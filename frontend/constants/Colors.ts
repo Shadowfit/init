@@ -1,4 +1,4 @@
-// SyncFit 앱 컬러 팔레트
+// ShadowFit 앱 컬러 팔레트
 export const COLORS = {
   // Primary - 라임 그린 액센트
   primary: '#CAFF00',

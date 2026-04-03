@@ -1,18 +1,80 @@
-import { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
+import { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { COLORS, FONT_SIZE, SPACING, RADIUS } from '@/constants/Colors';
 import Button from '@/components/ui/Button';
 
-const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
+/** 싱크로율 → 색상 */
+function getSyncColor(rate: number) {
+  if (rate >= 70) return COLORS.syncHigh; // 라임 그린
+  if (rate >= 40) return COLORS.syncMid;  // 주황
+  return COLORS.syncLow;                  // 빨강
+}
 
 export default function ExerciseScreen() {
   const router = useRouter();
   const [permission, requestPermission] = useCameraPermissions();
   const [isRecording, setIsRecording] = useState(false);
   const [syncRate, setSyncRate] = useState(0);
+
+  // 테두리 점멸 애니메이션
+  const borderOpacity = useRef(new Animated.Value(0)).current;
+
+  // 녹화 중 mock 싱크로율 시뮬레이션 (TODO: AI 서버 연동 시 제거)
+  useEffect(() => {
+    if (!isRecording) {
+      setSyncRate(0);
+      return;
+    }
+    const interval = setInterval(() => {
+      setSyncRate(Math.floor(Math.random() * 100));
+    }, 1500);
+    return () => clearInterval(interval);
+  }, [isRecording]);
+
+  // 싱크로율 낮을 때 진동 피드백
+  const prevSyncRef = useRef(syncRate);
+  useEffect(() => {
+    if (!isRecording) return;
+    const prev = prevSyncRef.current;
+    prevSyncRef.current = syncRate;
+
+    if (syncRate < 40 && prev >= 40) {
+      // 낮은 구간 진입 시 강한 진동
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    } else if (syncRate < 40) {
+      // 낮은 구간 유지 시 가벼운 진동
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+  }, [syncRate, isRecording]);
+
+  // 싱크로율 낮을 때 테두리 점멸
+  useEffect(() => {
+    if (!isRecording) {
+      borderOpacity.setValue(0);
+      return;
+    }
+
+    if (syncRate < 40) {
+      // 빨간 테두리 점멸
+      const pulse = Animated.loop(
+        Animated.sequence([
+          Animated.timing(borderOpacity, { toValue: 1, duration: 300, useNativeDriver: false }),
+          Animated.timing(borderOpacity, { toValue: 0.3, duration: 300, useNativeDriver: false }),
+        ]),
+      );
+      pulse.start();
+      return () => pulse.stop();
+    }
+
+    // 40% 이상이면 고정 표시
+    borderOpacity.setValue(isRecording ? 1 : 0);
+  }, [syncRate, isRecording]);
+
+  const syncColor = getSyncColor(syncRate);
 
   // 카메라 권한 없을 때
   if (!permission) {
@@ -28,14 +90,32 @@ export default function ExerciseScreen() {
       <View style={styles.center}>
         <FontAwesome name="camera" size={48} color={COLORS.textMuted} />
         <Text style={styles.permTitle}>카메라 권한이 필요합니다</Text>
-        <Text style={styles.permDesc}>실시간 자세 분석을 위해 카메라 접근을 허용해주세요.</Text>
-        <Button title="카메라 허용" onPress={requestPermission} style={{ marginTop: SPACING.xl }} />
+        <Text style={styles.permDesc}>
+          실시간 자세 분석을 위해 카메라 접근을 허용해주세요.
+        </Text>
+        <Button
+          title="카메라 허용"
+          onPress={requestPermission}
+          style={{ marginTop: SPACING.xl }}
+        />
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
+      {/* 싱크로율 기반 테두리 */}
+      <Animated.View
+        style={[
+          styles.cameraBorder,
+          {
+            borderColor: syncColor,
+            opacity: borderOpacity,
+          },
+        ]}
+        pointerEvents="none"
+      />
+
       {/* 카메라 뷰 */}
       <CameraView style={styles.camera} facing="front">
         {/* 상단 UI 오버레이 */}
@@ -55,24 +135,33 @@ export default function ExerciseScreen() {
 
         {/* 싱크로율 게이지 */}
         <View style={styles.syncGauge}>
-          <FontAwesome name="bolt" size={14} color={COLORS.primary} />
+          <FontAwesome name="bolt" size={14} color={syncColor} />
           <Text style={styles.syncLabel}>싱크로율</Text>
           <View style={styles.syncBarBg}>
-            <View style={[styles.syncBarFill, { width: `${syncRate}%` }]} />
+            <View
+              style={[
+                styles.syncBarFill,
+                { width: `${syncRate}%`, backgroundColor: syncColor },
+              ]}
+            />
           </View>
-          <Text style={styles.syncValue}>{syncRate}%</Text>
+          <Text style={[styles.syncValue, { color: syncColor }]}>{syncRate}%</Text>
         </View>
 
         {/* 하단: 기준영상 + 녹화 버튼 */}
         <View style={styles.bottomOverlay}>
           <View style={styles.bottomCenter}>
-            <Text style={styles.recordHint}>버튼을 눌러 녹화를 시작하세요</Text>
+            <Text style={styles.recordHint}>
+              {isRecording ? '운동 중...' : '버튼을 눌러 녹화를 시작하세요'}
+            </Text>
             <TouchableOpacity
               style={[styles.recordBtn, isRecording && styles.recordBtnActive]}
               onPress={() => setIsRecording(!isRecording)}
               activeOpacity={0.7}
             >
-              <View style={[styles.recordDot, isRecording && styles.recordDotActive]} />
+              <View
+                style={[styles.recordDot, isRecording && styles.recordDotActive]}
+              />
             </TouchableOpacity>
           </View>
 
@@ -97,8 +186,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.xxl,
   },
   permText: { color: COLORS.textSecondary, fontSize: FONT_SIZE.md },
-  permTitle: { color: COLORS.text, fontSize: FONT_SIZE.lg, fontWeight: '700', marginTop: SPACING.xl },
-  permDesc: { color: COLORS.textSecondary, fontSize: FONT_SIZE.sm, textAlign: 'center', marginTop: SPACING.sm },
+  permTitle: {
+    color: COLORS.text,
+    fontSize: FONT_SIZE.lg,
+    fontWeight: '700',
+    marginTop: SPACING.xl,
+  },
+  permDesc: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZE.sm,
+    textAlign: 'center',
+    marginTop: SPACING.sm,
+  },
+
+  // 싱크로율 테두리
+  cameraBorder: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderWidth: 4,
+    borderRadius: 0,
+    zIndex: 10,
+  },
 
   camera: { flex: 1 },
 
@@ -140,10 +251,14 @@ const styles = StyleSheet.create({
   },
   syncBarFill: {
     height: 6,
-    backgroundColor: COLORS.primary,
     borderRadius: 3,
   },
-  syncValue: { color: COLORS.primary, fontSize: FONT_SIZE.md, fontWeight: '800', minWidth: 40, textAlign: 'right' },
+  syncValue: {
+    fontSize: FONT_SIZE.md,
+    fontWeight: '800',
+    minWidth: 40,
+    textAlign: 'right',
+  },
 
   // Bottom overlay
   bottomOverlay: {
@@ -157,7 +272,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.xxl,
   },
   bottomCenter: { alignItems: 'center', flex: 1 },
-  recordHint: { color: COLORS.textSecondary, fontSize: FONT_SIZE.sm, marginBottom: SPACING.md },
+  recordHint: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZE.sm,
+    marginBottom: SPACING.md,
+  },
   recordBtn: {
     width: 72,
     height: 72,

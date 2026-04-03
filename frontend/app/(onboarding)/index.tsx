@@ -245,6 +245,27 @@ function StepVideo({
       <Text style={styles.stepTitle}>기준 영상을 설정해주세요</Text>
       <Text style={styles.stepDesc}>따라 하고 싶은 운동 영상을 등록하세요. 나중에 변경할 수 있어요.</Text>
 
+      {/* 촬영 가이드라인 */}
+      <View style={styles.guideBox}>
+        <Text style={styles.guideTitle}>📌 영상 촬영 가이드</Text>
+        <View style={styles.guideItem}>
+          <Text style={styles.guideBullet}>📐</Text>
+          <Text style={styles.guideText}>정면 또는 측면(45°)에서 촬영된 영상</Text>
+        </View>
+        <View style={styles.guideItem}>
+          <Text style={styles.guideBullet}>🧍</Text>
+          <Text style={styles.guideText}>전신이 보이도록 1.5m 이상 거리 확보</Text>
+        </View>
+        <View style={styles.guideItem}>
+          <Text style={styles.guideBullet}>💡</Text>
+          <Text style={styles.guideText}>밝은 조명, 단색 배경 권장</Text>
+        </View>
+        <View style={styles.guideItem}>
+          <Text style={styles.guideBullet}>🚫</Text>
+          <Text style={styles.guideText}>거울 반사, 여러 사람이 보이는 영상은 피해주세요</Text>
+        </View>
+      </View>
+
       <Text style={styles.inputLabel}>🔗 유튜브 링크</Text>
       <TextInput
         style={styles.urlInput}
@@ -398,6 +419,35 @@ const styles = StyleSheet.create({
   },
   uploadText: { color: COLORS.textSecondary, fontSize: FONT_SIZE.md },
   uploadHint: { color: COLORS.textMuted, fontSize: FONT_SIZE.xs },
+
+  // Guide
+  guideBox: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    padding: SPACING.lg,
+    marginBottom: SPACING.xxl,
+    gap: SPACING.sm,
+  },
+  guideTitle: {
+    fontSize: FONT_SIZE.sm,
+    fontWeight: '700',
+    color: COLORS.text,
+    marginBottom: SPACING.xs,
+  },
+  guideItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: SPACING.sm,
+  },
+  guideBullet: { fontSize: 14 },
+  guideText: {
+    flex: 1,
+    fontSize: FONT_SIZE.sm,
+    color: COLORS.textSecondary,
+    lineHeight: 20,
+  },
 
   // Footer
   footer: {
