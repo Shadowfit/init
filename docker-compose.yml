@@ -34,6 +34,7 @@ services:
     restart: unless-stopped
     ports:
       - "8080:8080"
+      - "6565:6565"
     environment:
       SPRING_PROFILES_ACTIVE: prod
       # application.yml에서 사용할 호스트명을 shadowfit-mysql로 고정

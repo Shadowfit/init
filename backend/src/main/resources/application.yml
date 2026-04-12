@@ -74,3 +74,10 @@ internal:
 
 ai-server:
   url: http://shadowfit-ai:8000
+
+grpc:
+  server:
+    port: 6565
+    address: 0.0.0.0 # 도커 내부에서 외부 호출을 받으려면 필수
+    # reflection 설정을 켜두면 Postman 같은 툴로 gRPC 테스트하기 편합니다.
+    reflection-enabled: true
