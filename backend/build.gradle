@@ -2,6 +2,7 @@ plugins {
 	id 'java'
 	id 'org.springframework.boot' version '4.0.5'
 	id 'io.spring.dependency-management' version '1.1.7'
+	id 'com.google.protobuf' version '0.9.4'
 }
 
 group = 'com.shadowfit'
@@ -88,6 +89,31 @@ dependencies {
 
     // WebClient 사용을 위한 WebFlux 의존성 추가
 	implementation 'org.springframework.boot:spring-boot-starter-webflux'
+
+//gRPC 스프링 부트 스타터 추가
+	implementation 'io.github.lognet:grpc-spring-boot-starter:5.1.5'
+
+	// Protobuf 관련 의존성
+	implementation 'io.grpc:grpc-netty-shaded:1.62.2'
+	implementation 'io.grpc:grpc-protobuf:1.62.2'
+	implementation 'io.grpc:grpc-stub:1.62.2'
+	compileOnly 'org.apache.tomcat:annotations-api:6.0.53'
+}
+
+protobuf {
+	protoc {
+		artifact = "com.google.protobuf:protoc:3.25.1"
+	}
+	plugins {
+		grpc {
+			artifact = "io.grpc:protoc-gen-grpc-java:1.62.2"
+		}
+	}
+	generateProtoTasks {
+		all()*.plugins {
+			grpc {}
+		}
+	}
 }
 
 tasks.named('test') {
