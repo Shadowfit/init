@@ -113,3 +113,13 @@ src/main/resources/application-local.properties
 #프론트 제외
 frontend/
 .agents/
+
+# Local AI/demo artifacts
+/.venv/
+/git_local/
+/init/
+/*.mp4
+/*_analysis*.json
+/*_annotated*.mp4
+/pose_landmarker_full.task
+ai-server/scripts/demo_videos/
