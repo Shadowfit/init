@@ -2,7 +2,7 @@ package com.shadowfit.model.exercise;
 
 import jakarta.persistence.*;
 import lombok.*;
-import org.springframework.data.annotation.Id;
+import jakarta.persistence.Id;
 
 @Entity
 @Table(name = "exercise_references")
@@ -11,7 +11,8 @@ import org.springframework.data.annotation.Id;
 @AllArgsConstructor
 @Builder
 public class ExerciseReference {
-    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
