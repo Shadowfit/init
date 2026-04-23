@@ -11,7 +11,7 @@ import java.util.List;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class CalendarMainReponseDto {
+public class CalendarMainResponseDto {
     // 1. 상단 요약 카드 데이터 (빨간색 동그라미 부분)
     private int monthlyExerciseDays;     // 이번 달 운동 일수 (예: 11일)
     private int totalAvgSyncRate;        // 이번 달 평균 싱크로율 (예: 84%)

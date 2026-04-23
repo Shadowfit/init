@@ -11,7 +11,7 @@ import java.util.List;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class WeeklyActivityResponse {
+public class WeeklyActivityResponseDto {
     private String dateRange;            // "3월 23일 - 29일"
     private int totalWorkouts;           // 4 Workouts
     private int totalMinutes;            // 35 Min
