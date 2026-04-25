@@ -1,4 +1,4 @@
-package com.shadowfit.repository;
+package com.shadowfit.repository.exercise;
 
 import com.shadowfit.model.exercise.ExerciseReference;
 import org.springframework.data.jpa.repository.JpaRepository;

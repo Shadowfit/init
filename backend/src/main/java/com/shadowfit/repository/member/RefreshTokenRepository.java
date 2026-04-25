@@ -1,4 +1,4 @@
-package com.shadowfit.repository;
+package com.shadowfit.repository.member;
 
 import com.shadowfit.model.member.RefreshToken;
 import org.springframework.data.jpa.repository.JpaRepository;

@@ -11,18 +11,14 @@ spring:
     password: ${DB_PASSWORD:shadowfit}
     driver-class-name: com.mysql.cj.jdbc.Driver
 
+  sql:
+    init:
+      mode: never
+
   jpa:
-    hibernate:
-      ddl-auto: update
-    show-sql: true
-    properties:
-      hibernate:
-        format_sql: true
-        dialect: org.hibernate.dialect.MySQLDialect
-        jdbc.batch_size: 100
-        order_inserts: true
-        order_updates: true
-        batch_versioned_data: true
+     hibernate:
+       ddl-auto: update # 혹은 none (도커에서 schema.sql을 실행하므로)
+     defer-datasource-initialization: false
 
 # [2] gRPC 설정 (최상단 레벨)
 grpc:
@@ -71,3 +67,4 @@ logging:
     com.shadowfit: DEBUG
     io.github.lognet.grpc: DEBUG
     net.devh: DEBUG
+    org.springframework.jdbc.datasource.init: DEBUG # SQL 초기화 로그 확인용
