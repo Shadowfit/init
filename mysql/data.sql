@@ -57,8 +57,9 @@ CREATE TABLE reports (
 SET FOREIGN_KEY_CHECKS = 0;
 
 -- 1. 유저 데이터 (ID 1번 확실히 생성)
-INSERT INTO users (email, password, username, role, onboarding_completed)
-VALUES ('test@test.com', '$2a$10$.mpvpjYHKGukSTvbCukWNusFWU/lHUBCmHjp3Un2mz6qjrOg9z/LC', '효재', 'USER', TRUE);
+INSERT INTO users (email, password, username, role, onboarding_completed, preferred_squat_url)
+VALUES ('test@test.com', '$2a$10$.mpvpjYHKGukSTvbCukWNusFWU/lHUBCmHjp3Un2mz6qjrOg9z/LC', '효재', 'USER', TRUE,
+        'https://www.youtube.com/watch?v=q6hBSSis_60');
 
 -- 2. 운동 종목 데이터 (REPLACE 사용으로 에러 방지)
 REPLACE INTO exercises (id, name, category, created_at) VALUES (1, '스쿼트', 'LOWER', NOW());

@@ -56,6 +56,9 @@ public class Member {
     @Column(name = "workout_level")
     private WorkoutLevel workoutLevel;
 
+    @Column(name = "preferred_squat_url", length = 500)
+    private String preferredSquatUrl;
+
     @Column(name = "onboarding_completed", nullable = false)
     @Builder.Default
     private boolean onboardingCompleted = false; // 온보딩 완료 여부
@@ -69,6 +72,9 @@ public class Member {
         if (dto.getWorkoutLevel() != null) this.workoutLevel = dto.getWorkoutLevel();
         if (dto.getHeight() != null) this.height = dto.getHeight();
         if (dto.getWeight() != null) this.weight = dto.getWeight();
+        if (dto.getPreferredSquatUrl() != null) {
+            this.preferredSquatUrl = dto.getPreferredSquatUrl();
+        }
     }
 
 }

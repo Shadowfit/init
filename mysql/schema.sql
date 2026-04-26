@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS users (
     weight DECIMAL(5,1),
     workout_level VARCHAR(20),
     selected_persona ENUM('BEGINNER', 'ADVANCED', 'DIET', 'REHAB') NOT NULL DEFAULT 'BEGINNER',
+    preferred_squat_url VARCHAR(500),
     onboarding_completed BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- DATETIME 대신 TIMESTAMP 권장 (타임존 대응)
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP -- 자동 갱신 설정
