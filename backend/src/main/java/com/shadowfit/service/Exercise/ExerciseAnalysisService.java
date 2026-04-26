@@ -1,21 +1,18 @@
 package com.shadowfit.service.Exercise;
 
-import com.shadowfit.dto.exercises.FastApiRequestDto;
 import com.shadowfit.dto.exercises.VideoRequestDto;
 import com.shadowfit.dto.exercises.session.SessionUpdateRequestDto;
 import com.shadowfit.global.error.BusinessException;
 import com.shadowfit.global.error.ErrorCode;
 import com.shadowfit.global.util.YoutubeValidator;
 import com.shadowfit.grpc.*;
-import com.shadowfit.model.exercise.Exercise;
 import com.shadowfit.model.exercise.ExerciseReference;
 import com.shadowfit.model.exercise.Session;
 import com.shadowfit.model.exercise.Status;
-import com.shadowfit.model.member.Member;
-import com.shadowfit.repository.ExerciseReferenceRepository;
-import com.shadowfit.repository.ExercisesRepository;
-import com.shadowfit.repository.MemberRepository;
-import com.shadowfit.repository.SessionRepository;
+import com.shadowfit.repository.exercise.ExerciseReferenceRepository;
+import com.shadowfit.repository.exercise.ExercisesRepository;
+import com.shadowfit.repository.member.MemberRepository;
+import com.shadowfit.repository.exercise.SessionRepository;
 import io.grpc.stub.StreamObserver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

@@ -1,4 +1,4 @@
-package com.shadowfit.repository;
+package com.shadowfit.repository.member;
 
 import com.shadowfit.model.member.Member;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -8,7 +8,9 @@ import java.util.Optional;
 
 @Repository
 public interface MemberRepository extends JpaRepository<Member,Long> {
-    Optional<Member> findByUserId(String userId);
+    Optional<Member> findByEmail(String email);
 
-    boolean existsByUserId(String userId);
+    boolean existsByEmail(String email);
+
+    boolean existsByUsername(String username);
 }
