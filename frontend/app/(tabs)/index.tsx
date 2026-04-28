@@ -1,40 +1,70 @@
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Calendar, type DateData } from 'react-native-calendars';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { COLORS, FONT_SIZE, SPACING, RADIUS } from '@/constants/Colors';
 import Button from '@/components/ui/Button';
+import { reportService } from '@/services/reportService';
+import type { CalendarMainResponse, CalendarDay } from '@/types/report';
 
-// TODO: API 연동 후 실제 데이터로 교체
-const MOCK_MARKED_DATES: Record<string, any> = {
-  '2026-03-01': { marked: true, dotColor: COLORS.primary },
-  '2026-03-02': { marked: true, dotColor: COLORS.primary },
-  '2026-03-03': { marked: true, dotColor: COLORS.warning },
-  '2026-03-05': { marked: true, dotColor: COLORS.primary },
-  '2026-03-07': { marked: true, dotColor: COLORS.warning },
-  '2026-03-09': { marked: true, dotColor: COLORS.primary },
-  '2026-03-10': { marked: true, dotColor: COLORS.warning },
-  '2026-03-12': { marked: true, dotColor: COLORS.primary },
-  '2026-03-14': { marked: true, dotColor: COLORS.warning },
-  '2026-03-17': { marked: true, dotColor: COLORS.warning },
-  '2026-03-19': { marked: true, dotColor: COLORS.primary },
-  '2026-03-22': { marked: true, dotColor: COLORS.primary },
-  '2026-03-23': { marked: true, dotColor: COLORS.primary },
-};
+// 백엔드 records 를 react-native-calendars 의 markedDates 형식으로 변환
+function buildMarkedDates(records: CalendarDay[]): Record<string, any> {
+  const marked: Record<string, any> = {};
+  for (const r of records) {
+    if (!r.hasRecord) continue;
+    // 싱크로율 90 이상이면 primary, 그 미만이면 warning 색으로 구분
+    const goodSync = r.dailyAvgSyncRate != null && r.dailyAvgSyncRate >= 90;
+    marked[r.date] = {
+      marked: true,
+      dotColor: goodSync ? COLORS.primary : COLORS.warning,
+    };
+  }
+  return marked;
+}
 
 export default function HomeScreen() {
   const router = useRouter();
-  const [selectedDate, setSelectedDate] = useState('');
   const today = new Date().toISOString().split('T')[0];
+  const [selectedDate, setSelectedDate] = useState('');
 
+  // 캘린더가 가리키는 연/월 (사용자가 ◀▶ 눌러 바꿈)
+  const initialDate = new Date();
+  const [viewYear, setViewYear] = useState(initialDate.getFullYear());
+  const [viewMonth, setViewMonth] = useState(initialDate.getMonth() + 1);
+
+  const [data, setData] = useState<CalendarMainResponse | null>(null);
+
+  // 화면 포커스 / 연·월 변경마다 캘린더 데이터 재조회
+  useFocusEffect(
+    useCallback(() => {
+      reportService
+        .getCalendar(viewYear, viewMonth)
+        .then((res) => setData(res.data))
+        .catch((e) => {
+          console.error('[calendar] status=', e.response?.status, 'data=', e.response?.data);
+        });
+    }, [viewYear, viewMonth]),
+  );
+
+  const baseMarked = data ? buildMarkedDates(data.records) : {};
   const markedDates = {
-    ...MOCK_MARKED_DATES,
+    ...baseMarked,
     ...(selectedDate
-      ? { [selectedDate]: { ...MOCK_MARKED_DATES[selectedDate], selected: true, selectedColor: COLORS.primary } }
+      ? {
+          [selectedDate]: {
+            ...(baseMarked[selectedDate] ?? {}),
+            selected: true,
+            selectedColor: COLORS.primary,
+          },
+        }
       : {}),
   };
+
+  const hasRecordOnSelected = selectedDate
+    ? !!baseMarked[selectedDate]
+    : !!baseMarked[today];
 
   return (
     <SafeAreaView style={styles.container}>
@@ -50,11 +80,24 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* 상단 통계 카드 */}
+        {/* 상단 통계 카드 - 백엔드 CalendarMainResponse 의 monthly* 사용 */}
         <View style={styles.statsRow}>
-          <StatCard icon="🔥" value="11일" label="이번 달" />
-          <StatCard icon="🎯" value="84%" label="평균 싱크로율" highlight />
-          <StatCard icon="🏆" value="5일" label="연속 기록" />
+          <StatCard
+            icon="🔥"
+            value={`${data?.monthlyExerciseDays ?? 0}일`}
+            label="이번 달"
+          />
+          <StatCard
+            icon="🎯"
+            value={`${data?.totalAvgSyncRate ?? 0}%`}
+            label="평균 싱크로율"
+            highlight
+          />
+          <StatCard
+            icon="🏆"
+            value={`${data?.consecutiveDays ?? 0}일`}
+            label="연속 기록"
+          />
         </View>
 
         {/* 캘린더 */}
@@ -62,6 +105,11 @@ export default function HomeScreen() {
           <Calendar
             markedDates={markedDates}
             onDayPress={(day: DateData) => setSelectedDate(day.dateString)}
+            onMonthChange={(d: DateData) => {
+              setViewYear(d.year);
+              setViewMonth(d.month);
+              setSelectedDate('');
+            }}
             theme={{
               calendarBackground: COLORS.card,
               textSectionTitleColor: COLORS.textSecondary,
@@ -87,9 +135,7 @@ export default function HomeScreen() {
               : `${new Date().getMonth() + 1}월 ${new Date().getDate()}일 ${['일', '월', '화', '수', '목', '금', '토'][new Date().getDay()]}요일`}
           </Text>
           <Text style={styles.noRecordText}>
-            {MOCK_MARKED_DATES[selectedDate || today]
-              ? '운동 기록이 있습니다'
-              : '운동 기록이 없습니다'}
+            {hasRecordOnSelected ? '운동 기록이 있습니다' : '운동 기록이 없습니다'}
           </Text>
         </View>
 
