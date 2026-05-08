@@ -2,7 +2,24 @@ import { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
+import {
+  ChevronLeft,
+  ChevronRight,
+  Dumbbell,
+  Ruler,
+  Target,
+  UserCog,
+  Video,
+  Megaphone,
+  HelpCircle,
+  LogOut,
+  Pencil,
+  Sprout,
+  Crosshair,
+  Apple,
+  HeartPulse,
+  type LucideIcon,
+} from 'lucide-react-native';
 import { COLORS, FONT_SIZE, SPACING, RADIUS } from '@/constants/Colors';
 import { useAuthStore } from '@/stores/authStore';
 import { memberService } from '@/services/memberService';
@@ -18,11 +35,11 @@ const LEVEL_MAP: Record<string, { label: string; desc: string }> = {
 };
 
 // 백엔드 SelectedPersona: BEGINNER, ADVANCED, DIET, REHAB
-const PERSONA_MAP: Record<string, { icon: string; label: string; desc: string }> = {
-  BEGINNER: { icon: '🐣', label: '헬린이', desc: '친절하고 격려하는 초보 친화 코치' },
-  ADVANCED: { icon: '🫡', label: 'FM 교관', desc: '엄격하고 체계적인 군대식 트레이너' },
-  DIET: { icon: '🥗', label: '다이어터', desc: '체중 관리에 특화된 식단·운동 코치' },
-  REHAB: { icon: '🏥', label: '재활 전문', desc: '안전 최우선, 부상 방지 중심 가이드' },
+const PERSONA_MAP: Record<string, { Icon: LucideIcon; label: string; desc: string }> = {
+  BEGINNER: { Icon: Sprout, label: '헬린이', desc: '친절하고 격려하는 초보 친화 코치' },
+  ADVANCED: { Icon: Crosshair, label: 'FM 교관', desc: '엄격하고 체계적인 군대식 트레이너' },
+  DIET: { Icon: Apple, label: '다이어터', desc: '체중 관리에 특화된 식단·운동 코치' },
+  REHAB: { Icon: HeartPulse, label: '재활 전문', desc: '안전 최우선, 부상 방지 중심 가이드' },
 };
 
 export default function MyPageScreen() {
@@ -68,16 +85,16 @@ export default function MyPageScreen() {
         {/* 헤더 */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()}>
-            <FontAwesome name="chevron-left" size={16} color={COLORS.text} />
+            <ChevronLeft size={20} color={COLORS.text} strokeWidth={2} />
           </TouchableOpacity>
           <Text style={styles.title}>마이페이지</Text>
-          <View style={{ width: 16 }} />
+          <View style={{ width: 20 }} />
         </View>
 
         {/* 프로필 카드 */}
         <View style={styles.profileCard}>
           <View style={styles.avatar}>
-            <Text style={styles.avatarIcon}>💪</Text>
+            <Dumbbell size={26} color={COLORS.primary} strokeWidth={2} />
           </View>
           <View>
             <Text style={styles.email}>{profile?.username || user?.email || ''}</Text>
@@ -88,35 +105,39 @@ export default function MyPageScreen() {
         {/* 페르소나 설정 */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>페르소나 설정</Text>
-          <TouchableOpacity onPress={() => router.push('/(onboarding)' as any)}>
-            <Text style={styles.editBtn}>✏️ 수정</Text>
+          <TouchableOpacity
+            onPress={() => router.push('/(onboarding)' as any)}
+            style={styles.editBtnRow}
+          >
+            <Pencil size={12} color={COLORS.primary} strokeWidth={2} />
+            <Text style={styles.editBtn}>수정</Text>
           </TouchableOpacity>
         </View>
 
         <InfoCard
-          icon="💪"
+          Icon={Dumbbell}
           label="운동 수준"
           title={level?.label ?? '미설정'}
           desc={level?.desc}
         />
         <InfoCard
-          icon="📏"
+          Icon={Ruler}
           label="키"
           title={profile?.height != null ? `${profile.height}cm` : '미설정'}
         />
         <InfoCard
-          icon="🎯"
+          Icon={Target}
           label="목표 몸무게"
           title={profile?.weight != null ? `${profile.weight}kg` : '미설정'}
         />
         <InfoCard
-          icon={persona?.icon ?? '🙂'}
+          Icon={persona?.Icon ?? UserCog}
           label="트레이너 페르소나"
-          title={persona ? `${persona.icon} ${persona.label}` : '미설정'}
+          title={persona ? persona.label : '미설정'}
           desc={persona?.desc}
         />
         <InfoCard
-          icon="📹"
+          Icon={Video}
           label="기준 영상"
           title={profile?.preferredUrl || '미설정'}
         />
@@ -133,10 +154,10 @@ export default function MyPageScreen() {
           onPress={() => router.push('/board/notice' as any)}
         >
           <View style={styles.menuLeft}>
-            <FontAwesome name="bullhorn" size={16} color={COLORS.primary} />
+            <Megaphone size={18} color={COLORS.primary} strokeWidth={2} />
             <Text style={styles.menuText}>공지사항</Text>
           </View>
-          <FontAwesome name="chevron-right" size={12} color={COLORS.textMuted} />
+          <ChevronRight size={14} color={COLORS.textMuted} strokeWidth={2} />
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -145,15 +166,15 @@ export default function MyPageScreen() {
           onPress={() => router.push('/board/qna' as any)}
         >
           <View style={styles.menuLeft}>
-            <FontAwesome name="question-circle" size={16} color={COLORS.primary} />
+            <HelpCircle size={18} color={COLORS.primary} strokeWidth={2} />
             <Text style={styles.menuText}>Q&A</Text>
           </View>
-          <FontAwesome name="chevron-right" size={12} color={COLORS.textMuted} />
+          <ChevronRight size={14} color={COLORS.textMuted} strokeWidth={2} />
         </TouchableOpacity>
 
         {/* 로그아웃 */}
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.7}>
-          <FontAwesome name="sign-out" size={16} color={COLORS.textSecondary} />
+          <LogOut size={16} color={COLORS.textSecondary} strokeWidth={2} />
           <Text style={styles.logoutText}>로그아웃</Text>
         </TouchableOpacity>
 
@@ -163,15 +184,20 @@ export default function MyPageScreen() {
   );
 }
 
-function InfoCard({ icon, label, title, desc }: {
-  icon: string;
+function InfoCard({ Icon, emoji, label, title, desc }: {
+  Icon?: LucideIcon;
+  emoji?: string;
   label: string;
   title: string;
   desc?: string;
 }) {
   return (
     <View style={styles.infoCard}>
-      <Text style={styles.infoIcon}>{icon}</Text>
+      {Icon ? (
+        <Icon size={18} color={COLORS.primary} strokeWidth={2} />
+      ) : emoji ? (
+        <Text style={styles.infoEmoji}>{emoji}</Text>
+      ) : null}
       <Text style={styles.infoLabel}>{label}</Text>
       <Text style={styles.infoTitle}>{title}</Text>
       {desc && <Text style={styles.infoDesc}>{desc}</Text>}
@@ -211,6 +237,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   avatarIcon: { fontSize: 24 },
+  editBtnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  infoEmoji: { fontSize: 18 },
   email: { fontSize: FONT_SIZE.md, fontWeight: '700', color: COLORS.text },
   memberLabel: { fontSize: FONT_SIZE.sm, color: COLORS.textSecondary, marginTop: 2 },
 
@@ -234,7 +266,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
   },
-  infoIcon: { fontSize: 14, marginBottom: 4 },
+  infoIcon: { marginBottom: 4 },
   infoLabel: { fontSize: FONT_SIZE.xs, color: COLORS.textMuted, marginBottom: 4 },
   infoTitle: { fontSize: FONT_SIZE.md, fontWeight: '700', color: COLORS.text },
   infoDesc: { fontSize: FONT_SIZE.sm, color: COLORS.textSecondary, marginTop: 2 },

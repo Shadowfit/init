@@ -16,17 +16,33 @@ import TabSwitch from '@/components/ui/TabSwitch';
 import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
 import { useAuthStore } from '@/stores/authStore';
+import {
+  Mail,
+  Lock,
+  User as UserIcon,
+  Dumbbell,
+  Home,
+  BarChart3,
+  Film,
+  UserCircle2,
+  Rocket,
+  ClipboardList,
+  Megaphone,
+  HelpCircle,
+  KeyRound,
+  type LucideIcon,
+} from 'lucide-react-native';
 
-const DEV_ROUTES = [
-  { label: '홈', icon: '🏠', path: '/(tabs)' },
-  { label: '활동', icon: '📊', path: '/(tabs)/activity' },
-  { label: '운동', icon: '🎬', path: '/(tabs)/exercise' },
-  { label: '마이페이지', icon: '👤', path: '/(tabs)/mypage' },
-  { label: '온보딩', icon: '🚀', path: '/(onboarding)' },
-  { label: '운동 보고서', icon: '📋', path: '/report/1' },
-  { label: '공지사항', icon: '📢', path: '/board/notice' },
-  { label: 'Q&A', icon: '❓', path: '/board/qna' },
-  { label: 'PW재설정', icon: '🔒', path: '/(auth)/reset-password' },
+const DEV_ROUTES: { label: string; Icon: LucideIcon; path: string }[] = [
+  { label: '홈', Icon: Home, path: '/(tabs)' },
+  { label: '활동', Icon: BarChart3, path: '/(tabs)/activity' },
+  { label: '운동', Icon: Film, path: '/(tabs)/exercise' },
+  { label: '마이페이지', Icon: UserCircle2, path: '/(tabs)/mypage' },
+  { label: '온보딩', Icon: Rocket, path: '/(onboarding)' },
+  { label: '운동 보고서', Icon: ClipboardList, path: '/report/1' },
+  { label: '공지사항', Icon: Megaphone, path: '/board/notice' },
+  { label: 'Q&A', Icon: HelpCircle, path: '/board/qna' },
+  { label: 'PW재설정', Icon: KeyRound, path: '/(auth)/reset-password' },
 ];
 
 export default function LoginScreen() {
@@ -46,7 +62,9 @@ export default function LoginScreen() {
         >
           {/* 로고 */}
           <View style={styles.logoArea}>
-            <Text style={styles.logoIcon}>💪</Text>
+            <View style={styles.logoIconWrap}>
+              <Dumbbell size={42} color={COLORS.primary} strokeWidth={2.2} />
+            </View>
             <Text style={styles.logoTitle}>ShadowFit</Text>
             <Text style={styles.logoSubtitle}>AI 자세 교정 트레이너</Text>
           </View>
@@ -67,15 +85,15 @@ export default function LoginScreen() {
             <View style={styles.devSection}>
               <Text style={styles.devTitle}>DEV 바로가기</Text>
               <View style={styles.devGrid}>
-                {DEV_ROUTES.map((route) => (
+                {DEV_ROUTES.map(({ label, Icon, path }) => (
                   <TouchableOpacity
-                    key={route.path}
+                    key={path}
                     style={styles.devBtn}
-                    onPress={() => router.push(route.path as any)}
+                    onPress={() => router.push(path as any)}
                     activeOpacity={0.7}
                   >
-                    <Text style={styles.devBtnIcon}>{route.icon}</Text>
-                    <Text style={styles.devBtnLabel}>{route.label}</Text>
+                    <Icon size={18} color={COLORS.textSecondary} strokeWidth={2} />
+                    <Text style={styles.devBtnLabel}>{label}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -122,7 +140,7 @@ function LoginForm() {
     <>
       <Input
         label="이메일"
-        icon="envelope"
+        icon={Mail}
         placeholder="example@email.com"
         value={email}
         onChangeText={setEmail}
@@ -134,7 +152,7 @@ function LoginForm() {
       />
       <Input
         label="비밀번호"
-        icon="lock"
+        icon={Lock}
         placeholder="6자 이상 입력"
         value={password}
         onChangeText={setPassword}
@@ -227,7 +245,7 @@ function SignupForm() {
     <>
       <Input
         label="아이디"
-        icon="user"
+        icon={UserIcon}
         placeholder="3자 이상"
         value={username}
         onChangeText={setUsername}
@@ -238,7 +256,7 @@ function SignupForm() {
       />
       <Input
         label="이메일"
-        icon="envelope"
+        icon={Mail}
         placeholder="example@email.com"
         value={email}
         onChangeText={setEmail}
@@ -250,7 +268,7 @@ function SignupForm() {
       />
       <Input
         label="비밀번호"
-        icon="lock"
+        icon={Lock}
         placeholder="6자 이상 입력"
         value={password}
         onChangeText={setPassword}
@@ -261,7 +279,7 @@ function SignupForm() {
       />
       <Input
         label="비밀번호 확인"
-        icon="lock"
+        icon={Lock}
         placeholder="비밀번호를 다시 입력"
         value={passwordConfirm}
         onChangeText={setPasswordConfirm}
@@ -322,8 +340,7 @@ const styles = StyleSheet.create({
     marginTop: 60,
     marginBottom: 40,
   },
-  logoIcon: {
-    fontSize: 48,
+  logoIconWrap: {
     marginBottom: SPACING.md,
   },
   logoTitle: {
@@ -421,10 +438,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     paddingVertical: SPACING.md,
     alignItems: 'center',
-  },
-  devBtnIcon: {
-    fontSize: 20,
-    marginBottom: 4,
+    gap: 4,
   },
   devBtnLabel: {
     fontSize: FONT_SIZE.xs,

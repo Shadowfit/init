@@ -2,7 +2,14 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
+import {
+  ChevronLeft,
+  ChevronRight,
+  Dumbbell,
+  Timer,
+  Flame,
+  type LucideIcon,
+} from 'lucide-react-native';
 import { COLORS, FONT_SIZE, SPACING, RADIUS } from '@/constants/Colors';
 import { reportService } from '@/services/reportService';
 import type { WeeklyActivityResponse } from '@/types/report';
@@ -45,11 +52,11 @@ export default function ActivityScreen() {
         {/* 주간 네비게이션 (현재 주만 표시 - 추후 이전/다음 주 기능 확장) */}
         <View style={styles.weekNav}>
           <TouchableOpacity disabled>
-            <FontAwesome name="chevron-left" size={14} color={COLORS.textMuted} />
+            <ChevronLeft size={16} color={COLORS.textMuted} strokeWidth={2} />
           </TouchableOpacity>
           <Text style={styles.weekRange}>{data?.dateRange ?? '이번 주'}</Text>
           <TouchableOpacity disabled>
-            <FontAwesome name="chevron-right" size={14} color={COLORS.textMuted} />
+            <ChevronRight size={16} color={COLORS.textMuted} strokeWidth={2} />
           </TouchableOpacity>
         </View>
 
@@ -61,9 +68,9 @@ export default function ActivityScreen() {
           <>
             {/* 주간 통계 */}
             <View style={styles.statsRow}>
-              <WeeklyStat icon="💪" value={String(data?.totalWorkouts ?? 0)} label="Workouts" />
-              <WeeklyStat icon="⏱" value={String(data?.totalMinutes ?? 0)} label="Min" />
-              <WeeklyStat icon="🔥" value={String(data?.totalCalories ?? 0)} label="Kcal" />
+              <WeeklyStat Icon={Dumbbell} value={String(data?.totalWorkouts ?? 0)} label="Workouts" />
+              <WeeklyStat Icon={Timer} value={String(data?.totalMinutes ?? 0)} label="Min" />
+              <WeeklyStat Icon={Flame} value={String(data?.totalCalories ?? 0)} label="Kcal" />
             </View>
 
             {/* 운동일지 */}
@@ -74,7 +81,7 @@ export default function ActivityScreen() {
                 <Text style={styles.summaryText}>
                   {data?.totalWorkouts ?? 0} Workouts   {data?.totalMinutes ?? 0} Min   {data?.totalCalories ?? 0} Kcal
                 </Text>
-                <FontAwesome name="chevron-right" size={12} color={COLORS.textMuted} />
+                <ChevronRight size={14} color={COLORS.textMuted} strokeWidth={2} />
               </View>
 
               {/* 바 차트 - dailyLogs 기준 */}
@@ -144,10 +151,10 @@ export default function ActivityScreen() {
   );
 }
 
-function WeeklyStat({ icon, value, label }: { icon: string; value: string; label: string }) {
+function WeeklyStat({ Icon, value, label }: { Icon: LucideIcon; value: string; label: string }) {
   return (
     <View style={styles.statCard}>
-      <Text style={styles.statIcon}>{icon}</Text>
+      <Icon size={18} color={COLORS.primary} strokeWidth={2} />
       <Text style={styles.statValue}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
     </View>
@@ -188,8 +195,7 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
     alignItems: 'center',
   },
-  statIcon: { fontSize: 16, marginBottom: 4 },
-  statValue: { fontSize: FONT_SIZE.xxl, fontWeight: '800', color: COLORS.text },
+  statValue: { fontSize: FONT_SIZE.xxl, fontWeight: '800', color: COLORS.text, marginTop: 4 },
   statLabel: { fontSize: FONT_SIZE.xs, color: COLORS.textSecondary, marginTop: 2 },
 
   section: { paddingHorizontal: SPACING.xxl, marginTop: SPACING.xxl },

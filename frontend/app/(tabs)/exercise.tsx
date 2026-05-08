@@ -2,7 +2,17 @@ import { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { LinearGradient } from 'expo-linear-gradient';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
+import {
+  Camera as CameraIcon,
+  ChevronLeft,
+  Grid3x3,
+  Maximize,
+  Zap,
+  ChevronUp,
+  ChevronDown,
+  Play,
+  Square,
+} from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { COLORS, FONT_SIZE, SPACING, RADIUS } from '@/constants/Colors';
@@ -96,7 +106,7 @@ export default function ExerciseScreen() {
   if (!permission.granted) {
     return (
       <View style={styles.center}>
-        <FontAwesome name="camera" size={48} color={COLORS.textMuted} />
+        <CameraIcon size={48} color={COLORS.textMuted} strokeWidth={1.75} />
         <Text style={styles.permTitle}>카메라 권한이 필요합니다</Text>
         <Text style={styles.permDesc}>
           실시간 자세 분석을 위해 카메라 접근을 허용해주세요.
@@ -128,21 +138,21 @@ export default function ExerciseScreen() {
         {/* 상단 UI 오버레이 */}
         <View style={styles.topOverlay}>
           <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
-            <FontAwesome name="chevron-left" size={18} color={COLORS.text} />
+            <ChevronLeft size={20} color={COLORS.text} strokeWidth={2} />
           </TouchableOpacity>
           <View style={styles.topRight}>
             <TouchableOpacity style={styles.iconBtn}>
-              <FontAwesome name="th" size={18} color={COLORS.text} />
+              <Grid3x3 size={18} color={COLORS.text} strokeWidth={2} />
             </TouchableOpacity>
             <TouchableOpacity style={styles.iconBtn}>
-              <FontAwesome name="expand" size={18} color={COLORS.text} />
+              <Maximize size={18} color={COLORS.text} strokeWidth={2} />
             </TouchableOpacity>
           </View>
         </View>
 
         {/* 싱크로율 게이지 */}
         <View style={styles.syncGauge}>
-          <FontAwesome name="bolt" size={14} color={syncColor} />
+          <Zap size={14} color={syncColor} strokeWidth={2} fill={syncColor} />
           <Text style={styles.syncLabel}>싱크로율</Text>
           <View style={styles.syncBarBg}>
             <View
@@ -161,12 +171,12 @@ export default function ExerciseScreen() {
           onPress={() => setGuideOpen(!guideOpen)}
           activeOpacity={0.7}
         >
-          <Text style={styles.guideToggleText}>📌 촬영 가이드</Text>
-          <FontAwesome
-            name={guideOpen ? 'chevron-up' : 'chevron-down'}
-            size={12}
-            color={COLORS.textSecondary}
-          />
+          <Text style={styles.guideToggleText}>촬영 가이드</Text>
+          {guideOpen ? (
+            <ChevronUp size={14} color={COLORS.textSecondary} strokeWidth={2} />
+          ) : (
+            <ChevronDown size={14} color={COLORS.textSecondary} strokeWidth={2} />
+          )}
         </TouchableOpacity>
         {guideOpen && (
           <View style={styles.guidePanel}>
@@ -229,7 +239,7 @@ export default function ExerciseScreen() {
 
           {/* 기준 영상 미리보기 */}
           <TouchableOpacity style={styles.refVideoBtn} activeOpacity={0.7}>
-            <FontAwesome name="play" size={16} color={COLORS.primary} />
+            <Play size={14} color={COLORS.primary} strokeWidth={2} fill={COLORS.primary} />
             <Text style={styles.refVideoText}>기준 영상</Text>
           </TouchableOpacity>
         </View>

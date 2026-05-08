@@ -11,7 +11,25 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Slider from '@react-native-community/slider';
 import { useRouter } from 'expo-router';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
+import {
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  ChevronsUp,
+  Check,
+  Dumbbell,
+  Ruler,
+  Target,
+  UserCog,
+  Video,
+  Sprout,
+  Crosshair,
+  Apple,
+  HeartPulse,
+  Footprints,
+  type LucideIcon,
+} from 'lucide-react-native';
 import { COLORS, FONT_SIZE, SPACING, RADIUS } from '@/constants/Colors';
 import Button from '@/components/ui/Button';
 import type {
@@ -34,7 +52,7 @@ interface ReferenceVideo {
 
 interface ExerciseCategory {
   key: string;
-  icon: string;
+  Icon: LucideIcon;
   label: string;
   videos: ReferenceVideo[];
 }
@@ -42,7 +60,7 @@ interface ExerciseCategory {
 const EXERCISE_VIDEOS: ExerciseCategory[] = [
   {
     key: 'squat',
-    icon: '🏋️',
+    Icon: Footprints,
     label: '스쿼트',
     videos: [
       {
@@ -73,7 +91,7 @@ const EXERCISE_VIDEOS: ExerciseCategory[] = [
   },
   {
     key: 'deadlift',
-    icon: '💪',
+    Icon: Dumbbell,
     label: '데드리프트',
     videos: [
       {
@@ -104,7 +122,7 @@ const EXERCISE_VIDEOS: ExerciseCategory[] = [
   },
   {
     key: 'pullup',
-    icon: '🤸',
+    Icon: ChevronsUp,
     label: '턱걸이',
     videos: [
       {
@@ -229,7 +247,7 @@ export default function OnboardingScreen() {
       <View style={styles.header}>
         {step > 0 ? (
           <TouchableOpacity onPress={handleBack} style={styles.backBtn}>
-            <FontAwesome name="chevron-left" size={16} color={COLORS.text} />
+            <ChevronLeft size={20} color={COLORS.text} strokeWidth={2} />
           </TouchableOpacity>
         ) : (
           <View style={styles.backBtn} />
@@ -288,7 +306,9 @@ function StepLevel({
 }) {
   return (
     <View>
-      <Text style={styles.stepIcon}>💪</Text>
+      <View style={styles.stepIconWrap}>
+        <Dumbbell size={28} color={COLORS.primary} strokeWidth={2} />
+      </View>
       <Text style={styles.stepTitle}>운동 수준이 어떻게 되시나요?</Text>
       <Text style={styles.stepDesc}>적절한 운동 추천에 필요해요! 외부에 공개되지 않아요.</Text>
 
@@ -323,7 +343,9 @@ function StepHeight({
 }) {
   return (
     <View>
-      <Text style={styles.stepIcon}>📏</Text>
+      <View style={styles.stepIconWrap}>
+        <Ruler size={28} color={COLORS.primary} strokeWidth={2} />
+      </View>
       <Text style={styles.stepTitle}>키가 어떻게 되시나요?</Text>
       <Text style={styles.stepDesc}>
         정확한 운동 강도와 칼로리 계산에 사용돼요. 외부에 공개되지 않아요.
@@ -370,7 +392,9 @@ function StepWeight({
 
   return (
     <View>
-      <Text style={styles.stepIcon}>🎯</Text>
+      <View style={styles.stepIconWrap}>
+        <Target size={28} color={COLORS.primary} strokeWidth={2} />
+      </View>
       <Text style={styles.stepTitle}>목표 몸무게가 어떻게 되시나요?</Text>
 
       <View style={styles.motivationBox}>
@@ -403,11 +427,11 @@ function StepWeight({
 
 // ─── Step 3: 트레이너 페르소나 ───────────────────────
 // 백엔드 SelectedPersona: BEGINNER, ADVANCED, DIET, REHAB
-const PERSONAS: { key: SelectedPersona; icon: string; label: string; desc: string }[] = [
-  { key: 'BEGINNER', icon: '🐣', label: '헬린이', desc: '친절하고 격려하는 초보 친화 코치' },
-  { key: 'ADVANCED', icon: '🫡', label: 'FM 교관', desc: '엄격하고 체계적인 군대식 트레이너' },
-  { key: 'DIET', icon: '🥗', label: '다이어터', desc: '체중 관리에 특화된 식단·운동 코치' },
-  { key: 'REHAB', icon: '🏥', label: '재활 전문', desc: '안전 최우선, 부상 방지 중심 가이드' },
+const PERSONAS: { key: SelectedPersona; Icon: LucideIcon; label: string; desc: string }[] = [
+  { key: 'BEGINNER', Icon: Sprout, label: '헬린이', desc: '친절하고 격려하는 초보 친화 코치' },
+  { key: 'ADVANCED', Icon: Crosshair, label: 'FM 교관', desc: '엄격하고 체계적인 군대식 트레이너' },
+  { key: 'DIET', Icon: Apple, label: '다이어터', desc: '체중 관리에 특화된 식단·운동 코치' },
+  { key: 'REHAB', Icon: HeartPulse, label: '재활 전문', desc: '안전 최우선, 부상 방지 중심 가이드' },
 ];
 
 function StepPersona({
@@ -419,31 +443,39 @@ function StepPersona({
 }) {
   return (
     <View>
-      <Text style={styles.stepIcon}>👥</Text>
+      <View style={styles.stepIconWrap}>
+        <UserCog size={28} color={COLORS.primary} strokeWidth={2} />
+      </View>
       <Text style={styles.stepTitle}>어떤 트레이너 스타일을 원하시나요?</Text>
       <Text style={styles.stepDesc}>페르소나에 따라 피드백 방식이 달라집니다.</Text>
 
-      {PERSONAS.map((p) => (
-        <TouchableOpacity
-          key={p.key}
-          style={[
-            styles.optionCard,
-            data.persona === p.key && styles.optionCardActive,
-          ]}
-          onPress={() => setData({ ...data, persona: p.key })}
-          activeOpacity={0.7}
-        >
-          <View style={styles.personaRow}>
-            <Text style={styles.personaIcon}>{p.icon}</Text>
-            <View>
-              <Text style={[styles.optionLabel, data.persona === p.key && styles.optionLabelActive]}>
-                {p.label}
-              </Text>
-              <Text style={styles.optionDesc}>{p.desc}</Text>
+      {PERSONAS.map((p) => {
+        const isActive = data.persona === p.key;
+        return (
+          <TouchableOpacity
+            key={p.key}
+            style={[styles.optionCard, isActive && styles.optionCardActive]}
+            onPress={() => setData({ ...data, persona: p.key })}
+            activeOpacity={0.7}
+          >
+            <View style={styles.personaRow}>
+              <View style={styles.personaIconWrap}>
+                <p.Icon
+                  size={28}
+                  color={isActive ? COLORS.primary : COLORS.textSecondary}
+                  strokeWidth={2}
+                />
+              </View>
+              <View>
+                <Text style={[styles.optionLabel, isActive && styles.optionLabelActive]}>
+                  {p.label}
+                </Text>
+                <Text style={styles.optionDesc}>{p.desc}</Text>
+              </View>
             </View>
-          </View>
-        </TouchableOpacity>
-      ))}
+          </TouchableOpacity>
+        );
+      })}
     </View>
   );
 }
@@ -479,7 +511,9 @@ function StepVideo({
 
   return (
     <View>
-      <Text style={styles.stepIcon}>▶</Text>
+      <View style={styles.stepIconWrap}>
+        <Video size={28} color={COLORS.primary} strokeWidth={2} />
+      </View>
       <Text style={styles.stepTitle}>기준 영상을 선택해주세요</Text>
       <Text style={styles.stepDesc}>
         따라 할 운동 영상을 하나 골라주세요. 나중에 변경할 수 있어요.
@@ -493,6 +527,7 @@ function StepVideo({
       >
         {EXERCISE_VIDEOS.map((category) => {
           const isActive = category.key === activeKey;
+          const TabIcon = category.Icon;
           return (
             <TouchableOpacity
               key={category.key}
@@ -500,13 +535,18 @@ function StepVideo({
               onPress={() => handleCategoryChange(category.key)}
               activeOpacity={0.7}
             >
+              <TabIcon
+                size={16}
+                color={isActive ? COLORS.primary : COLORS.textSecondary}
+                strokeWidth={2}
+              />
               <Text
                 style={[
                   styles.categoryTabText,
                   isActive && styles.categoryTabTextActive,
                 ]}
               >
-                {category.icon}  {category.label}
+                {category.label}
               </Text>
             </TouchableOpacity>
           );
@@ -534,7 +574,7 @@ function StepVideo({
                 />
                 {isSelected && (
                   <View style={styles.checkOverlay}>
-                    <FontAwesome name="check" size={18} color={COLORS.primaryText} />
+                    <Check size={16} color={COLORS.primaryText} strokeWidth={3} />
                   </View>
                 )}
               </View>
@@ -559,10 +599,10 @@ function StepVideo({
           onPress={() => setPage(Math.max(0, page - 10))}
           disabled={page === 0}
         >
-          <FontAwesome
-            name="angle-double-left"
+          <ChevronsLeft
             size={16}
             color={page === 0 ? COLORS.textMuted : COLORS.text}
+            strokeWidth={2}
           />
         </TouchableOpacity>
         <TouchableOpacity
@@ -570,10 +610,10 @@ function StepVideo({
           onPress={() => page > 0 && setPage(page - 1)}
           disabled={page === 0}
         >
-          <FontAwesome
-            name="chevron-left"
+          <ChevronLeft
             size={14}
             color={page === 0 ? COLORS.textMuted : COLORS.text}
+            strokeWidth={2}
           />
         </TouchableOpacity>
 
@@ -589,10 +629,10 @@ function StepVideo({
           onPress={() => page < totalPages - 1 && setPage(page + 1)}
           disabled={page === totalPages - 1}
         >
-          <FontAwesome
-            name="chevron-right"
+          <ChevronRight
             size={14}
             color={page === totalPages - 1 ? COLORS.textMuted : COLORS.text}
+            strokeWidth={2}
           />
         </TouchableOpacity>
         <TouchableOpacity
@@ -603,10 +643,10 @@ function StepVideo({
           onPress={() => setPage(Math.min(totalPages - 1, page + 10))}
           disabled={page === totalPages - 1}
         >
-          <FontAwesome
-            name="angle-double-right"
+          <ChevronsRight
             size={16}
             color={page === totalPages - 1 ? COLORS.textMuted : COLORS.text}
+            strokeWidth={2}
           />
         </TouchableOpacity>
       </View>
@@ -638,6 +678,7 @@ const styles = StyleSheet.create({
 
   // Step common
   stepIcon: { fontSize: 28, marginTop: SPACING.xl, marginBottom: SPACING.md },
+  stepIconWrap: { marginTop: SPACING.xl, marginBottom: SPACING.md },
   stepTitle: {
     fontSize: FONT_SIZE.xl,
     fontWeight: '800',
@@ -674,7 +715,14 @@ const styles = StyleSheet.create({
 
   // Persona
   personaRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
-  personaIcon: { fontSize: 28 },
+  personaIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.surfaceLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
 
   // Weight
   motivationBox: {
@@ -707,6 +755,9 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.lg,
   },
   categoryTab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.sm,
     borderRadius: RADIUS.full,
