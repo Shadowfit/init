@@ -64,8 +64,8 @@ public class ExercisesController {
 
         // 응답 DTO 생성
         ExercisesResponseDto response = ExercisesResponseDto.builder()
-                .sessionId(sessionId.intValue())
-                .exerciseId(dto.getExerciseId().intValue())
+                .sessionId(sessionId)
+                .exerciseId(dto.getExerciseId())
                 .startTime(LocalDateTime.now())
                 .status(Status.IN_PROGRESS)
                 .build();
@@ -92,7 +92,7 @@ public class ExercisesController {
 
         // 응답 생성
         SessionUpdateResponseDto response = SessionUpdateResponseDto.builder()
-                .sessionId(sessionId.intValue())
+                .sessionId(sessionId)
                 .status(Status.COMPLETED)
                 .endTime(LocalDateTime.now())
                 .build();
