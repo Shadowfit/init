@@ -76,7 +76,7 @@
 | 우선 | 항목 | 비고 |
 |------|------|------|
 | 🔴 | `services/exerciseService.ts` 신설 (운동 시작·종료·세션 조회) | 분기 H 무관, 즉시 가능 |
-| 🔴 | 카메라 프레임 송신 (`POST /pose` 또는 백엔드 프록시) | 분기 H 결정 후 — [`decisions/ai-backend-coupling.md`](./decisions/ai-backend-coupling.md) §5-β |
+| 🔴 | 카메라 프레임 송신 (`POST /pose` 또는 백엔드 프록시) | 분기 H 결정 후 — [`decisions/ai-backend-coupling.md`](../decisions/ai-backend-coupling.md) §5-β |
 | 🔴 | 운동 결과 화면 (rep 수·sync_rate·feedback) | 종료 후 화면 |
 | 🟡 | TTS 재생 (`expo-speech`) | `/preferences/tts` + `/feedback-templates` 기반 |
 | 🟡 | 관절 점 오버레이 시각화 | AI landmarks 응답 활용 |
@@ -97,15 +97,15 @@
 | 🟢 | 카테고리 관리 CRUD | 운영자용 |
 | 🟢 | 사용자 운동 패턴 분석 API | 큰 작업 |
 | 🟢 | 데이터 기반 개인화 루틴 추천 | 가장 큰 작업, 알고리즘 설계 필요 |
-| ⚪ | 운동 세트 개념 도입 | DB 컬럼·DTO 신설, 분석기와 협의 — [`project-squat-first`](../../C:/Users/khjae/.claude/projects/E--init/memory/project_squat_first.md) 와 묶어 후순위 |
+| ⚪ | 운동 세트 개념 도입 | DB 컬럼·DTO 신설, 분석기와 협의 — [`project-squat-first`](../../../C:/Users/khjae/.claude/projects/E--init/memory/project_squat_first.md) 와 묶어 후순위 |
 
 ### 2-3. AI Server (FastAPI) — 🟢 변경 최소화 (정책)
 
-[`feedback-minimize-python-changes`](../../C:/Users/khjae/.claude/projects/E--init/memory/feedback_minimize_python_changes.md) 따라 거의 손대지 않음.
+[`feedback-minimize-python-changes`](../../../C:/Users/khjae/.claude/projects/E--init/memory/feedback_minimize_python_changes.md) 따라 거의 손대지 않음.
 
 | 우선 | 항목 | 비고 |
 |------|------|------|
-| 🟢 | (필요 시) `ExtractReferenceData` 실제 구현 | 새 운동 추가 시점에 함께 — 현재는 `UNIMPLEMENTED` 응답. [`project-squat-first`](../../C:/Users/khjae/.claude/projects/E--init/memory/project_squat_first.md) 따라 보류 |
+| 🟢 | (필요 시) `ExtractReferenceData` 실제 구현 | 새 운동 추가 시점에 함께 — 현재는 `UNIMPLEMENTED` 응답. [`project-squat-first`](../../../C:/Users/khjae/.claude/projects/E--init/memory/project_squat_first.md) 따라 보류 |
 | ⚪ | 런지·플랭크 분석기 추가 | 위와 같은 시점 |
 | ⚪ | 운동 세트 자동 구분 분석 로직 | DB 스키마 결정 후 |
 
@@ -115,8 +115,8 @@
 
 | 우선 | 항목 | 위치 |
 |------|------|------|
-| 🟢 | A6 운영 알람 (Slack 웹훅 + Spring 헬퍼) | [`decisions/ai-backend-coupling.md`](./decisions/ai-backend-coupling.md) §4 |
-| 🟢 | HTTPS 종료 + 도메인 | [`19-deployment.md`](./19-deployment.md) TODO |
+| 🟢 | A6 운영 알람 (Slack 웹훅 + Spring 헬퍼) | [`decisions/ai-backend-coupling.md`](../decisions/ai-backend-coupling.md) §4 |
+| 🟢 | HTTPS 종료 + 도메인 | [`19-deployment.md`](../19-deployment.md) TODO |
 | 🟢 | MySQL 호스트 노출 차단 (운영용) | 위와 동일 |
 | 🟢 | DB 마이그레이션 도구 (Flyway 등) | 위와 동일 |
 | 🟢 | dependabot 취약점 처리 | frontend npm `audit fix` 즉시, ai-server pip 신중 |
@@ -132,7 +132,7 @@
 이게 없으면 시연 자체가 불가능:
 
 1. **프론트 운동 시작/종료 API 호출** — `services/exerciseService.ts` 신설, `exercise.tsx` 의 녹화 버튼에 연결
-2. **분기 H 결정** ([`decisions §5-β`](./decisions/ai-backend-coupling.md)) — 카메라 프레임 송신 경로. H1 (백엔드 프록시) 추천
+2. **분기 H 결정** ([`decisions §5-β`](../decisions/ai-backend-coupling.md)) — 카메라 프레임 송신 경로. H1 (백엔드 프록시) 추천
 3. **백엔드 프록시 `POST /exercises/sessions/{id}/frame`** — H1 채택 시
 4. **프론트 카메라 프레임 송신** — H1 endpoint 호출
 5. **운동 결과 화면** — 종료 후 rep·sync_rate·feedback 표시
@@ -191,8 +191,8 @@
 ---
 
 ## 관련 문서
-- [`REQUIREMENTS.md`](./REQUIREMENTS.md) — 코드 기준 도메인별 요구사항
-- [`architecture/ai-backend-integration.md`](./architecture/ai-backend-integration.md) — 결합 현황
-- [`decisions/ai-backend-coupling.md`](./decisions/ai-backend-coupling.md) — 미결 분기 (H 포함)
-- [`18-testing-guide.md`](./18-testing-guide.md) §8 — 시연 한 사이클 검증 절차
-- [`19-deployment.md`](./19-deployment.md) — 배포 TODO
+- [`REQUIREMENTS.md`](../REQUIREMENTS.md) — 코드 기준 도메인별 요구사항
+- [`architecture/ai-backend-integration.md`](../architecture/ai-backend-integration.md) — 결합 현황
+- [`decisions/ai-backend-coupling.md`](../decisions/ai-backend-coupling.md) — 미결 분기 (H 포함)
+- [`18-testing-guide.md`](../18-testing-guide.md) §8 — 시연 한 사이클 검증 절차
+- [`19-deployment.md`](../19-deployment.md) — 배포 TODO

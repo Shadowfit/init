@@ -1,0 +1,371 @@
+# Backend 작업 상세 — BE-01 ~ BE-09
+
+마지막 업데이트: 2026-05-24
+출처: [`21-task-assignment.md`](./21-task-assignment.md) §2 의 항목별 풀이.
+범위: 각 작업이 **어떤 파일을 / 무엇을 / 왜 / 어디까지** 만져야 하는지 + 현재 코드 상태 확인. 담당자가 받아서 바로 시작할 수 있는 단위.
+
+읽는 법:
+- **현재 상태**: 코드를 실제로 확인한 결과 (📁 = 존재, ❌ = 부재, ⚠️ = 부분 구현)
+- **만질 파일**: 신설/수정 대상 — 파일:라인 표기
+- **완료 기준**: 무엇이 되면 끝났다고 볼 수 있는가
+- **리스크/의존**: 시작 전에 결정 받아야 할 것
+
+---
+
+## BE-01 — 카메라 프레임 프록시 endpoint (H1 채택 시)
+
+**우선**: 🔴 | **추정**: 3h | **의존**: [분기 H 결정](../decisions/ai-backend-coupling.md) (H1 선택 시에만)
+
+### 현재 상태
+- 📁 AI 측 `POST /pose`: `ai-server/app/api/endpoints/pose.py:25-145` 존재 (이미 프레임 수신 가능)
+- 📁 `WebClientConfig`: `backend/src/main/java/com/shadowfit/global/config/WebClientConfig.java:12` 존재, `application.yml:61` 의 `ai-server.url` 주입
+- 📁 `ExercisesController`: `backend/src/main/java/com/shadowfit/controller/ExercisesController.java:52-93` 에 `POST /exercises/sessions`, `PUT /exercises/sessions/{id}/stop|complete` 존재
+- ❌ `POST /exercises/sessions/{sessionId}/frame` endpoint 없음
+
+### 만질 파일
+1. `controller/ExercisesController.java` — `POST /exercises/sessions/{sessionId}/frame` 신설
+   - request body: base64 인코딩된 JPEG 프레임 + `frame_index`/`timestamp_ms`
+   - 응답: AI 의 `POST /pose` 응답 그대로 전달 (sync_rate, feedback_message, landmarks 등)
+2. `service/Exercise/ExerciseAnalysisService.java` — `forwardFrame(sessionId, frame)` 메서드 추가
+   - 기존 `webClient` 빈으로 AI `POST /pose` 호출
+   - 세션 소유권 검증 (이 sessionId 가 인증된 사용자 것인지)
+3. `dto/exercises/session/FrameRequestDto.java` (신설), `FrameResponseDto.java` (신설)
+   - 또는 AI 응답을 그대로 통과시키는 Map<String,Object>/JsonNode 패턴 (간단)
+
+### 완료 기준
+- 프론트가 `POST /exercises/sessions/{id}/frame` 으로 base64 프레임 보내면 AI 분석 결과 그대로 받음
+- 비인증/타 사용자 세션 접근 시 401/403
+- 통합 테스트 1개 (`FrameProxyIntegrationTest`)
+
+### 리스크/의존
+- **분기 H 결정 선행 필수** — H1(프록시) 이 아니라 H2(프론트 → AI 직결) 면 이 작업 자체가 없어짐
+- base64 인코딩 프레임 크기(보통 ~50KB) × 초당 5~10프레임 → WebClient buffer 한도 조정 필요할 수 있음
+
+---
+
+## BE-02 — worst 구간 선정 서비스 로직 보강
+
+**우선**: 🟡 | **추정**: 3h | **의존**: 없음 (지금 시작 가능)
+
+### 현재 상태
+- 📁 `WorstSectionDto`: `dto/report/detailreport/WorstSectionDto.java` 존재 — 필드 `exerciseName`, `timeStamp`, `reason` (모두 String, setter 만)
+- 📁 `SessionReportResponseDto`: `dto/report/detailreport/SessionReportResponseDto.java` 존재 — 필드 `sessionId`, `avgSyncRate`, `totalReps`, `workoutMinutes`, `caloriesBurned`, `aiSafetyReport`, `worstSection`, `syncRateDetails`, `comparisonWithPrevious`
+- ⚠️ `ReportService.java:64-92` — `worstSection`, `syncRateDetails`, `comparisonWithPrevious` 가 null/default 로만 세팅됨 (stub)
+- 📁 `PoseData`: `model/exercise/PoseData.java` — `timestampSec`, `syncRate`, `isCorrect`, `feedbackMessage` 컬럼 보유 (worst 구간 선정의 원천 데이터)
+
+### 만질 파일
+1. `service/Report/ReportService.java` — `selectWorstSection(sessionId)`, `buildSyncRateDetails(sessionId)`, `buildComparisonWithPrevious(memberId, sessionId)` 3 메서드 신설
+   - **worst 선정 알고리즘**: `PoseData` 중 `syncRate` 가장 낮은 timestamp 구간 (또는 연속된 N개의 평균이 가장 낮은 구간)
+   - **syncRateDetails**: 시계열 배열 — 프론트가 차트 그릴 수 있는 형태 `[{t: 5.2, sync: 0.78}, ...]`
+   - **comparisonWithPrevious**: 직전 동일 운동 세션의 평균 syncRate 와 차이
+2. `repository/exercise/PoseDataRepository.java` — `findBySessionIdOrderByTimestampSecAsc(sessionId)` 추가 (이미 비슷한 게 있을 수 있음, 확인 후)
+
+### 완료 기준
+- `GET /reports/sessions/{sessionId}` 응답에 worstSection/syncRateDetails/comparisonWithPrevious 가 실데이터로 채워짐
+- 단위 테스트 — 합성 PoseData 로 worst 선정 결과 검증
+
+### 리스크/의존
+- worst 구간을 "최소 syncRate 한 점" 으로 할지 "연속 구간의 최저 평균" 으로 할지 정의 필요 → 작업자가 1줄 정의하고 시작 (예: "연속된 3 PoseData 의 평균이 가장 낮은 구간")
+- "직전 동일 운동" 의 정의 — 같은 `exerciseId`? 같은 카테고리? → 단순 동일 `exerciseId` 권장
+
+---
+
+## BE-03 — GPT/Claude 리포트 자동 생성
+
+**우선**: 🟡 | **추정**: 6h | **의존**: 없음
+
+### 현재 상태
+- ❌ `application.yml` / `application.properties` 에 `OPENAI_API_KEY` 또는 `ANTHROPIC_API_KEY` **없음** (작업 분배표의 "이미 env 에 있음" 은 부정확, `.env.example` 만 있을 가능성 — 시작 시 재확인 필요)
+- ❌ `GptFeedbackService` 없음
+- 📁 `Report` 엔티티: `model/report/Report.java` — `summary`, `improvementTips`, `detailedAnalysis`, `comparisonWithPrevious` 텍스트 필드 보유 (LLM 채울 자리는 준비됨)
+- 📁 `ReportService.java:29-56` — 현재는 Report 엔티티 조회/표시만 함. **누가 Report 를 생성하는지 불명확** (현재는 수동 시드 또는 미생성)
+
+### 만질 파일
+1. `service/Report/GptFeedbackService.java` 신설
+   - 입력: `Session` + 그 세션의 `PoseData` 요약(평균 syncRate, worst 구간, totalReps)
+   - 출력: `{summary, improvementTips, detailedAnalysis}` 텍스트 3종
+   - 호출: OpenAI Chat Completions 또는 Anthropic Messages API
+   - 프롬프트는 한국어 ([`project-korean-only`](../../../C:/Users/khjae/.claude/projects/E--init/memory/project_korean_only.md))
+2. `service/Report/ReportService.java` — `generateReportForSession(sessionId)` 추가, `GptFeedbackService` 호출 후 `Report` 엔티티 저장
+3. `service/Exercise/ExerciseAnalysisService.java` 또는 gRPC 콜백 `CompleteAnalysis` 처리부 — **세션 종료 콜백 수신 시 비동기로 리포트 생성 트리거** (`@Async` 또는 `ApplicationEventPublisher`)
+4. `application.yml` — `openai.api-key: ${OPENAI_API_KEY}` 또는 `anthropic.api-key: ${ANTHROPIC_API_KEY}`
+5. `docker-compose.yml` — backend 컨테이너에 env 주입
+6. `.env.example` — 키 변수 추가
+
+### 완료 기준
+- 운동 세션 종료 → 30초 이내 Report 자동 생성됨
+- LLM 호출 실패해도 세션 자체는 정상 종료 (실패 시 Report.status=FAILED 정도, 사용자 화면 영향 없음)
+- 단위 테스트 — LLM 응답 mock 으로 Report 저장 확인
+
+### 리스크/의존
+- **OpenAI vs Anthropic 선택 필요** — 작업 분배표는 "GPT/Claude" 로 모호. SDK 의존성/단가/응답 품질 트레이드오프 (분기 추가 → `decisions/llm-provider.md` 로 빼는 것 추천)
+- LLM 호출은 외부 의존 → 타임아웃·재시도 정책 필요 (5초 timeout, 1회 재시도 정도)
+- 응답이 한국어로 안정적으로 나오는 프롬프트 설계 비용
+
+---
+
+## BE-04 — 카테고리 관리 CRUD API
+
+**우선**: 🟢 | **추정**: 3h | **의존**: 없음
+
+### 현재 상태
+- 📁 `ExerciseCategory`: `model/exercise/ExerciseCategory.java` — **enum** (LOWER, BACK, UPPER, CORE, FULL). 엔티티가 아니라 enum 인 점에 주의
+- 📁 `AdminExerciseController`: `controller/AdminExerciseController.java:19-29` — 현재 `PATCH /admin/exercises/{exerciseId}/thresholds` 1개만 있음
+- ❌ 카테고리 추가/삭제 API 없음
+
+### 만질 파일
+
+**선택지 A — enum 유지 (간단, 권장)**
+1. `controller/AdminCategoryController.java` 신설
+   - `GET /admin/categories` — enum 값 + 그 카테고리에 속한 운동 수
+   - 카테고리 자체 CRUD 불가 (enum 이므로 코드 수정 필요)
+   - 결과적으로 "카테고리 목록 조회" + "카테고리별 운동 목록" 정도가 끝
+2. 이 경우 작업 분량은 1h 로 줄어듦
+
+**선택지 B — 엔티티로 마이그레이션 (본격적 CRUD)**
+1. `model/exercise/ExerciseCategory.java` — enum → `@Entity` 로 전환 (코드 광범위 영향)
+2. `mysql/schema.sql` — `exercise_categories` 테이블 신설, `exercises.category_id` FK
+3. `controller/AdminCategoryController.java` 신설 — `POST/PATCH/DELETE /admin/categories`
+4. `repository/exercise/ExerciseCategoryRepository.java` 신설
+5. 기존 `Exercise.category` 참조하는 모든 코드 수정 (Exercise.java, DTO, 서비스 다수)
+
+### 완료 기준
+- A: `GET /admin/categories` 가 enum 값 + 운동 개수 반환
+- B: 관리자가 새 카테고리 추가/삭제 가능
+
+### 리스크/의존
+- **enum 유지 vs 엔티티 전환 선택이 결정 필요** — 현재 enum 인데 시연용으론 A 로 충분. 운영 단계에서 카테고리를 비개발자가 추가해야 하면 B 필요
+- B 선택 시 추정 3h → 6h+ 로 증가 (영향 범위가 큼)
+- 시작 전 사용자 확인 권장 ([`feedback-preview-scope-before-bulk-changes`](../../../C:/Users/khjae/.claude/projects/E--init/memory/feedback_preview_scope_before_bulk_changes.md))
+
+---
+
+## BE-05 — 관리자 대시보드 통계 API
+
+**우선**: 🟢 | **추정**: 4h | **의존**: 없음
+
+### 현재 상태
+- ❌ 관리자 통계 endpoint 없음
+- 📁 집계 대상 도메인: `Member` (`model/member/Member.java`), `Session` (`model/exercise/Session.java`), `Report` (`model/report/Report.java`)
+
+### 만질 파일
+1. `controller/AdminDashboardController.java` 신설 (또는 `AdminExerciseController` 에 추가)
+   - `GET /admin/stats/overview` — 가입자 수, 활성 사용자(최근 7일), 총 세션 수, 평균 syncRate
+   - `GET /admin/stats/sessions?from=...&to=...` — 일별 세션 수 시계열
+   - `GET /admin/stats/exercises` — 운동별 인기도 (세션 수 기준 top)
+2. `service/admin/AdminStatsService.java` 신설
+3. `repository/exercise/SessionRepository.java` — count/group-by 메서드 추가 (`countByCreatedAtBetween`, `groupByExerciseId` 등)
+4. `dto/admin/stats/OverviewResponseDto.java`, `SessionsTimeseriesResponseDto.java`, `ExercisePopularityResponseDto.java`
+
+### 완료 기준
+- 3 endpoint 모두 응답
+- 관리자 권한 검증 (`@PreAuthorize("hasRole('ADMIN')")` 또는 SecurityConfig 에서)
+- 기존 시드 데이터로 응답이 0/null 이 아닌 의미 있는 숫자 나옴
+
+### 리스크/의존
+- **Member 엔티티에 role/admin 필드 존재 여부** 확인 필요 (현재 Security 가 어떻게 관리자 구분하는지 확인 후 시작)
+- 집계 쿼리가 무거우면 캐싱 필요 (시연용은 일단 무캐시)
+
+---
+
+## BE-06 — 운동 목표 엔티티·CRUD API
+
+**우선**: 🟢 | **추정**: 5h | **의존**: 없음
+
+### 현재 상태
+- ❌ `Goal` 엔티티 **없음**
+- ❌ Member 에 `weeklyGoal`/`target` 필드 **없음**
+- 📁 비교용: `Onboarding` 흐름에 사용자 목적 입력 받는 부분이 있는지는 별도 확인 필요
+
+### 만질 파일
+1. `model/member/Goal.java` 신설
+   - 필드: `id`, `member` (FK), `goalType` (enum: WEEKLY_SESSIONS, WEEKLY_MINUTES, TARGET_WEIGHT 등), `targetValue`, `currentValue`, `periodStart`, `periodEnd`, `status` (IN_PROGRESS/ACHIEVED/FAILED)
+2. `repository/member/GoalRepository.java` 신설
+3. `controller/GoalController.java` 신설
+   - `POST /goals` — 목표 설정
+   - `GET /goals` — 본인 목표 조회
+   - `PATCH /goals/{id}` — 목표 수정
+   - `DELETE /goals/{id}` — 삭제
+4. `service/Goal/GoalService.java` 신설
+   - **목표 진척도 자동 갱신**: 세션 종료 콜백 시점에 `currentValue` += 세션 분/횟수 (이벤트 리스너 또는 `CompleteAnalysis` 콜백 핸들러에서 호출)
+5. `dto/goal/*` — Request/Response DTO 4종
+6. `mysql/schema.sql` — `goals` 테이블
+
+### 완료 기준
+- CRUD 4 endpoint 모두 동작
+- 세션 종료 시 관련 목표의 `currentValue` 자동 증가
+- 단위 테스트 — 주간 세션 목표 진척 시나리오
+
+### 리스크/의존
+- **목표 종류(goalType) 정의**가 비개발자 합의 필요 — 시연용은 WEEKLY_SESSIONS 한 종만 먼저 구현 권장
+- 진척 자동 갱신 트리거 지점을 [`136f0e6 SessionTimeoutScheduler`](../architecture/ai-backend-monthly-log.md) 흐름과 동일한 곳에 두면 자연스러움
+
+---
+
+## BE-07 — 사용자 운동 패턴 분석 API
+
+**우선**: 🟢 | **추정**: 8h+ | **의존**: 데이터 축적 후
+
+### 현재 상태
+- ❌ 패턴 분석 endpoint 없음
+- 📁 `SessionService.getWeeklyActivity()`, `getCalendarMain()` 존재 — **단순 조회/집계** 수준 (패턴 추론 아님)
+
+### 만질 파일
+1. `controller/PatternAnalysisController.java` 신설
+   - `GET /patterns/periodicity` — 사용자가 주로 운동하는 요일/시간대
+   - `GET /patterns/intensity-trend` — 4주간 평균 syncRate·총 분 추세
+   - `GET /patterns/consistency` — 연속 운동일 수, 빠진 날 수
+2. `service/Analysis/PatternAnalysisService.java` 신설
+3. `repository/exercise/SessionRepository.java` — 시계열 집계 메서드 추가
+
+### 완료 기준
+- 3 endpoint 응답
+- 최소 4주치 데이터가 있는 사용자에서 의미 있는 결과 나옴
+
+### 리스크/의존
+- **사용자당 최소 4주(28세션) 데이터가 있어야 의미 있음** → 시연 초기에는 mock/stub 응답 권장
+- 알고리즘 정의가 모호 — 분기로 빼서 결정 필요: 단순 통계? 클러스터링? → 시연용은 단순 통계 (요일별 평균, 시간대별 분포)
+
+---
+
+## BE-08 — 개인화 루틴 추천 API
+
+**우선**: 🟢 | **추정**: 10h+ | **의존**: BE-07
+
+### 현재 상태
+- ❌ 추천 endpoint 없음
+- ❌ 추천 알고리즘 설계 안 됨
+
+### 만질 파일
+1. `controller/RecommendationController.java` 신설
+   - `GET /recommendations/today` — 오늘 추천 루틴 (3개 운동)
+   - `GET /recommendations/weekly` — 1주 단위 추천 플랜
+2. `service/Recommendation/RoutineRecommendationService.java` 신설
+3. `dto/recommendation/*`
+
+### 완료 기준
+- 추천 결과 응답 + 추천 근거 한 줄 (`"최근 하체 운동이 적어서"`)
+
+### 리스크/의존
+- **알고리즘 자체가 설계 안 됨** — 작업 시작 전 `decisions/recommendation-algorithm.md` 신설 필수
+  - 후보: 규칙 기반(가장 약한 카테고리 보강) / 협업 필터링 / GPT 호출
+  - 시연용은 **규칙 기반 1안** 추천 (가장 가벼움, 1~2h)
+- BE-07 의 패턴 분석 결과를 입력으로 사용
+
+---
+
+## BE-09 — 운동 세트 개념 도입 (보류)
+
+**우선**: ⚪ | **추정**: 5h | **상태**: 🟦 보류 | **의존**: 새 운동 추가 시점
+
+### 현재 상태
+- 📁 `Session.java:43` — `totalReps` 만 있고 `setCount`/`setIndex` **없음**
+- 📁 `PoseData.java` — set 필드 **없음**
+- 📁 `ai-server/app/proto/exercise.proto:94-99` (`PoseDataRequest`) — `timestamp_sec`, `joint_coordinates`, `sync_rate`, `feedback_message`. set 필드 **없음**
+
+### 만질 파일 (보류 해제 시)
+1. **proto** (양쪽 동기 필요)
+   - `backend/src/main/proto/exercise.proto` — `PoseDataRequest` 에 `set_index(5)`, `rep_index_in_set(6)` 추가
+   - `ai-server/app/proto/exercise.proto` 동일 변경
+2. `model/exercise/Session.java` — `setCount`, `restSeconds` 컬럼 추가
+3. `model/exercise/PoseData.java` — `setIndex` 컬럼 추가
+4. `mysql/schema.sql` — 컬럼 추가 (또는 Flyway 마이그레이션, OP-04 의존)
+5. `dto/exercises/session/*` — 세트 정보 노출
+6. `service/Exercise/PoseDataService.java`, `ExerciseGrpcService.java` — 새 필드 처리
+
+### 완료 기준
+- 스쿼트 외 운동 추가 + 세트 단위 분석 결과 저장/조회 가능
+
+### 리스크/의존
+- [`project-squat-first`](../../../C:/Users/khjae/.claude/projects/E--init/memory/project_squat_first.md) 에 의해 **현재 스쿼트만 다룸 → 세트 개념 자체가 필요 없음**. 새 운동 추가 결정 전까지 보류
+- AI 측 분석기가 세트 구분을 어떻게 할지 (AI-03 와 협의 필요) → [`feedback-minimize-python-changes`](../../../C:/Users/khjae/.claude/projects/E--init/memory/feedback_minimize_python_changes.md) 정책상 AI 원작자와 합의 필요
+
+---
+
+## 권장 시작 순서
+
+1주차 (시연 직결):
+1. **BE-01** (분기 H 결정 후)
+
+1~2주차 (시연 풍성하게):
+2. **BE-02** (worst 구간) — 다른 작업과 독립
+3. **BE-03** (GPT 리포트) — LLM 제공자 결정 선행
+
+2주차 이후 (관리/장기):
+4. **BE-04** (카테고리 — A안 1h 로 가볍게)
+5. **BE-05** (관리자 통계)
+6. **BE-06** (Goal)
+7. **BE-07** → **BE-08** (패턴 → 추천, 데이터 충분해진 후)
+
+보류:
+- **BE-09** — 새 운동 추가 결정 시점에 해제
+
+---
+
+## 작업 시작 전 결정 받아야 할 항목
+
+| 작업 | 결정 사항 | 추천 |
+|------|---------|------|
+| BE-01 | 분기 H (프록시 vs 직결) | H1 (프록시) |
+| BE-03 | LLM 제공자 (OpenAI vs Anthropic) | `decisions/llm-provider.md` 신설 후 결정 |
+| BE-04 | 카테고리 enum 유지 vs 엔티티 전환 | A (enum 유지) → 1h |
+| BE-07 | 패턴 분석 알고리즘 | 단순 통계 (요일별/시간대별) |
+| BE-08 | 추천 알고리즘 | `decisions/recommendation-algorithm.md` 신설 후, 규칙 기반 권장 |
+
+---
+
+## 최종 신설 API 목록 (전체 합치면)
+
+BE-01~08 가 모두 완료되면 새로 생기는 endpoint 전체. 인증 칸: 👤 = 본인 JWT, 🛡️ = 관리자, 🔁 = 신설 아니라 응답 필드만 채워짐.
+
+### 사용자용 API
+
+| 작업 | Method | Endpoint | 응답 요지 | 인증 |
+|------|--------|----------|---------|------|
+| BE-01 | POST | `/exercises/sessions/{sessionId}/frame` | AI `POST /pose` 응답 그대로 (sync_rate, feedback_message, landmarks) | 👤 |
+| BE-02 | GET | `/reports/sessions/{sessionId}` 🔁 | 기존 응답에 worstSection / syncRateDetails / comparisonWithPrevious 채워짐 (새 endpoint 아님) | 👤 |
+| BE-06 | POST | `/goals` | 목표 생성 (goalType, targetValue, periodStart/End) | 👤 |
+| BE-06 | GET | `/goals` | 본인 목표 목록 (currentValue 자동 갱신됨) | 👤 |
+| BE-06 | PATCH | `/goals/{goalId}` | 목표 수정 | 👤 |
+| BE-06 | DELETE | `/goals/{goalId}` | 목표 삭제 | 👤 |
+| BE-07 | GET | `/patterns/periodicity` | 주로 운동하는 요일/시간대 | 👤 |
+| BE-07 | GET | `/patterns/intensity-trend` | 4주간 평균 syncRate · 총 분 추세 | 👤 |
+| BE-07 | GET | `/patterns/consistency` | 연속 운동일 수, 빠진 날 수 | 👤 |
+| BE-08 | GET | `/recommendations/today` | 오늘 추천 루틴 (3개 운동) + 근거 한 줄 | 👤 |
+| BE-08 | GET | `/recommendations/weekly` | 1주 단위 추천 플랜 | 👤 |
+
+### 관리자용 API
+
+| 작업 | Method | Endpoint | 응답 요지 | 인증 |
+|------|--------|----------|---------|------|
+| BE-04(A) | GET | `/admin/categories` | enum 값 + 카테고리별 운동 수 | 🛡️ |
+| BE-04(B) | POST | `/admin/categories` | 카테고리 생성 (B안 채택 시만) | 🛡️ |
+| BE-04(B) | PATCH | `/admin/categories/{id}` | 카테고리 수정 (B안 채택 시만) | 🛡️ |
+| BE-04(B) | DELETE | `/admin/categories/{id}` | 카테고리 삭제 (B안 채택 시만) | 🛡️ |
+| BE-05 | GET | `/admin/stats/overview` | 가입자 수, 활성 사용자(7d), 총 세션 수, 평균 syncRate | 🛡️ |
+| BE-05 | GET | `/admin/stats/sessions?from=&to=` | 일별 세션 수 시계열 | 🛡️ |
+| BE-05 | GET | `/admin/stats/exercises` | 운동별 인기도 (세션 수 top) | 🛡️ |
+
+### 새 endpoint 없는 작업 (백그라운드/스키마 변경)
+
+| 작업 | 변경 형태 |
+|------|---------|
+| BE-03 | gRPC `CompleteAnalysis` 콜백 핸들러에서 비동기 트리거 — REST 표면 없음. Report 가 자동 생성되어 기존 `GET /reports/sessions/{id}` 응답에 LLM 텍스트 채워짐 |
+| BE-09 (보류) | DB 컬럼 + proto 메시지 확장만. 새 endpoint 없음, 기존 `/exercises/sessions/...` 응답 필드만 확장 |
+
+### 합계
+- **신설 endpoint**: 사용자용 10개 + 관리자용 4~7개 (BE-04 A/B 선택에 따라) = **14~17개**
+- **응답 보강만**: 2개 (`GET /reports/sessions/{id}`, 기존 세션 응답)
+- **REST 표면 없음**: 2개 작업 (BE-03 LLM 트리거, BE-09 스키마 확장)
+
+### 인증/권한 메모
+- 👤 사용자용 — 기존 `JwtAuthFilter` 통해 `Authentication` 주입, `memberId` 추출. 소유권 검증(자기 자신 sessionId/goalId만 접근) 필수
+- 🛡️ 관리자용 — Member 에 role/admin 필드 확인 필요 (BE-05 리스크 항목 참조). 없으면 추가 작업 (BE-05 의 선행 작업 ~1h)
+
+---
+
+## 관련 문서
+- [`21-task-assignment.md`](./21-task-assignment.md) — 원본 작업 분배표 (BE-01~09 의 요약 행)
+- [`20-feature-roadmap.md`](./20-feature-roadmap.md) — PPT 요구사항 ↔ 코드 매핑
+- [`decisions/ai-backend-coupling.md`](../decisions/ai-backend-coupling.md) — 분기 H 등 미결 결정
+- [`architecture/ai-backend-integration.md`](../architecture/ai-backend-integration.md) — 현재 결합 현황
