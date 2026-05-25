@@ -51,7 +51,6 @@ security:
     - "/member/login"
     - "/member/signup"
     - "/ws/**"
-    - "/internal/**"   # InternalFeedbackController 내부 X-Internal-Token 검증, Spring Security 우회
 
 jwt:
   secret: ${JWT_SECRET}

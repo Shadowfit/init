@@ -1,9 +1,19 @@
 # Decision: TTS 음성 안내 설계
 
 상태: **OPEN (사용자 결정 대기)**
-작성: 2026-05-25 · 갱신: 2026-05-25 (요구사항 반영)
+작성: 2026-05-25 · 갱신: 2026-05-26 (gRPC 통일 결정 추가)
 배경 문서: [`../REQUIREMENTS.md`](../REQUIREMENTS.md) §5·6·8, [`../11-tts-youtube-guide.md`](../11-tts-youtube-guide.md), [`../05-database-design.md`](../05-database-design.md) (TTS 스키마 섹션)
-연관: [`./ai-backend-coupling.md`](./ai-backend-coupling.md), [`../tasks/22-backend-tasks-detail.md`](../tasks/22-backend-tasks-detail.md), [`../tasks/23-ai-tasks-detail.md`](../tasks/23-ai-tasks-detail.md)
+연관: [`./ai-backend-coupling.md`](./ai-backend-coupling.md), [`../tasks/22-backend-tasks-detail.md`](../tasks/22-backend-tasks-detail.md), [`../tasks/23-ai-tasks-detail.md`](../tasks/23-ai-tasks-detail.md), [`../handoff/ai-tts-feedback-batch.md`](../handoff/ai-tts-feedback-batch.md)
+
+> **✅ 2026-05-26 결정 (송신 채널 통일)**: 피드백 batch 송신을 **REST → gRPC 단일화**.
+>
+> - 변경: 기존 REST `POST /internal/feedback/batch` (`InternalFeedbackController`) **폐기**.
+> - 신규: gRPC `ExerciseService.ReportFeedbackBatch` (FastAPI → Spring) 추가. `FeedbackBatchRequest` / `FeedbackEvent` / `FeedbackBatchResponse` 메시지 정의.
+> - 근거: AI→Spring 콜백이 이미 두 가지 gRPC (`SavePoseDataBatch`, `CompleteAnalysis`) — 채널·인증(`Authorization: Bearer`) 일관성 ↑. `X-Internal-Token` REST 인증 어긋남 제거. BT-SET retry 가 동일 채널 재사용. proto schema 강제로 JSON validation 누락 버그 차단.
+> - 박힌 코드: `backend/src/main/proto/exercise.proto` + `ai-server/app/proto/exercise.proto` (메시지·RPC 동기), `ExerciseGrpcService.reportFeedbackBatch`, `FeedbackLogService.saveBatch(FeedbackBatchRequest proto)` (D-2: 서비스 레이어 proto 직접).
+> - 삭제된 코드: `InternalFeedbackController`, `FeedbackBatchRequestDto`, `FeedbackEventDto`, `application.yml` 의 `/internal/**` whitelist.
+> - 본 문서 §2.A.BT, §7, §8, §11 등 본문의 "POST /internal/feedback/batch" 표기는 모두 위 gRPC 경로로 의미 치환하여 읽을 것. 본문 일일이 수정하지 않음 — 작업·결정 맥락 보존을 위해 원형 유지 + 본 박스만 추가.
+> - AI 측 작업 가이드: [`../handoff/ai-tts-feedback-batch.md`](../handoff/ai-tts-feedback-batch.md) 참조 (2026-05-26 동시 갱신).
 
 ---
 
@@ -121,9 +131,17 @@ Header: X-Internal-Token: ***
 }
 ```
 
-### 2.A.ET 세션 종료 trigger — *누가 AI 에게 "세션 끝" 을 알리나?* → **✅ ET-A 확정 (2026-05-25)**
+### 2.A.ET 세션 종료 trigger — *누가 AI 에게 "세션 끝" 을 알리나?* → **✅ ET-H 확정 (2026-05-26 재검토)**
 
-> **결정 (2026-05-25)**: ET-A (클라가 Spring + AI 양쪽에 직접 종료 통보) 채택. BE-14 endpoint (`PATCH /sessions/{id}/end`) 유지.
+> **✅ 2026-05-26 재검토 결정 (ET-A → ET-H 변경)**: 2026-05-25 ET-A 결정의 전제 (REST batch + AI 가 송신 주체이므로 trigger 도 AI 직접) 가 *gRPC 통일 결정* 으로 무효화됨. 또한 ET-A 의 "Spring 장애 시 AI 가 trigger 받음" 장점이 실제로는 *batch 송신처가 Spring 이라 의미 없음* 으로 드러남.
+>
+> - **확정**: ET-H (단일 endpoint 분배자 패턴). 클라 → `PATCH /sessions/{id}/end` 단 한 번만 호출. Spring 이 endTime 기록 + afterCommit 으로 AI 에 gRPC StopAnalysis 송신
+> - **삭제**: `ExercisesController.stopSession` (`PUT /exercises/sessions/{id}/stop`)
+> - **유지**: `ExerciseAnalysisService.stopAnalysis` (호출자 변경 — controller 가 아닌 SessionService afterCommit), AI 측 `StopAnalysis` gRPC 핸들러 (변경 없음)
+> - **safety net**: `SessionTimeoutScheduler` 가 IN_PROGRESS → FAILED 자동 정리 (이미 구현됨)
+> - **분석 문서**: [`./session-end-trigger.md`](./session-end-trigger.md)
+
+> ~~**결정 (2026-05-25)**: ET-A (클라가 Spring + AI 양쪽에 직접 종료 통보) 채택. BE-14 endpoint (`PATCH /sessions/{id}/end`) 유지.~~ (2026-05-26 무효화)
 > **호출 trigger 3가지 인지**:
 > - A 사용자 명시 종료 (버튼) — 클라가 endpoint 호출
 > - B 목표 rep/세트 달성 자동 종료 — 클라가 자동으로 endpoint 호출 (UI 가 "운동 끝났습니다 ✓" 확인 받고 동일 endpoint)
