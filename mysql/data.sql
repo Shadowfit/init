@@ -171,6 +171,48 @@ REPLACE INTO reports (id, session_id, member_id, report_type, summary, improveme
 (703, 603, 1, 'SESSION', '603번 리포트', '안정적입니다.', NOW()),
 (717, 617, 1, 'SESSION', '617번 리포트', '안정적입니다.', NOW()),
 (718, 618, 1, 'SESSION', '618번 리포트', '안정적입니다.', NOW()),
-(719, 619, 1, 'SESSION', '719번 리포트', '안정적입니다.', NOW());
+(719, 619, 1, 'SESSION', '719번 리포트', '안정적입니다.', NOW()),
+(801, 801, 1, 'SESSION', '801번 리포트 (TTS 피드백 시연용)',
+ '무릎 정렬(KNEE_OUT) 위주 결함 — 발끝 방향 의식 + 햄스트링 가동성 점검 권장.', NOW());
+
+-- 5. TTS 피드백 시연용 더미 세션 (session_id = 801)
+-- 3 세트 × 평균 10 rep = 30 rep, 결함 20건 (KNEE_OUT 8 / BACK_BENT 5 / HIP_HIGH 4 / KNEE_IN 3)
+-- AI 측 분류·송신 로직 완료 전 L1 백엔드 단독 시연용. 실제 ReportFeedbackBatch gRPC 호출로 들어올 데이터와 동일 분포.
+REPLACE INTO exercise_sessions
+  (id, member_id, exercise_id, reference_source, start_time, end_time,
+   total_reps, avg_sync_rate, max_sync_rate, min_sync_rate, calories_burned,
+   difficulty_level, status, created_at, version)
+VALUES
+  (801, 1, 1, 'https://www.youtube.com/watch?v=q6hBSSis_60',
+   '2026-05-28 10:00:00', '2026-05-28 10:03:30',
+   30, 65.50, 92.00, 42.10, 145.00,
+   2, 'COMPLETED', NOW(), 0);
+
+-- 5-A. 결함 이벤트 20건 (세트 경계 시뮬레이션 — BT-SET 의 3 batch 결과 누적)
+INSERT INTO session_feedback_logs
+  (session_id, feedback_type, sync_rate_at_trigger, occurred_at, created_at) VALUES
+-- 세트 1 (10:00:00 ~ 10:00:30, 7건)
+(801, 'KNEE_OUT',  55.20, '2026-05-28 10:00:03', NOW()),
+(801, 'BACK_BENT', 48.70, '2026-05-28 10:00:06', NOW()),
+(801, 'KNEE_OUT',  52.10, '2026-05-28 10:00:09', NOW()),
+(801, 'HIP_HIGH',  50.30, '2026-05-28 10:00:13', NOW()),
+(801, 'KNEE_IN',   47.50, '2026-05-28 10:00:17', NOW()),
+(801, 'KNEE_OUT',  58.40, '2026-05-28 10:00:21', NOW()),
+(801, 'BACK_BENT', 51.00, '2026-05-28 10:00:25', NOW()),
+-- 세트 2 (10:01:30 ~ 10:02:00, 7건) — 휴식 후
+(801, 'KNEE_OUT',  60.10, '2026-05-28 10:01:33', NOW()),
+(801, 'HIP_HIGH',  54.20, '2026-05-28 10:01:36', NOW()),
+(801, 'BACK_BENT', 49.50, '2026-05-28 10:01:40', NOW()),
+(801, 'KNEE_OUT',  62.70, '2026-05-28 10:01:43', NOW()),
+(801, 'KNEE_IN',   45.80, '2026-05-28 10:01:47', NOW()),
+(801, 'HIP_HIGH',  56.00, '2026-05-28 10:01:51', NOW()),
+(801, 'KNEE_OUT',  59.30, '2026-05-28 10:01:55', NOW()),
+-- 세트 3 (10:03:00 ~ 10:03:30, 6건) — 휴식 후, is_final=true 시뮬레이션
+(801, 'BACK_BENT', 53.40, '2026-05-28 10:03:03', NOW()),
+(801, 'KNEE_OUT',  64.20, '2026-05-28 10:03:07', NOW()),
+(801, 'HIP_HIGH',  51.80, '2026-05-28 10:03:11', NOW()),
+(801, 'KNEE_OUT',  67.50, '2026-05-28 10:03:15', NOW()),
+(801, 'KNEE_IN',   48.60, '2026-05-28 10:03:19', NOW()),
+(801, 'BACK_BENT', 55.70, '2026-05-28 10:03:23', NOW());
 
 SET FOREIGN_KEY_CHECKS = 1;
