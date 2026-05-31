@@ -1,6 +1,7 @@
 package com.shadowfit.service.Exercise;
 
-import com.shadowfit.dto.exercises.PoseDataRequestDto;
+// TODO: PoseDataRequestDto 클래스 미작성 — 아래 메서드도 같이 임시 주석. REST 경로 작업 재개 시 복구.
+// import com.shadowfit.dto.exercises.PoseDataRequestDto;
 import com.shadowfit.global.error.BusinessException;
 import com.shadowfit.global.error.ErrorCode;
 import com.shadowfit.grpc.PoseDataRequest;
@@ -57,10 +58,13 @@ public class PoseDataService {
         log.info("세션 {} : 포즈 데이터 {}개 일괄 저장 성공", sessionId, entities.size());
     }
 
-    /**
+    /*
      * [실시간 저장 - REST] FastAPI가 HTTP로 보내는 좌표 DTO 묶음을 DB에 저장합니다.
      * 동일 batch에 여러 sessionId가 섞여 있어도 세션별로 그룹화해 처리합니다.
-     */
+     *
+     * TODO: PoseDataRequestDto 클래스 미작성으로 임시 주석 처리 (2026-05-28).
+     *       사용처 없는 dead code 상태. REST 경로 도입 결정 시 DTO 작성 + 복구.
+     *
     @Transactional
     public void savePoseDataBatch(List<PoseDataRequestDto> dtos) {
         if (dtos == null || dtos.isEmpty()) return;
@@ -87,6 +91,7 @@ public class PoseDataService {
         poseDataRepository.saveAll(entities);
         log.info("REST 포즈 데이터 {}개 저장 (세션 {}개)", entities.size(), bySession.size());
     }
+    */
 
     /**
      * [관리자용] AI가 유튜브에서 추출한 '정석 기준 좌표'를 DB에 저장합니다.
