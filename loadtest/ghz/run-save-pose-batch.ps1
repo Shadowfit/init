@@ -41,12 +41,16 @@ if (-not (Test-Path $DataFile)) {
 $results = Join-Path $here "results"
 if (-not (Test-Path $results)) { New-Item -ItemType Directory -Path $results | Out-Null }
 
+# 메타데이터는 파일로 전달 — Win PowerShell 5.1 이 native exe 로 JSON 인라인 인자의
+# 따옴표를 벗겨먹어 ghz 가 파싱 실패하므로 (--metadata-file 로 우회). 토큰 포함이라 results/(gitignore).
+$metaFile = Join-Path $results "metadata.json"
 $metadata = '{"authorization":"Bearer ' + $env:INTERNAL_API_TOKEN + '"}'
+[System.IO.File]::WriteAllText($metaFile, $metadata, (New-Object System.Text.UTF8Encoding($false)))
 $call = "ExerciseService.SavePoseDataBatch"
 $common = @(
   "--insecure",
   "--call", $call,
-  "--metadata", $metadata,
+  "--metadata-file", $metaFile,
   "--data-file", $DataFile
 )
 

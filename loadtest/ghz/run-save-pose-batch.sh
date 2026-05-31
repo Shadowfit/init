@@ -21,9 +21,11 @@ command -v ghz >/dev/null || { echo "ghz 미설치 (README §설치)"; exit 1; }
 [ -f "$DATA_FILE" ] || { echo "$DATA_FILE 없음 (gen_batch.py 로 생성)"; exit 1; }
 mkdir -p results
 
-METADATA="{\"authorization\":\"Bearer ${INTERNAL_API_TOKEN}\"}"
+# 메타데이터는 파일로 전달 (--metadata-file) — 인라인 인용 이슈 회피, ps1 판과 일관. results/(gitignore).
+META_FILE="results/metadata.json"
+printf '{"authorization":"Bearer %s"}' "$INTERNAL_API_TOKEN" > "$META_FILE"
 CALL="ExerciseService.SavePoseDataBatch"
-COMMON=(--insecure --call "$CALL" --metadata "$METADATA" --data-file "$DATA_FILE")
+COMMON=(--insecure --call "$CALL" --metadata-file "$META_FILE" --data-file "$DATA_FILE")
 
 case "$MODE" in
   smoke)
