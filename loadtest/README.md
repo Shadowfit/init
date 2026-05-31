@@ -1,6 +1,7 @@
 # 부하 테스트 (loadtest/)
 
 전략·근거는 [`docs/decisions/load-test-strategy.md`](../docs/decisions/load-test-strategy.md). 이 디렉토리는 **실행 스크립트**.
+용어(baseline/ramp/smoke, percentile, throughput, SLO 등)는 [`docs/decisions/load-test-glossary.md`](../docs/decisions/load-test-glossary.md).
 
 확정 결정(2026-05-31): 목표 DAU 1,000 / 트랙 **② 백엔드 격리(ghz) → ⑤ 시딩→projection** 순차 / 도구 ghz + Locust.
 
