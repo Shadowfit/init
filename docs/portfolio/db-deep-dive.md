@@ -64,6 +64,31 @@
 
 ## 2. 항목별 깊이 트랙
 
+### ⭐ 0. 데이터 아키텍처 (현업 reframe) — 진짜 헤드라인
+
+> 아래 A~E(projection·trim·파티셔닝 등)는 **이 판단 아래의 국소 최적화**. 현업 기준 핵심은 "프레임 raw 시계열이 OLTP에 영구 누적되는 구조 자체"다.
+
+**현업 평결**: 프레임 단위 raw 좌표 JSON을 OLTP MySQL `pose_data`에 1행/프레임으로 영구 적재 = **안티패턴** (시계열을 row-oriented OLTP에 opaque JSON으로, 연 ~800GB가 주 DB 오염). 학생 프로젝트라서 봐주는 게 아니라 현업이면 리뷰에서 막힘.
+
+**재설계 — raw는 휘발성, derived가 영속** (접근 패턴 정반대라 분리):
+
+| 테이블 | 역할 | 쓰기/읽기 | 수명 |
+|---|---|---|---|
+| **`pose_data`** (적재 버퍼) | raw 프레임 | 🔴쓰기 많음 / 🟢읽기 거의 없음(precompute 1회) | **단기 TTL** |
+| **`reports`** (서빙, 기존 테이블) | derived(worst 구간·sync 추세) | 🟢세션당 1회(precompute) / 🔴조회마다 읽음 | **영구·작음** |
+
+- **연결 = precompute-on-write**: 세션 종료 시 worst 구간 계산 → `reports`에 저장. 조회는 `reports` 단일 행만(pose_data 스캔 0).
+- **⚠️ 이건 CQRS 아님** — 단일 DB·동기 갱신. 정확히는 **precompute된 materialized read model / denormalization**. "CQRS 했다"는 과claim(이벤트소싱·별도 읽기DB 없음 → 면접서 무너짐).
+- **before/after**: MySQL 영속 풋프린트 ~800GB raw → **derived 수십 MB**, 리포트 조회 스캔→O(1).
+- **결과적으로 "33→13 트림" 문제가 녹는다**: raw가 단기면 그 JSON이 33이든 13이든 영구 비용 아님 → 트림은 부차.
+
+**right-sizing (과설계 금지)**:
+- **샤딩 ❌** — 단일 MySQL로 충분(DAU 작음). 스케일 시에도 샤딩 전에 raw를 S3로 티어링이 먼저.
+- **파티셔닝 🟡** — 쿼리 pruning 아니라 **buffer의 값싼 TTL(DROP PARTITION) 도구로만**. 볼륨 커지면.
+- **S3/TSDB 데이터레이크 🔵** — "ML·재분석 needs 생기면" 트리거. 지금 X.
+
+→ 면접: *"적재(write-heavy)와 조회(read-heavy)가 정반대라 buffer/serving을 역할·수명으로 분리, precompute로 연결. raw는 OLTP에 안 남김. 샤딩은 규모상 불필요, 파티션은 TTL 용도."*
+
 ### A. 쓰기 최적화 — batch insert ✅ 완료
 
 - **문제**: `PoseDataService.savePoseDataBatch`의 JPA `saveAll`이 `@GeneratedValue(IDENTITY)` 때문에 Hibernate batch가 원천 차단 → 개별 INSERT N방.
@@ -76,7 +101,7 @@
 
 목표 = `GET /reports/sessions/{id}` 응답시간 before/after.
 
-1. **projection** 🔶 — `ReportService`가 엔티티 전체 로드 → worst 구간 계산은 `syncRate`·`feedbackMessage`·`timestampSec` 3개만 쓰는데 `joint_coordinates`(JSON 1~3KB) 까지 끌어옴. 세션당 ~1,500행 × ~2KB = **~3MB 헛로드**. → 3컬럼 projection DTO. **헤드라인: payload 3MB→0.05MB, 응답 X→Y ms** (측정값이 헤드라인 결정, 사전 고정 금지).
+1. **projection** ✅ 측정 — `ReportService`가 엔티티 전체 로드 → worst 구간 계산은 `syncRate`·`feedbackMessage`·`timestampSec` 3개만 쓰는데 `joint_coordinates`(JSON 2.3KB)까지 끌어옴. → 3컬럼 projection DTO. **실측(2026-06-02, warm, 750행/세션): payload 1,716.8KB→22.4KB (−98.7%), warm 쿼리 12.1ms→1.5ms (8x)**. 같은 인덱스 — 차이는 JSON이 InnoDB **off-page 저장**이라 SELECT 시 overflow 페이지 random I/O, projection이 회피([`realmysql-experiments ②`](./realmysql-experiments.md)).
 2. **Redis 캐싱** ⬜ — 세션 종료 후 리포트 불변 → cache-aside, 높은 적중률. stampede 방지.
 3. **precompute-on-write** ⬜ — worst 구간을 세션 종료 시 1회 계산해 `reports`에 저장 → GET 때 pose_data 스캔 제거. denormalization.
 
@@ -93,14 +118,17 @@
 
 상세 스토리는 [`problem-solving-log.md #3·#4`](./problem-solving-log.md).
 
-### D. 시계열 대용량 — 파티셔닝 + 보존정책 ⬜ 설계+트리거
+### D. 시계열 보존 — pose_data 버퍼의 TTL ⬜ 설계+트리거
 
-- **무한 성장**: 연 ~8억 행 시계열을 무한 적재 불가. TTL이 정답.
-- **pose_data는 중간 산출물** — 리포트 worst 구간 계산용. precompute(B-3) 후 cold data → TTL 안전(UX 손실 0). precompute가 TTL을 *안전하게* 만든다(상호 강화).
-- **구현은 DELETE 아니라 DROP PARTITION**: 월 단위 Range 파티셔닝 → 가장 오래된 파티션을 **O(1) 메타데이터 연산**으로 제거(락 거의 없음). 대량 DELETE는 락·undo 폭발.
-- **파티셔닝의 진짜 가치 = 쿼리 pruning 아니라 "값싼 TTL"** (쿼리는 이미 인덱스로 빠름). 이 reframe이 핵심.
+> §0 재설계의 하위 도구. pose_data를 **단기 버퍼**로 만드는 만료 메커니즘.
+
+- **pose_data는 중간 산출물(버퍼)** — precompute(§0)로 worst 구간을 `reports`에 옮긴 직후 cold → TTL 안전(UX 손실 0). precompute가 TTL을 *안전하게* 만든다(상호 강화).
+- **구현은 DELETE 아니라 DROP PARTITION**: 날짜 Range 파티셔닝 → 가장 오래된 파티션을 **O(1) 메타데이터 연산**으로 제거(락 거의 없음). 대량 DELETE는 락·undo 폭발.
+- **파티셔닝의 진짜 가치 = 쿼리 pruning 아니라 "값싼 TTL"** (쿼리는 이미 인덱스로 빠름, §4.3). 이 reframe이 핵심.
+- ⚠️ **파티션 전제 = PK에 파티션 키 포함** — pose_data PK `id`만으론 created_at 파티션 불가, PK를 `(id, created_at)`로 바꿔야(실험 시 처리).
+- **샤딩은 안 함** — 단일 MySQL로 충분. 스케일 시에도 샤딩 전에 raw를 S3 티어링이 먼저(§0).
 - (선택) S3 아카이빙 → DROP. FK `session→pose_data` ON DELETE CASCADE.
-- **트리거 명시**: DAU 50엔 불필요. pose_data 수천만 행 / 단일 테이블 백업·ALTER가 운영 부담일 때 발동.
+- **트리거 명시**: DAU 50엔 불필요. 버퍼 보존기간×볼륨이 커져 DELETE 만료가 부담될 때 발동.
 - 포폴 가치: 보존정책 + partition-drop은 신입이 거의 안 함 (§4.7).
 
 ### E. CS 토픽 → 내 코드 매핑 (MVCC·격리수준)

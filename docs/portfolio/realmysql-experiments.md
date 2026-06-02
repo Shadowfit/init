@@ -75,20 +75,25 @@
 - **개념**: 클러스터링 인덱스, covering index, 카디널리티 / `EXPLAIN` type·key·rows·Extra.
 - **이 프로젝트**: `pose_data.idx_session_timestamp(session_id, timestamp_sec)`.
 - **가설(반증된)**: "리포트 쿼리가 인덱스 없어 풀스캔" → **측정으로 폐기**: 이미 covering(lookup+정렬 한 인덱스, filesort 없음), 세션 단위라 테이블 성장 무관(§4.3).
-- **설계**: 리포트 쿼리 `EXPLAIN ANALYZE`(covering 확인, `Using index`) → `IGNORE INDEX`로 풀스캔 강제 비교 → 복합 인덱스 컬럼 순서 (session_id, timestamp_sec) vs 역순 EXPLAIN 차이 → 1억 행에서 B-Tree 깊이·인덱스 크기(`information_schema`).
-- **결과**: ⬜ (헤드라인은 "인덱스 추가"가 아니라 **"이미 최적임을 측정으로 발견"** — 카고컬트 반대 시그널)
-- **면접**: "인덱스 넣기 전에 EXPLAIN으로 이미 최적임을 확인 → 진짜 병목은 payload(Ch.11 projection)."
+- **설계**: 리포트 쿼리 `EXPLAIN ANALYZE` → `IGNORE INDEX`로 풀스캔 강제 비교.
+- **결과 ✅ (2026-06-02, 로컬 412만 행)**:
+  - 인덱스 사용: `type=ref`, `key=idx_session_timestamp`, **`Extra=NULL` (filesort 없음)** — WHERE+ORDER BY를 인덱스가 완결.
+  - `IGNORE INDEX` 강제 풀스캔: **4.13M 행 스캔 + filesort = 85,000ms (85초)**.
+  - → **"인덱스 추가"가 아니라 "이미 최적임을 측정으로 발견"**(§4.3 확인). 인덱스가 85초→lookup으로 바꾸는 핵심 역할도 대조로 입증.
+- **면접**: "인덱스 넣기 전에 EXPLAIN으로 이미 최적 확인(filesort 0). 없으면 4M 풀스캔 85초. 진짜 병목은 payload(Ch.11 projection)."
 
 ### ② Ch.11 + Ch.13 — 쿼리 최적화 & 파티션 🟢⭐
 - **개념**: bulk INSERT, 페이지네이션(offset→cursor), projection / Range 파티션·프루닝.
 - **이 프로젝트 (a) 쓰기**: ✅ batch insert 완료 — JdbcTemplate `batchUpdate`, throughput **+99%**, p99 −37% (§7.6). Ch.11 bulk insert 그 자체.
 - **이 프로젝트 (b) projection**: `ReportService` JSON blob 헛로드(~3MB) → 3컬럼 DTO. 🔶
 - **이 프로젝트 (c) 페이지네이션**: 세션 목록·pose 조회 offset → keyset(cursor). 대용량에서 offset 깊을수록 저하.
-- **이 프로젝트 (d) 파티션**: `pose_data` 월 Range 파티션 → cross-session 시간범위 쿼리 **pruning** + **DROP PARTITION TTL**.
+- **이 프로젝트 (d) 파티션**: `pose_data` 날짜 Range 파티션 → **버퍼 TTL의 DROP PARTITION**(주용도, [`db-deep-dive §2-0`](./db-deep-dive.md) raw=버퍼) + cross-session 집계 pruning(부차). ⚠️ PK를 `(id, created_at)`로 변경 선결. 샤딩은 미적용(과설계).
 - **설계**: (b) projection before/after payload·응답 / (c) offset N=10만 vs cursor 응답 곡선 / (d) 파티션 후 `EXPLAIN`의 `partitions` 컬럼 pruning 확인 + **DROP PARTITION vs DELETE WHERE 실측 시간**(O(1) vs 락·undo).
-- **지표**: payload(MB), 응답(ms), pruning 파티션 수, DROP vs DELETE(ms).
-- **결과**: ⬜
-- **면접**: "세션 리포트는 안 느려지지만(§4.3), cross-session 집계는 파티션 프루닝으로 개선. TTL은 DELETE 아니라 DROP PARTITION."
+- **결과 (b) projection ✅ (2026-06-02, warm, 세션 750행)**:
+  - payload **1,716.8 KB → 22.4 KB (−98.7%)**, warm 쿼리 **12.1ms → 1.5ms (8x, −87%)**. **인덱스는 동일** — 차이는 `joint_coordinates`(2.3KB JSON)가 InnoDB **off-page(overflow) 저장**이라 SELECT 시 추가 random I/O, projection이 회피(Ch.15).
+  - ⚠️ cold 721ms → warm 12ms(같은 쿼리) — 워밍업 통제 필수 재확인(§7.6). 절대 ms는 로컬 기준, 상대 delta는 신뢰 가능.
+  - (c)(d)는 ⬜.
+- **면접**: "세션 리포트는 안 느려지지만(§4.3), payload는 JSON off-page 페치라 projection이 −98.7%. cross-session 집계는 파티션 pruning, TTL은 DROP PARTITION."
 
 ### ③ Ch.5 — 트랜잭션·잠금·격리수준 🟢
 - **개념**: 격리수준(RC/RR), 레코드/갭/넥스트키 락, 낙관적 vs 비관적.
@@ -105,8 +110,9 @@
 - **설계 (MVCC)**: 긴 batch insert 트랜잭션 open 중 동시 리포트 조회가 **이전 스냅샷** 읽음(RR) 관찰 — gRPC 적재↔조회 사이 일관성.
 - **설계 (버퍼풀)**: 1억 행 > `innodb_buffer_pool_size`면 디스크 읽기 급증 — hit율(`sys`) 관찰, 버퍼풀 사이징 영향.
 - **설계 (JSON)**: `joint_coordinates` 저장 비용 측정, JSON path에 **generated column + 인덱스** vs 정규화 테이블 트레이드오프. 🟡 (현재 불필요, 데모용).
+- **설계 (트림 33→13)** 🔶: `_landmarks_to_json`이 MediaPipe **33개 전부 저장**(필터 없음, `constants.py LANDMARK`는 13개만 참조) → JSON 함수로 사용 13개만 추출해 `AVG(LENGTH)` before/after 측정(33→13 ≈ ~60% 절감). **단 이건 국소 미봉책** — 진짜 해법은 [`db-deep-dive §2-0`](./db-deep-dive.md)의 raw→buffer/serving 분리(raw 단기화하면 트림 영구비용 자체가 사라짐).
 - **결과**: ⬜
-- **면접**: "MVCC 덕에 적재 트랜잭션이 조회를 블로킹 안 함. 버퍼풀 넘는 데이터에서 hit율 저하 관찰."
+- **면접**: "MVCC 덕에 적재 트랜잭션이 조회를 블로킹 안 함. 33 저장/13 사용은 default였고, 트림보다 raw를 OLTP에서 빼는 게 정답."
 
 ### ⑤ Ch.9 — 옵티마이저·힌트 🟢
 - **개념**: 통계정보, 비용기반 최적화, 조인 알고리즘(8.0 hash join), 힌트.
