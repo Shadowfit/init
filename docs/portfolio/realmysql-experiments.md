@@ -88,6 +88,11 @@
 - **이 프로젝트 (b) projection**: `ReportService` JSON blob 헛로드(~3MB) → 3컬럼 DTO. 🔶
 - **이 프로젝트 (c) 페이지네이션**: ✅ 전체 테이블 시간순 페이지네이션 offset → keyset(cursor). 1억 행 합성 rig로 실측 — offset O(N) 선형 저하 vs keyset 평탄 입증.
 - **이 프로젝트 (d) 파티션**: `pose_data` 날짜 Range 파티션 → **버퍼 TTL의 DROP PARTITION**(주용도, [`db-deep-dive §2-0`](./db-deep-dive.md) raw=버퍼) + cross-session 집계 pruning(부차). ⚠️ PK를 `(id, created_at)`로 변경 선결. 샤딩은 미적용(과설계).
+  - **언제 파티셔닝하나? — "행 수"가 아니라 "용도"** ⭐: 업계 감각치(단일 테이블이 버퍼풀 초과 / 수천만~1억 행 / 수십~100GB↑)는 **필요조건일 뿐 충분조건 아님**. RealMySQL도 "몇 행"으로 안 박고 "감당·관리(특히 오래된 데이터 삭제)가 부담일 때"로 설명. 정당화 트리거 3: ①TTL/보존(대량 DELETE 부담→DROP PARTITION) ②쿼리가 항상 파티션 키로 범위 좁힘(pruning) ③파티션 단위 백업·아카이빙.
+  - **이 프로젝트의 정직한 포지션**: DAU 작아 파티션 **실수요 0**, 1억 행은 "DAU 1,000 합성", 세션 리포트는 인덱스로 이미 빠름(pruning 이득 없음, §4.3). → 유일한 정당화 = **raw를 단기 버퍼로 보고 `DROP PARTITION`으로 싸게 버리는 TTL**. "1억이니까 파티션"이 아니라 "크기는 충분조건 아님 → 용도(buffer TTL)가 있어서 → 그래서 pruning 아닌 DROP이 헤드라인"이라는 **판단 과정 자체가 차별점** (AI의 "1억이면 파티션 추천"과 정반대 결).
+  - **왜 ALTER인가 (CREATE vs ALTER)**: 시딩은 **일부러 비파티션 일반 테이블**로 채움(파티션 걸면 INSERT마다 라우팅 계산으로 시딩 느려짐). 이미 1억 행 든 테이블에 파티션을 거니 `CREATE` 불가 → `ALTER TABLE ... PARTITION BY`만 가능. 그런데 이건 메타데이터만 바꾸는 게 아니라 **임시 테이블(`#sql-…`) 생성 → 1억 행 전부 읽어 파티션별 재배치 → 인덱스 재빌드 → 원본 교체**(=`copy to tmp table`).
+  - **같은 `ALTER`라도 비용 정반대** ⭐: `PARTITION BY`(전환)=1억 행 풀 리빌드 71분 vs `DROP PARTITION`(만료)=O(1) 메타데이터. 이 대비가 카드 핵심 — "파티션 전환은 비싸니 운영이면 처음부터 파티션 테이블로 만들거나 pt-osc 무중단, 일단 걸어두면 만료는 DROP으로 거의 공짜".
+  - **운영 캐비엇**: 이 in-place `ALTER ... PARTITION BY`는 1억 행 **copy-to-tmp 풀 리빌드**(로컬 실측 ~85분, ~24,700행/초, 그동안 테이블 락) → 현업 운영 DB라면 `pt-online-schema-change`/`ALGORITHM=INPLACE`로 무중단 전환할 이유. 회고 포인트.
 - **설계**: (b) projection before/after payload·응답 / (c) offset N=10만 vs cursor 응답 곡선 / (d) 파티션 후 `EXPLAIN`의 `partitions` 컬럼 pruning 확인 + **DROP PARTITION vs DELETE WHERE 실측 시간**(O(1) vs 락·undo).
 - **결과 (b) projection ✅ (2026-06-02, warm, 세션 750행)**:
   - payload **1,716.8 KB → 22.4 KB (−98.7%)**, warm 쿼리 **12.1ms → 1.5ms (8x, −87%)**. **인덱스는 동일** — 차이는 `joint_coordinates`(2.3KB JSON)가 InnoDB **off-page(overflow) 저장**이라 SELECT 시 추가 random I/O, projection이 회피(Ch.15).
@@ -106,8 +111,19 @@
   - **offset = O(N) 선형** — 깊이 10배마다 시간 ~10배(`EXPLAIN`: rows 스캔량 = OFFSET+20, cost 0.09→149,953). keyset = **평탄(≈O(log n))**, PK 범위 점프라 깊이 무관.
   - ⚠️ cold/warm: OFFSET 1,000만 cold **8.9초** → warm **2.9초**(버퍼풀 캐시). **캐시돼도 선형 유지** → 병목은 디스크 I/O가 아니라 **행 스캔/폐기 자체(CPU)**. keyset은 그 스캔을 안 함이 핵심.
   - rig: `loadtest/measure_pagination.sh`(재현), 133,334 세션×750행=정확히 1억 행, 더미 JSON `{}`(행수·payload 디커플링 §0.3 — 실제 2.3KB JSON이면 255GB라 불가, 더미로 ~11GB). 버퍼풀 2GB·sort_buffer 64M로 시딩·인덱스 빌드 가속(`docker-compose.yml`).
-  - (d)는 ⬜.
-- **면접**: "세션 리포트는 안 느려지지만(§4.3), payload는 JSON off-page 페치라 projection이 −98.7%. cross-session 집계는 파티션 pruning, TTL은 DROP PARTITION."
+- **결과 (d) 파티션 ✅ (2026-06-03, 1억 행 → `created_at` 월별 14파티션, in-place ALTER)**:
+  - **파티션 전환 비용**: `ALTER TABLE ... PARTITION BY RANGE(UNIX_TIMESTAMP(created_at))` = **5,767초(96분)** copy-to-tmp 풀 리빌드(~24,700행/초). → 운영이면 처음부터 파티션 테이블 or `pt-osc`/`INPLACE` 무중단(위 운영 캐비엇 실측 확인).
+  - **pruning (EXPLAIN `partitions` 칼럼)**: 날짜범위 `WHERE created_at∈[6월]` → **`p2026_06` 1개만**(13개 안 읽음) / 범위 없으면 14개 전부 / ⚠️ **`session_id=…` → 14개 전부**(rows:750이나 파티션-로컬 인덱스라 14개 트리 모두 탐색) — **세션 쿼리는 pruning 이득 0, 오히려 미세 손해**. §4.3·정직 포지션 실측 확인.
+  - **⭐ DROP PARTITION vs DELETE WHERE (같은 ~8M 행 만료)**:
+
+    | 작업 | 행수 | 소요 | 파티션 | `.ibd` 디스크 |
+    |---|---|---|---|---|
+    | `DELETE WHERE created_at<…` | 8,301,450 | **1,118,936 ms (18.6분)** | 잔존(0행) | **952MB 그대로**(공간 미회수) |
+    | `ALTER … DROP PARTITION` | 7,560,000 | **1,790 ms (1.8초)** | 제거 | **파일 삭제 → ~910MB 즉시 회수** |
+
+  - **~625배** (행당 정규화 ~570배). DELETE는 8.3M행 행단위 삭제(undo·인덱스 유지·락) + **빈 952MB 파일 잔존**(OPTIMIZE 없인 공간 안 돌아옴), DROP은 **파티션 `.ibd` 파일째 unlink** = 행단위 작업 0. ⚠️ DROP 1.8초도 진짜 O(1)이 아니라 ~910MB 파일 삭제 I/O(로컬 디스크 느림) — 빠른 스토리지면 sub-100ms. "O(1)"은 *행단위 비용 없음*을 뜻함.
+  - rig: `loadtest/measure_partition.sh`(재현). 측정 후 p2026_01(DELETE로 빈 채 잔존)·p2026_02(DROP) 제거됨 → rig 재현은 `seed_pose_scale.sh`.
+- **면접**: "세션 리포트는 안 느려지지만(§4.3), payload는 JSON off-page 페치라 projection이 −98.7%. **파티션은 pruning(세션 쿼리엔 이득 0)이 아니라 TTL이 핵심 — 8M행 만료가 DELETE 18.6분 vs DROP PARTITION 1.8초(625x), DELETE는 빈 파일까지 남는다.**"
 
 ### ③ Ch.5 — 트랜잭션·잠금·격리수준 🟢
 - **개념**: 격리수준(RC/RR), 레코드/갭/넥스트키 락, 낙관적 vs 비관적.
