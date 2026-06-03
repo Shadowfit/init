@@ -52,12 +52,12 @@
 
 ---
 
-## 3. 공통 선결 — 1억 row 합성 시딩
+## 3. 공통 선결 — 1억 row 합성 시딩 ✅ (2026-06-03 완료)
 
-모든 대용량 실험의 전제. **"DAU 1,000 시뮬레이션 위해 합성"이라고 명시**.
-- 방법: `INSERT ... SELECT` 자가증식(최속) — 단 세션·멤버를 numbers 테이블 cross join으로 먼저 N개 깔아 **session_id·날짜 분산**(cross-session 쿼리 현실성).
-- 목표: pose_data ~1억 행, 월 분산(파티션·pruning 실험용).
-- 스크립트 위치(예정): `loadtest/seed/` (gitignore 결과).
+모든 대용량 실험의 전제. **"DAU 1,000 시뮬레이션 위해 합성"이라고 명시**. 결과: `pose_data_scale` **정확히 1억 행** (133,334 세션×750행, 2026년 12개월+ 분산), ~11GB.
+- 방법: `_seq`(numbers 0~99만, digit cross join) × `_seq` cross join으로 session_id·날짜 분산. **더미 JSON `{}`** — 행수·payload 디커플링(§0.3): 실제 2.3KB JSON이면 1억=255GB라 로컬 불가, 더미로 ~11GB.
+- 가속 교훈(실측): ① **버퍼풀 128MB→2GB** 필수(기본값은 롤백 64행/s, 2GB는 1만행/s). ② **인덱스는 시딩 후 일괄 빌드**(random insert 페이지 분할 회피, 375만 청크 3.4분→2분). ③ **청크 병렬**(세션 범위 3분할 동시 INSERT, 48분→16분). ④ `innodb_sort_buffer_size=1M→64M`로 인덱스 merge sort 가속.
+- 스크립트: `loadtest/seed/seed_pose_scale.sh` (재현), `loadtest/measure_pagination.sh` (②c 측정).
 
 ---
 
