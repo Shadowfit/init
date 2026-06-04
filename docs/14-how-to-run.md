@@ -489,6 +489,10 @@ New-NetFirewallRule -DisplayName "Expo Metro" -Direction Inbound -Port 8081 -Pro
 2. AVD(Android Virtual Device) 설정 후 에뮬레이터 실행
 3. Expo 터미널에서 `a` 키 입력
 
+#### 방법 D: Dev Client (네이티브 모듈 필요 시)
+Expo Go에서 안 되는 라이브러리(예: `react-native-vision-camera`)를 써야 할 때 사용합니다.
+EAS Build로 ShadowFit 전용 개발 앱을 만들어 폰에 설치하는 방식 → [20-eas-build-guide.md](20-eas-build-guide.md) 참고.
+
 ---
 
 ## 6. 실행 확인하기
