@@ -46,6 +46,16 @@ export default function ReportScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const sessionId = id ? Number(id) : NaN;
 
+  // 운동 화면이 router.replace 로 들어와서 stack 이 비어있을 수 있음.
+  // canGoBack false 면 탭 홈으로 안전하게 이동.
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)' as any);
+    }
+  };
+
   // 자세 교정 이벤트 집계 (backend SessionFeedbackController)
   const [feedbackSummary, setFeedbackSummary] = useState<SessionFeedbackSummary | null>(null);
 
@@ -64,7 +74,7 @@ export default function ReportScreen() {
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* 헤더 */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()}>
+          <TouchableOpacity onPress={handleBack}>
             <ChevronLeft size={20} color={COLORS.text} strokeWidth={2} />
           </TouchableOpacity>
           <View>

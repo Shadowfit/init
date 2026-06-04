@@ -17,7 +17,6 @@ import {
   ChevronUp,
   ChevronDown,
   Play,
-  Square,
   FlaskConical,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';

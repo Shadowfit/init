@@ -10,7 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ChevronLeft, Mail, Key, Lock } from 'lucide-react-native';
-import { COLORS, FONT_SIZE, SPACING, RADIUS } from '@/constants/Colors';
+import { COLORS, FONT_SIZE, SPACING } from '@/constants/Colors';
 import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
 import { TouchableOpacity } from 'react-native';
