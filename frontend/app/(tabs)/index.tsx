@@ -80,7 +80,7 @@ export default function HomeScreen() {
     setDailyLoading(true);
     console.log('[daily] 요청 date=', targetDate);
     reportService
-      .getDailyActivity(targetDate)
+      .getDaily(targetDate)
       .then((res) => {
         console.log('[daily] 응답', JSON.stringify(res.data));
         setDaily(res.data);
@@ -109,32 +109,14 @@ export default function HomeScreen() {
       : {}),
   };
 
-<<<<<<< HEAD
-=======
-  const hasRecordOnSelected = selectedDate
-    ? !!baseMarked[selectedDate]
-    : !!baseMarked[today];
-
-  // 날짜 클릭: 그 날 운동 목록 조회 → 기록 있으면 상세 보고서로 이동
+  // 날짜 클릭 시 selectedDate 만 갱신.
+  // 실제 일별 조회는 위쪽 useEffect 가 selectedDate 변화로 트리거.
   const handleDayPress = useCallback(
-    async (day: DateData) => {
-      setSelectedDate(day.dateString);
-      try {
-        const res = await reportService.getDaily(day.dateString);
-        const sessions = res.data.sessions ?? [];
-        if (sessions.length > 0) {
-          // 스쿼트=하루 단건이 일반적 → 첫 세션 상세로 직행
-          router.push(`/report/${sessions[0].sessionId}` as any);
-        }
-        // 기록 없는 날은 이동 없이 "기록 없음" 텍스트만 갱신
-      } catch (e: any) {
-        console.error('[daily] status=', e.response?.status, 'data=', e.response?.data);
-      }
-    },
-    [router],
+    (day: DateData) => setSelectedDate(day.dateString),
+    [],
   );
 
->>>>>>> 1b116ac1b99beedb8cf4bf30237a91458214942d
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>

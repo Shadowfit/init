@@ -74,15 +74,7 @@ export default function ReportScreen() {
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* 헤더 */}
         <View style={styles.header}>
-<<<<<<< HEAD
           <TouchableOpacity onPress={handleBack}>
-=======
-          <TouchableOpacity
-            onPress={() =>
-              router.canGoBack() ? router.back() : router.replace('/(tabs)/activity')
-            }
-          >
->>>>>>> 1b116ac1b99beedb8cf4bf30237a91458214942d
             <ChevronLeft size={20} color={COLORS.text} strokeWidth={2} />
           </TouchableOpacity>
           <View>
