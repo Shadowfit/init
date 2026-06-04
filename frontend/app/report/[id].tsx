@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useEffect, useState } from 'react';
 import {
   ChevronLeft,
   Download,
@@ -13,6 +14,9 @@ import {
   type LucideIcon,
 } from 'lucide-react-native';
 import { COLORS, FONT_SIZE, SPACING, RADIUS } from '@/constants/Colors';
+import { exercisesService } from '@/services/exercisesService';
+import type { SessionFeedbackSummary } from '@/types/feedback';
+import { FEEDBACK_TYPE_LABEL } from '@/types/feedback';
 
 // TODO: API 연동 후 실제 데이터로 교체
 const MOCK_REPORT = {
@@ -39,6 +43,21 @@ const MOCK_REPORT = {
 
 export default function ReportScreen() {
   const router = useRouter();
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const sessionId = id ? Number(id) : NaN;
+
+  // 자세 교정 이벤트 집계 (backend SessionFeedbackController)
+  const [feedbackSummary, setFeedbackSummary] = useState<SessionFeedbackSummary | null>(null);
+
+  useEffect(() => {
+    if (!Number.isFinite(sessionId)) return;
+    exercisesService
+      .getSessionFeedbackSummary(sessionId)
+      .then((res) => setFeedbackSummary(res.data))
+      .catch((e) => {
+        console.warn('[feedback-summary] status=', e?.response?.status);
+      });
+  }, [sessionId]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -114,6 +133,32 @@ export default function ReportScreen() {
             </View>
           ))}
         </View>
+
+        {/* 자세 교정 집계 - 백엔드 SessionFeedbackSummary */}
+        {feedbackSummary && feedbackSummary.totalCount > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionTitleRow}>
+              <AlertTriangle size={18} color={COLORS.warning} strokeWidth={2} />
+              <Text style={styles.sectionTitle}>
+                자세 교정 알림 · 총 {feedbackSummary.totalCount}회
+              </Text>
+            </View>
+            {feedbackSummary.byType.map((bucket) => (
+              <View key={bucket.feedbackType} style={styles.feedbackBucket}>
+                <View style={styles.feedbackBucketHeader}>
+                  <Text style={styles.feedbackBucketLabel}>
+                    {FEEDBACK_TYPE_LABEL[bucket.feedbackType] ?? bucket.feedbackType}
+                  </Text>
+                  <Text style={styles.feedbackBucketCount}>{bucket.count}회</Text>
+                </View>
+                <Text style={styles.feedbackBucketStat}>
+                  평균 싱크로율 {Number(bucket.avgSyncRate).toFixed(1)}%
+                  {'  '}·{'  '}최저 {Number(bucket.minSyncRate).toFixed(1)}%
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
 
         {/* Worst 구간 */}
         {MOCK_REPORT.worstMoment && (
@@ -253,6 +298,36 @@ const styles = StyleSheet.create({
   barValue: { fontSize: FONT_SIZE.sm, fontWeight: '700', width: 40, textAlign: 'right' },
 
   // Worst
+  // 자세 교정 집계
+  feedbackBucket: {
+    backgroundColor: COLORS.card,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    padding: SPACING.lg,
+    marginBottom: SPACING.sm,
+  },
+  feedbackBucketHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  feedbackBucketLabel: {
+    fontSize: FONT_SIZE.md,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  feedbackBucketCount: {
+    fontSize: FONT_SIZE.md,
+    fontWeight: '800',
+    color: COLORS.warning,
+  },
+  feedbackBucketStat: {
+    fontSize: FONT_SIZE.sm,
+    color: COLORS.textSecondary,
+  },
+
   worstCard: {
     backgroundColor: COLORS.card,
     borderRadius: RADIUS.md,
