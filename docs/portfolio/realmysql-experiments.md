@@ -132,8 +132,22 @@
 - **이 프로젝트 (c) 멱등성**: ✅ INSERT IGNORE (`FeedbackLogService.java:33`).
 - **설계**: (b) 두 트랜잭션으로 lost-update **재현**(RC) → 원자 UPDATE / `SELECT FOR UPDATE` / `@Version` 비교, `performance_schema.data_locks`로 락 관찰, `SHOW ENGINE INNODB STATUS` → (a) 낙관락 충돌 시 양보 정책 근거.
 - **지표**: 손실 갱신 발생/방지, 락 종류·대기.
-- **결과**: ⬜
-- **면접**: "RC로는 lost-update 못 막음 → 원자 UPDATE 선택. 타임아웃 vs 콜백은 저경합·읽기위주라 낙관락(비관락 블로킹 비용 회피)." 🟡 갭/넥스트키 락은 저경합이라 일부 합성 — 명시.
+- **결과 (b) lost-update 재현·방지 ✅ (2026-06-05, scratch `lock_lab`, daily_logs.updateStats 동형, 매 run 초기화)**:
+  - 시나리오: 같은 사용자·같은 날 두 세션 동시 종료 = `total_exercise_time += A(10)`, `+= B(20)`, 기댓값 **30**.
+
+    | 전략 | 방식 | 최종값 | 손실 | 락 비용 |
+    |---|---|---|---|---|
+    | ❌ naive RMW (RC) | `SELECT @x → SLEEP → UPDATE=@x+v` | **10 or 20** | **유실(commit 순서 따라 10/20)** | 없음(둘 다 0 읽음) |
+    | ✅ 원자 UPDATE | `SET x = x + v` | **30** | 없음 | UPDATE 1문장 X락 직렬화 |
+    | ✅ 비관락 | `SELECT … FOR UPDATE` | **30** | 없음 | **트랜잭션 내내 X락 점유(블로킹)** |
+    | ✅ 낙관락 CAS | `… WHERE id=? AND version=@v` | **30** | 없음 | 블로킹 0, **충돌 시 재시도 1회** |
+
+  - **재현 안정성**: 3회 반복 모두 naive 는 유실(10 또는 20), 세 방지책 모두 30 복구. CAS 는 매 run **정확히 1 worker 충돌→재시도 2회차 성공**(version 0→1→2).
+  - **락 증거(`performance_schema.data_locks`, B 가 FOR UPDATE 대기 중 스냅샷)**: 양 trx 가 테이블 `IX`(의도) GRANTED + 동일 레코드(PK=1)에 trx A `X,REC_NOT_GAP **GRANTED**` / trx B `X,REC_NOT_GAP **WAITING**` — 비관락이 단일 핫로우를 **직렬화**함을 그대로 관찰. naive·원자·CAS 경로엔 이 WAITING 이 없음(블로킹 무).
+  - **해석**: RC 격리만으론 read-modify-write 의 lost-update 를 **못 막는다**(MVCC 스냅샷 읽기라 둘 다 옛값). 막으려면 ① 읽기 자체를 없애거나(원자 UPDATE) ② 읽기에 락을 걸거나(FOR UPDATE) ③ 쓰기에 버전 가드(CAS). **단일 카운터 누적이면 원자 UPDATE 가 최적**(왕복·블로킹 0). `@Version` 은 충돌이 드물고 블로킹을 피하고 싶을 때(이 프로젝트의 타임아웃 vs 콜백 경합).
+  - rig: `loadtest/measure_lock.sh`(재현, 4단계 + 락 스냅샷). 🟡 갭/넥스트키 락은 단일 PK 핫로우라 미관찰 — append-only 저경합 substrate 한계, 명시.
+- **(a) 낙관락 양보(실코드) 근거**: 타임아웃 스케줄러 vs FastAPI 콜백은 **저경합·서로 다른 세션 위주**라 비관락의 상시 블로킹 비용이 아깝다 → `@Version` 으로 충돌만 감지, 충돌 시 콜백이 재시도(`SessionService.completeSession` 최대 3회, FastAPI 결과 우선). 위 (b) 의 CAS 가 바로 이 정책의 축소 재현.
+- **면접**: "RC로는 lost-update 못 막음(MVCC 스냅샷이라 둘 다 옛값 읽음) → 단일 카운터 누적은 **원자 UPDATE**가 최적(왕복·블로킹 0). `data_locks`로 FOR UPDATE의 X,REC_NOT_GAP WAITING을 직접 관찰해 비관락이 핫로우를 직렬화함을 확인. 타임아웃 vs 콜백은 저경합·세션 분리라 낙관락(@Version)으로 블로킹 비용 회피, 충돌 시 3회 재시도." 🟡 갭/넥스트키 락은 단일 PK 핫로우라 미관찰 — 명시.
 
 ### ④ Ch.4 + Ch.15 — 아키텍처(MVCC·버퍼풀) & JSON 🟢🟡
 - **개념**: InnoDB 버퍼풀, undo, MVCC 스냅샷 / JSON 저장·함수·generated column 인덱스.
