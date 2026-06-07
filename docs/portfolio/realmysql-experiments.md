@@ -163,8 +163,9 @@
 - **결과 (MVCC) ✅ (2026-06-07, scratch `mvcc_lab` 100행, `measure_mvcc.sh`)**:
   - **RR(기본)**: Reader 트랜잭션 첫 SELECT=100 → 그 사이 Writer 가 50행 INSERT+COMMIT → 같은 트랜잭션 재SELECT **여전히 100**(스냅샷 고정) → COMMIT 후 **150**. 일관된 읽기(consistent read) 입증.
   - **RC 대비**: 같은 시나리오에서 재SELECT가 **150**(매 문장 새 스냅샷). RR↔RC 차이를 직접 관찰.
-  - **읽기↔쓰기 비블로킹**: Reader 가 3초 트랜잭션 점유 중에도 Writer INSERT+COMMIT 이 **461ms** 에 완료(안 막힘). `performance_schema.data_locks` **0행** — 일반 SELECT 는 락 없이 undo 로 과거 버전 재구성.
-  - 실코드 매핑: gRPC `SavePoseDataBatch` 적재가 길게 열려도 리포트 조회(`ReportService`)는 대기 없이 일관 뷰 → 적재↔조회 상호 비블로킹(OLTP 동시성).
+  - **읽기↔쓰기 비블로킹(RR)**: Reader 가 3초 트랜잭션 점유 중에도 Writer INSERT+COMMIT 이 **461ms** 에 완료(안 막힘). `performance_schema.data_locks` **0행** — 일반 SELECT 는 락 없이 undo 로 과거 버전 재구성.
+  - **SERIALIZABLE 대비**: 같은 시나리오를 SERIALIZABLE 로 돌리면 일반 SELECT 가 암묵적 잠금읽기(S 넥스트키락)가 됨 → `data_locks` 에 `RECORD S GRANTED 101`(100행+supremum), Writer INSERT 가 **1,998ms** 블로킹(RR 461ms 의 4배). **읽기가 락을 잡아 직렬화 = MVCC 비블로킹의 반대편.** 단일 카운터엔 과함(원자 UPDATE/낙관락이 답) — ③ 락 실험과 연결.
+  - 실코드 매핑: gRPC `SavePoseDataBatch` 적재가 길게 열려도 리포트 조회(`ReportService`)는 RR 스냅샷으로 대기 없이 일관 뷰 → 적재↔조회 상호 비블로킹(OLTP 동시성).
 - **결과 (버퍼풀) ✅ (2026-06-07, `pose_data_scale` 8,256만 행/10.4GB vs 풀 128MB, `measure_bufferpool.sh`)**:
   - **작업셋 ≫ 풀**: 월 파티션 풀스캔(540MB ≫ 128MB) → cold/warm 모두 **매번 ~485MB 디스크 읽기**, hit ~84% 고정, ~10초. 작업셋이 풀을 초과해 **warm 재실행도 캐시 무력**(eviction 으로 재miss).
   - **작업셋 < 풀**: 좁은 PK 범위(수MB) → warm **디스크 0MB, hit 100%**, ~0.45초. 핫 데이터 메모리 상주. (⚠️ 이 구간 cold 도 직전 실행 잔여로 이미 resident — 진짜 cold 아님, 명시)

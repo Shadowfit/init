@@ -94,7 +94,34 @@ echo "  (행 0 = 일관된 읽기는 undo 로 과거 버전을 재구성할 뿐 
 wait
 
 echo
-echo "## [4] 적재↔조회 서사 (실코드 매핑)"
+echo "## [4] SERIALIZABLE — 일반 SELECT 가 잠금 읽기가 되어 쓰기를 블로킹"
+echo "RR/RC 와 달리 SERIALIZABLE 은 평범한 SELECT 를 암묵적 LOCK IN SHARE MODE(S 넥스트키락)로 처리."
+echo "Reader 가 트랜잭션 열고 SELECT 점유 중이면 Writer INSERT 가 막힌다(=RR 의 461ms 비블로킹과 대비)."
+reset_lab
+( SESS <<'SQL'
+SET SESSION transaction_isolation='SERIALIZABLE';
+BEGIN;
+SELECT COUNT(*) FROM mvcc_lab;   -- SERIALIZABLE: 스캔 범위에 S 넥스트키락 획득
+DO SLEEP(3);
+COMMIT;
+SQL
+) &
+sleep 1
+echo "### [4-lock] Reader(SERIALIZABLE) SELECT 점유 중 data_locks — RR([3]) 의 0행과 달리 S 락 출현"
+DB -t -e "SELECT LOCK_TYPE, LOCK_MODE, LOCK_STATUS, COUNT(*) n
+          FROM performance_schema.data_locks WHERE OBJECT_NAME='mvcc_lab'
+          GROUP BY LOCK_TYPE, LOCK_MODE, LOCK_STATUS;"
+W_START=$(date +%s%N)
+SESS <<'SQL'
+INSERT INTO mvcc_lab(v) SELECT 9 FROM information_schema.columns LIMIT 1;
+SQL
+W_END=$(date +%s%N)
+echo "  W  Writer INSERT 소요: $(( (W_END-W_START)/1000000 )) ms (Reader 락에 막혀 ~2초 기대 — RR 461ms 와 대비)"
+wait
+echo "  → SERIALIZABLE 은 읽기가 락을 잡아 직렬화 = MVCC 비블로킹의 반대편. 단일 카운터엔 과함(원자 UPDATE/낙관락이 답)."
+
+echo
+echo "## [5] 적재↔조회 서사 (실코드 매핑)"
 echo "  gRPC SavePoseDataBatch 가 한 트랜잭션으로 N행 INSERT 중이어도,"
 echo "  리포트 조회(ReportService)는 MVCC 스냅샷으로 대기 없이 '적재 시작 시점' 일관 뷰를 본다."
 echo "  → 적재와 조회가 서로를 막지 않는다(OLTP 동시성). RR 기본이라 조회 일관성 보장."
