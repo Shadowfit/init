@@ -165,7 +165,7 @@
   - **RC 대비**: 같은 시나리오에서 재SELECT가 **150**(매 문장 새 스냅샷). RR↔RC 차이를 직접 관찰.
   - **읽기↔쓰기 비블로킹(RR)**: Reader 가 3초 트랜잭션 점유 중에도 Writer INSERT+COMMIT 이 **461ms** 에 완료(안 막힘). `performance_schema.data_locks` **0행** — 일반 SELECT 는 락 없이 undo 로 과거 버전 재구성.
   - **SERIALIZABLE 대비**: 같은 시나리오를 SERIALIZABLE 로 돌리면 일반 SELECT 가 암묵적 잠금읽기(S 넥스트키락)가 됨 → `data_locks` 에 `RECORD S GRANTED 101`(100행+supremum), Writer INSERT 가 **1,998ms** 블로킹(RR 461ms 의 4배). **읽기가 락을 잡아 직렬화 = MVCC 비블로킹의 반대편.** 단일 카운터엔 과함(원자 UPDATE/낙관락이 답) — ③ 락 실험과 연결.
-  - 실코드 매핑: gRPC `SavePoseDataBatch` 적재가 길게 열려도 리포트 조회(`ReportService`)는 RR 스냅샷으로 대기 없이 일관 뷰 → 적재↔조회 상호 비블로킹(OLTP 동시성).
+  - 실코드 매핑(**DAU 1,000 가정**): 사용자 A의 라이브 세션이 `pose_data`/`exercise_sessions`에 적재 중일 때, 사용자 B의 주간/월간 요약(`findByMemberIdAndStartTimeBetween`, 범위 조회)이 같은 테이블에 동시 진입 — RR 스냅샷이 그 조회를 대기 없이 일관되게 보장(단일 세션은 쓰기→읽기 순차, 동시성은 교차 사용자·테이블 수준). ⚠️ "1,000 동시부하 TPS 실측"은 주장 안 함 — 메커니즘·일관성 입증이지 처리량 자랑 아님(§5 throughput 캐비엇).
 - **결과 (버퍼풀) ✅ (2026-06-07, `pose_data_scale` 8,256만 행/10.4GB vs 풀 128MB, `measure_bufferpool.sh`)**:
   - **작업셋 ≫ 풀**: 월 파티션 풀스캔(540MB ≫ 128MB) → cold/warm 모두 **매번 ~485MB 디스크 읽기**, hit ~84% 고정, ~10초. 작업셋이 풀을 초과해 **warm 재실행도 캐시 무력**(eviction 으로 재miss).
   - **작업셋 < 풀**: 좁은 PK 범위(수MB) → warm **디스크 0MB, hit 100%**, ~0.45초. 핫 데이터 메모리 상주. (⚠️ 이 구간 cold 도 직전 실행 잔여로 이미 resident — 진짜 cold 아님, 명시)
