@@ -167,7 +167,7 @@
 
 > 모든 수치는 레포지토리 `docs/portfolio/realmysql-experiments.md`·`loadtest/`의 실측 결과를 인용한다. 측정 환경·한계는 **부록 C(정직성 캐비엇)** 에 명시한다.
 
-이 프로젝트의 데이터는 **시계열 대용량(`pose_data`) + JSON 컬럼 + gRPC 동기 적재 + 집계**라는 특성을 갖는다. DAU 1,000 시나리오를 가정해 `pose_data`를 **1억 행(133,334 세션 × 750행, ~11GB) 합성 시딩**한 뒤, 대표 4개 병목과 1개 동시성 정합성 이슈를 측정·개선했다.
+이 프로젝트의 데이터는 **시계열 대용량(`pose_data`) + JSON 컬럼 + gRPC 동기 적재 + 집계**라는 특성을 갖는다. DAU 1,000 시나리오를 가정해 `pose_data`를 **1억 행(133,334 세션 × 750행, ~11GB) 합성 시딩**한 뒤, 쓰기·읽기·인덱스·페이지네이션·보존(파티션)의 5개 병목과 동시성(lost-update·MVCC)·저장(JSON 트림)·메모리(버퍼풀) 영역을 측정·개선했다. ⚠️ 합성 데이터는 **행수·크기는 현실적이나 값 분포는 균일**(단일 템플릿 복제)하여, 결론이 값 분포에 무관한 구조 실험만 수행하고 선택도 의존 실험(인덱스 카디널리티·옵티마이저)은 제외했다(부록 C).
 
 ### 5.1 쓰기 — 배치 INSERT
 건별 INSERT → JdbcTemplate `batchUpdate` 적용:
@@ -227,7 +227,31 @@
 
 → `READ COMMITTED`만으로는 막지 못한다(MVCC 스냅샷이라 두 트랜잭션이 같은 옛값을 읽음). `performance_schema.data_locks`로 `FOR UPDATE`의 `X,REC_NOT_GAP` 락이 한쪽은 `GRANTED`·다른 쪽은 `WAITING`임을 직접 관찰해 비관락의 직렬화를 입증했다. **단일 카운터 누적은 원자 UPDATE가 최적**(왕복·블로킹 0)이고, 실제 코드의 **타임아웃 스케줄러 ↔ FastAPI 콜백 경합**은 저경합·세션 분리라 `@Version` 낙관락(블로킹 비용 회피, 충돌 시 최대 3회 재시도)을 채택한 근거를 같은 실험으로 뒷받침했다.
 
-### 5.7 측정 요약
+### 5.7 JSON 저장 — 트림 33→13
+MediaPipe가 뱉는 **33개 landmark 전부**를 `joint_coordinates`에 저장하지만(`_landmarks_to_json`), 스쿼트 분석이 실제로 쓰는 건 **13개**(`constants.py LANDMARK`)뿐이다. 사용 13개만 남기면:
+
+- `joint_coordinates` 평균 **2,344 B → 916 B (−60.9%)**. 1억 행 환산 시 ~234GB → ~92GB.
+- **키는 못 줄인다**: `z`(3D 각도)·`visibility`(추적 신뢰도)가 모두 실사용 → 13 landmark × 4 key가 트림 천장.
+- 단 이는 **국소 미봉책**이고, 진짜 해법은 raw 프레임 시계열을 OLTP에서 분리(raw→buffer/serving)하는 것이다. 적용 지점은 `pose.py:93`(ai-server, 별도 결정).
+
+### 5.8 동시성 읽기 — MVCC 스냅샷
+긴 gRPC 배치 INSERT 트랜잭션이 열려 있는 동안 동시 리포트 조회가 무엇을 보는지 격리수준별로 관찰했다:
+
+- **REPEATABLE READ(기본)**: Reader 트랜잭션 첫 SELECT=100 → 중간에 Writer가 50행 INSERT+COMMIT → 같은 트랜잭션 재SELECT **여전히 100**(스냅샷 고정), COMMIT 후 150. 일관된 읽기 보장.
+- **READ COMMITTED 대비**: 같은 상황에서 재SELECT가 150(매 문장 새 스냅샷).
+- **읽기↔쓰기 비블로킹**: Reader가 트랜잭션 점유 중에도 Writer INSERT가 461ms에 완료, `data_locks` **0행** — 일반 SELECT는 락 없이 undo로 과거 버전을 재구성. → 적재와 조회가 서로를 막지 않는다.
+
+### 5.9 메모리 — 버퍼풀 작업셋 vs 풀 크기
+`pose_data_scale`(8,256만 행/10.4GB)을 버퍼풀 128MB로 스캔해 작업셋 크기별 캐시 효율을 측정했다:
+
+| 작업셋 | 디스크 읽기 | hit율 | 시간 |
+|---|---|---|---|
+| 540MB 파티션 (≫ 풀) | cold·warm 모두 **~485MB 매번** | ~84% 고정 | ~10초 |
+| 수MB PK범위 (< 풀) | warm **0MB** | 100% | ~0.45초 |
+
+→ 작업셋이 풀을 초과하면 warm 재실행도 캐시가 무력(eviction 재miss). **⭐ 함정**: 순차 스캔은 InnoDB 선읽기(read-ahead)가 페이지를 비동기로 당겨와 **표준 hit율 공식(1−`reads`/`req`)이 거짓 99.9%** 가 된다 — `reads`는 동기 미스만 카운트하기 때문. 진짜 물리 I/O는 `read_ahead`+`Innodb_data_read`(바이트)로 봐야 84%/485MB가 드러난다.
+
+### 5.10 측정 요약
 | 영역 | 개선 | 수치 |
 |---|---|---|
 | 쓰기 | 배치 INSERT | 처리량 +99%, p99 −37% |
@@ -236,6 +260,9 @@
 | 페이지네이션 | offset→keyset | 최대 489,868x |
 | 보존 | DROP PARTITION | DELETE 대비 625x |
 | 동시성 | lost-update 방지 | RC 재현 → 원자 UPDATE·낙관락 |
+| JSON 저장 | 트림 33→13 | `joint_coordinates` −60.9% |
+| 동시성 읽기 | MVCC 스냅샷 | RR 일관읽기·읽기쓰기 비블로킹 |
+| 메모리 | 버퍼풀 작업셋 | 작업셋>풀이면 warm 무력(read-ahead 함정) |
 
 ---
 

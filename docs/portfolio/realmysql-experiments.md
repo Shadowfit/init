@@ -155,8 +155,23 @@
 - **설계 (버퍼풀)**: 1억 행 > `innodb_buffer_pool_size`면 디스크 읽기 급증 — hit율(`sys`) 관찰, 버퍼풀 사이징 영향.
 - **설계 (JSON)**: `joint_coordinates` 저장 비용 측정, JSON path에 **generated column + 인덱스** vs 정규화 테이블 트레이드오프. 🟡 (현재 불필요, 데모용).
 - **설계 (트림 33→13)** 🔶: `_landmarks_to_json`이 MediaPipe **33개 전부 저장**(필터 없음, `constants.py LANDMARK`는 13개만 참조) → JSON 함수로 사용 13개만 추출해 `AVG(LENGTH)` before/after 측정(33→13 ≈ ~60% 절감). **단 이건 국소 미봉책** — 진짜 해법은 [`db-deep-dive §2-0`](./db-deep-dive.md)의 raw→buffer/serving 분리(raw 단기화하면 트림 영구비용 자체가 사라짐).
-- **결과**: ⬜
-- **면접**: "MVCC 덕에 적재 트랜잭션이 조회를 블로킹 안 함. 33 저장/13 사용은 default였고, 트림보다 raw를 OLTP에서 빼는 게 정답."
+- **결과 (트림 33→13) ✅ (2026-06-07, `_pose_template` 현실 JSON)**:
+  - `joint_coordinates` 평균 **2,344 B → 916 B (−60.9%)** — 33개 landmark 중 사용 13개(`0,11~16,23~28`)만 `JSON_ARRAY(JSON_EXTRACT(...))`로 남긴 결과. 구조적 절감이라 값 균일과 무관하게 유효.
+  - **키는 못 줄임(천장)**: `z`(angle_calculator 3D 각도)·`visibility`(squat_analyzer 추적신뢰도) 둘 다 실사용 → `x,y`만 남기는 추가 트림은 분석이 깨짐. 13 landmark × 4 key 가 정직한 상한.
+  - ⚠️ rig JSON 은 `{"landmarks":[{x,y,z,visibility}×33]}`(index 필드 없음)인데 실코드 `_landmarks_to_json`(`pose.py:93`)은 `[{index,x,y,z,visibility}]`라 index 키만큼 더 큼 → **실제 절감폭 ≥ 60.9%**. 진짜 수정위치는 `pose.py:93`(이번 미변경, ai-server 별도 결정).
+  - 스케일 투영: `pose_data` 412만 행 ~10.7GB → 트림 시 ~40%대. DAU 1,000 1억 행이면 ~234GB → ~92GB. **단 국소 미봉책** — 진짜 해법은 raw→buffer/serving 분리([`db-deep-dive §2-0`](./db-deep-dive.md)).
+- **결과 (MVCC) ✅ (2026-06-07, scratch `mvcc_lab` 100행, `measure_mvcc.sh`)**:
+  - **RR(기본)**: Reader 트랜잭션 첫 SELECT=100 → 그 사이 Writer 가 50행 INSERT+COMMIT → 같은 트랜잭션 재SELECT **여전히 100**(스냅샷 고정) → COMMIT 후 **150**. 일관된 읽기(consistent read) 입증.
+  - **RC 대비**: 같은 시나리오에서 재SELECT가 **150**(매 문장 새 스냅샷). RR↔RC 차이를 직접 관찰.
+  - **읽기↔쓰기 비블로킹**: Reader 가 3초 트랜잭션 점유 중에도 Writer INSERT+COMMIT 이 **461ms** 에 완료(안 막힘). `performance_schema.data_locks` **0행** — 일반 SELECT 는 락 없이 undo 로 과거 버전 재구성.
+  - 실코드 매핑: gRPC `SavePoseDataBatch` 적재가 길게 열려도 리포트 조회(`ReportService`)는 대기 없이 일관 뷰 → 적재↔조회 상호 비블로킹(OLTP 동시성).
+- **결과 (버퍼풀) ✅ (2026-06-07, `pose_data_scale` 8,256만 행/10.4GB vs 풀 128MB, `measure_bufferpool.sh`)**:
+  - **작업셋 ≫ 풀**: 월 파티션 풀스캔(540MB ≫ 128MB) → cold/warm 모두 **매번 ~485MB 디스크 읽기**, hit ~84% 고정, ~10초. 작업셋이 풀을 초과해 **warm 재실행도 캐시 무력**(eviction 으로 재miss).
+  - **작업셋 < 풀**: 좁은 PK 범위(수MB) → warm **디스크 0MB, hit 100%**, ~0.45초. 핫 데이터 메모리 상주. (⚠️ 이 구간 cold 도 직전 실행 잔여로 이미 resident — 진짜 cold 아님, 명시)
+  - **⭐ read-ahead 함정**: 순차 스캔은 InnoDB 선읽기(`Innodb_buffer_pool_read_ahead`)가 페이지를 비동기로 당겨와 **표준 hit율 공식(1−`reads`/`read_requests`)이 거짓 99.9%** 가 됨(`reads`는 동기 미스만 카운트). 진짜 물리 I/O = `reads`+`read_ahead`, 또는 `Innodb_data_read`(바이트)로 봐야 84%/485MB 가 보임. **"hit율 공식은 read-ahead 가 가린다"** 가 핵심 교훈.
+  - 같은 뿌리: 페이지네이션 cold/warm(②c §3)·시딩 가속(버퍼풀 128MB→2GB)·라우팅 모두 "작업셋 vs 메모리". 사이징 판단 = ⓐraw 단기화·파티션 만료로 작업셋 축소 ⓑ풀 증설.
+- **결과 (generated column) ⬜ 미수행 결정**: ⓐ프로젝트 실수요 0(JSON 내부값으로 검색 안 함, `sync_rate`는 별도 컬럼) ⓑ합성 rig 가 단일 템플릿 복제라 **값 분포(카디널리티) 균일**(`_pose_template` 750행 `d_whole_json=1`) → 선택도 실험 불가. **세 번째 축(값 분포) 한계**로 정직 박제(아래 §5 캐비엇). ⑤ 옵티마이저도 동일 제약.
+- **면접**: "MVCC 덕에 적재 트랜잭션이 조회를 블로킹 안 함(RR 스냅샷, data_locks 0). 트림은 33→13 으로 −60.9%지만 z·visibility 실사용이라 키는 못 줄임, 진짜 해법은 raw 를 OLTP 에서 빼는 것. 버퍼풀은 **작업셋 vs 메모리** — 540MB 스캔이 128MB 풀에선 warm 도 매번 485MB 재읽기, 그리고 **read-ahead 때문에 표준 hit율 공식이 거짓 99% 라 `data_read` 바이트로 봐야 한다**."
 
 ### ⑤ Ch.9 — 옵티마이저·힌트 🟢
 - **개념**: 통계정보, 비용기반 최적화, 조인 알고리즘(8.0 hash join), 힌트.
@@ -176,6 +191,8 @@
 |---|---|
 | Ch.16·17 복제·클러스터 | 🔴 **substrate 없음** — 규모상 실수요 0. "개념 학습 + 왜 미적용인지"로만. 가짜 replication 데모 금지 |
 | Ch.5 갭/넥스트키 락 | 🟡 append-only 저경합이라 일부 **합성 구간** — 명시 |
+| 합성데이터 **값 분포** | 🟡 rig 가 단일 템플릿 복제라 **카디널리티 균일**(`d_whole_json=1`). 행수·payload(크기)는 진짜지만 값 분포는 가짜 → 분포 의존 실험(generated column 선택도·옵티마이저 카디널리티)은 **미수행**. "구조 실험만 골라 돌렸다"가 정직 |
+| 버퍼풀 hit율 | 🟡 표준 공식(1−`reads`/`req`)은 **read-ahead 가 가려 거짓 99%** — 순차 스캔은 `read_ahead`+`Innodb_data_read`(바이트)로 봐야 함(§4 ④) |
 | Ch.8 인덱스 | "추가로 빨라짐" ❌ → "**이미 최적임을 측정으로 발견**"이 정직한 헤드라인(§4.3) |
 | 대용량 쿼리 저하 | 세션 리포트는 안 느려짐. **cross-session 집계**에서만 성립 |
 | throughput | DAU 작음(§4.2) — 처리량 자랑 ❌, 데이터량·정합성 축 |
