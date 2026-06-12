@@ -1,0 +1,2 @@
+# 다세션 rig 데이터 — 대용량(~64MB), gen_batch_multi.py로 재생성 가능
+batch_multi*.json

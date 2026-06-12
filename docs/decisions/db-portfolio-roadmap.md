@@ -156,13 +156,20 @@
 
 ---
 
-## 10. 미결정 항목 (사용자 confirm 필요)
+## 10. 미결정 항목 (2026-06-12 재조정)
 
-- [ ] **착수 기능 선택**: 1순위 팬아웃 vs 2순위 파티셔닝 (또는 둘 다, 순서)
-- [ ] 소셜 도입 여부 — 신규 테이블(friendships/activity_feed/notifications) 추가 범위
-- [ ] "1초 평균 집계"를 AI에서 할지 / Spring INSERT 직전에 할지 (쓰기 축 첫 갈림길)
-- [ ] 볼륨 시드 목표 규모 (예: pose_data 1억 행)
-- [ ] 유튜브 좌표를 시드 샘플로 쓸지 (라이선스 리스크 수용 여부)
+> ⚠️ 이 절은 2026-06-05 초안. 그 뒤 실측·서사 작업으로 **5개 중 4개가 이미 해소**됐다. 아래는 현실 대조 결과.
+
+**해소됨 (문서 동기화):**
+- ~~착수 기능: 팬아웃 vs 파티셔닝~~ → **파티셔닝 채택·완료**([`realmysql-experiments.md §4-②d`](../portfolio/realmysql-experiments.md), 06-03: ALTER 96분 / DROP PARTITION 1.8초 / DELETE 대비 **625x** 실측). **팬아웃은 폐기**([`portfolio-narrative.md §4`](../portfolio/portfolio-narrative.md): "혼자 운동 도메인엔 억지 → 헤드라인 제외").
+- ~~소셜 도입 여부~~ → **드롭**(팬아웃 폐기와 동반). friendships/activity_feed/notifications 신규 테이블 **안 만듦**.
+- ~~볼륨 시드 규모~~ → **1억 행 완료**([`realmysql §3`](../portfolio/realmysql-experiments.md), 06-03: 133,334세션×750행·~11GB, `loadtest/seed/seed_pose_scale.sh`, 커밋 da69056).
+- ~~유튜브 좌표를 시드로~~ → **안 씀**. 실제 시드는 더미 JSON `{}`/`_pose_template`(행수·payload 디커플링). 유튜브 추출은 별도 기능([`youtube-coordinate-harvest.md`](./youtube-coordinate-harvest.md))으로 분리, 시드와 무관.
+
+**아직 진짜 미결정:**
+- [ ] **"1초 평균 집계"를 AI(FastAPI)에서 할지 / Spring INSERT 직전에 할지** (쓰기 축 첫 갈림길, §7 갭). → 분석+측정 문서: [`pose-ingest-downsampling.md`](./pose-ingest-downsampling.md). **2026-06-12 측정 결과**: 쓰기 천장(~25 RPS)은 행수가 아니라 **HikariCP 풀=10 + 단일세션 rig 아티팩트**로 귀속(버퍼풀 가설 반증). R-sweep로 **배치 비용 고정비용 지배** 확인 → **다운샘플은 천장 해법 아님, 1순위는 풀 사이징**. 다운샘플은 저장·배치 효율 부수 카드로 강등. → 다음 미결정: **풀 10→20/30 재측정**(컨테이너 재생성 동반).
+
+> 참고: 보강 축(outbox·관측성·회복탄력성)의 착수 순서는 별도 미결정 — [`portfolio-narrative.md §7`](../portfolio/portfolio-narrative.md), [`outbox-reliable-messaging.md`](./outbox-reliable-messaging.md).
 
 ---
 
@@ -176,3 +183,4 @@
 
 ## 결정 로그
 - 2026-06-05: 로드맵 초안 작성. 기능 9개 후보·우선순위·측정법 정리. **착수 기능 미결정** (§10).
+- 2026-06-12: §10 재조정. 초안 미결정 5개 중 **4개 해소 반영**(파티셔닝 채택·완료, 팬아웃·소셜 폐기, 1억 시드 완료, 유튜브 좌표 미사용). 남은 진짜 미결정 = **"1초 평균 집계" 위치(AI vs Spring)** 1개. 새 결정 아닌 *기존 사실·서사 동기화*.
