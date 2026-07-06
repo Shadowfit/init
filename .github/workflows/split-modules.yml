@@ -1,0 +1,47 @@
+name: Split modules to standalone repos
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  split:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - dir: frontend
+            repo: Shadowfit/frontend
+          - dir: backend
+            repo: Shadowfit/backend
+          - dir: ai-server
+            repo: Shadowfit/ai-server
+    steps:
+      - name: Checkout with full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for changes in ${{ matrix.dir }}
+        id: changes
+        run: |
+          BEFORE="${{ github.event.before }}"
+          if [ -z "$BEFORE" ] || ! git cat-file -e "$BEFORE" 2>/dev/null; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          elif git diff --quiet "$BEFORE" "${{ github.sha }}" -- "${{ matrix.dir }}"; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Split ${{ matrix.dir }} history
+        if: steps.changes.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git subtree split --prefix=${{ matrix.dir }} -b split-${{ matrix.dir }}
+
+      - name: Push to ${{ matrix.repo }}
+        if: steps.changes.outputs.changed == 'true'
+        run: |
+          git push "https://x-access-token:${{ secrets.SPLIT_PUSH_TOKEN }}@github.com/${{ matrix.repo }}.git" "split-${{ matrix.dir }}:main" --force
