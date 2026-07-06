@@ -1465,12 +1465,20 @@ Speech.speak(message, { language: 'ko-KR', rate: userTtsSpeed });
   - #14 ttsSpeed 검증: ✅ UI 슬라이더로 0.5~2.0 범위 강제 + Spring `@DecimalMin("0.5") @DecimalMax("2.0")` 표준 검증 어노테이션 (방어용, 평시 발동 X)
   - #15 TTS preferences 즉시 효과: 🔵 *보류* — 일단 cached value 추천 박제했으나 *Front UI 디자인 확정 후 재검토 필요* (운동 중 변경 UI 만들 가능성). 사용자 결정으로 보류 전환
   - 사용자 명시적 confirm 항목 5건 → **6건** (#14 만 추가)
+- **2026-05-28 (갱신 17, § 12.5 보강)**: **Jackson `write-dates-as-timestamps` 누락 보강**:
+  - 갱신 15 에서 *서버 timezone* 만 박고 **Jackson 직렬화 설정 누락** — Spring Boot 의 기본값 `write-dates-as-timestamps: true` 가 살아있어 `LocalDateTime` 이 **7필드 배열** `[2026,5,28,10,0,3]` 으로 응답됨 (`/sessions/{id}/feedbacks` 호출 시 발견)
+  - 갱신 15 결정의 ② "API JSON 형식 `"2026-05-25T10:23:45"`" 과 실제 응답 형식 불일치 — 결정 박제 시 *직렬화 단계까지* 박지 못한 누락
+  - 추가 결정: `application.yml` 의 `spring.jackson.serialization.write-dates-as-timestamps: false` 명시
+  - 변경 결과: `LocalDateTime` → ISO string (`"2026-05-28T10:00:03"`, timezone 마커 없음) — 갱신 15 결정과 정합
+  - 트레이드오프 분석 (배열 vs ISO string): 가독성·클라 호환·정렬·OpenAPI 표준·timezone 안전성 모두 string 우위. 배열의 유일한 장점인 *대역폭 -2 bytes / 파싱 미미* 는 실무 무의미
+  - 회고: *결정 박제 시 yaml·코드 매핑까지 검증* 절차 필요. 향후 timezone·직렬화 등 *서버 동작 결정* 은 (1) 결정 문구 (2) 적용 위치 (3) 검증 응답 3단으로 박을 것
 - **2026-05-25 (갱신 15)**: **협의 안건 #16 (시간대 형식) 단순화 결정**:
   - 한국 전용 서비스 ([[project-korean-only]]) 정합 — timezone 마커 가치 약하고 산업 mainstream (카카오·네이버·토스) 도 미사용
   - 결정: (1) 서버 timezone Asia/Seoul 고정 (Spring `spring.jackson.time-zone: Asia/Seoul` + AI `TZ=Asia/Seoul`), (2) API JSON 형식 *timezone 마커 없음* (`"2026-05-25T10:23:45"`), (3) DB `LocalDateTime` 유지, (4) UI KST 표시
   - 작업 영향: `application.yml` + `docker-compose.yml` 각 1줄. 코드 변경 0
   - 글로벌 진출 시 재검토 (현재 가능성 0)
   - 미팅 안건 4 *사전 해결* — 3자 미팅에서 제외 가능. tts-negotiation-checklist.md #16 ✅, 3way-meeting-agenda.md 안건 4 단순화안으로 갱신
+  - ⚠️ 2026-05-28 갱신 17 보강: 본 결정의 *Jackson 직렬화 설정* 누락 → 갱신 17 에서 `write-dates-as-timestamps: false` 추가
 - **2026-05-25 (갱신 14)**: **BT-SET 작업 분담 명시 + 점진 전환 단계 박제**:
   - §2.A.BT 에 *책임 분담* sub-섹션 신설 — Spring (DTO·uniqueKey·INSERT IGNORE) ~10줄 + AI (set 카운터·retry·target_reps_per_set 자체 계산) ~60줄. **Front 변경 없음** (분기 7-1 의 발화 채널만 관여)
   - §2.A.BT 에 *점진 전환* 4 단계 명시 — Phase 1 (MVP, BT-NONE) → Phase 2 (BE-13, Spring 준비) → Phase 3 (베타, AI 전환) → Phase 4 (정식, 디스크 영속화). **Spring 측 작업은 Phase 2 한 번으로 끝**

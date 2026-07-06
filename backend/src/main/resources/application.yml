@@ -5,12 +5,16 @@ spring:
     active: prod
 
   # 시간대 — 한국 전용 서비스 (협의 안건 #16, 갱신 15)
+  # LocalDateTime 직렬화 형식 — § 12.5 결정과 정합 ("2026-05-28T10:00:03", timezone 마커 없음)
   jackson:
     time-zone: Asia/Seoul
+    serialization:
+      write-dates-as-timestamps: false
 
   # [1] 데이터베이스 및 JPA 설정 (spring 하위로 정렬)
   datasource:
-    url: jdbc:mysql://${DB_HOST:shadowfit-mysql}:${DB_PORT:3306}/${DB_NAME:shadowfit}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8
+    # rewriteBatchedStatements=true: JDBC 드라이버가 batch INSERT 를 multi-row SQL 한 방으로 재작성 (부하테스트 §7.5 개선)
+    url: jdbc:mysql://${DB_HOST:shadowfit-mysql}:${DB_PORT:3306}/${DB_NAME:shadowfit}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Seoul&characterEncoding=UTF-8&rewriteBatchedStatements=true
     username: ${DB_USERNAME:shadowfit}
     password: ${DB_PASSWORD:shadowfit}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -23,6 +27,12 @@ spring:
      hibernate:
        ddl-auto: none # 혹은 none (도커에서 schema.sql을 실행하므로)
      defer-datasource-initialization: true
+     properties:
+       hibernate:
+         jdbc:
+           batch_size: 25      # saveAll 을 batch 로 묶음 (부하테스트 §7.5 개선)
+         order_inserts: true
+         order_updates: true
 
 # [2] gRPC 설정 (최상단 레벨)
 grpc:

@@ -1,25 +1,23 @@
 package com.shadowfit.service.Exercise;
 
-import com.shadowfit.dto.exercises.PoseDataRequestDto;
 import com.shadowfit.global.error.BusinessException;
 import com.shadowfit.global.error.ErrorCode;
 import com.shadowfit.grpc.PoseDataRequest;
 import com.shadowfit.model.exercise.Exercise;
 import com.shadowfit.model.exercise.ExerciseReference;
-import com.shadowfit.model.exercise.PoseData;
-import com.shadowfit.model.exercise.Session;
 import com.shadowfit.repository.exercise.ExerciseReferenceRepository;
 import com.shadowfit.repository.exercise.ExercisesRepository;
-import com.shadowfit.repository.exercise.PoseDataRepository;
 import com.shadowfit.repository.exercise.SessionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.jdbc.core.BatchPreparedStatementSetter;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -27,65 +25,51 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class PoseDataService {
 
-    private final PoseDataRepository poseDataRepository;
     private final SessionRepository sessionRepository;
     private final ExercisesRepository exercisesRepository;
     private final ExerciseReferenceRepository referenceRepository;
+    private final JdbcTemplate jdbcTemplate;
+
+    private static final String INSERT_POSE_SQL =
+            "INSERT INTO pose_data " +
+            "(session_id, timestamp_sec, joint_coordinates, sync_rate, is_correct, feedback_message) " +
+            "VALUES (?, ?, ?, ?, ?, ?)";
 
     /**
      * [실시간 저장] FastAPI가 주기적으로 쏴주는 분석 좌표 데이터 묶음을 DB에 저장합니다.
+     *
+     * JPA saveAll 은 PoseData.id 가 IDENTITY 라 Hibernate batch insert 가 비활성(개별 INSERT N방).
+     * 부하 테스트(§7.5)에서 동시성 100에 p99 4.6s·throughput 천장 확인 → JdbcTemplate.batchUpdate
+     * 로 multi-row INSERT 단일화. created_at 은 DB DEFAULT CURRENT_TIMESTAMP 에 위임.
      */
     @Transactional
     public void savePoseDataBatch(Long sessionId, List<com.shadowfit.grpc.PoseDataRequest> grpcList) {
         if (grpcList == null || grpcList.isEmpty()) return;
 
-        Session session = sessionRepository.findById(sessionId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.SESSION_NOT_FOUND));
-
-        List<PoseData> entities = grpcList.stream()
-                .map(grpc -> PoseData.builder()
-                        .session(session)
-                        .timestampSec(grpc.getTimestampSec())
-                        .jointCoordinates(grpc.getJointCoordinates())
-                        .syncRate(grpc.getSyncRate())
-                        .isCorrect(grpc.getSyncRate() >= 40.0) // 40점 기준 (수정 가능)
-                        .feedbackMessage(grpc.getFeedbackMessage())
-                        .build())
-                .collect(Collectors.toList());
-
-        poseDataRepository.saveAll(entities);
-        log.info("세션 {} : 포즈 데이터 {}개 일괄 저장 성공", sessionId, entities.size());
-    }
-
-    /**
-     * [실시간 저장 - REST] FastAPI가 HTTP로 보내는 좌표 DTO 묶음을 DB에 저장합니다.
-     * 동일 batch에 여러 sessionId가 섞여 있어도 세션별로 그룹화해 처리합니다.
-     */
-    @Transactional
-    public void savePoseDataBatch(List<PoseDataRequestDto> dtos) {
-        if (dtos == null || dtos.isEmpty()) return;
-
-        Map<Long, List<PoseDataRequestDto>> bySession = dtos.stream()
-                .filter(d -> d.getSessionId() != null)
-                .collect(Collectors.groupingBy(PoseDataRequestDto::getSessionId));
-
-        List<PoseData> entities = new ArrayList<>();
-        for (Map.Entry<Long, List<PoseDataRequestDto>> entry : bySession.entrySet()) {
-            Long sessionId = entry.getKey();
-            Session session = sessionRepository.findById(sessionId)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.SESSION_NOT_FOUND));
-
-            for (PoseDataRequestDto dto : entry.getValue()) {
-                entities.add(PoseData.builder()
-                        .session(session)
-                        .timestampSec(dto.getTimestampSec())
-                        .jointCoordinates(dto.getJointCoordinates())
-                        .build());
-            }
+        // 세션 존재 검증 (FK 보호 + 기존 SESSION_NOT_FOUND 계약 유지)
+        if (!sessionRepository.existsById(sessionId)) {
+            throw new BusinessException(ErrorCode.SESSION_NOT_FOUND);
         }
 
-        poseDataRepository.saveAll(entities);
-        log.info("REST 포즈 데이터 {}개 저장 (세션 {}개)", entities.size(), bySession.size());
+        jdbcTemplate.batchUpdate(INSERT_POSE_SQL, new BatchPreparedStatementSetter() {
+            @Override
+            public void setValues(PreparedStatement ps, int i) throws SQLException {
+                PoseDataRequest grpc = grpcList.get(i);
+                ps.setLong(1, sessionId);
+                ps.setDouble(2, grpc.getTimestampSec());
+                ps.setString(3, grpc.getJointCoordinates());
+                ps.setDouble(4, grpc.getSyncRate());
+                ps.setBoolean(5, grpc.getSyncRate() >= 40.0); // 40점 기준 (수정 가능)
+                ps.setString(6, grpc.getFeedbackMessage());
+            }
+
+            @Override
+            public int getBatchSize() {
+                return grpcList.size();
+            }
+        });
+
+        log.info("세션 {} : 포즈 데이터 {}개 일괄 저장 성공", sessionId, grpcList.size());
     }
 
     /**
