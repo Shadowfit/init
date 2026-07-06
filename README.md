@@ -47,8 +47,6 @@ npm install
 npx expo start
 ```
 
-독립 저장소: [FRONT](https://github.com/SMU-2026-1-capstone-project/FRONT)
-
 ### ⚙️ Backend — `backend/`
 
 Spring Boot API 서버. 회원·인증(JWT)·세션 라이프사이클·리포트·gRPC 연동을 담당합니다.
@@ -61,8 +59,6 @@ cd backend
 - API 문서: 로컬 기동 후 `http://localhost:8080/swagger-ui`
 - 설계 문서: [`docs/07-api-design.md`](./docs/07-api-design.md), [`docs/05-database-design.md`](./docs/05-database-design.md)
 
-독립 저장소: [ShadowFit-BACKEND](https://github.com/SMU-2026-1-capstone-project/ShadowFit-BACKEND)
-
 ### 🤖 AI Server — `ai-server/`
 
 FastAPI 서버. MediaPipe로 관절 좌표를 추출하고 DTW로 기준 동작과 비교합니다.
@@ -74,8 +70,6 @@ uvicorn app.main:app --reload
 ```
 
 - 가이드: [`docs/06-mediapipe-guide.md`](./docs/06-mediapipe-guide.md)
-
-독립 저장소: [AI-server](https://github.com/SMU-2026-1-capstone-project/AI-server)
 
 ---
 
@@ -108,9 +102,4 @@ frontend --(HTTP, 카메라 프레임)--> ai-server
 
 ## 관련 저장소
 
-| 저장소 | 역할 |
-| :--- | :--- |
-| [.github](https://github.com/SMU-2026-1-capstone-project/.github) | 조직 프로필 (제품 소개) |
-| [FRONT](https://github.com/SMU-2026-1-capstone-project/FRONT) | 프론트엔드 단독 저장소 |
-| [ShadowFit-BACKEND](https://github.com/SMU-2026-1-capstone-project/ShadowFit-BACKEND) | 백엔드 단독 저장소 |
-| [AI-server](https://github.com/SMU-2026-1-capstone-project/AI-server) | AI 서버 단독 저장소 |
+프론트·백엔드·AI 서버는 별도 저장소 없이 전부 이 레포 안에서 관리합니다. 팀 소개·제품 개요는 [.github](https://github.com/SMU-2026-1-capstone-project/.github) 조직 프로필 참고.
