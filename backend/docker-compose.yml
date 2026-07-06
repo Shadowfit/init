@@ -1,0 +1,74 @@
+version: '3.8'
+
+# 모노레포 루트의 docker-compose.yml(mysql+backend+ai-server 풀스택)과 별개로,
+# 이 파일은 backend 모듈 단독 실행용(standalone 스플릿 레포 기준)이라
+# mysql+backend만 포함한다. AI 서버 연동이 필요하면 AI_SERVER_HOST 등을 직접 띄운
+# 인스턴스 주소로 채울 것.
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: shadowfit-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      TZ: Asia/Seoul
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+      - ./mysql/data.sql:/docker-entrypoint-initdb.d/data.sql
+      - ./mysql/my.cnf:/etc/mysql/conf.d/charset.cnf:ro
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --skip-character-set-client-handshake
+      --innodb-buffer-pool-size=2G
+      --innodb-sort-buffer-size=64M
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - shadowfit-net
+
+  shadowfit-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: shadowfit-backend
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      - "6565:6565"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      TZ: Asia/Seoul
+      DB_HOST: shadowfit-mysql
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
+      AI_SERVER_HOST: ${AI_SERVER_HOST:-}
+      AI_SERVER_GRPC_PORT: ${AI_SERVER_GRPC_PORT:-8585}
+      AI_SERVER_HTTP_PORT: ${AI_SERVER_HTTP_PORT:-8000}
+      JWT_SECRET: ${JWT_SECRET:-shadowfit-prod-secret-key-change-this}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - shadowfit-net
+
+networks:
+  shadowfit-net:
+    driver: bridge
+
+volumes:
+  mysql_data:
+    driver: local
