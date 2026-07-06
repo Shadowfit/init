@@ -15,6 +15,66 @@
 
 ---
 
+## 🧩 아키텍처
+
+```mermaid
+graph LR
+    FE["📱 App"]
+    AI["🤖 AI Server"]
+    BE["⚙️ Spring Boot"]
+    DB[("🗄️ MySQL")]
+
+    FE -- "프레임 스트리밍" --> AI
+    AI -- "분석 콜백" --> BE
+    FE -- "세션 시작/중단" --> BE
+    BE --> DB
+```
+
+프론트는 카메라 프레임을 AI 서버에 직접 스트리밍하고, AI 서버는 gRPC 콜백으로 결과를 Spring에 전달합니다. 세션 시작/중단만 프론트→Spring→AI로 한 단계 거칩니다.
+
+## 🔀 데이터 플로우
+
+```mermaid
+flowchart TD
+    YT["YouTube 기준 영상"] -->|"youtube_url"| Extract["🤖 AI: 관절 좌표 추출"]
+    Extract -->|"jointCoordinates 시계열"| RefDB[("exercise_reference")]
+
+    Cam["📱 카메라 프레임 (base64)"] -->|"POST /pose"| MP["🤖 MediaPipe 추론"]
+    RefDB -.->|"세션 시작 시 조회"| DTW
+    MP --> DTW["DTW 비교 + syncRate 계산"]
+    DTW -->|"rep 완성 시 배치"| PoseDB[("pose_data<br/>jointCoordinates · syncRate · feedbackMessage")]
+    DTW -.->|"설계됨 · 미연동"| FeedbackDB[("session_feedback_log")]
+
+    PoseDB -->|"세션 종료 시 집계"| SessionDB[("session<br/>totalReps · avgSyncRate · calories")]
+
+    PoseDB -->|"3프레임 슬라이딩 윈도우"| Weak["취약 구간 탐지"]
+    SessionDB -->|"직전 세션과 비교"| Weak
+    Weak --> Report["세션 리포트"]
+    SessionDB -->|"주/월 단위 집계"| Weekly["주간요약 · 달력"]
+    DailyLogDB[("daily_log<br/>memo · mood")] --> Weekly
+```
+
+카메라 프레임은 AI 서버 내부에서 관절 좌표로 변환된 뒤 rep 단위로만 Spring에 저장되고, 세션 리포트·주간요약·달력은 모두 이 `pose_data`/`session` 테이블에서 파생됩니다.
+
+## 🔌 대표 API
+
+| Method | Endpoint | 설명 |
+| :--- | :--- | :--- |
+| `POST` | `/exercises/sessions` | 운동 세션 시작 (DB 생성 후 202 즉시 응답, gRPC 송신은 비동기) |
+| `PATCH` | `/sessions/{sessionId}/end` | 세션 종료 (단일 엔드포인트, 커밋 후 AI에 비동기 통보) |
+| `POST` | `/exercises/{exerciseId}/reference` | YouTube 기준 동작 좌표 추출 요청 |
+| `GET` `PATCH` | `/preferences/tts` | TTS 사용 여부·속도 조회/변경 |
+| `GET` | `/exercises/{exerciseId}/feedback-templates` | 운동별 피드백 멘트 조회 |
+| `GET` | `/reports/calendar` | 달력 기반 월별 운동 기록 |
+| `GET` | `/reports/weekly-summary` | 주간 활동 요약 |
+| `POST` | `/reports/daily-logs` | 운동 일지 작성 |
+| `GET` | `/reports/session/{sessionId}` | 세션별 상세 리포트(취약 구간·이전 세션 비교) |
+| `PATCH` | `/admin/exercises/{exerciseId}/thresholds` | 페르소나별 싱크로율 임계값 조정 (관리자) |
+
+전체 스펙은 로컬 기동 후 Swagger(`/swagger-ui`)에서 확인할 수 있습니다.
+
+---
+
 ## 🎯 헤드라인 — 운동 세션 생명주기의 분산 정합성
 
 **문제**: 운동 세션 상태가 Spring(Java)과 FastAPI(Python) 두 서비스에 걸쳐 있습니다. 세션 종료 시점에 서로 다른 두 주체가 같은 레코드를 동시에 건드릴 수 있습니다.
