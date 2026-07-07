@@ -100,6 +100,3 @@ frontend --(HTTP, 카메라 프레임)--> ai-server
 
 ---
 
-## 관련 저장소
-
-프론트·백엔드·AI 서버는 별도 저장소 없이 전부 이 레포 안에서 관리합니다. 팀 소개·제품 개요는 [.github](https://github.com/SMU-2026-1-capstone-project/.github) 조직 프로필 참고.
