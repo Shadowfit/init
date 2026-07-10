@@ -85,7 +85,8 @@ public class MemberService{
     public void deleteAccount(String email){
         Member member = memberRepository.findByEmail(email)
                 .orElseThrow(()-> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        // refresh_token.member_id 는 users(id) ON DELETE CASCADE 라 DB가 자동으로 같이 지움 —
+        // 수동으로도 지우면 이미 사라진 행을 또 지우려다 StaleStateException(0 row) 발생
         memberRepository.delete(member);
-        refreshTokenRepository.deleteByMemberId(member.getId());
     }
 }
