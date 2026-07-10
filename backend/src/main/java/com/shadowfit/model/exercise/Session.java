@@ -5,6 +5,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import jakarta.persistence.Version;
+import lombok.AccessLevel;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -65,6 +66,7 @@ public class Session {
     @Version
     @Column(nullable = false)
     @Builder.Default
+    @Setter(AccessLevel.NONE)  // Hibernate가 관리하는 필드 — 외부에서 setVersion() 호출 차단
     private Long version = 0L;
 
     @CreationTimestamp // INSERT 시 현재 시간 자동 입력

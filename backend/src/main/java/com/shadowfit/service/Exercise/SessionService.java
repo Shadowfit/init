@@ -26,7 +26,9 @@ import com.shadowfit.grpc.SessionCompleteRequest;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 
@@ -184,8 +186,8 @@ public class SessionService {
         LocalDate startOfWeek = today.with(java.time.DayOfWeek.MONDAY);
         LocalDate endOfWeek = today.with(java.time.DayOfWeek.SUNDAY);
 
-        // 2. 이번 주 모든 세션 조회
-        List<Session> weeklySessions = sessionRepository.findByMemberIdAndStartTimeBetween(
+        // 2. 이번 주 모든 세션 조회 — exercise fetch join으로 N+1 방지
+        List<Session> weeklySessions = sessionRepository.findWeeklySessionsWithExercise(
                 memberId, startOfWeek.atStartOfDay(), endOfWeek.atTime(23, 59, 59));
 
         // 3. 통계 계산 (Duration 계산 시 NPE 방어)
@@ -304,31 +306,24 @@ public class SessionService {
     }
 
     private int calculateConsecutiveDays(Long memberId) {
+        LocalDate today = LocalDate.now();
+
+        // 최근 100일치 활동 날짜를 한 번에 조회 (루프 N+1 → 쿼리 1방)
+        Set<LocalDate> activeDates = new HashSet<>(
+                sessionRepository.findDistinctActiveDates(
+                        memberId,
+                        today.minusDays(100).atStartOfDay(),
+                        today.atTime(23, 59, 59)
+                )
+        );
+
+        // 오늘 기록 없으면 어제부터 체크 (오늘 아직 안 했을 수도 있으니)
+        LocalDate checkDate = activeDates.contains(today) ? today : today.minusDays(1);
+
         int consecutiveDays = 0;
-        LocalDate checkDate = LocalDate.now();
-
-        while (true) {
-            // 해당 날짜에 운동 기록이 있는지 확인
-            boolean hasRecord = sessionRepository.findByMemberIdAndStartTimeBetween(
-                    memberId,
-                    checkDate.atStartOfDay(),
-                    checkDate.atTime(23, 59, 59)
-            ).size() > 0;
-
-            if (hasRecord) {
-                consecutiveDays++;
-                checkDate = checkDate.minusDays(1); // 하루 전으로 이동해서 계속 체크
-            } else {
-                // 오늘 기록이 없으면 어제 기록부터 다시 체크 (오늘 아직 안 했을 수도 있으니)
-                if (checkDate.equals(LocalDate.now())) {
-                    checkDate = checkDate.minusDays(1);
-                    continue;
-                }
-                break; // 기록 끊기면 종료
-            }
-
-            // 무한 루프 방지 (최대 100일까지만 체크 등 설정 가능)
-            if (consecutiveDays > 100) break;
+        while (activeDates.contains(checkDate)) {
+            consecutiveDays++;
+            checkDate = checkDate.minusDays(1);
         }
         return consecutiveDays;
     }
