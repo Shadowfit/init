@@ -6,6 +6,7 @@ import com.shadowfit.model.exercise.FeedbackType;
 import com.shadowfit.model.member.SelectedPersona;
 import com.shadowfit.repository.exercise.ExerciseFeedbackTemplateRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,7 +24,9 @@ public class FeedbackTemplateService {
     /**
      * 페르소나 row 가 있는 feedback_type 은 그것, 없는 것은 persona IS NULL fallback (분기 4-A).
      * priority ASC 정렬. persona null 호출 시 fallback 전체 반환.
+     * exercise_feedback_templates 는 쓰기 경로 없음(§2-2-1) — cache-aside, evict 불필요.
      */
+    @Cacheable(cacheNames = "feedbackTemplates", key = "#exerciseId + '_' + #persona")
     public List<FeedbackTemplateDto> getTemplatesByExercise(Long exerciseId, SelectedPersona persona) {
         List<ExerciseFeedbackTemplate> fallback =
                 templateRepository.findByExerciseIdAndPersonaIsNullOrderByPriorityAsc(exerciseId);

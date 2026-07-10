@@ -34,6 +34,14 @@ spring:
          order_inserts: true
          order_updates: true
 
+  # [1.5] 로컬 캐시 (Caffeine) — feedbackTemplates: 쓰기 경로 없는 카탈로그성 데이터, 1시간은
+  # 히트율 손해 목적이 아니라 미래에 관리자 CRUD 생기고 @CacheEvict 깜빡해도 자동 복구되는 안전판
+  cache:
+    type: caffeine
+    cache-names: feedbackTemplates # 시작 시 미리 등록 — 안 하면 Micrometer 가 지연생성 캐시를 못 잡음
+    caffeine:
+      spec: expireAfterWrite=1h,maximumSize=500,recordStats
+
 # [2] gRPC 설정 (최상단 레벨)
 grpc:
   port: 6565
@@ -61,6 +69,14 @@ security:
     - "/member/login"
     - "/member/signup"
     - "/ws/**"
+    - "/actuator/**"
+
+# [6] Actuator — 캐시 히트율 관측용 (caches/metrics 만 노출, health 는 기본)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,caches,metrics
 
 jwt:
   secret: ${JWT_SECRET}
