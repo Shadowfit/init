@@ -70,10 +70,13 @@ security:
     - "/error"
     - "/v3/api-docs/**"
     - "/swagger-ui/**"
+    - "/swagger-ui.html"
+    - "/webjars/**"
     - "/member/login"
     - "/member/signup"
     - "/ws/**"
-    - "/actuator/**"
+    - "/actuator/health"
+    - "/actuator/health/**"
 
 # [6] Actuator — 캐시 히트율·서킷브레이커 상태 관측용
 management:
