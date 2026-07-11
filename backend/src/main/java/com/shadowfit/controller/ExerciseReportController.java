@@ -26,7 +26,7 @@ public class ExerciseReportController {
             @AuthenticationPrincipal CustomUserDetails customUserDetails,
             @PathVariable Long sessionId) {
 
-        SessionReportResponseDto response = reportService.getSessionReport(sessionId);
+        SessionReportResponseDto response = reportService.getSessionReport(sessionId, customUserDetails.getMember().getId());
         return ResponseEntity.ok(response);
     }
 }
