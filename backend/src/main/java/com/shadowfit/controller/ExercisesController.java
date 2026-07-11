@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
@@ -28,6 +29,7 @@ public class ExercisesController {
      * ✅ 기준 좌표 추출 (관리자/등록용)
      */
     @Operation(summary="기준 좌표 추출",description = "기준 좌표 추출 요청을 할 수 있음")
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/{exerciseId}/reference")
     public ResponseEntity<String> extractReference(
             @PathVariable Long exerciseId,
