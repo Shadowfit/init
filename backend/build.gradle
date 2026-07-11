@@ -2,7 +2,7 @@ plugins {
 	id 'java'
 	id 'org.springframework.boot' version '3.4.0'
 	id 'io.spring.dependency-management' version '1.1.7'
-	id 'com.google.protobuf' version '0.9.4'
+	id 'com.google.protobuf' version '0.10.0'
 }
 
 group = 'com.shadowfit'
@@ -48,7 +48,7 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-cache'
 	implementation 'com.github.ben-manes.caffeine:caffeine:3.2.4'
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
-	implementation 'io.github.resilience4j:resilience4j-spring-boot3:2.2.0'
+	implementation 'io.github.resilience4j:resilience4j-spring-boot3:2.4.0'
 
 	// --- AWS & Security ---
 	implementation 'org.springframework.cloud:spring-cloud-starter-aws:2.2.6.RELEASE'
@@ -62,7 +62,7 @@ dependencies {
 	developmentOnly 'org.springframework.boot:spring-boot-devtools'
 
 	// --- gRPC & Protobuf (버전 정합성 해결) ---
-	def grpcVersion = '1.62.2'
+	def grpcVersion = '1.82.2'
 	def protobufVersion = '3.25.1'
 
 	// Starter는 API만 제공하고 실제 구현체는 아래에서 버전 고정
@@ -96,7 +96,7 @@ protobuf {
 	}
 	plugins {
 		grpc {
-			artifact = "io.grpc:protoc-gen-grpc-java:1.62.2"
+			artifact = "io.grpc:protoc-gen-grpc-java:1.82.2"
 		}
 	}
 	generateProtoTasks {
