@@ -54,6 +54,9 @@
 - 리포트 집계 로직 (worst 구간 sliding window, comparison)
 - `loadtest/ghz/` — gRPC ceiling(c1~c100) + JDBC ramp/fair 결과 = **쓰기 축 부하 인프라 이미 존재**
 - `redis-introduction.md` 의 "측정 전 캐싱은 premature" — production-grade 태도
+- Resilience4j 서킷브레이커 — Spring→AI gRPC 3개 호출에 수동 연동 + gRPC 데드라인(5s), Docker 장애주입(`stop`/`pause`)으로 CLOSED→OPEN→HALF_OPEN→CLOSED 전체 생명주기 실측 검증, 스킵/hang 세션 즉시 FAILED 전환까지 완료 ([`production-signal-checklist.md §2-3`](./production-signal-checklist.md))
+- 로컬 캐시(Caffeine) — `exercises`(임계값)·`exercise_references` 구현+실측 완료 ([`production-signal-checklist.md §2-2`](./production-signal-checklist.md))
+- connection 설정(HikariCP) — `maximum-pool-size=10` 실측 근거와 함께 명시적 유지로 문서화 완료 ([`production-signal-checklist.md §2-5`](./production-signal-checklist.md))
 
 ---
 
@@ -167,7 +170,7 @@
 - ~~유튜브 좌표를 시드로~~ → **안 씀**. 실제 시드는 더미 JSON `{}`/`_pose_template`(행수·payload 디커플링). 유튜브 추출은 별도 기능([`youtube-coordinate-harvest.md`](./youtube-coordinate-harvest.md))으로 분리, 시드와 무관.
 
 **아직 진짜 미결정:**
-- [ ] **"1초 평균 집계"를 AI(FastAPI)에서 할지 / Spring INSERT 직전에 할지** (쓰기 축 첫 갈림길, §7 갭). → 분석+측정 문서: [`pose-ingest-downsampling.md`](./pose-ingest-downsampling.md). **2026-06-12 측정 결과**: 쓰기 천장(~25 RPS)은 행수가 아니라 **HikariCP 풀=10 + 단일세션 rig 아티팩트**로 귀속(버퍼풀 가설 반증). R-sweep로 **배치 비용 고정비용 지배** 확인 → **다운샘플은 천장 해법 아님, 1순위는 풀 사이징**. 다운샘플은 저장·배치 효율 부수 카드로 강등. → 다음 미결정: **풀 10→20/30 재측정**(컨테이너 재생성 동반).
+- [ ] **"1초 평균 집계"를 AI(FastAPI)에서 할지 / Spring INSERT 직전에 할지** (쓰기 축 첫 갈림길, §7 갭). → 분석+측정 문서: [`pose-ingest-downsampling.md`](./pose-ingest-downsampling.md). **2026-06-12 측정 결과**: 쓰기 천장(~25 RPS)은 행수가 아니라 **HikariCP 풀=10 + 단일세션 rig 아티팩트**로 귀속(버퍼풀 가설 반증). R-sweep로 **배치 비용 고정비용 지배** 확인 → **다운샘플은 천장 해법 아님, 1순위는 풀 사이징**. 다운샘플은 저장·배치 효율 부수 카드로 강등. **2026-06-12 풀 10→30 재측정 완료**(§5-1(5)): RPS 개선 0·p99 악화 → 천장은 풀이 아니라 **박스(물리 2코어) 한계**로 재확정. **2026-07-11 추가 정정**(§5-1(6)): 이 "박스 한계" 결론은 mysql·backend가 코어를 공유하는 **로컬 동거 환경에 종속**된 것 — 실제 배포처럼 앱 서버·DB가 분리(RDS 등)되면 재계산 필요하다는 한계를 명시. 분리 배포 가정 시 이론 계산(`db.t4g.micro` 2vCPU 기준 스위트스폿 5)만 정리, 실측 아님(비용 발생하는 실제 RDS 기동은 미착수·미결정). → 다운샘플 착수 자체(방식/위치/리포트 해상도 SLA)는 여전히 열려 있음 — 상세는 `pose-ingest-downsampling.md §7`.
 
 > 참고: 보강 축(outbox·관측성·회복탄력성)의 착수 순서는 별도 미결정 — [`portfolio-narrative.md §7`](../portfolio/portfolio-narrative.md), [`outbox-reliable-messaging.md`](./outbox-reliable-messaging.md).
 
@@ -197,3 +200,4 @@
 - 2026-06-05: 로드맵 초안 작성. 기능 9개 후보·우선순위·측정법 정리. **착수 기능 미결정** (§10).
 - 2026-06-12: §10 재조정. 초안 미결정 5개 중 **4개 해소 반영**(파티셔닝 채택·완료, 팬아웃·소셜 폐기, 1억 시드 완료, 유튜브 좌표 미사용). 남은 진짜 미결정 = **"1초 평균 집계" 위치(AI vs Spring)** 1개. 새 결정 아닌 *기존 사실·서사 동기화*.
 - 2026-07-05: §11-1 추가. "워크로드가 MySQL에 맞다"는 주장 3개(클러스터드 인덱스·파티션 DROP·off-page)를 자체 실측/RDBMS 일반 원리로 재검토 → 전부 과장 판명, 정정. MySQL 유지 근거를 기술 우위가 아닌 실측 자산+채용 시그널로 재정리. 새 결정 아닌 *기존 주장 정정*.
+- 2026-07-11: §3·§10 문서 동기화. §3에 그 사이 완료된 자산 3개 반영 — Resilience4j 서킷브레이커(구현+실측+갭 3개 마무리, `production-signal-checklist.md §2-3~§2-3-4`), 로컬 캐시(Caffeine, `exercises`/`exercise_references`, §2-2), connection 설정 문서화(HikariCP `maximum-pool-size=10`, §2-5). §10은 "풀 10→20/30 재측정" 미결정을 **완료로 갱신**(§5-1(5): 천장은 풀 아닌 박스 한계) + **§5-1(6) 추가 정정**(그 결론이 로컬 동거 환경 종속이라는 한계, 분리 배포 가정 시 이론 계산만 정리·실측 아님) 반영. 다운샘플 착수 자체는 여전히 미결정으로 유지. 새 결정 아닌 *기존 실측·정정 사실 동기화*.
