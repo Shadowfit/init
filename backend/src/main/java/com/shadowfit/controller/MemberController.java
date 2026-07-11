@@ -6,6 +6,9 @@ import com.shadowfit.dto.login.LoginResponseDto;
 import com.shadowfit.dto.login.MemberRequestDto;
 import com.shadowfit.dto.onboarding.OnboardingDto;
 import com.shadowfit.dto.onboarding.OnboardingRequestDto;
+import com.shadowfit.global.error.BusinessException;
+import com.shadowfit.global.error.ErrorCode;
+import com.shadowfit.global.security.auth.CustomUserDetails;
 import com.shadowfit.service.Member.MemberService;
 import com.shadowfit.service.Member.OnboardingService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -15,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @Tag(name="인증/인가/온보딩", description="로그인/회원가입/회원정보수정")
@@ -48,27 +52,40 @@ public class MemberController {
         return ResponseEntity.status(HttpStatus.OK).body(id);
     }
 
-    @Operation(summary="회원탈퇴", description = "회원탈퇴를 할 수 있음")
+    @Operation(summary="회원탈퇴", description = "회원탈퇴를 할 수 있음 (본인만)")
     @DeleteMapping("/{email}")
-    public ResponseEntity<Void> deleteMember(@PathVariable("email") String email){
+    public ResponseEntity<Void> deleteMember(@PathVariable("email") String email,
+                                              @AuthenticationPrincipal CustomUserDetails userDetails){
+        requireSelf(email, userDetails);
         memberService.deleteAccount(email);
         return ResponseEntity.noContent().build();
     }
 
-    @Operation(summary="회원정보조회", description = "온보딩정보를 열람 할 수 있음")
+    @Operation(summary="회원정보조회", description = "온보딩정보를 열람 할 수 있음 (본인만)")
     @GetMapping("/onboarding/{email}")
-    public ResponseEntity<OnboardingDto> getOnboarding(@PathVariable("email") String email){
+    public ResponseEntity<OnboardingDto> getOnboarding(@PathVariable("email") String email,
+                                                        @AuthenticationPrincipal CustomUserDetails userDetails){
+        requireSelf(email, userDetails);
         OnboardingDto response = onboardingService.readOnboarding(email);
         return ResponseEntity.ok(response);
     }
 
-    @Operation(summary="온보딩 단계별 저장", description = "온보딩을 수정할 수 있음")
+    @Operation(summary="온보딩 단계별 저장", description = "온보딩을 수정할 수 있음 (본인만)")
     @PatchMapping("/onboarding/{email}")
     public ResponseEntity<OnboardingDto> updateOnboarding(@PathVariable("email") String email,
-                                                          @RequestBody OnboardingRequestDto dto){
+                                                          @RequestBody OnboardingRequestDto dto,
+                                                          @AuthenticationPrincipal CustomUserDetails userDetails){
+        requireSelf(email, userDetails);
         OnboardingDto response = onboardingService.updateOnboarding(email,dto);
         return ResponseEntity.ok(response);
 
+    }
+
+    // 경로의 email을 신뢰하지 않고 인증된 본인인지 확인 (IDOR 방지)
+    private void requireSelf(String pathEmail, CustomUserDetails userDetails) {
+        if (!userDetails.getMember().getEmail().equals(pathEmail)) {
+            throw new BusinessException(ErrorCode.ACCESS_DENIED);
+        }
     }
 
 }
