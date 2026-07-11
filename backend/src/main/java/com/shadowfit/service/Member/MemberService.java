@@ -74,7 +74,9 @@ public class MemberService{
                 .username(dto.getUsername())
                 .email(dto.getEmail())
                 .password(encodedPassword)
-                .role(dto.getRole())
+                // 클라이언트가 보낸 role은 신뢰하지 않음 — 그대로 반영하면 누구나 자기 자신을
+                // ADMIN으로 가입시켜 @PreAuthorize("hasRole('ADMIN')") 전부를 우회할 수 있었음.
+                .role(UserRole.USER)
                 .build();
         memberRepository.save(member);
         return member.getUsername();
