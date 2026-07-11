@@ -69,7 +69,11 @@ CREATE TABLE IF NOT EXISTS exercise_sessions (
     version BIGINT NOT NULL DEFAULT 0, -- 낙관적 락 (JPA @Version)
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- DEFAULT 추가
     FOREIGN KEY (member_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (exercise_id) REFERENCES exercises(id)
+    FOREIGN KEY (exercise_id) REFERENCES exercises(id),
+    -- 캘린더/주간활동 조회(member_id + start_time 범위)가 FK 단일 인덱스로는
+    -- member_id로 찾은 뒤 range를 filesort/filter 하는 게 EXPLAIN으로 확인돼 추가
+    -- (report-read-path.md §4 인덱스 갭 ④, production-signal-checklist.md §2-2 관련 조사)
+    INDEX idx_session_member_starttime (member_id, start_time)
     );
 
 -- 6. 자세 데이터

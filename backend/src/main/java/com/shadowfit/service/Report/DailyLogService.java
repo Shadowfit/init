@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -23,29 +24,27 @@ public class DailyLogService {
     private final MemberRepository memberRepository;
 
     @Transactional
-    public void saveOrUpdateLog(Long memberId, DailyLogRequestDto dto){
+    public void saveOrUpdateLog(Long memberId, DailyLogRequestDto dto) {
         log.info("일지 저장 요청 - 사용자: {}, 날짜: {}", memberId, dto.getLogDate());
 
-        //1. 일지 조회
-        DailyLog dailyLog = dailyLogRepository.findByMemberIdAndLogDate(memberId,dto.getLogDate())
-                .map(existingLog->{
-                    existingLog.setMemo(dto.getMemo());
-                    existingLog.setMood(dto.getMood());
-                    return existingLog;
-                })
-                .orElseGet(() -> {
-                    //2.존재하지 않는다면 새로운 엔티티 생성
-                    Member member = memberRepository.findById(memberId)
-                            .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        Optional<DailyLog> existing = dailyLogRepository.findByMemberIdAndLogDate(memberId, dto.getLogDate());
 
-                    return DailyLog.builder()
-                            .member(member)
-                            .logDate(dto.getLogDate())
-                            .memo(dto.getMemo())
-                            .mood(dto.getMood())
-                            .build();
-                });
-        dailyLogRepository.save(dailyLog);
+        if (existing.isPresent()) {
+            // 영속성 컨텍스트가 관리 중인 엔티티 — 필드 수정만 하면 트랜잭션 커밋 시 더티체킹으로 자동 UPDATE
+            DailyLog log = existing.get();
+            log.setMemo(dto.getMemo());
+            log.setMood(dto.getMood());
+        } else {
+            // 새 엔티티는 영속성 컨텍스트에 없으므로 save()로 등록해야 INSERT
+            Member member = memberRepository.findById(memberId)
+                    .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+            dailyLogRepository.save(DailyLog.builder()
+                    .member(member)
+                    .logDate(dto.getLogDate())
+                    .memo(dto.getMemo())
+                    .mood(dto.getMood())
+                    .build());
+        }
     }
     @Transactional(readOnly = true)
     public DailyLogResponseDto getDailyLog(Long memberId, LocalDate date) {

@@ -71,7 +71,7 @@ public class ExerciseAnalysisService {
      */
     public void extractReferencePoses(Long exerciseId,String youtubeUrl) {
 
-        Exercise exercise = exercisesRepository.findById(exerciseId)
+        Exercise exercise = exercisesRepository.findByIdCached(exerciseId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.EXERCISE_NOT_FOUND));
 
         if (youtubeUrl == null || youtubeUrl.isEmpty()) {

@@ -40,7 +40,7 @@ GET /reports/sessions/{id}
 | ① | **fat 컬럼 over-fetch** — 풀엔티티 로드, worst 계산은 `syncRate`·`timestampSec`·`feedbackMessage` 3개만 씀. `joint_coordinates`는 **한 번도 안 씀** | ✅ 실재 + 측정 | `findBySessionIdOrderByTimestampSecAsc`(전체) vs `selectWorstSection` 사용 필드 |
 | ② | **재계산-on-read** — precompute 없이 매 GET마다 worst 구간 재계산 | ✅ 실재 | `selectWorstSection` 매 호출 |
 | ③ | **REPORT_NOT_FOUND 갭** — `completeAnalysis`가 `session`만 UPDATE, `reports`엔 안 씀 → 실제 세션은 Report 행 없음 → 404 | ✅ 실재(기능 끊김) | `applyCompleteFromApp`([`ExerciseAnalysisService.java:217`](../../backend/src/main/java/com/shadowfit/service/Exercise/ExerciseAnalysisService.java)) session만 UPDATE / `reports`는 [`data.sql:168`](../../mysql/data.sql) 시드뿐 |
-| ④ | **exercise_sessions 인덱스 갭** — `(member_id, start_time)` 등 복합 인덱스 없음(FK 단일뿐) → 캘린더·이전세션 쿼리 filesort | ✅ 실재(스키마) | [`schema.sql:55`](../../mysql/schema.sql) FK만, `(member_id,...)` 복합 없음 |
+| ④ | ~~**exercise_sessions 인덱스 갭** — `(member_id, start_time)` 등 복합 인덱스 없음(FK 단일뿐) → 캘린더·이전세션 쿼리 filesort~~ | **✅ 해결(2026-07-11)** | `idx_session_member_starttime` 추가([`schema.sql:71`](../../mysql/schema.sql)), 실측: 월간 조회 1675행 Filter → 143행 Index range scan(cost 91.4→64.6), 연간 조회는 Covering index scan으로 전환. 커밋 `dbb0fec` |
 | ⑤ | **버퍼풀 오염** — cold 거대 raw를 서빙 경로가 건드려 핫 데이터 evict | 🔶 메커니즘 실재, 규모 미발동 | DAU 작아 리포트 조회 드묾 |
 | ⑥ | **무제한 프레임 극단** — R(프레임/세션)이 위로 열림(fps 미강제) → 극단 세션이 수십~수백 MB 로드·O(N) 루프·OOM 위험 | 🔶 가능성 실재, 미발동 | 정상 750행, [`load-test-strategy.md`](./load-test-strategy.md) §4.5 "R 위로 열림" |
 
@@ -52,13 +52,13 @@ GET /reports/sessions/{id}
 
 | 시계열 읽기 하위문제 | 인덱스로 풀리나 |
 |---|---|
-| ① 어느 행/범위 찾고 정렬 | ✅ **풀린다** (단건 리포트는 이미 최적; 캘린더는 복합 인덱스가 답=문제④) |
+| ① 어느 행/범위 찾고 정렬 | ✅ **풀린다** (단건 리포트는 이미 최적; 캘린더도 복합 인덱스 추가로 해결=문제④, 2026-07-11) |
 | ② 찾은 fat 행 JSON 펼치기 | ❌ projection |
 | ③ derived(worst 구간) 재계산 | ❌ precompute |
 | ④ cold raw 버퍼풀 오염 | ❌ 분리/티어링 |
 
 - 단건 리포트는 `idx_session_timestamp(session_id, timestamp_sec)`([`schema.sql:86`](../../mysql/schema.sql))로 **①이 이미 최적**(세션 바운드, filesort 0, [`db-deep-dive.md`](../portfolio/db-deep-dive.md) §4.3) → 남는 병목 ②③⑤가 전부 **인덱스 바깥**.
-- **단, cross-session(캘린더·이전세션)은 ①이 인덱스 갭**(문제④) → 여긴 인덱스가 정답. member 바운드+누적이라 데이터 쌓이면 진짜 느려짐(pose_data와 정반대).
+- **cross-session(캘린더·이전세션)도 ①이 인덱스 갭이었으나 해결됨**(문제④, `idx_session_member_starttime` 추가) — member 바운드+누적이라 데이터 쌓이면 인덱스 없이는 진짜 느려지는 구조였음(pose_data와 정반대).
 
 **쓰기(적재)와도 대비**: 적재 경로엔 인덱스가 *비용*(쓰기 증폭·페이지 분할). 시딩 때 인덱스 빼고 일괄 빌드한 이유([`realmysql-experiments.md`](../portfolio/realmysql-experiments.md) §3). → 인덱스가 닿는 건 "읽기의 찾기" 한 칸뿐.
 
@@ -84,7 +84,8 @@ GET /reports/sessions/{id}
 | 등급 | 항목 | 의미 |
 |---|---|---|
 | 🟢 **실재 + 측정** | ① over-fetch (projection −98.7% 측정) | 코드에 있고 합성 볼륨으로 측정 |
-| 🟢 **실재 (코드)** | ② 재계산, ③ REPORT_NOT_FOUND, ④ 인덱스 갭 | 코드/스키마에 실재 |
+| 🟢 **실재 (코드)** | ② 재계산, ③ REPORT_NOT_FOUND | 코드/스키마에 실재 |
+| ✅ **해결됨(2026-07-11)** | ④ 인덱스 갭 | `idx_session_member_starttime` 추가, 실측 확인 — 커밋 `dbb0fec` |
 | 🟡 **잠재 (규모 미발동)** | ⑤ 버퍼풀 오염, ⑥ 무제한 프레임 | 메커니즘 실재하나 DAU 작아 안 터짐 |
 
 **메타 포인트**: 이건 "프로덕션 화재"가 아니라 "**코드를 읽고 측정해 발견·판단한 것**". 실트래픽 작아 실제로 아픈 건 아니지만 코드엔 실재. → §0.5 정직한 천장이자 차별점("운영 위장"❌ / "median 신입보다 위"✅). 면접에선 **"실재+측정 / 잠재+미발동"을 갈라** 말해야 과장도 약함도 아님.
@@ -98,13 +99,15 @@ GET /reports/sessions/{id}
 | ① fat 헛로드 | ✅ | ✅ | | |
 | ② 재계산 | | ✅ | | |
 | ③ REPORT_NOT_FOUND | | ✅ | | |
-| ④ 인덱스 갭(캘린더) | | | ✅ | |
+| ④ 인덱스 갭(캘린더) | | | ✅ **완료(2026-07-11)** | |
 | ⑤ 버퍼풀 오염 | 🔶 부분 | ✅ | | |
 | ⑥ 무제한 프레임 | ❌ | ✅ | | ✅ |
 
-→ **precompute가 6개 중 4개를 한 번에 푼다**(세션 종료 시 worst 구간·요약을 `reports`에 1회 저장 → 조회가 raw를 0개 읽음). projection은 그 전까지 완화책(per-row만), 복합 인덱스는 별개 축(세션 히스토리), 다운샘플은 프레임 수 자체([`pose-ingest-downsampling.md`](./pose-ingest-downsampling.md)).
+→ **precompute가 6개 중 4개를 한 번에 푼다**(세션 종료 시 worst 구간·요약을 `reports`에 1회 저장 → 조회가 raw를 0개 읽음). projection은 그 전까지 완화책(per-row만), 복합 인덱스는 별개 축(세션 히스토리, 완료)이고, 다운샘플은 프레임 수 자체([`pose-ingest-downsampling.md`](./pose-ingest-downsampling.md)).
 
-**추천 착수 순서(미confirm)**: ① projection(가볍다, 쿼리/DTO만) → ② precompute(`completeAnalysis`에서 Report 생성 + worst 저장, ③·⑥도 해결) → ③ 복합 인덱스(캘린더) → ④ raw TTL.
+**추천 착수 순서(미confirm)**: ① projection(가볍다, 쿼리/DTO만) → ② precompute(`completeAnalysis`에서 Report 생성 + worst 저장, ③·⑥도 해결) → ~~③ 복합 인덱스(캘린더)~~ **완료** → ④ raw TTL.
+
+**부수 발견(2026-07-11)**: 복합 인덱스 실측 중 `calculateConsecutiveDays`(연속일수 계산)가 실제 세션 데이터가 있으면 항상 500(`java.sql.Date` → `LocalDate` 컨버터 없음, `ConverterNotFoundException`)을 내는 걸 발견·수정. 이전까지 이 경로를 테스트할 때 결과가 항상 빈 배열이라 드러나지 않았던 버그 — `GET /reports/calendar`가 실사용자 데이터로는 사실상 항상 터지고 있었을 것. 인덱스와는 무관한 별개 버그, 커밋 `eed807e`.
 
 ---
 
