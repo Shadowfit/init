@@ -61,7 +61,7 @@ dependencies {
 	developmentOnly 'org.springframework.boot:spring-boot-devtools'
 
 	// --- gRPC & Protobuf (버전 정합성 해결) ---
-	def grpcVersion = '1.62.2'
+	def grpcVersion = '1.82.2'
 	def protobufVersion = '3.25.1'
 
 	// Starter는 API만 제공하고 실제 구현체는 아래에서 버전 고정
