@@ -75,12 +75,34 @@ security:
     - "/ws/**"
     - "/actuator/**"
 
-# [6] Actuator — 캐시 히트율 관측용 (caches/metrics 만 노출, health 는 기본)
+# [6] Actuator — 캐시 히트율·서킷브레이커 상태 관측용
 management:
   endpoints:
     web:
       exposure:
-        include: health,caches,metrics
+        include: health,caches,metrics,circuitbreakers,circuitbreakerevents
+  endpoint:
+    health:
+      show-details: always
+  health:
+    circuitbreakers:
+      enabled: true
+
+# [7] Resilience4j — Spring→AI(FastAPI) gRPC 호출(StartAnalysis/ExtractReferenceData/StopAnalysis)
+# 서킷브레이커. AI 장애 시 백엔드가 계속 호출을 밀어넣는 대신 빠르게 실패해서 graceful하게
+# 버티도록(load-test-strategy.md §9.2 OPEN 항목, production-signal-checklist.md §2-3 재확인).
+resilience4j:
+  circuitbreaker:
+    instances:
+      aiServer:
+        registerHealthIndicator: true
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
 
 jwt:
   secret: ${JWT_SECRET}

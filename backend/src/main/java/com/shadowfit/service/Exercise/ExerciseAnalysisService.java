@@ -14,6 +14,8 @@ import com.shadowfit.repository.exercise.ExerciseReferenceRepository;
 import com.shadowfit.repository.exercise.ExercisesRepository;
 import com.shadowfit.repository.member.MemberRepository;
 import com.shadowfit.repository.exercise.SessionRepository;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.grpc.Metadata;
 import io.grpc.stub.StreamObserver;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.client.WebClient;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 
 @Service
@@ -41,6 +44,7 @@ public class ExerciseAnalysisService {
     private final MemberRepository memberRepository;
     private final SessionService sessionService;
     private final ExerciseReferenceRepository referenceRepository;
+    private final CircuitBreakerRegistry circuitBreakerRegistry;
 
     // 자기 주입: completeSession → applyCompleteFromApp 호출이 Spring 프록시를 통과하도록 함.
     @Lazy
@@ -52,6 +56,12 @@ public class ExerciseAnalysisService {
 
     @GrpcClient("fastapi-client")
     private ExerciseServiceGrpc.ExerciseServiceStub exerciseAsyncStub;
+
+    // Spring→AI(FastAPI) gRPC 호출 전체가 공유하는 서킷브레이커 — AI가 죽으면
+    // 세 호출(추출·분석시작·중단) 모두 같은 상대(AI 서버)로 가는 것이므로 인스턴스 하나로 충분.
+    private CircuitBreaker aiCircuitBreaker() {
+        return circuitBreakerRegistry.circuitBreaker("aiServer");
+    }
 
     // 토큰 fastapi에게 보내기
     private ExerciseServiceGrpc.ExerciseServiceStub getAuthenticatedStub() {
@@ -86,13 +96,22 @@ public class ExerciseAnalysisService {
 
         log.info("FastAPI에게 기준 좌표 추출 요청 전송 - 운동 ID: {}", exerciseId);
 
+        CircuitBreaker cb = aiCircuitBreaker();
+        if (!cb.tryAcquirePermission()) {
+            log.warn("AI 서버 서킷브레이커 OPEN — 기준 좌표 추출 요청 스킵 (운동 ID: {})", exerciseId);
+            return;
+        }
+        long callStart = System.nanoTime();
+
         getAuthenticatedStub().extractReferenceData(request, new StreamObserver<com.shadowfit.grpc.ExtractResponse>() {
             @Override
             public void onNext(com.shadowfit.grpc.ExtractResponse value) {
+                cb.onSuccess(System.nanoTime() - callStart, TimeUnit.NANOSECONDS);
                 log.info("FastAPI 추출 시작 응답 수신 - 운동 ID: {}", value.getExerciseId());
             }
             @Override
             public void onError(Throwable t) {
+                cb.onError(System.nanoTime() - callStart, TimeUnit.NANOSECONDS, t);
                 log.error("좌표 추출 gRPC 통신 장애: {}", t.getMessage());
             }
             @Override
@@ -149,13 +168,22 @@ public class ExerciseAnalysisService {
                     .build());
         }
 
+        CircuitBreaker cb = aiCircuitBreaker();
+        if (!cb.tryAcquirePermission()) {
+            log.warn("AI 서버 서킷브레이커 OPEN — 분석 시작 요청 스킵 (세션 ID: {})", sessionId);
+            return;
+        }
+        long callStart = System.nanoTime();
+
         getAuthenticatedStub().startAnalysis(requestBuilder.build(), new StreamObserver<AnalyzeResponse>() {
             @Override
             public void onNext(AnalyzeResponse value) {
+                cb.onSuccess(System.nanoTime() - callStart, TimeUnit.NANOSECONDS);
                 log.info("FastAPI 응답 수신 - 세션: {}", value.getSessionId());
             }
             @Override
             public void onError(Throwable t) {
+                cb.onError(System.nanoTime() - callStart, TimeUnit.NANOSECONDS, t);
                 log.error("gRPC 통신 장애: {}", t.getMessage());
             }
             @Override
@@ -178,13 +206,22 @@ public class ExerciseAnalysisService {
                 .setSessionId(sessionId)
                 .build();
 
+        CircuitBreaker cb = aiCircuitBreaker();
+        if (!cb.tryAcquirePermission()) {
+            log.warn("AI 서버 서킷브레이커 OPEN — 중단 요청 스킵 (세션 ID: {})", sessionId);
+            return;
+        }
+        long callStart = System.nanoTime();
+
         getAuthenticatedStub().stopAnalysis(request, new io.grpc.stub.StreamObserver<com.shadowfit.grpc.StopResponse>() {
             @Override
             public void onNext(com.shadowfit.grpc.StopResponse value) {
+                cb.onSuccess(System.nanoTime() - callStart, TimeUnit.NANOSECONDS);
                 log.info("AI 서버 응답: {}", value.getMessage());
             }
             @Override
             public void onError(Throwable t) {
+                cb.onError(System.nanoTime() - callStart, TimeUnit.NANOSECONDS, t);
                 log.error("AI 서버 중단 실패: {}", t.getMessage());
             }
             @Override
