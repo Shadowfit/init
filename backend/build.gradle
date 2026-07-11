@@ -1,8 +1,8 @@
 plugins {
 	id 'java'
-	id 'org.springframework.boot' version '3.4.0'
+	id 'org.springframework.boot' version '4.1.0'
 	id 'io.spring.dependency-management' version '1.1.7'
-	id 'com.google.protobuf' version '0.9.4'
+	id 'com.google.protobuf' version '0.10.0'
 }
 
 group = 'com.shadowfit'
@@ -42,18 +42,18 @@ dependencies {
 
 	// --- DB & Utility ---
 	runtimeOnly 'com.mysql:mysql-connector-j'
-	implementation 'io.github.cdimascio:dotenv-java:3.0.0'
-	implementation group: 'org.modelmapper', name: 'modelmapper', version: '2.4.2'
-	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.6'
+	implementation 'io.github.cdimascio:dotenv-java:3.2.0'
+	implementation group: 'org.modelmapper', name: 'modelmapper', version: '3.2.6'
+	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3'
 	implementation 'org.springframework.boot:spring-boot-starter-cache'
-	implementation 'com.github.ben-manes.caffeine:caffeine:3.1.8'
+	implementation 'com.github.ben-manes.caffeine:caffeine:3.2.4'
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
 
 	// --- AWS & Security ---
 	implementation 'org.springframework.cloud:spring-cloud-starter-aws:2.2.6.RELEASE'
-	implementation 'io.jsonwebtoken:jjwt-api:0.11.5'
-	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.11.5'
-	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.11.5'
+	implementation 'io.jsonwebtoken:jjwt-api:0.13.0'
+	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.13.0'
+	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.13.0'
 
 	// --- Lombok & Dev ---
 	compileOnly 'org.projectlombok:lombok'
@@ -61,8 +61,8 @@ dependencies {
 	developmentOnly 'org.springframework.boot:spring-boot-devtools'
 
 	// --- gRPC & Protobuf (버전 정합성 해결) ---
-	def grpcVersion = '1.62.2'
-	def protobufVersion = '3.25.1'
+	def grpcVersion = '1.82.2'
+	def protobufVersion = '4.35.1'
 
 	// Starter는 API만 제공하고 실제 구현체는 아래에서 버전 고정
 	implementation 'net.devh:grpc-client-spring-boot-starter:3.1.0.RELEASE'
@@ -91,11 +91,11 @@ dependencies {
 
 protobuf {
 	protoc {
-		artifact = "com.google.protobuf:protoc:3.25.1"
+		artifact = "com.google.protobuf:protoc:4.35.1"
 	}
 	plugins {
 		grpc {
-			artifact = "io.grpc:protoc-gen-grpc-java:1.62.2"
+			artifact = "io.grpc:protoc-gen-grpc-java:1.82.2"
 		}
 	}
 	generateProtoTasks {
