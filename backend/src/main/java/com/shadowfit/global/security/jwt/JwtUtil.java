@@ -8,14 +8,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import java.security.Key;
+import javax.crypto.SecretKey;
 import java.time.ZonedDateTime;
 import java.util.Date;
 
 @Slf4j
 @Component
 public class JwtUtil {
-    private final Key key;
+    private final SecretKey key;
     private final long accessTokenExpTime;
     private final long refreshTokenExpTime;
 
@@ -65,7 +65,7 @@ public class JwtUtil {
     // JWT 검증
     public boolean isValidToken(String token){
         try{
-            Jwts.parserBuilder().setSigningKey(key).build().parseClaimsJws(token);
+            Jwts.parser().verifyWith(key).build().parseSignedClaims(token);
             return true;
         } catch (SecurityException | MalformedJwtException e) {
             log.info("Invalid JWT signature.", e);
@@ -86,11 +86,11 @@ public class JwtUtil {
     // Claims 추출
     public Claims parseClaims(String accessToken){
         try{
-            return Jwts.parserBuilder()
-                    .setSigningKey(key)
+            return Jwts.parser()
+                    .verifyWith(key)
                     .build()
-                    .parseClaimsJws(accessToken)
-                    .getBody();
+                    .parseSignedClaims(accessToken)
+                    .getPayload();
         } catch(ExpiredJwtException e){
             return e.getClaims();
         }
