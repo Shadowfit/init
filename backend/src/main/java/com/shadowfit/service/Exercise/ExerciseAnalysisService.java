@@ -57,13 +57,19 @@ public class ExerciseAnalysisService {
     @GrpcClient("fastapi-client")
     private ExerciseServiceGrpc.ExerciseServiceStub exerciseAsyncStub;
 
+    // AI가 죽지 않고 그냥 응답을 안 주는(hang) 경우, 데드라인 없이는 onNext/onError
+    // 둘 다 안 불려서 서킷브레이커가 그 호출을 영원히 실패/느림으로 못 잡음. 셋 다
+    // "빠른 ack" 성격의 제어 호출이라 5초로 통일(실측 튜닝된 값 아닌 보수적 기본값).
+    private static final long GRPC_CALL_TIMEOUT_SECONDS = 5;
+
     // Spring→AI(FastAPI) gRPC 호출 전체가 공유하는 서킷브레이커 — AI가 죽으면
     // 세 호출(추출·분석시작·중단) 모두 같은 상대(AI 서버)로 가는 것이므로 인스턴스 하나로 충분.
     private CircuitBreaker aiCircuitBreaker() {
         return circuitBreakerRegistry.circuitBreaker("aiServer");
     }
 
-    // 토큰 fastapi에게 보내기
+    // 토큰 fastapi에게 보내고, 데드라인을 걸어 hang 상태도 onError(DEADLINE_EXCEEDED)로
+    // 귀결시킨다 — 이래야 서킷브레이커가 hang도 실패로 기록할 수 있음.
     private ExerciseServiceGrpc.ExerciseServiceStub getAuthenticatedStub() {
         Metadata header = new Metadata();
         Metadata.Key<String> authKey = Metadata.Key.of("Authorization", Metadata.ASCII_STRING_MARSHALLER);
@@ -72,7 +78,7 @@ public class ExerciseAnalysisService {
         // .attachHeaders() 호출 시 명확하게 stub 타입을 맞춰줍니다.
         return exerciseAsyncStub.withInterceptors(
                 io.grpc.stub.MetadataUtils.newAttachHeadersInterceptor(header)
-        );
+        ).withDeadlineAfter(GRPC_CALL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
     }
 
     /**
