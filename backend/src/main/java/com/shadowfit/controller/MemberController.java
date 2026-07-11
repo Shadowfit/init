@@ -73,7 +73,7 @@ public class MemberController {
     @Operation(summary="온보딩 단계별 저장", description = "온보딩을 수정할 수 있음 (본인만)")
     @PatchMapping("/onboarding/{email}")
     public ResponseEntity<OnboardingDto> updateOnboarding(@PathVariable("email") String email,
-                                                          @RequestBody OnboardingRequestDto dto,
+                                                          @Valid @RequestBody OnboardingRequestDto dto,
                                                           @AuthenticationPrincipal CustomUserDetails userDetails){
         requireSelf(email, userDetails);
         OnboardingDto response = onboardingService.updateOnboarding(email,dto);

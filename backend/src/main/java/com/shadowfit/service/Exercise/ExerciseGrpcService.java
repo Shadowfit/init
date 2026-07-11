@@ -97,7 +97,7 @@ public class ExerciseGrpcService extends ExerciseServiceGrpc.ExerciseServiceImpl
             log.info("AI 서버 gRPC에 의한 세션 종료 성공 - 세션 ID: {}", request.getSessionId());
         } catch (Exception e) {
             log.error("세션 종료 gRPC 처리 중 에러: {}", e.getMessage());
-            responseObserver.onError(e);
+            responseObserver.onError(io.grpc.Status.INTERNAL.asRuntimeException());
         }
     }
 

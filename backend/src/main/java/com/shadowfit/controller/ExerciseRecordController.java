@@ -8,9 +8,9 @@ import com.shadowfit.service.Exercise.SessionService;
 import com.shadowfit.service.Report.DailyLogService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -48,15 +48,8 @@ public class ExerciseRecordController {
     @PostMapping("/daily-logs")
     public ResponseEntity<Void> saveDailyLog(
             @AuthenticationPrincipal CustomUserDetails customUserDetails,
-            @RequestBody DailyLogRequestDto request) {
-        if (customUserDetails == null) {
-            log.error("#### [ERROR] 인증 객체가 비어있습니다!");
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-
+            @Valid @RequestBody DailyLogRequestDto request) {
         Long memberId = customUserDetails.getMember().getId();
-        log.info("#### [DEBUG] 인증 성공! memberId: {}", memberId);
-
         dailyLogService.saveOrUpdateLog(memberId, request);
         return ResponseEntity.noContent().build();
     }

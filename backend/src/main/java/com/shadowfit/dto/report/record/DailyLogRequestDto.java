@@ -1,6 +1,7 @@
 package com.shadowfit.dto.report.record;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
+import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -15,6 +16,7 @@ import java.time.LocalDate;
 public class DailyLogRequestDto {
 
     // 날짜 정보를 "2026-03-31" 형식의 문자열로 안전하게 받기 위해 사용
+    @NotNull(message = "날짜는 필수 입력 값입니다.")
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd", timezone = "Asia/Seoul")
     private LocalDate logDate;
 
