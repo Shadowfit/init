@@ -1,6 +1,5 @@
-# ShadowFit — 통합 개발 레포
+# ShadowFit — 통합 레포
 
-React Native · Spring Boot · FastAPI 세 서비스를 한 곳에서 같이 개발하기 위한 모노레포입니다. gRPC 프로토(`*.proto`) 변경처럼 여러 서비스에 걸친 작업을 한 커밋/PR로 다루기 위해 이 구조를 씁니다.
 
 > 제품 소개·핵심 기능·아키텍처는 [조직 프로필](https://github.com/SMU-2026-1-capstone-project)을 참고하세요. 이 문서는 **이 레포를 어떻게 실행하고 개발하는지**만 다룹니다.
 
