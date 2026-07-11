@@ -30,12 +30,16 @@ public class ReportService {
     private final PoseDataRepository poseDataRepository;
 
     @Transactional(readOnly = true)
-    public SessionReportResponseDto getSessionReport(Long sessionId) {
+    public SessionReportResponseDto getSessionReport(Long sessionId, Long currentMemberId) {
         log.info("세션 리포트 생성 시작 - 세션 ID: {}", sessionId);
 
         // 1. 기초 세션 정보 및 운동 조회
         Session currentSession = sessionRepository.findSessionWithExerciseById(sessionId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SESSION_NOT_FOUND));
+
+        if (!currentSession.getMember().getId().equals(currentMemberId)) {
+            throw new BusinessException(ErrorCode.ACCESS_DENIED);
+        }
 
         // 2. AI 분석 리포트 엔티티 조회
         Report report = reportRepository.findBySessionId(sessionId)

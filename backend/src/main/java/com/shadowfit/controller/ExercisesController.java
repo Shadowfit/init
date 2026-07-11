@@ -10,10 +10,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
-import com.shadowfit.dto.exercises.session.SessionUpdateRequestDto;
-import com.shadowfit.dto.exercises.session.SessionUpdateResponseDto;
 
 import java.time.LocalDateTime;
 
@@ -30,6 +29,7 @@ public class ExercisesController {
      * ✅ 기준 좌표 추출 (관리자/등록용)
      */
     @Operation(summary="기준 좌표 추출",description = "기준 좌표 추출 요청을 할 수 있음")
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/{exerciseId}/reference")
     public ResponseEntity<String> extractReference(
             @PathVariable Long exerciseId,
@@ -71,38 +71,5 @@ public class ExercisesController {
                 .build();
 
         return ResponseEntity.accepted().body(response);
-    }
-
-
-    /**
-     * @deprecated 클라가 자체 카운트한 결과를 DB에 직접 반영하던 옛 흐름.
-     *     AI 분석 결과와 권위가 충돌해 일관성이 깨지는 문제가 있었다.
-     *     세션 종료는 `PATCH /sessions/{id}/end` (SessionController) 단일 endpoint 사용 —
-     *     Spring 이 endTime 기록 후 afterCommit 으로 AI 에 gRPC StopAnalysis 송신 (ET-H, 분기 2.A.ET).
-     */
-    @Deprecated
-    @Operation(
-            summary = "[Deprecated] 운동 세션 종료 요청",
-            description = "사용 자제. PATCH /sessions/{id}/end 로 대체됨 (ET-H, 분기 2.A.ET)."
-    )
-    @PutMapping("/sessions/{sessionId}/complete")
-    public ResponseEntity<SessionUpdateResponseDto> completeSession(
-            @PathVariable Long sessionId,
-            @RequestBody SessionUpdateRequestDto updateDto
-    ) {
-        log.info("운동 세션 종료 요청 (deprecated) - sessionId: {}, totalReps: {}",
-                sessionId, updateDto.getTotalReps());
-
-        // 서비스 호출하여 상태 변경 및 결과 업데이트
-        analysisService.completeSession(sessionId, updateDto);
-
-        // 응답 생성
-        SessionUpdateResponseDto response = SessionUpdateResponseDto.builder()
-                .sessionId(sessionId)
-                .status(Status.COMPLETED)
-                .endTime(LocalDateTime.now())
-                .build();
-
-        return ResponseEntity.ok(response);
     }
 }

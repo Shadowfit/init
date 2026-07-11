@@ -14,6 +14,8 @@ import com.shadowfit.repository.exercise.ExerciseReferenceRepository;
 import com.shadowfit.repository.exercise.ExercisesRepository;
 import com.shadowfit.repository.member.MemberRepository;
 import com.shadowfit.repository.exercise.SessionRepository;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.grpc.Metadata;
 import io.grpc.stub.StreamObserver;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.client.WebClient;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 
 @Service
@@ -41,6 +44,7 @@ public class ExerciseAnalysisService {
     private final MemberRepository memberRepository;
     private final SessionService sessionService;
     private final ExerciseReferenceRepository referenceRepository;
+    private final CircuitBreakerRegistry circuitBreakerRegistry;
 
     // 자기 주입: completeSession → applyCompleteFromApp 호출이 Spring 프록시를 통과하도록 함.
     @Lazy
@@ -53,7 +57,19 @@ public class ExerciseAnalysisService {
     @GrpcClient("fastapi-client")
     private ExerciseServiceGrpc.ExerciseServiceStub exerciseAsyncStub;
 
-    // 토큰 fastapi에게 보내기
+    // AI가 죽지 않고 그냥 응답을 안 주는(hang) 경우, 데드라인 없이는 onNext/onError
+    // 둘 다 안 불려서 서킷브레이커가 그 호출을 영원히 실패/느림으로 못 잡음. 셋 다
+    // "빠른 ack" 성격의 제어 호출이라 5초로 통일(실측 튜닝된 값 아닌 보수적 기본값).
+    private static final long GRPC_CALL_TIMEOUT_SECONDS = 5;
+
+    // Spring→AI(FastAPI) gRPC 호출 전체가 공유하는 서킷브레이커 — AI가 죽으면
+    // 세 호출(추출·분석시작·중단) 모두 같은 상대(AI 서버)로 가는 것이므로 인스턴스 하나로 충분.
+    private CircuitBreaker aiCircuitBreaker() {
+        return circuitBreakerRegistry.circuitBreaker("aiServer");
+    }
+
+    // 토큰 fastapi에게 보내고, 데드라인을 걸어 hang 상태도 onError(DEADLINE_EXCEEDED)로
+    // 귀결시킨다 — 이래야 서킷브레이커가 hang도 실패로 기록할 수 있음.
     private ExerciseServiceGrpc.ExerciseServiceStub getAuthenticatedStub() {
         Metadata header = new Metadata();
         Metadata.Key<String> authKey = Metadata.Key.of("Authorization", Metadata.ASCII_STRING_MARSHALLER);
@@ -62,7 +78,7 @@ public class ExerciseAnalysisService {
         // .attachHeaders() 호출 시 명확하게 stub 타입을 맞춰줍니다.
         return exerciseAsyncStub.withInterceptors(
                 io.grpc.stub.MetadataUtils.newAttachHeadersInterceptor(header)
-        );
+        ).withDeadlineAfter(GRPC_CALL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
     }
 
     /**
@@ -86,13 +102,22 @@ public class ExerciseAnalysisService {
 
         log.info("FastAPI에게 기준 좌표 추출 요청 전송 - 운동 ID: {}", exerciseId);
 
+        CircuitBreaker cb = aiCircuitBreaker();
+        if (!cb.tryAcquirePermission()) {
+            log.warn("AI 서버 서킷브레이커 OPEN — 기준 좌표 추출 요청 스킵 (운동 ID: {})", exerciseId);
+            return;
+        }
+        long callStart = System.nanoTime();
+
         getAuthenticatedStub().extractReferenceData(request, new StreamObserver<com.shadowfit.grpc.ExtractResponse>() {
             @Override
             public void onNext(com.shadowfit.grpc.ExtractResponse value) {
+                cb.onSuccess(System.nanoTime() - callStart, TimeUnit.NANOSECONDS);
                 log.info("FastAPI 추출 시작 응답 수신 - 운동 ID: {}", value.getExerciseId());
             }
             @Override
             public void onError(Throwable t) {
+                cb.onError(System.nanoTime() - callStart, TimeUnit.NANOSECONDS, t);
                 log.error("좌표 추출 gRPC 통신 장애: {}", t.getMessage());
             }
             @Override
@@ -149,14 +174,30 @@ public class ExerciseAnalysisService {
                     .build());
         }
 
+        CircuitBreaker cb = aiCircuitBreaker();
+        if (!cb.tryAcquirePermission()) {
+            log.warn("AI 서버 서킷브레이커 OPEN — 분석 시작 요청 스킵 (세션 ID: {})", sessionId);
+            // 스킵된 세션을 IN_PROGRESS로 방치하면 SessionTimeoutScheduler 버퍼(기본 30분+)가
+            // 돌 때까지 사용자가 응답 없는 세션을 붙들고 있게 됨 — AI가 이미 죽은 걸 아는
+            // 상황이니 여기서 바로 FAILED 처리해서 사용자 피드백을 앞당긴다.
+            sessionService.markAsFailedIfStillInProgress(sessionId, LocalDateTime.now());
+            return;
+        }
+        long callStart = System.nanoTime();
+
         getAuthenticatedStub().startAnalysis(requestBuilder.build(), new StreamObserver<AnalyzeResponse>() {
             @Override
             public void onNext(AnalyzeResponse value) {
+                cb.onSuccess(System.nanoTime() - callStart, TimeUnit.NANOSECONDS);
                 log.info("FastAPI 응답 수신 - 세션: {}", value.getSessionId());
             }
             @Override
             public void onError(Throwable t) {
+                cb.onError(System.nanoTime() - callStart, TimeUnit.NANOSECONDS, t);
                 log.error("gRPC 통신 장애: {}", t.getMessage());
+                // 이 한 번의 호출이 실패한 것(장애가 죽 이어져 서킷이 OPEN 되기 전이라도)도
+                // 사용자 입장에선 응답 없는 세션이므로 동일하게 즉시 FAILED 처리.
+                sessionService.markAsFailedIfStillInProgress(sessionId, LocalDateTime.now());
             }
             @Override
             public void onCompleted() {
@@ -178,13 +219,22 @@ public class ExerciseAnalysisService {
                 .setSessionId(sessionId)
                 .build();
 
+        CircuitBreaker cb = aiCircuitBreaker();
+        if (!cb.tryAcquirePermission()) {
+            log.warn("AI 서버 서킷브레이커 OPEN — 중단 요청 스킵 (세션 ID: {})", sessionId);
+            return;
+        }
+        long callStart = System.nanoTime();
+
         getAuthenticatedStub().stopAnalysis(request, new io.grpc.stub.StreamObserver<com.shadowfit.grpc.StopResponse>() {
             @Override
             public void onNext(com.shadowfit.grpc.StopResponse value) {
+                cb.onSuccess(System.nanoTime() - callStart, TimeUnit.NANOSECONDS);
                 log.info("AI 서버 응답: {}", value.getMessage());
             }
             @Override
             public void onError(Throwable t) {
+                cb.onError(System.nanoTime() - callStart, TimeUnit.NANOSECONDS, t);
                 log.error("AI 서버 중단 실패: {}", t.getMessage());
             }
             @Override
