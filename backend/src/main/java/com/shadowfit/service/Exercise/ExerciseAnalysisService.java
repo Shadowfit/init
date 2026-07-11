@@ -177,6 +177,10 @@ public class ExerciseAnalysisService {
         CircuitBreaker cb = aiCircuitBreaker();
         if (!cb.tryAcquirePermission()) {
             log.warn("AI 서버 서킷브레이커 OPEN — 분석 시작 요청 스킵 (세션 ID: {})", sessionId);
+            // 스킵된 세션을 IN_PROGRESS로 방치하면 SessionTimeoutScheduler 버퍼(기본 30분+)가
+            // 돌 때까지 사용자가 응답 없는 세션을 붙들고 있게 됨 — AI가 이미 죽은 걸 아는
+            // 상황이니 여기서 바로 FAILED 처리해서 사용자 피드백을 앞당긴다.
+            sessionService.markAsFailedIfStillInProgress(sessionId, LocalDateTime.now());
             return;
         }
         long callStart = System.nanoTime();
@@ -191,6 +195,9 @@ public class ExerciseAnalysisService {
             public void onError(Throwable t) {
                 cb.onError(System.nanoTime() - callStart, TimeUnit.NANOSECONDS, t);
                 log.error("gRPC 통신 장애: {}", t.getMessage());
+                // 이 한 번의 호출이 실패한 것(장애가 죽 이어져 서킷이 OPEN 되기 전이라도)도
+                // 사용자 입장에선 응답 없는 세션이므로 동일하게 즉시 FAILED 처리.
+                sessionService.markAsFailedIfStillInProgress(sessionId, LocalDateTime.now());
             }
             @Override
             public void onCompleted() {
