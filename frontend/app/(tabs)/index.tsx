@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Calendar, type DateData } from 'react-native-calendars';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   CircleUser,
   Flame,
@@ -13,12 +13,19 @@ import {
   PersonStanding,
   Lightbulb,
   Ban,
+  ChevronRight,
   type LucideIcon,
 } from 'lucide-react-native';
 import { COLORS, FONT_SIZE, SPACING, RADIUS } from '@/constants/Colors';
 import Button from '@/components/ui/Button';
 import { reportService } from '@/services/reportService';
-import type { CalendarMainResponse, CalendarDay } from '@/types/report';
+import type { CalendarMainResponse, CalendarDay, DailyActivityResponse } from '@/types/report';
+
+function getSyncColor(rate: number) {
+  if (rate >= 80) return COLORS.primary;
+  if (rate >= 60) return COLORS.warning;
+  return COLORS.error;
+}
 
 // 백엔드 records 를 react-native-calendars 의 markedDates 형식으로 변환
 function buildMarkedDates(records: CalendarDay[]): Record<string, any> {
@@ -51,6 +58,9 @@ export default function HomeScreen() {
   const [viewMonth, setViewMonth] = useState(initialDate.getMonth() + 1);
 
   const [data, setData] = useState<CalendarMainResponse | null>(null);
+  // 선택 날짜의 운동 목록 (GET /reports/daily)
+  const [daily, setDaily] = useState<DailyActivityResponse | null>(null);
+  const [dailyLoading, setDailyLoading] = useState(false);
 
   // 화면 포커스 / 연·월 변경마다 캘린더 데이터 재조회
   useFocusEffect(
@@ -63,6 +73,27 @@ export default function HomeScreen() {
         });
     }, [viewYear, viewMonth]),
   );
+
+  // 선택 날짜 변경 시 그 날의 운동 목록 조회 (없으면 오늘 자동 조회)
+  useEffect(() => {
+    const targetDate = selectedDate || today;
+    setDailyLoading(true);
+    console.log('[daily] 요청 date=', targetDate);
+    reportService
+      .getDaily(targetDate)
+      .then((res) => {
+        console.log('[daily] 응답', JSON.stringify(res.data));
+        setDaily(res.data);
+      })
+      .catch((e) => {
+        console.warn(
+          '[daily] 에러 status=', e?.response?.status,
+          'data=', JSON.stringify(e?.response?.data),
+        );
+        setDaily(null);
+      })
+      .finally(() => setDailyLoading(false));
+  }, [selectedDate, today]);
 
   const baseMarked = data ? buildMarkedDates(data.records) : {};
   const markedDates = {
@@ -78,9 +109,13 @@ export default function HomeScreen() {
       : {}),
   };
 
-  const hasRecordOnSelected = selectedDate
-    ? !!baseMarked[selectedDate]
-    : !!baseMarked[today];
+  // 날짜 클릭 시 selectedDate 만 갱신.
+  // 실제 일별 조회는 위쪽 useEffect 가 selectedDate 변화로 트리거.
+  const handleDayPress = useCallback(
+    (day: DateData) => setSelectedDate(day.dateString),
+    [],
+  );
+
 
   return (
     <SafeAreaView style={styles.container}>
@@ -120,7 +155,7 @@ export default function HomeScreen() {
         <View style={styles.calendarContainer}>
           <Calendar
             markedDates={markedDates}
-            onDayPress={(day: DateData) => setSelectedDate(day.dateString)}
+            onDayPress={handleDayPress}
             onMonthChange={(d: DateData) => {
               setViewYear(d.year);
               setViewMonth(d.month);
@@ -143,17 +178,43 @@ export default function HomeScreen() {
           />
         </View>
 
-        {/* 선택 날짜 정보 */}
+        {/* 선택 날짜 정보 + 일별 운동 목록 */}
         <View style={styles.dateInfo}>
           <Text style={styles.dateInfoText}>
             {selectedDate
               ? `${new Date(selectedDate).getMonth() + 1}월 ${new Date(selectedDate).getDate()}일 ${['일', '월', '화', '수', '목', '금', '토'][new Date(selectedDate).getDay()]}요일`
               : `${new Date().getMonth() + 1}월 ${new Date().getDate()}일 ${['일', '월', '화', '수', '목', '금', '토'][new Date().getDay()]}요일`}
           </Text>
-          <Text style={styles.noRecordText}>
-            {hasRecordOnSelected ? '운동 기록이 있습니다' : '운동 기록이 없습니다'}
-          </Text>
+          {dailyLoading ? (
+            <Text style={styles.noRecordText}>불러오는 중...</Text>
+          ) : (daily?.totalWorkouts ?? 0) === 0 ? (
+            <Text style={styles.noRecordText}>운동 기록이 없습니다</Text>
+          ) : (
+            <Text style={styles.dailyCountText}>
+              총 {daily?.totalWorkouts ?? 0}개의 운동
+            </Text>
+          )}
         </View>
+
+        {(daily?.sessions ?? []).map((s) => (
+          <TouchableOpacity
+            key={s.sessionId}
+            style={styles.dailyCard}
+            activeOpacity={0.7}
+            onPress={() => router.push(`/report/${s.sessionId}` as any)}
+          >
+            <View style={styles.dailyCardLeft}>
+              <Text style={styles.dailyCardName}>{s.exerciseName}</Text>
+              <Text style={styles.dailyCardSets}>{s.setSummary}</Text>
+            </View>
+            <View style={styles.dailyCardRight}>
+              <Text style={[styles.dailyCardSync, { color: getSyncColor(s.syncRate) }]}>
+                {Math.round(s.syncRate)}%
+              </Text>
+              <ChevronRight size={14} color={COLORS.textMuted} strokeWidth={2} />
+            </View>
+          </TouchableOpacity>
+        ))}
 
         {/* 촬영 가이드 */}
         <View style={styles.guideBox}>
@@ -252,6 +313,27 @@ const styles = StyleSheet.create({
   dateInfo: { paddingHorizontal: SPACING.xxl, paddingVertical: SPACING.lg },
   dateInfoText: { fontSize: FONT_SIZE.sm, color: COLORS.textSecondary },
   noRecordText: { fontSize: FONT_SIZE.sm, color: COLORS.textMuted, marginTop: 4 },
+  dailyCountText: { fontSize: FONT_SIZE.sm, color: COLORS.primary, fontWeight: '700', marginTop: 4 },
+
+  // 일별 운동 카드
+  dailyCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: COLORS.card,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    marginHorizontal: SPACING.xxl,
+    marginBottom: SPACING.sm,
+  },
+  dailyCardLeft: { flex: 1 },
+  dailyCardName: { fontSize: FONT_SIZE.md, fontWeight: '700', color: COLORS.text },
+  dailyCardSets: { fontSize: FONT_SIZE.xs, color: COLORS.textSecondary, marginTop: 2 },
+  dailyCardRight: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+  dailyCardSync: { fontSize: FONT_SIZE.lg, fontWeight: '800' },
 
   scrollContent: {
     paddingBottom: SPACING.xxxl,

@@ -4,3 +4,7 @@ updates:
     directory: "/backend"
     schedule:
       interval: "weekly"
+    groups:
+      backend-dependencies:
+        patterns:
+          - "*"

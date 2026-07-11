@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Slider from '@react-native-community/slider';
 import { useRouter, useFocusEffect } from 'expo-router';
 import {
   ChevronLeft,
@@ -18,12 +19,15 @@ import {
   Crosshair,
   Apple,
   HeartPulse,
+  Volume2,
   type LucideIcon,
 } from 'lucide-react-native';
 import { COLORS, FONT_SIZE, SPACING, RADIUS } from '@/constants/Colors';
 import { useAuthStore } from '@/stores/authStore';
 import { memberService } from '@/services/memberService';
+import { preferenceService } from '@/services/preferenceService';
 import type { OnboardingResponse } from '@/types/user';
+import type { TtsPreference } from '@/types/preference';
 
 // 백엔드 WorkoutLevel: STARTER < BEGINNER < INTERMEDIATE < ADVANCED < EXPERT
 const LEVEL_MAP: Record<string, { label: string; desc: string }> = {
@@ -48,6 +52,7 @@ export default function MyPageScreen() {
   const user = useAuthStore((s) => s.user);
 
   const [profile, setProfile] = useState<OnboardingResponse | null>(null);
+  const [tts, setTts] = useState<TtsPreference | null>(null);
 
   // 화면 진입 / 재포커스 마다 최신 데이터 조회 (수정 후 돌아올 때도 갱신)
   useFocusEffect(
@@ -59,8 +64,41 @@ export default function MyPageScreen() {
         .catch(() => {
           // 조회 실패 시 기존 표시 유지
         });
+      preferenceService
+        .getTts()
+        .then((res) => setTts(res.data))
+        .catch(() => {
+          // 미설정 시 기본값 (백엔드가 ttsEnabled=true, ttsSpeed=1.0 으로 줄 것)
+        });
     }, [user?.email]),
   );
+
+  // TTS 토글: 즉시 서버 반영, 실패 시 롤백
+  const handleTtsToggle = async (next: boolean) => {
+    const prev = tts;
+    setTts((cur) => (cur ? { ...cur, ttsEnabled: next } : { ttsEnabled: next, ttsSpeed: 1.0 }));
+    try {
+      const res = await preferenceService.updateTts({ ttsEnabled: next });
+      setTts(res.data);
+    } catch (e: any) {
+      setTts(prev);
+      Alert.alert('TTS 설정 실패', e?.response?.data?.message ?? '잠시 후 다시 시도해주세요');
+    }
+  };
+
+  // TTS 속도: 슬라이드 완료(release) 시점에만 서버 반영
+  const handleTtsSpeedCommit = async (speed: number) => {
+    const rounded = Math.round(speed * 10) / 10; // 0.1 단위
+    const prev = tts;
+    setTts((cur) => (cur ? { ...cur, ttsSpeed: rounded } : { ttsEnabled: true, ttsSpeed: rounded }));
+    try {
+      const res = await preferenceService.updateTts({ ttsSpeed: rounded });
+      setTts(res.data);
+    } catch (e: any) {
+      setTts(prev);
+      Alert.alert('TTS 속도 변경 실패', e?.response?.data?.message ?? '잠시 후 다시 시도해주세요');
+    }
+  };
 
   const level = profile?.workoutLevel ? LEVEL_MAP[profile.workoutLevel] : null;
   const persona = profile?.selectedPersona ? PERSONA_MAP[profile.selectedPersona] : null;
@@ -141,6 +179,54 @@ export default function MyPageScreen() {
           label="기준 영상"
           title={profile?.preferredUrl || '미설정'}
         />
+
+        {/* 음성 피드백 (TTS) 설정 */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>음성 피드백</Text>
+          <View />
+        </View>
+
+        <View style={styles.ttsCard}>
+          <View style={styles.ttsRow}>
+            <View style={styles.ttsLabelRow}>
+              <Volume2 size={18} color={COLORS.primary} strokeWidth={2} />
+              <View>
+                <Text style={styles.ttsTitle}>음성 안내</Text>
+                <Text style={styles.ttsDesc}>운동 중 자세 교정 멘트를 음성으로 안내</Text>
+              </View>
+            </View>
+            <Switch
+              value={tts?.ttsEnabled ?? true}
+              onValueChange={handleTtsToggle}
+              trackColor={{ false: COLORS.surfaceLight, true: COLORS.primary }}
+              thumbColor={COLORS.text}
+            />
+          </View>
+
+          {(tts?.ttsEnabled ?? true) && (
+            <View style={styles.ttsSpeedRow}>
+              <View style={styles.ttsSpeedLabelRow}>
+                <Text style={styles.ttsSpeedLabel}>속도</Text>
+                <Text style={styles.ttsSpeedValue}>{(tts?.ttsSpeed ?? 1.0).toFixed(1)}x</Text>
+              </View>
+              <Slider
+                style={styles.ttsSlider}
+                minimumValue={0.5}
+                maximumValue={2.0}
+                step={0.1}
+                value={tts?.ttsSpeed ?? 1.0}
+                onSlidingComplete={handleTtsSpeedCommit}
+                minimumTrackTintColor={COLORS.primary}
+                maximumTrackTintColor={COLORS.surfaceLight}
+                thumbTintColor={COLORS.primary}
+              />
+              <View style={styles.ttsSpeedScale}>
+                <Text style={styles.ttsSpeedScaleText}>0.5x</Text>
+                <Text style={styles.ttsSpeedScaleText}>2.0x</Text>
+              </View>
+            </View>
+          )}
+        </View>
 
         {/* 게시판 */}
         <View style={styles.sectionHeader}>
@@ -243,6 +329,46 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   infoEmoji: { fontSize: 18 },
+
+  // TTS 카드
+  ttsCard: {
+    backgroundColor: COLORS.card,
+    marginHorizontal: SPACING.xxl,
+    marginBottom: SPACING.md,
+    padding: SPACING.lg,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+  },
+  ttsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  ttsLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+    flex: 1,
+  },
+  ttsTitle: { fontSize: FONT_SIZE.md, fontWeight: '700', color: COLORS.text },
+  ttsDesc: { fontSize: FONT_SIZE.xs, color: COLORS.textSecondary, marginTop: 2 },
+  ttsSpeedRow: {
+    marginTop: SPACING.lg,
+    paddingTop: SPACING.lg,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.cardBorder,
+  },
+  ttsSpeedLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: SPACING.sm,
+  },
+  ttsSpeedLabel: { fontSize: FONT_SIZE.sm, color: COLORS.textSecondary, fontWeight: '600' },
+  ttsSpeedValue: { fontSize: FONT_SIZE.sm, color: COLORS.primary, fontWeight: '800' },
+  ttsSlider: { width: '100%', height: 32 },
+  ttsSpeedScale: { flexDirection: 'row', justifyContent: 'space-between' },
+  ttsSpeedScaleText: { fontSize: FONT_SIZE.xs, color: COLORS.textMuted },
   email: { fontSize: FONT_SIZE.md, fontWeight: '700', color: COLORS.text },
   memberLabel: { fontSize: FONT_SIZE.sm, color: COLORS.textSecondary, marginTop: 2 },
 
