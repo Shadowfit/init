@@ -26,7 +26,6 @@ import com.shadowfit.grpc.SessionCompleteRequest;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -309,13 +308,13 @@ public class SessionService {
         LocalDate today = LocalDate.now();
 
         // 최근 100일치 활동 날짜를 한 번에 조회 (루프 N+1 → 쿼리 1방)
-        Set<LocalDate> activeDates = new HashSet<>(
-                sessionRepository.findDistinctActiveDates(
+        Set<LocalDate> activeDates = sessionRepository.findDistinctActiveDates(
                         memberId,
                         today.minusDays(100).atStartOfDay(),
                         today.atTime(23, 59, 59)
-                )
-        );
+                ).stream()
+                .map(java.sql.Date::toLocalDate)
+                .collect(Collectors.toSet());
 
         // 오늘 기록 없으면 어제부터 체크 (오늘 아직 안 했을 수도 있으니)
         LocalDate checkDate = activeDates.contains(today) ? today : today.minusDays(1);
