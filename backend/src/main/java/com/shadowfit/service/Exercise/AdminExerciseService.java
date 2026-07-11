@@ -8,6 +8,7 @@ import com.shadowfit.model.exercise.Exercise;
 import com.shadowfit.repository.exercise.ExercisesRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,7 +18,10 @@ import org.springframework.transaction.annotation.Transactional;
 public class AdminExerciseService {
     private final ExercisesRepository exercisesRepository;
 
+    // findById(캐시 미적용) 유지 — 캐시된 findByIdCached는 detached 엔티티를 반환해
+    // 아래 setter가 dirty-checking에 안 잡히고 조용히 무시됨. evict만 캐시에 반영.
     @Transactional
+    @CacheEvict(cacheNames = "exercises", key = "#exerciseId")
     public ExerciseThresholdResponseDto updateThresholds(Long exerciseId, ThresholdUpdateDto dto) {
         if (dto.beginner().compareTo(dto.advanced()) >= 0) {
             throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);

@@ -63,7 +63,7 @@ public class SessionService {
         Member member = memberRepository.findById(currentMemberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
-        Exercise exercise = exercisesRepository.findById(appDto.getExerciseId())
+        Exercise exercise = exercisesRepository.findByIdCached(appDto.getExerciseId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.EXERCISE_NOT_FOUND));
 
         Session session = Session.builder()

@@ -35,10 +35,12 @@ spring:
          order_updates: true
 
   # [1.5] 로컬 캐시 (Caffeine) — feedbackTemplates: 쓰기 경로 없는 카탈로그성 데이터, 1시간은
-  # 히트율 손해 목적이 아니라 미래에 관리자 CRUD 생기고 @CacheEvict 깜빡해도 자동 복구되는 안전판
+  # 히트율 손해 목적이 아니라 미래에 관리자 CRUD 생기고 @CacheEvict 깜빡해도 자동 복구되는 안전판.
+  # exercises: 쓰기 경로 있음(AdminExerciseService.updateThresholds) — @CacheEvict로 무효화,
+  # findByIdCached(읽기 전용)만 캐시 타고 findById(쓰기 경로)는 캐시 미적용 유지.
   cache:
     type: caffeine
-    cache-names: feedbackTemplates # 시작 시 미리 등록 — 안 하면 Micrometer 가 지연생성 캐시를 못 잡음
+    cache-names: feedbackTemplates,exercises # 시작 시 미리 등록 — 안 하면 Micrometer 가 지연생성 캐시를 못 잡음
     caffeine:
       spec: expireAfterWrite=1h,maximumSize=500,recordStats
 

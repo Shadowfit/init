@@ -79,7 +79,7 @@ public class PoseDataService {
     public void saveReferencePoses(Long exerciseId, List<com.shadowfit.grpc.PoseDataRequest> grpcList) {
         if (grpcList == null || grpcList.isEmpty()) return;
 
-        Exercise exercise = exercisesRepository.findById(exerciseId)
+        Exercise exercise = exercisesRepository.findByIdCached(exerciseId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.EXERCISE_NOT_FOUND));
 
         List<ExerciseReference> referenceEntities = grpcList.stream()
