@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RealMySQL 실험 대시보드</title>
+<style>
+  .viz-root {
+    --surface-1:      #fcfcfb;
+    --surface-2:      #f3f2ee;
+    --page:           #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --c-before:       #2a78d6;
+    --c-after:        #1baf7a;
+    --c-accent:       #c47f1f;
+    --c-fail:         #b23b3b;
+  }
+  @media (prefers-color-scheme: dark) {
+    .viz-root {
+      --surface-1: #1a1a19; --surface-2: #232320; --page: #0d0d0d;
+      --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #898781;
+      --gridline: #2c2c2a; --baseline: #383835; --border: rgba(255,255,255,0.10);
+      --c-before: #3987e5; --c-after: #199e70; --c-accent: #c2841f; --c-fail: #d9645f;
+    }
+  }
+  :root[data-theme="dark"] .viz-root {
+    --surface-1: #1a1a19; --surface-2: #232320; --page: #0d0d0d;
+    --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #898781;
+    --gridline: #2c2c2a; --baseline: #383835; --border: rgba(255,255,255,0.10);
+    --c-before: #3987e5; --c-after: #199e70; --c-accent: #c2841f; --c-fail: #d9645f;
+  }
+  :root[data-theme="light"] .viz-root {
+    --surface-1: #fcfcfb; --surface-2: #f3f2ee; --page: #f9f9f7;
+    --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #898781;
+    --gridline: #e1e0d9; --baseline: #c3c2b7; --border: rgba(11,11,11,0.10);
+    --c-before: #2a78d6; --c-after: #1baf7a; --c-accent: #c47f1f; --c-fail: #b23b3b;
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); }
+  .viz-root {
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: var(--text-primary);
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 2rem 1.25rem 3rem;
+  }
+  header.page-head { margin-bottom: 1.6rem; }
+  .eyebrow {
+    font-size: .75rem; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--text-muted); font-weight: 600; margin-bottom: .4rem;
+  }
+  h1 { font-size: 1.5rem; font-weight: 700; margin: 0 0 .3rem; text-wrap: balance; }
+  .sub { color: var(--text-secondary); font-size: .9rem; margin: 0; max-width: 76ch; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+    gap: 1rem;
+  }
+  .card {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.3rem 1.4rem 1.1rem;
+    display: flex;
+    flex-direction: column;
+  }
+  .card-tag { font-size: .68rem; letter-spacing: .05em; text-transform: uppercase; color: var(--text-muted); font-weight: 700; margin-bottom: .3rem; }
+  .card h2 { font-size: 1rem; font-weight: 700; margin: 0 0 .35rem; text-wrap: balance; }
+  .card p.desc { font-size: .8rem; color: var(--text-secondary); margin: 0 0 .9rem; line-height: 1.5; }
+
+  .chart-wrap { position: relative; overflow-x: auto; }
+  svg.bars { display: block; width: 100%; height: auto; }
+  .gridline { stroke: var(--gridline); stroke-width: 1; }
+  .baseline { stroke: var(--baseline); stroke-width: 1; }
+  .axis-label { fill: var(--text-muted); font-size: 10.5px; }
+  .bar-label { fill: var(--text-primary); font-size: 12px; font-weight: 600; }
+  .bar-value { fill: var(--text-primary); font-size: 12.5px; font-weight: 700; }
+  .bar-sub { fill: var(--text-muted); font-size: 10.5px; }
+  rect.bar { rx: 4; }
+  .hover-target { fill: transparent; }
+  .tooltip {
+    position: absolute; pointer-events: none; opacity: 0; transition: opacity .1s;
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px;
+    padding: .5rem .65rem; font-size: .76rem; color: var(--text-primary);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15); white-space: nowrap; z-index: 10;
+  }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: .7rem; font-size: .76rem; color: var(--text-secondary); }
+  .legend-item { display: flex; align-items: center; gap: .35rem; }
+  .legend-swatch { width: 11px; height: 11px; border-radius: 3px; }
+
+  .footnote { color: var(--text-muted); font-size: .72rem; margin-top: .7rem; padding-top: .6rem; border-top: 1px solid var(--gridline); }
+  .source-footer { text-align: center; color: var(--text-muted); font-size: .78rem; margin-top: 2rem; }
+  .source-footer a { color: var(--text-secondary); }
+</style>
+</head>
+<body>
+
+<div class="viz-root">
+  <header class="page-head">
+    <div class="eyebrow">Shadowfit · RealMySQL 8.0 실험 종합</div>
+    <h1>DB 엔지니어링 실험 대시보드</h1>
+    <p class="sub">이 프로젝트에서 실측한 RealMySQL 실험 결과 모음. 절대 수치는 로컬(물리 2코어) 또는 AWS EC2(m6i.xlarge, 1억 행 real-JSON) 환경에 종속적이며, 신뢰할 근거는 메커니즘과 상대적 개선폭입니다.</p>
+  </header>
+
+  <div class="grid" id="cards"></div>
+
+  <p class="source-footer">전체 실험 상세: <a href="./realmysql-experiments.md">realmysql-experiments.md</a> · 관련 차트: <a href="./pagination-chart.html">페이지네이션</a> · <a href="./optimizer-crossover-chart.html">옵티마이저 크로스오버</a></p>
+</div>
+
+<script>
+const svgNS = "http://www.w3.org/2000/svg";
+
+// ---- 재사용 가능한 수평 막대 차트 렌더러 ----
+function renderBarCard(container, cfg) {
+  const { bars, scale = "linear", domainMax, domainMin = 0, width = 520 } = cfg;
+  const rowH = 46, topPad = 8, leftPad = 8, rightPad = 70, labelW = 150;
+  const plotLeft = leftPad + labelW, plotRight = width - rightPad;
+  const plotWidth = plotRight - plotLeft;
+  const height = bars.length * rowH + topPad * 2;
+
+  const svg = document.createElementNS(svgNS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("class", "bars");
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", cfg.ariaLabel || "막대 차트");
+
+  const max = domainMax !== undefined ? domainMax : Math.max(...bars.map(b => b.value));
+  const min = scale === "log" ? (domainMin || Math.min(...bars.map(b => b.value)) * 0.5) : 0;
+
+  function xFor(v) {
+    if (scale === "log") {
+      const lv = Math.log10(Math.max(v, min));
+      const lMin = Math.log10(min), lMax = Math.log10(max);
+      return plotLeft + (lv - lMin) / (lMax - lMin) * plotWidth;
+    }
+    return plotLeft + (v / max) * plotWidth;
+  }
+
+  bars.forEach((b, i) => {
+    const y = topPad + i * rowH;
+    const barH = 22;
+    const barY = y + (rowH - barH) / 2;
+
+    const label = document.createElementNS(svgNS, "text");
+    label.setAttribute("x", labelW + leftPad - 10);
+    label.setAttribute("y", barY + barH / 2 + 4);
+    label.setAttribute("text-anchor", "end");
+    label.setAttribute("class", "bar-label");
+    label.textContent = b.label;
+    svg.appendChild(label);
+
+    const x0 = xFor(scale === "log" ? min : 0);
+    const x1 = xFor(b.value);
+    const rect = document.createElementNS(svgNS, "rect");
+    rect.setAttribute("x", Math.min(x0, x1));
+    rect.setAttribute("y", barY);
+    rect.setAttribute("width", Math.max(Math.abs(x1 - x0), 2));
+    rect.setAttribute("height", barH);
+    rect.setAttribute("class", "bar");
+    rect.setAttribute("fill", `var(${b.colorVar})`);
+    svg.appendChild(rect);
+
+    const valueText = document.createElementNS(svgNS, "text");
+    valueText.setAttribute("x", x1 + 8);
+    valueText.setAttribute("y", barY + barH / 2 + 4);
+    valueText.setAttribute("class", "bar-value");
+    valueText.textContent = b.displayValue || b.value;
+    svg.appendChild(valueText);
+
+    if (b.sub) {
+      const subText = document.createElementNS(svgNS, "text");
+      subText.setAttribute("x", labelW + leftPad - 10);
+      subText.setAttribute("y", barY + barH / 2 + 16);
+      subText.setAttribute("text-anchor", "end");
+      subText.setAttribute("class", "bar-sub");
+      subText.textContent = b.sub;
+      svg.appendChild(subText);
+    }
+  });
+
+  const wrap = document.createElement("div");
+  wrap.className = "chart-wrap";
+  wrap.appendChild(svg);
+  container.appendChild(wrap);
+}
+
+function makeCard(tag, title, desc) {
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `<div class="card-tag">${tag}</div><h2>${title}</h2><p class="desc">${desc}</p>`;
+  return card;
+}
+
+function addLegend(card, items) {
+  const legend = document.createElement("div");
+  legend.className = "legend";
+  legend.innerHTML = items.map(it => `<div class="legend-item"><span class="legend-swatch" style="background:var(${it.colorVar})"></span>${it.label}</div>`).join("");
+  card.appendChild(legend);
+}
+
+function addFootnote(card, text) {
+  const fn = document.createElement("p");
+  fn.className = "footnote";
+  fn.textContent = text;
+  card.appendChild(fn);
+}
+
+const cardsRoot = document.getElementById("cards");
+
+// 1. Projection
+{
+  const card = makeCard("② Ch.11", "Projection — JSON off-page 회피", "리포트 조회가 안 쓰는 JSON 컬럼(2.3KB)까지 통째로 로드하고 있었음. joint_coordinates가 InnoDB off-page 저장이라 추가 랜덤 I/O 발생 — 3컬럼 projection으로 회피.");
+  renderBarCard(card, {
+    scale: "log", domainMax: 2000, domainMin: 10,
+    bars: [
+      { label: "payload (전체 SELECT)", value: 1716.8, displayValue: "1,716.8 KB", colorVar: "--c-before" },
+      { label: "payload (projection)",   value: 22.4,   displayValue: "22.4 KB (−98.7%)", colorVar: "--c-after" },
+    ],
+    ariaLabel: "projection 전후 payload 크기 비교"
+  });
+  addFootnote(card, "쿼리 시간도 12.1ms → 1.5ms(8x). AWS 1억 행 real-JSON 재검증: 40.6ms → 1.4ms(29~41x) — 스케일 커질수록 개선폭 더 큼.");
+  cardsRoot.appendChild(card);
+}
+
+// 2. 인덱스 vs 풀스캔
+{
+  const card = makeCard("① Ch.8+10", "인덱스 vs 강제 풀스캔", "\"인덱스 추가하면 빨라진다\"는 가설을 먼저 세웠으나 EXPLAIN으로 이미 최적(covering index, filesort 없음)임을 확인. IGNORE INDEX로 강제 풀스캔과 대조해 인덱스의 실제 역할을 검증.");
+  renderBarCard(card, {
+    scale: "log", domainMax: 3000000, domainMin: 1,
+    bars: [
+      { label: "인덱스 사용(projection)", value: 1.5, displayValue: "1.5 ms", sub: "412만 행", colorVar: "--c-after" },
+      { label: "IGNORE INDEX 풀스캔", value: 85000, displayValue: "85,000 ms", sub: "412만 행", colorVar: "--c-before" },
+      { label: "풀스캔(AWS 1억 행)", value: 2120900, displayValue: "2,120,900 ms", sub: "1억 행", colorVar: "--c-fail" },
+    ],
+    ariaLabel: "인덱스 사용과 강제 풀스캔의 응답시간 비교"
+  });
+  addFootnote(card, "풀스캔 비용은 행 수에 선형(O(N)) — 412만→1억(24.27배)에서 85초→2,120.9초(24.95배)로 거의 정확히 비례.");
+  cardsRoot.appendChild(card);
+}
+
+// 3. 파티션 DROP vs DELETE
+{
+  const card = makeCard("② Ch.13", "파티션 TTL — DROP vs DELETE", "\"1억 행이니까 파티션\"이 아니라 세션 조회엔 pruning 이득이 0임을 먼저 확인(정직한 반증). 유일한 정당화는 오래된 raw 데이터를 버리는 TTL 용도.");
+  renderBarCard(card, {
+    scale: "log", domainMax: 1500000, domainMin: 100,
+    bars: [
+      { label: "DELETE (더미, 830만행)", value: 1118936, displayValue: "18.6분", sub: "빈 파일 잔존", colorVar: "--c-before" },
+      { label: "DROP PARTITION (더미)",  value: 1790,    displayValue: "1.8초 (625x)", sub: "830만행", colorVar: "--c-after" },
+      { label: "DELETE (real-JSON)",     value: 66552,   displayValue: "66.6초", sub: "52.5만행", colorVar: "--c-before" },
+      { label: "DROP PARTITION (real-JSON)", value: 158, displayValue: "0.16초 (421x)", sub: "52.5만행", colorVar: "--c-after" },
+    ],
+    ariaLabel: "파티션 DROP과 DELETE의 소요시간 비교"
+  });
+  addFootnote(card, "행당 DELETE 비용은 더미(0.135ms/행)와 real-JSON(0.127ms/행)이 비슷 — DELETE 비용은 payload 크기가 아니라 행당 오버헤드(undo·인덱스·락) 지배.");
+  cardsRoot.appendChild(card);
+}
+
+// 4. 버퍼풀
+{
+  const card = makeCard("④ Ch.4", "버퍼풀 — 작업셋 vs 풀 크기", "AWS 1억 행 real-JSON(버퍼풀 2GB)에서 작업셋이 풀보다 큰 경우와 작은 경우를 대조. read-ahead가 표준 hit율 공식을 왜곡하는 함정도 확인(data_read 바이트로만 진짜 I/O 확인 가능).");
+  renderBarCard(card, {
+    scale: "log", domainMax: 800000, domainMin: 300,
+    bars: [
+      { label: "cold (작업셋 8.19GB)", value: 675200, displayValue: "675.2초", sub: "≫ 풀 2GB", colorVar: "--c-before" },
+      { label: "warm (작업셋 8.19GB)", value: 675850, displayValue: "675.9초", sub: "개선 0%", colorVar: "--c-fail" },
+      { label: "cold (작업셋 19.3MB)", value: 1557,   displayValue: "1.56초", sub: "< 풀 2GB", colorVar: "--c-before" },
+      { label: "warm (작업셋 19.3MB)", value: 461,    displayValue: "0.46초 (3.4x)", sub: "디스크 0바이트", colorVar: "--c-after" },
+    ],
+    ariaLabel: "버퍼풀 작업셋 크기에 따른 cold/warm 비교"
+  });
+  addFootnote(card, "작업셋이 풀보다 크면 warm 재실행도 캐시 무력(매번 재-miss) — 작을 때만 진짜 완전 캐시 히트.");
+  cardsRoot.appendChild(card);
+}
+
+// 5. JSON 트림
+{
+  const card = makeCard("④ Ch.15", "JSON 트림 — 33개 → 13개 랜드마크", "MediaPipe가 33개 관절을 전부 저장하지만 실사용은 13개뿐(z·visibility는 실사용, x·y만 남기는 추가 트림은 분석이 깨짐 — 13×4키가 정직한 상한).");
+  renderBarCard(card, {
+    domainMax: 2600,
+    bars: [
+      { label: "트림 전 (33개)", value: 2344, displayValue: "2,344 B", colorVar: "--c-before" },
+      { label: "트림 후 (13개)", value: 916,  displayValue: "916 B (−60.9%)", colorVar: "--c-after" },
+    ],
+    ariaLabel: "JSON 트림 전후 평균 payload 크기"
+  });
+  addFootnote(card, "구조적 절감이라 값 균일과 무관하게 유효. 실코드(pose.py)는 index 필드 포함이라 실제 절감폭은 ≥60.9%.");
+  cardsRoot.appendChild(card);
+}
+
+// 6. 배치 INSERT
+{
+  const card = makeCard("공통", "배치 INSERT 전환", "JPA saveAll이 IDENTITY PK 때문에 Hibernate batch가 원천 차단되는 걸 확인 후 JdbcTemplate.batchUpdate(multi-row INSERT)로 우회 — 개별 INSERT 25방 → 1방.");
+  renderBarCard(card, {
+    domainMax: 55,
+    bars: [
+      { label: "throughput (전)", value: 23.5, displayValue: "23.5 RPS", colorVar: "--c-before" },
+      { label: "throughput (후)", value: 46.7, displayValue: "46.7 RPS (+99%)", colorVar: "--c-after" },
+    ],
+    ariaLabel: "배치 INSERT 전환 전후 처리량"
+  });
+  renderBarCard(card, {
+    domainMax: 8000,
+    bars: [
+      { label: "p99 (전)", value: 7549, displayValue: "7,549 ms", colorVar: "--c-before" },
+      { label: "p99 (후)", value: 4784, displayValue: "4,784 ms (−37%)", colorVar: "--c-after" },
+    ],
+    ariaLabel: "배치 INSERT 전환 전후 p99 지연"
+  });
+  cardsRoot.appendChild(card);
+}
+
+// 7. Lock 전략 (lost-update)
+{
+  const card = makeCard("③ Ch.5", "Lost-update 방지 전략 4종", "같은 사용자·같은 날 두 세션 동시 종료(+10, +20, 기댓값 30)를 4가지 전략으로 재현. naive read-modify-write만 갱신 유실.");
+  renderBarCard(card, {
+    domainMax: 35,
+    bars: [
+      { label: "naive RMW (RC)",   value: 20, displayValue: "10 또는 20 — 유실", colorVar: "--c-fail" },
+      { label: "원자 UPDATE",       value: 30, displayValue: "30 — 블로킹 0", colorVar: "--c-after" },
+      { label: "비관락 FOR UPDATE", value: 30, displayValue: "30 — 트랜잭션 내내 X락", colorVar: "--c-before" },
+      { label: "낙관락 CAS",        value: 30, displayValue: "30 — 충돌 시 재시도 1회", colorVar: "--c-accent" },
+    ],
+    ariaLabel: "네 가지 동시성 전략의 최종 복구값 비교"
+  });
+  addFootnote(card, "naive는 3회 반복 모두 유실(10 또는 20, commit 순서 따라 결정) — RC 격리만으론 lost-update를 못 막는다는 걸 재현으로 확인.");
+  cardsRoot.appendChild(card);
+}
+
+// 8. Lock wait timeout 반사실
+{
+  const card = makeCard("③ Ch.5", "반사실: 세션 완료에 비관락을 썼다면", "실제로는 @Version(낙관락)을 쓰는 세션 완료 경합에, 만약 비관락(FOR UPDATE)을 썼다면 최악의 경우 몇 초 만에 실패하는지 재현(innodb_lock_wait_timeout=2초).");
+  renderBarCard(card, {
+    domainMax: 3.2,
+    bars: [
+      { label: "낙관락(실제, CAS)", value: 0.001, displayValue: "블로킹 0, 즉시 재시도", colorVar: "--c-after" },
+      { label: "비관락(반사실)",     value: 2.831, displayValue: "2.831초 후 타임아웃 에러", colorVar: "--c-fail" },
+    ],
+    ariaLabel: "낙관락과 비관락 반사실의 블로킹 비용 비교"
+  });
+  addFootnote(card, "ERROR 1205 Lock wait timeout exceeded. 저경합·세션 분리라 낙관락으로 이 비용 자체를 회피한 것이 실제 설계 근거.");
+  cardsRoot.appendChild(card);
+}
+</script>
+
+</body>
+</html>

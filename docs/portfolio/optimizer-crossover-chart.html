@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>옵티마이저 인덱스 vs 풀스캔 크로스오버</title>
+<style>
+  .viz-root {
+    --surface-1:      #fcfcfb;
+    --page:           #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --series-range:   #2a78d6;
+    --series-full:    #1baf7a;
+    --series-accent:  #c47f1f;
+    --band-fill:      rgba(196,127,31,0.10);
+    --tooltip-bg:     #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    .viz-root {
+      --surface-1:      #1a1a19;
+      --page:           #0d0d0d;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --gridline:       #2c2c2a;
+      --baseline:       #383835;
+      --border:         rgba(255,255,255,0.10);
+      --series-range:   #3987e5;
+      --series-full:    #199e70;
+      --series-accent:  #c2841f;
+      --band-fill:      rgba(194,132,31,0.16);
+      --tooltip-bg:     #26251f;
+    }
+  }
+  :root[data-theme="dark"] .viz-root {
+    --surface-1:      #1a1a19;
+    --page:           #0d0d0d;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --gridline:       #2c2c2a;
+    --baseline:       #383835;
+    --border:         rgba(255,255,255,0.10);
+    --series-range:   #3987e5;
+    --series-full:    #199e70;
+    --series-accent:  #c2841f;
+    --band-fill:      rgba(194,132,31,0.16);
+    --tooltip-bg:     #26251f;
+  }
+  :root[data-theme="light"] .viz-root {
+    --surface-1:      #fcfcfb;
+    --page:           #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --series-range:   #2a78d6;
+    --series-full:    #1baf7a;
+    --series-accent:  #c47f1f;
+    --band-fill:      rgba(196,127,31,0.10);
+    --tooltip-bg:     #ffffff;
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); }
+  .viz-root {
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: var(--text-primary);
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 2rem 1.25rem 2.5rem;
+  }
+  .card {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.75rem 1.75rem 1.25rem;
+  }
+  .eyebrow {
+    font-size: .75rem; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--text-muted); font-weight: 600; margin-bottom: .4rem;
+  }
+  h1 { font-size: 1.3rem; font-weight: 700; margin: 0 0 .3rem; text-wrap: balance; }
+  .sub { color: var(--text-secondary); font-size: .88rem; margin: 0 0 1.4rem; max-width: 68ch; }
+
+  .chart-wrap { position: relative; overflow-x: auto; }
+  svg { display: block; width: 100%; height: auto; }
+
+  .gridline { stroke: var(--gridline); stroke-width: 1; }
+  .baseline { stroke: var(--baseline); stroke-width: 1; }
+  .axis-label { fill: var(--text-muted); font-size: 11px; }
+  .axis-label-x { fill: var(--text-muted); font-size: 11px; text-anchor: middle; }
+
+  .band { fill: var(--band-fill); }
+  .band-label { fill: var(--text-secondary); font-size: 11px; font-weight: 600; }
+
+  .line-range { fill: none; stroke: var(--series-range); stroke-width: 2.25px; stroke-linecap: round; }
+  .line-full { fill: none; stroke: var(--series-full); stroke-width: 2.25px; stroke-linecap: round; stroke-dasharray: none; }
+  .dot { stroke: var(--surface-1); stroke-width: 1.5px; }
+  .dot-range { fill: var(--series-range); }
+  .dot-full { fill: var(--series-full); }
+  .dot-measured { fill: var(--series-accent); }
+  .crossover-marker { fill: none; stroke: var(--series-accent); stroke-width: 1.5px; stroke-dasharray: 4 3; }
+  .crossover-label { fill: var(--text-primary); font-size: 12px; font-weight: 700; }
+  .end-label { fill: var(--text-primary); font-size: 12.5px; font-weight: 700; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 1.25rem; margin-top: .8rem; padding-left: 58px; }
+  .legend-item { display: flex; align-items: center; gap: .45rem; font-size: .82rem; color: var(--text-secondary); }
+  .legend-swatch { width: 14px; height: 3px; border-radius: 2px; }
+  .legend-dot { width: 9px; height: 9px; border-radius: 50%; }
+
+  .crosshair { stroke: var(--text-muted); stroke-width: 1; stroke-dasharray: 3 3; opacity: 0; pointer-events: none; }
+  .hover-target { fill: transparent; cursor: crosshair; }
+  .tooltip {
+    position: absolute; pointer-events: none; opacity: 0; transition: opacity .1s;
+    background: var(--tooltip-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: .55rem .7rem; font-size: .78rem; color: var(--text-primary);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15); white-space: nowrap; z-index: 10;
+  }
+  .tooltip .t-n { color: var(--text-muted); font-size: .7rem; margin-bottom: .25rem; }
+  .tooltip .t-row { display: flex; justify-content: space-between; gap: 1rem; }
+  .tooltip .t-swatch { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: .35rem; }
+
+  .footnote { color: var(--text-muted); font-size: .74rem; margin-top: 1.1rem; }
+  table.data-table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: .82rem; }
+  table.data-table th, table.data-table td { text-align: right; padding: .4rem .5rem; border-bottom: 1px solid var(--gridline); font-variant-numeric: tabular-nums; }
+  table.data-table th:first-child, table.data-table td:first-child { text-align: left; }
+  table.data-table th { color: var(--text-muted); font-weight: 600; font-size: .72rem; text-transform: uppercase; letter-spacing: .03em; }
+  details summary { cursor: pointer; color: var(--text-secondary); font-size: .82rem; margin-top: .8rem; }
+</style>
+</head>
+<body>
+
+<div class="viz-root">
+  <div class="card">
+    <div class="eyebrow">Shadowfit · RealMySQL 실험 ⑤ Ch.9</div>
+    <h1>옵티마이저 크로스오버 — 인덱스(range) vs 풀스캔(ALL)</h1>
+    <p class="sub">session_id 선택 범위가 넓어질수록 옵티마이저가 인덱스 range 스캔에서 풀스캔으로 전환하는 지점을, 실측 행당 비용으로 역산한 이론 곡선과 실제 EXPLAIN 관찰을 겹쳐 검증(1억 행, AWS real-JSON, log-log 스케일).</p>
+
+    <div class="chart-wrap">
+      <svg viewBox="0 0 860 420" id="chart" role="img" aria-label="session_id 범위에 따른 range 스캔과 풀스캔 비용 곡선의 교차점, 실제 옵티마이저 전환 구간을 겹쳐 보여주는 로그 스케일 라인 차트">
+        <g id="gridlines-y"></g>
+        <g id="gridlines-x"></g>
+        <line x1="58" y1="350" x2="820" y2="350" class="baseline" />
+        <rect id="band" class="band" />
+        <text id="band-label" class="band-label"></text>
+        <path id="path-range" class="line-range" />
+        <line id="path-full" class="line-full" />
+        <line id="crossover-line" class="crossover-marker" />
+        <text id="crossover-label" class="crossover-label"></text>
+        <g id="dots"></g>
+        <text id="label-range" class="end-label"></text>
+        <text id="label-full" class="end-label"></text>
+        <line id="crosshair" class="crosshair" y1="20" y2="350" />
+        <g id="hover-targets"></g>
+      </svg>
+      <div class="tooltip" id="tooltip"></div>
+    </div>
+
+    <div class="legend">
+      <div class="legend-item"><span class="legend-swatch" style="background:var(--series-range)"></span>range 스캔 비용(추정, N×122.6μs/행)</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:var(--series-full)"></span>풀스캔 비용(고정, 2,120.9초)</div>
+      <div class="legend-item"><span class="legend-dot" style="background:var(--series-accent);display:inline-block;border-radius:50%"></span>실측 데이터포인트 / 전환 구간</div>
+    </div>
+
+    <details>
+      <summary>표로 보기</summary>
+      <table class="data-table">
+        <thead><tr><th>session_id 범위(1~N)</th><th>EXPLAIN type</th><th>추정 rows</th><th>filtered</th></tr></thead>
+        <tbody id="table-body"></tbody>
+      </table>
+    </details>
+
+    <p class="footnote">출처: docs/portfolio/realmysql-experiments.md §4 ⑤ Ch.9 — pose_data_real_scale(AWS EC2, 1억 행 real-JSON), idx_session_timestamp(session_id, timestamp_sec). 실측: N=10,000 실행 919.7초(range), 풀스캔 2,120.9초(§4 ②b 재사용).</p>
+  </div>
+</div>
+
+<script>
+const explainData = [
+  { n: 1,      type: "ref",   rows: 750,        filtered: "100%" },
+  { n: 100,    type: "range", rows: 157650,      filtered: "100%" },
+  { n: 1000,   type: "range", rows: 1544918,     filtered: "100%" },
+  { n: 10000,  type: "range", rows: 15502716,    filtered: "100%", measured: 919.7 },
+  { n: 11000,  type: "range", rows: 16752844,    filtered: "100%" },
+  { n: 12000,  type: "range", rows: 19121878,    filtered: "100%" },
+  { n: 13000,  type: "range", rows: 19700092,    filtered: "100%" },
+  { n: 14000,  type: "range", rows: 22221930,    filtered: "100%" },
+  { n: 15000,  type: "range", rows: 24915668,    filtered: "100%" },
+  { n: 16000,  type: "ALL",   rows: 79825338,    filtered: "34.8%" },
+  { n: 17000,  type: "range", rows: 26082478,    filtered: "100%" },
+  { n: 18000,  type: "ALL",   rows: 79825338,    filtered: "36.2%" },
+  { n: 20000,  type: "ALL",   rows: 79825338,    filtered: "40.1%" },
+  { n: 30000,  type: "ALL",   rows: 79825338,    filtered: "50.0%" },
+  { n: 50000,  type: "ALL",   rows: 79825338,    filtered: "50.0%" },
+  { n: 100000, type: "ALL",   rows: 79825338,    filtered: "50.0%" },
+  { n: 133334, type: "ALL",   rows: 79825338,    filtered: "50.0%" },
+];
+
+const COST_PER_ROW_RANGE = 919.7 / 7500000;   // 122.6us/row, 실측 역산
+const FULL_SCAN_COST = 2120.9;                 // 초, §4 ②b 실측
+const ROWS_PER_SESSION = 750;
+const crossoverN = FULL_SCAN_COST / (COST_PER_ROW_RANGE * ROWS_PER_SESSION); // ~23,067
+
+function rangeCost(n) { return n * ROWS_PER_SESSION * COST_PER_ROW_RANGE; }
+
+const svgNS = "http://www.w3.org/2000/svg";
+const plotLeft = 58, plotRight = 820, plotTop = 20, plotBottom = 350;
+const plotWidth = plotRight - plotLeft;
+
+// log-log scale
+const xMin = 1, xMax = 200000;
+const yMin = 0.05, yMax = 20000;
+const logXMin = Math.log10(xMin), logXMax = Math.log10(xMax);
+const logYMin = Math.log10(yMin), logYMax = Math.log10(yMax);
+function xForN(n) { return plotLeft + (Math.log10(n) - logXMin) / (logXMax - logXMin) * plotWidth; }
+function yForCost(c) { return plotBottom - (Math.log10(c) - logYMin) / (logYMax - logYMin) * (plotBottom - plotTop); }
+
+// y gridlines
+const yDecades = [0.1, 1, 10, 100, 1000, 10000];
+const yLabels = ["0.1초","1초","10초","100초","1,000초","10,000초"];
+const gyG = document.getElementById("gridlines-y");
+yDecades.forEach((d, i) => {
+  const y = yForCost(d);
+  const line = document.createElementNS(svgNS, "line");
+  line.setAttribute("x1", plotLeft); line.setAttribute("x2", plotRight);
+  line.setAttribute("y1", y); line.setAttribute("y2", y);
+  line.setAttribute("class", "gridline");
+  gyG.appendChild(line);
+  const label = document.createElementNS(svgNS, "text");
+  label.setAttribute("x", plotLeft - 8); label.setAttribute("y", y + 4);
+  label.setAttribute("text-anchor", "end"); label.setAttribute("class", "axis-label");
+  label.textContent = yLabels[i];
+  gyG.appendChild(label);
+});
+
+// x gridlines
+const xDecades = [1, 10, 100, 1000, 10000, 100000];
+const xLabels = ["1", "10", "100", "1,000", "10,000", "100,000"];
+const gxG = document.getElementById("gridlines-x");
+xDecades.forEach((d, i) => {
+  const x = xForN(d);
+  const label = document.createElementNS(svgNS, "text");
+  label.setAttribute("x", x); label.setAttribute("y", plotBottom + 20);
+  label.setAttribute("class", "axis-label-x");
+  label.textContent = xLabels[i];
+  gxG.appendChild(label);
+});
+const xAxisTitle = document.createElementNS(svgNS, "text");
+xAxisTitle.setAttribute("x", (plotLeft+plotRight)/2); xAxisTitle.setAttribute("y", plotBottom + 38);
+xAxisTitle.setAttribute("class", "axis-label-x");
+xAxisTitle.textContent = "session_id 범위(1~N), 세션 수 — 로그 스케일";
+gxG.appendChild(xAxisTitle);
+
+// highlighted band: 실제 관찰된 전환 구간 15,000~18,000
+const bandX1 = xForN(15000), bandX2 = xForN(18000);
+const band = document.getElementById("band");
+band.setAttribute("x", bandX1); band.setAttribute("y", plotTop);
+band.setAttribute("width", bandX2 - bandX1); band.setAttribute("height", plotBottom - plotTop);
+const bandLabel = document.getElementById("band-label");
+bandLabel.setAttribute("x", (bandX1+bandX2)/2); bandLabel.setAttribute("y", plotTop - 6);
+bandLabel.setAttribute("text-anchor", "middle");
+bandLabel.textContent = "실제 전환 구간(통계 오차로 흔들림)";
+
+// range cost line (diagonal)
+const rangePts = [];
+for (let n = 1; n <= xMax; n *= 1.15) {
+  rangePts.push([xForN(n), yForCost(rangeCost(n))]);
+}
+rangePts.push([xForN(xMax), yForCost(rangeCost(xMax))]);
+document.getElementById("path-range").setAttribute("d", "M " + rangePts.map(p => p.join(",")).join(" L "));
+
+// full scan cost line (flat)
+const fullLine = document.getElementById("path-full");
+fullLine.setAttribute("x1", plotLeft); fullLine.setAttribute("x2", plotRight);
+fullLine.setAttribute("y1", yForCost(FULL_SCAN_COST)); fullLine.setAttribute("y2", yForCost(FULL_SCAN_COST));
+
+// theoretical crossover marker
+const cx = xForN(crossoverN), cy = yForCost(FULL_SCAN_COST);
+const crossLine = document.getElementById("crossover-line");
+crossLine.setAttribute("x1", cx); crossLine.setAttribute("x2", cx);
+crossLine.setAttribute("y1", plotTop); crossLine.setAttribute("y2", plotBottom);
+const crossLabel = document.getElementById("crossover-label");
+crossLabel.setAttribute("x", cx + 8); crossLabel.setAttribute("y", plotTop + 14);
+crossLabel.textContent = `이론 크로스오버 ≈ ${Math.round(crossoverN).toLocaleString()}세션`;
+
+// dots per explain data point — placed on whichever cost line was actually chosen
+const dotsG = document.getElementById("dots");
+explainData.forEach(d => {
+  const x = xForN(d.n);
+  const chosenCost = d.type === "ALL" ? FULL_SCAN_COST : rangeCost(d.n);
+  const y = yForCost(chosenCost);
+  const c = document.createElementNS(svgNS, "circle");
+  c.setAttribute("cx", x); c.setAttribute("cy", y);
+  c.setAttribute("r", d.measured ? 6.5 : 4.5);
+  c.setAttribute("class", "dot " + (d.measured ? "dot-measured" : (d.type === "ALL" ? "dot-full" : "dot-range")));
+  dotsG.appendChild(c);
+});
+
+// end labels
+const labelRange = document.getElementById("label-range");
+const lastRange = rangePts[rangePts.length - 1];
+labelRange.setAttribute("x", Math.min(lastRange[0], plotRight - 8)); labelRange.setAttribute("y", Math.max(lastRange[1] - 10, plotTop + 12));
+labelRange.setAttribute("text-anchor", "end");
+labelRange.textContent = "range 스캔";
+const labelFull = document.getElementById("label-full");
+labelFull.setAttribute("x", plotRight - 4); labelFull.setAttribute("y", yForCost(FULL_SCAN_COST) - 8);
+labelFull.setAttribute("text-anchor", "end");
+labelFull.textContent = "풀스캔(고정)";
+
+// table
+const tbody = document.getElementById("table-body");
+explainData.forEach(d => {
+  const tr = document.createElement("tr");
+  tr.innerHTML = `<td>1~${d.n.toLocaleString()}</td><td>${d.type}${d.measured ? " (실측)" : ""}</td><td>${d.rows.toLocaleString()}</td><td>${d.filtered}</td>`;
+  tbody.appendChild(tr);
+});
+
+// hover interaction
+const chart = document.getElementById("chart");
+const tooltip = document.getElementById("tooltip");
+const crosshair = document.getElementById("crosshair");
+const hoverG = document.getElementById("hover-targets");
+
+explainData.forEach((d, i) => {
+  const x = xForN(d.n);
+  const prevX = i === 0 ? plotLeft : (x + xForN(explainData[i-1].n)) / 2;
+  const nextX = i === explainData.length - 1 ? plotRight : (x + xForN(explainData[i+1].n)) / 2;
+  const rect = document.createElementNS(svgNS, "rect");
+  rect.setAttribute("x", prevX); rect.setAttribute("y", plotTop);
+  rect.setAttribute("width", Math.max(nextX - prevX, 1)); rect.setAttribute("height", plotBottom - plotTop);
+  rect.setAttribute("class", "hover-target");
+  rect.addEventListener("mouseenter", () => {
+    crosshair.setAttribute("x1", x); crosshair.setAttribute("x2", x);
+    crosshair.style.opacity = 1;
+    tooltip.style.opacity = 1;
+    const chosenCost = d.type === "ALL" ? FULL_SCAN_COST : rangeCost(d.n);
+    tooltip.innerHTML = `
+      <div class="t-n">session_id 1~${d.n.toLocaleString()}</div>
+      <div class="t-row"><span><span class="t-swatch" style="background:${d.type === 'ALL' ? 'var(--series-full)' : 'var(--series-range)'}"></span>선택 plan</span><strong>${d.type}</strong></div>
+      <div class="t-row"><span>추정 비용</span><strong>${chosenCost < 1 ? chosenCost.toFixed(3)+'s' : Math.round(chosenCost).toLocaleString()+'s'}</strong></div>
+      ${d.measured ? `<div class="t-row" style="color:var(--series-accent)"><span>실측값</span><strong>${d.measured}s</strong></div>` : ''}
+      <div class="t-row" style="color:var(--text-muted)"><span>filtered</span><strong>${d.filtered}</strong></div>
+    `;
+    const svgRect = chart.getBoundingClientRect();
+    const scale = svgRect.width / 860;
+    tooltip.style.left = (x * scale) + 12 + "px";
+    tooltip.style.top = (yForCost(chosenCost) * scale) - 10 + "px";
+  });
+  rect.addEventListener("mouseleave", () => {
+    crosshair.style.opacity = 0;
+    tooltip.style.opacity = 0;
+  });
+  hoverG.appendChild(rect);
+});
+</script>
+
+</body>
+</html>
