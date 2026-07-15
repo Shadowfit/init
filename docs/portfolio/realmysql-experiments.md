@@ -94,9 +94,11 @@
   - **같은 `ALTER`라도 비용 정반대** ⭐: `PARTITION BY`(전환)=1억 행 풀 리빌드 71분 vs `DROP PARTITION`(만료)=O(1) 메타데이터. 이 대비가 카드 핵심 — "파티션 전환은 비싸니 운영이면 처음부터 파티션 테이블로 만들거나 pt-osc 무중단, 일단 걸어두면 만료는 DROP으로 거의 공짜".
   - **운영 캐비엇**: 이 in-place `ALTER ... PARTITION BY`는 1억 행 **copy-to-tmp 풀 리빌드**(로컬 실측 ~85분, ~24,700행/초, 그동안 테이블 락) → 현업 운영 DB라면 `pt-online-schema-change`/`ALGORITHM=INPLACE`로 무중단 전환할 이유. 회고 포인트.
 - **설계**: (b) projection before/after payload·응답 / (c) offset N=10만 vs cursor 응답 곡선 / (d) 파티션 후 `EXPLAIN`의 `partitions` 컬럼 pruning 확인 + **DROP PARTITION vs DELETE WHERE 실측 시간**(O(1) vs 락·undo).
-- **결과 (b) projection ✅ (2026-06-02, warm, 세션 750행)**:
+- **결과 (b) projection ✅ (2026-06-02, warm, 세션 750행, 412만 행 테이블)**:
   - payload **1,716.8 KB → 22.4 KB (−98.7%)**, warm 쿼리 **12.1ms → 1.5ms (8x, −87%)**. **인덱스는 동일** — 차이는 `joint_coordinates`(2.3KB JSON)가 InnoDB **off-page(overflow) 저장**이라 SELECT 시 추가 random I/O, projection이 회피(Ch.15).
   - ⚠️ cold 721ms → warm 12ms(같은 쿼리) — 워밍업 통제 필수 재확인(§7.6). 절대 ms는 로컬 기준, 상대 delta는 신뢰 가능.
+  - **✅ AWS 1억 행 real-JSON 재검증(2026-07-15)**: 면접 준비 중 로컬 하드웨어 제약(255GB 문제, §3)을 실제로 AWS EC2(m6i.xlarge)+EBS 700GB로 우회해 **진짜 1억 행 × 실제 2.3KB JSON**(`pose_data_real_scale`, 133,334세션×750행 정확히 1억)으로 재현. payload **1,740.1 KB → 22.6 KB (−98.7%)** — 412만 행 때와 거의 동일(행수와 무관, 세션당 바이트 비율이라 예상대로). **warm 쿼리는 오히려 훨씬 크게 개선**: 40.6ms → 1.4ms(**약 29배**, 반복 측정 시 최대 41배까지 관찰) — 412만 행 때의 8배보다 큼. 이유: 버퍼풀(2GB)은 동일한데 테이블이 25배 커져서(~230GB) **작업셋 대비 버퍼풀 비율이 더 나빠짐** → 풀엔티티 로드의 off-page 랜덤 I/O가 캐시에 덜 걸리고 실제 디스크 I/O를 더 많이 탐 → projection이 그 I/O를 회피하는 효과가 스케일이 커질수록 더 커짐. **결론이 뒤집힌 게 아니라 강화됨**: "이미 최적 인덱스, projection이 진짜 병목 해결" 결론은 동일, 배수만 스케일에 비례해 커짐.
+  - **✅ 풀스캔 대조도 1억 행으로 재검증(2026-07-15)**: `IGNORE INDEX` 강제 풀스캔 = **2,120.9초(35분 20초)**. 412만 행의 85초 대비 1억 행은 412만 행의 약 24.27배인데, 85×24.27≈2,063초(34.4분) 선형 추정치와 **거의 정확히 일치**(2,120.9초) — 풀스캔 비용이 행 수에 선형(O(N))으로 늘어난다는 걸 실제 1억 행 규모에서 재확인.
 - **결과 (c) 페이지네이션 ✅ (2026-06-03, 1억 행 합성[측정 시점 9,750만, 결론 동일], warm 3회째, EXPLAIN ANALYZE)**:
 
   | 깊이(OFFSET) | offset ms | keyset ms | speedup |
@@ -123,12 +125,13 @@
 
   - **~625배** (행당 정규화 ~570배). DELETE는 8.3M행 행단위 삭제(undo·인덱스 유지·락) + **빈 952MB 파일 잔존**(OPTIMIZE 없인 공간 안 돌아옴), DROP은 **파티션 `.ibd` 파일째 unlink** = 행단위 작업 0. ⚠️ DROP 1.8초도 진짜 O(1)이 아니라 ~910MB 파일 삭제 I/O(로컬 디스크 느림) — 빠른 스토리지면 sub-100ms. "O(1)"은 *행단위 비용 없음*을 뜻함.
   - rig: `loadtest/measure_partition.sh`(재현). 측정 후 p2026_01(DELETE로 빈 채 잔존)·p2026_02(DROP) 제거됨 → rig 재현은 `seed_pose_scale.sh`.
+  - **✅ AWS real-JSON 서브셋 재검증(2026-07-15)**: 전체 1억 행(~230GB) 테이블을 통째로 파티션 변환하는 건 시간·비용 리스크가 커서(로컬 96분의 최대 20배 이상까지 갈 수 있어 예측 불가), 대신 별도 소규모 real-JSON 테이블(2파티션, old 52.5만 행/~1.2GB 실제 JSON)로 축소 재현. `DELETE WHERE` = **66.552초**, `DROP PARTITION` = **0.158초** → **약 421배**. 원본(더미, 830만 행, 625배)보다 배수는 작지만(스케일 축소 영향) 행당 DELETE 비용은 오히려 비슷(원본 0.135ms/행 vs 이번 0.127ms/행) — **DELETE 비용이 payload 크기가 아니라 행당 오버헤드(undo·인덱스·락)에 지배된다**는 걸 확인. 메커니즘(O(1) vs O(n))은 real JSON에서도 동일하게 재현됨.
 - **면접**: "세션 리포트는 안 느려지지만(§4.3), payload는 JSON off-page 페치라 projection이 −98.7%. **파티션은 pruning(세션 쿼리엔 이득 0)이 아니라 TTL이 핵심 — 8M행 만료가 DELETE 18.6분 vs DROP PARTITION 1.8초(625x), DELETE는 빈 파일까지 남는다.**"
 
 ### ③ Ch.5 — 트랜잭션·잠금·격리수준 🟢
 - **개념**: 격리수준(RC/RR), 레코드/갭/넥스트키 락, 낙관적 vs 비관적.
-- **이 프로젝트 (a) 낙관락**: ✅ 구현 — 타임아웃 스케줄러 vs FastAPI 콜백(`Session.java:65 @Version`, `SessionTimeoutScheduler.java:84` 양보).
-- **이 프로젝트 (b) lost-update**: `DailyLog.updateStats()` read-modify-write 배선 시 동시 종료 경합 🔶.
+- **이 프로젝트 (a) 낙관락**: ✅ 구현 — 타임아웃 스케줄러 vs FastAPI 콜백(`Session.java:66 @Version`, `SessionTimeoutScheduler.java:84` 양보).
+- **이 프로젝트 (b) lost-update**: `DailyLog.updateStats()` 배선 완료(2026-07-15) — 네이티브 upsert(`upsertStats`, `INSERT ... ON DUPLICATE KEY UPDATE`) 한 문장으로 구현, 동시 종료 경합 방지 ✅. 첫 시도(원자 UPDATE→실패 시 `save()`→실패 시 catch 재시도)는 동시성 테스트에서 Hibernate 세션 손상으로 실패해 폐기 — 실측으로 잡은 함정.
 - **이 프로젝트 (c) 멱등성**: ✅ INSERT IGNORE (`FeedbackLogService.java:33`).
 - **설계**: (b) 두 트랜잭션으로 lost-update **재현**(RC) → 원자 UPDATE / `SELECT FOR UPDATE` / `@Version` 비교, `performance_schema.data_locks`로 락 관찰, `SHOW ENGINE INNODB STATUS` → (a) 낙관락 충돌 시 양보 정책 근거.
 - **지표**: 손실 갱신 발생/방지, 락 종류·대기.
@@ -171,8 +174,13 @@
   - **작업셋 < 풀**: 좁은 PK 범위(수MB) → warm **디스크 0MB, hit 100%**, ~0.45초. 핫 데이터 메모리 상주. (⚠️ 이 구간 cold 도 직전 실행 잔여로 이미 resident — 진짜 cold 아님, 명시)
   - **⭐ read-ahead 함정**: 순차 스캔은 InnoDB 선읽기(`Innodb_buffer_pool_read_ahead`)가 페이지를 비동기로 당겨와 **표준 hit율 공식(1−`reads`/`read_requests`)이 거짓 99.9%** 가 됨(`reads`는 동기 미스만 카운트). 진짜 물리 I/O = `reads`+`read_ahead`, 또는 `Innodb_data_read`(바이트)로 봐야 84%/485MB 가 보임. **"hit율 공식은 read-ahead 가 가린다"** 가 핵심 교훈.
   - 같은 뿌리: 페이지네이션 cold/warm(②c §3)·시딩 가속(버퍼풀 128MB→2GB)·라우팅 모두 "작업셋 vs 메모리". 사이징 판단 = ⓐraw 단기화·파티션 만료로 작업셋 축소 ⓑ풀 증설.
+  - **✅ AWS 1억 행 real-JSON 재검증(2026-07-15)**: 기존 실험은 더미 JSON(`{}`, 2바이트)이라 off-page 저장 자체가 발동 안 했을 가능성이 있어, `pose_data_real_scale`(진짜 2.3KB JSON, 버퍼풀 2GB, m6i.xlarge)에서 재현.
+    - **작업셋 ≫ 풀(세션 70000~75000, 5,000세션, 실제 JSON 합 8.19GB)**: cold **675.2초**, warm(같은 범위 즉시 재실행) **675.85초** — **거의 동일, warm 이득 0**. `data_read` 델타도 cold 12.79GB vs warm 12.78GB로 동일 — 작업셋이 풀(2GB)의 4배가 넘어 캐시가 전혀 안 먹힘.
+    - **read-ahead 함정 재확인**: warm 구간의 naive hit율 공식 `1-reads/read_requests` = 1-779,614/16,804,676 = **95.36%**(그럴듯해 보임) — 근데 실제 물리 I/O(`data_read`)는 cold·warm 둘 다 ~11.9GB로 **하나도 안 줄어듦**. 공식만 보면 "잘 캐시되고 있다"고 착각하기 딱 좋은 사례.
+    - **작업셋 < 풀(세션 80000~80010, 11세션, 19.3MB)**: cold **1.557초**(reads=1740, data_read=27.2MB) → warm **0.461초**(reads=**0**, data_read=**0바이트**, 3.4배) — **완전한 캐시 히트**, 진짜 cold부터 시작한 깨끗한 대조.
+    - **결론 강화**: "작업셋 vs 버퍼풀 비율"이 진짜 원인이라는 게 더미 데이터가 아니라 실제 off-page JSON에서도 그대로 재현됨 — 오히려 실제 JSON이 더 무거워서(off-page 랜덤 I/O) 대조가 더 극적으로 나타남(작은 쪽 3.4배 vs 큰 쪽 0배).
 - **결과 (generated column) ⬜ 미수행 결정**: ⓐ프로젝트 실수요 0(JSON 내부값으로 검색 안 함, `sync_rate`는 별도 컬럼) ⓑ합성 rig 가 단일 템플릿 복제라 **값 분포(카디널리티) 균일**(`_pose_template` 750행 `d_whole_json=1`) → 선택도 실험 불가. **세 번째 축(값 분포) 한계**로 정직 박제(아래 §5 캐비엇). ⑤ 옵티마이저도 동일 제약.
-- **면접**: "MVCC 덕에 적재 트랜잭션이 조회를 블로킹 안 함(RR 스냅샷, data_locks 0). 트림은 33→13 으로 −60.9%지만 z·visibility 실사용이라 키는 못 줄임, 진짜 해법은 raw 를 OLTP 에서 빼는 것. 버퍼풀은 **작업셋 vs 메모리** — 540MB 스캔이 128MB 풀에선 warm 도 매번 485MB 재읽기, 그리고 **read-ahead 때문에 표준 hit율 공식이 거짓 99% 라 `data_read` 바이트로 봐야 한다**."
+- **면접**: "MVCC 덕에 적재 트랜잭션이 조회를 블로킹 안 함(RR 스냅샷, data_locks 0). 트림은 33→13 으로 −60.9%지만 z·visibility 실사용이라 키는 못 줄임, 진짜 해법은 raw 를 OLTP 에서 빼는 것. 버퍼풀은 **작업셋 vs 메모리** — 540MB 스캔이 128MB 풀에선 warm 도 매번 485MB 재읽기, 그리고 **read-ahead 때문에 표준 hit율 공식이 거짓 99% 라 `data_read` 바이트로 봐야 한다**. AWS로 진짜 2.3KB JSON·1억 행에서도 재확인 — 8.6GB 작업셋은 warm 해도 675초 그대로(데이터 읽기 12.8GB 불변), 19MB 작업셋은 warm 시 0.46초·디스크 0바이트로 완전 대조."
 
 ### ⑤ Ch.9 — 옵티마이저·힌트 🟢
 - **개념**: 통계정보, 비용기반 최적화, 조인 알고리즘(8.0 hash join), 힌트.

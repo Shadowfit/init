@@ -122,7 +122,7 @@ BE-02 시작 시점 코드 실태 (22 문서 정정 사항 포함):
 
 **채택 사유**: DTO 가 int 3개라 차이 의도 명확. 백분율은 0 나누기 케이스. trending 은 데이터 축적 필요.
 
-**"직전 동일 운동" 정의 = 같은 `exerciseId`** — 이미 `ReportService.java:48-52` 에서 `findFirstByMemberIdAndExerciseIdAndStatus` 로 결정됨. 이번 작업은 그 lastSession 을 dto 로 변환만.
+**"직전 동일 운동" 정의 = 같은 `exerciseId`** — 이미 `ReportService.java:49-53` 에서 `findFirstByMemberIdAndExerciseIdAndStatus` 로 결정됨. 이번 작업은 그 lastSession 을 dto 로 변환만.
 
 **감수**:
 - 절대값 차이라 운동량 작은 사용자에겐 변화량 작아 보임

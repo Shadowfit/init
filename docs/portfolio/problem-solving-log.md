@@ -39,7 +39,7 @@
 
 ### #2 🔴 타임아웃 스케줄러 vs FastAPI 콜백 경합 → 낙관적 락
 - **문제**: 백그라운드 타임아웃 스케줄러(IN_PROGRESS→FAILED, 1분마다)와 FastAPI 완료 콜백이 **같은 세션 row 동시 갱신**. 타임아웃 직전 결과 도착 시 경합 → 완료된 세션이 잘못 FAILED 될 수 있음.
-- **Solution**: `Session.java:65 @Version` 낙관적 락. 충돌 시 `ObjectOptimisticLockingFailureException`을 잡아 **스케줄러가 양보**(결과 데이터 우선, `SessionTimeoutScheduler.java:84`). yield 건수 로깅.
+- **Solution**: `Session.java:66 @Version` 낙관적 락. 충돌 시 `ObjectOptimisticLockingFailureException`을 잡아 **스케줄러가 양보**(결과 데이터 우선, `SessionTimeoutScheduler.java:84`). yield 건수 로깅.
 - **Result**: 정합성 깨짐 방지 + 관측 가능.
 - **면접**: "왜 비관적 락(FOR UPDATE)·SERIALIZABLE이 아니라 낙관적 락? → 경합 빈도 낮고 읽기 위주라 블로킹 비용이 아까움. 누가 이기는 게 옳은지(충돌 해소 정책)까지 설계." ⭐ gRPC×DB 교집합.
 

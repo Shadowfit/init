@@ -7,11 +7,63 @@
 
 > ✅=코드/측정으로 확인, 🔶=실재하나 미발동/미구현, ⬜=계획. **결정 마크는 사용자 confirm 후에만.**
 
+**스코프 명확화(2026-07-15)**: `docs/tasks/20-feature-roadmap.md` §1-3 "운동 리포트"는 9개 항목(메인 캘린더, 주간 요약, 실시간 피드백, 이전 기록 비교, **worst 구간 선정**, AI 리포트 자동생성, 개인화 루틴 추천, 목표 달성현황 등)을 묶은 PPT 기획 카테고리다. 이 문서(`report-read-path.md`)가 DB 엔지니어링(인덱스·projection·precompute)으로 다루는 건 그중 **"worst 구간 선정" 하나뿐**이며, 나머지 8개는 담당 축이 다르다(프론트 연동만 남은 것 / AI 서비스 신설 필요 / 스키마 자체가 없는 것 등) — "리포트 기능"이라는 이름이 같아서 전부 같은 작업으로 착각하지 않도록 명시.
+
 ---
 
 ## 0. 한 줄 요약
 
 리포트는 **읽기 축(read-heavy, GET)** 이라 쓰기 최적화(락·트랜잭션)가 아니라 **쿼리·payload·캐싱**에 의존한다. 현재 읽기 경로엔 코드로 실재하는 갭이 4개(over-fetch·재계산·REPORT_NOT_FOUND·인덱스 갭), 규모 미발동 잠재 2개(버퍼풀 오염·무제한 프레임)가 있다. **인덱스는 "찾기"만 풀고**, 리포트의 진짜 병목(fat 컬럼·재계산·오염)은 인덱스 바깥(projection·precompute)에 있다.
+
+---
+
+## 0-A. 리포트 조회 DB 설계 체크리스트 (8단계, 2026-07-15)
+
+읽기 경로 하나(세션 리포트 조회)를 DB 관점에서 설계·점검할 때 이 순서로 따진다. 뒤 단계일수록 앞 단계의 답을 전제로 하고(예: ⑤동시성은 ④규모를 모르면 판단 불가), 앞쪽일수록 코드만 읽으면 답이 나오는 저비용·확정적 질문, 뒤쪽일수록 가정·트레이드오프 판단이 필요한 고비용 질문이다.
+
+| # | 단계 | 이 프로젝트 결론 | 상태 |
+|---|---|---|---|
+| ① | 저장 구조 파악 | `exercise_sessions`→`pose_data`(fat, append-only)→`reports`(집계) | ✅ |
+| ② | 저장 vs 조회 컬럼 대조 (over-fetch) | 8개 저장 컬럼 중 조회는 3개(timestamp_sec·sync_rate·feedback_message)만 사용 → projection 적용 | ✅ 적용 완료(§7) |
+| ③ | 접근 패턴별 인덱스 (등호 먼저·범위/정렬 나중) | `(session_id, timestamp_sec)`, `(member_id, start_time)`, `(member_id, exercise_id, status, start_time)` | ✅ 실측 완료(§4) |
+| ④ | 규모 역산 (가정 기반 미래 볼륨 예측) | DAU 1,000 가정 → 월 ~1억 행 | ✅ 가정 명시 |
+| ⑤ | 동시성 (④의 트래픽 규모로 충돌 빈도 판단) | 세션 status 낙관락(실장착), DailyLog 원자 upsert(실장착) | ✅ 코드 적용 완료 |
+| ⑥ | precompute 여부 (읽기 비용을 쓰기 시점으로 이전) | 세부 설계 4가지(§9) 정리, 착수는 미결 | 🔶 설계만 |
+| ⑦ | 보존 정책 (raw를 언제까지 들고 있을지) | 6가지 축(§9-B) 정리, 착수는 미결 | 🔶 설계만 |
+| ⑧ | N+1 체크 | `SessionRepository.findSessionWithExerciseById`가 `JOIN FETCH s.exercise` 사용 — 이미 방지됨 | ✅ 확인 완료 |
+
+**스코프 밖(현재 규모에서 이득 작다고 판단)**: read replica 분리(현재 트래픽 규모에서 불필요). 캐싱은 §0-B ⑨ 참고 — "이득이 작다"와 별개로 무효화 설계 자체가 빠져있어 완전히 스코프 밖으로 볼 항목은 아님(외부 리뷰로 정정, 2026-07-15).
+
+---
+
+## 0-B. 리포트 조회 — 비성능 축 체크리스트 (⑨~⑭, 2026-07-15, 외부 리뷰 반영)
+
+§0-A의 8단계는 "쿼리 성능·정합성" 축. 리포트 조회엔 성능 말고도 캐싱 무효화·시간 경계·결측 처리·권한·페이징·트랜잭션 경계라는 별개 축이 있음 — 외부 리뷰로 지적받아 코드 대조 후 정리.
+
+| # | 축 | 확인 내용 | 상태 |
+|---|---|---|---|
+| ⑨ | 캐싱 & 무효화 | `exercises`·`feedbackTemplates`·`exerciseReferences`엔 `@Cacheable` 있으나 리포트/주간요약엔 캐시 자체가 없음 | ❌ **갭** — 캐싱 자체도, 무효화 트리거 설계도 없음 |
+| ⑩ | 시간 경계 / 집계 기준 | `docker-compose.yml`에 `TZ: Asia/Seoul`(백엔드·DB 둘 다) → `LocalDate.now()`가 KST 기준 정확. 주 시작요일도 `DayOfWeek.MONDAY` 명시 | ✅ 처리됨 |
+| ⑪ | 결측 데이터 / 빈 리포트 | `getWeeklyActivity`: 그 주 세션 0건이어도 NPE 없이 0값 응답(`totalMinutes=0` 등 방어적 처리) | ✅ 처리됨 |
+| ⑫ | 권한 경계 (IDOR) | ~~조회 후 검증(fetch-then-check) 패턴~~ → **✅ 해결(2026-07-15)**: `SessionRepository.findSessionWithExerciseByIdAndMemberId`로 소유권을 WHERE절에 박음. 없으면(존재X/남의 것) 둘 다 동일하게 `SESSION_NOT_FOUND` — 존재 여부 비공개 | ✅ 해결 |
+| ⑬ | 페이징 전략 | 리포트 히스토리 목록 엔드포인트 자체가 없음(단일 세션 조회만 존재) — **의도적으로 미룸**(§0-C) | ⬜ 미착수, 트리거 명시 |
+| ⑭ | 읽기 트랜잭션 & OSIV | ~~기본값(켜짐) 방치~~ → **✅ 해결(2026-07-15)**: `application.yml`·테스트 yml 둘 다 `open-in-view: false` 명시. 전체 테스트 통과(숨은 lazy 접근 없음 확인, 단 테스트 파일 4~5개뿐이라 전체 엔드포인트 커버는 아님) | ✅ 해결 |
+
+**우선순위 판단(외부 리뷰, 2026-07-15)**: ⑫·⑭는 "싸고 구조적 안전 상승" → 오늘 처리. ⑨·⑬은 "지금 하면 조기 최적화/조기 설계" → 의도적 미룸, 트리거 조건은 §0-C.
+
+---
+
+## 0-C. 의도적으로 미루는 것 — ⑨ 캐싱, ⑬ 페이징 (2026-07-15)
+
+**⑨ 캐싱 — 지금 안 함.** DAU 1,000 가정에서 ③(인덱스)·⑧(N+1 차단)이 이미 돼 있으면 리포트 쿼리는 캐시 없이도 충분히 빠름. 캐싱은 "무효화"라는 새 버그 표면(세션 저장 시점에 어느 캐시를 깨야 하는지)을 여는 일이라, 실측 슬로우 쿼리가 나오기 전엔 순부채(premature optimization).
+- **지금 대신 할 것**: 슬로우 쿼리 로깅/측정만 걸어둠 — "언제 캐싱이 필요한지"를 감이 아니라 데이터로 판단하기 위한 관측 준비.
+- **착수 트리거**: 슬로우 쿼리 로그에 리포트/주간요약 쿼리가 실제로 잡히기 시작하면.
+
+**⑬ 페이징 — 히스토리 엔드포인트 자체가 없어서 지금 할 일이 없음.** 기능이 생길 때 같이 설계.
+- **미리 못박아두는 것**: 만들 때 offset이 아니라 **cursor(created_at + id) 페이징으로 시작**. 시계열 데이터라 나중에 offset→cursor로 갈아엎는 게 처음부터 cursor로 시작하는 것보다 비쌈.
+- **착수 트리거**: 리포트 히스토리 목록 기능(`20-feature-roadmap.md`) 착수 시점.
+
+두 항목 다 "안 했다"가 아니라 "의도적으로 미뤘고, 이 조건이 되면 착수한다"로 박제 — 나중에 "왜 안 했지"가 아니라 "언제 할지 이미 정해뒀다"가 되도록.
 
 ---
 
@@ -41,6 +93,7 @@ GET /reports/sessions/{id}
 | ② | **재계산-on-read** — precompute 없이 매 GET마다 worst 구간 재계산 | ✅ 실재 | `selectWorstSection` 매 호출 |
 | ③ | **REPORT_NOT_FOUND 갭** — `completeAnalysis`가 `session`만 UPDATE, `reports`엔 안 씀 → 실제 세션은 Report 행 없음 → 404 | ✅ 실재(기능 끊김) | `applyCompleteFromApp`([`ExerciseAnalysisService.java:217`](../../backend/src/main/java/com/shadowfit/service/Exercise/ExerciseAnalysisService.java)) session만 UPDATE / `reports`는 [`data.sql:168`](../../mysql/data.sql) 시드뿐 |
 | ④ | ~~**exercise_sessions 인덱스 갭** — `(member_id, start_time)` 등 복합 인덱스 없음(FK 단일뿐) → 캘린더·이전세션 쿼리 filesort~~ | **✅ 해결(2026-07-11)** | `idx_session_member_starttime` 추가([`schema.sql:71`](../../mysql/schema.sql)), 실측: 월간 조회 1675행 Filter → 143행 Index range scan(cost 91.4→64.6), 연간 조회는 Covering index scan으로 전환. 커밋 `dbb0fec` |
+| ④-1 | ~~**"직전 동일 운동" 조회는 ④의 인덱스로 안 커버됨** — `findFirstByMemberIdAndExerciseIdAndStatusOrderByStartTimeDesc`(이전 기록 비교용)는 `member_id, exercise_id, status`로 필터하는데 `idx_session_member_starttime(member_id, start_time)`엔 `exercise_id`·`status`가 없어 member_id로 찾은 뒤 filter~~ | **✅ 해결(2026-07-15)** | 실측: 기존 인덱스만 있을 때 `rows=1675, filtered=5.19%, Using where`. `idx_session_member_exercise_status_start(member_id, exercise_id, status, start_time)` 추가 후 `filtered=100%`, filter 단계 제거(`schema.sql` `exercise_sessions`) |
 | ⑤ | **버퍼풀 오염** — cold 거대 raw를 서빙 경로가 건드려 핫 데이터 evict | 🔶 메커니즘 실재, 규모 미발동 | DAU 작아 리포트 조회 드묾 |
 | ⑥ | **무제한 프레임 극단** — R(프레임/세션)이 위로 열림(fps 미강제) → 극단 세션이 수십~수백 MB 로드·O(N) 루프·OOM 위험 | 🔶 가능성 실재, 미발동 | 정상 750행, [`load-test-strategy.md`](./load-test-strategy.md) §4.5 "R 위로 열림" |
 
@@ -138,18 +191,70 @@ List<PoseFrameProjection> findFramesBySessionId(@Param("sessionId") Long session
 
 **측정 기대치**(이미 [`realmysql-experiments.md`](../portfolio/realmysql-experiments.md) §②b): payload 1,716.8KB→22.4KB(−98.7%), warm 쿼리 12.1ms→1.5ms(8x). 바이트는 −98.7%인데 시간은 −87%인 이유 = 750 row lookup 등 고정비용은 남고 off-page JSON I/O만 사라지기 때문(바이트≠시간 선형).
 
+**⚠️ 향후 컬럼 추가 예정 (BE-09 세트 도입, 현재 보류)**: `pose_data`에 `set_index` 컬럼이 추가되면([`22-backend-tasks-detail.md#BE-09`](../tasks/22-backend-tasks-detail.md)) `PoseFrameProjection`도 `setIndex`를 포함하도록 확장 필요 — worst 구간 계산이 세션 전체가 아니라 세트 단위로 바뀔 수 있음. BE-09는 스쿼트 외 운동 추가 시점까지 보류라 지금 미리 넣지 않음(YAGNI) — 확장 시점에 이 3컬럼 DTO부터 손대야 함을 기록.
+
 ---
 
 ## 8. 미결정 (사용자 confirm 필요)
 
 - [x] projection 코드 적용 여부 (위 §7) — **적용 완료 2026-07-15**
-- [ ] precompute 착수 — `completeAnalysis`에서 Report 생성(③·⑥ 동시 해결). 단 `reports` write 경로 신설 = AI 측 요약 송신 계약과 맞물림([`report-aggregation.md`](./report-aggregation.md) 참조)
-- [ ] exercise_sessions 복합 인덱스 추가 `(member_id, start_time)` / `(member_id, exercise_id, status, start_time)`
+- [ ] precompute 착수 — `completeAnalysis`에서 Report 생성(③·⑥ 동시 해결). 단 `reports` write 경로 신설 = AI 측 요약 송신 계약과 맞물림([`report-aggregation.md`](./report-aggregation.md) 참조). 세부 미결정 4가지는 §9
+- [x] exercise_sessions 복합 인덱스 추가 — **완료(2026-07-11)**, `mysql/schema.sql:83` `idx_session_member_starttime(member_id, start_time)` (§2 ④ 참고). 체크박스 갱신 누락 발견(2026-07-15)
 - [ ] 착수 순서: projection 먼저(가벼움) vs precompute 먼저(헤드라인·4개 해결)
+- [ ] raw TTL(보존 정책) 착수 — pose_data 파티셔닝을 실제 schema.sql에 반영할지. 설계 정리는 §9-B
 
 ---
 
-## 9. 관련 문서
+## 9. precompute 설계 — 미결정 4가지 (2026-07-15)
+
+precompute 자체("세션 완료 시 1회 계산해 `reports`에 저장, 조회는 읽기만")는 §6·§8에서 방향은 잡혔음. 아래 4개는 **그 방향 안에서 아직 안 정한 세부 설계** — 결정 마크는 사용자 confirm 후에만.
+
+### 9-1. 계산 로직 위치 — 순환 의존 회피
+
+`selectWorstSection`/`buildWorstReason`/`pickDominantFeedback`(현재 `ReportService`, 읽기 경로 전용)를 쓰기 경로(`SessionService.applyComplete`)에서도 호출해야 함. `SessionService`가 `ReportService`를 직접 의존하면, 훗날 `ReportService`가 `SessionService`를 참조할 일이 생겼을 때 순환 의존이 됨.
+- **후보**: 계산 로직을 별도 컴포넌트(예: `ReportCalculator` 또는 `WorstSectionCalculator`)로 추출, `ReportService`·`SessionService` 둘 다 이걸 의존하는 구조로 변경.
+
+### 9-2. 트랜잭션 경계 — 세션 완료와 리포트 생성의 원자성
+
+세션이 `COMPLETED`인데 `reports` row가 없는 상태(현재 ③번 갭)가 precompute 도입 후에도 재발하면 안 됨.
+- **후보**: `applyComplete`와 리포트 생성을 **같은 트랜잭션**에서 처리 — 하나라도 실패하면 세션 완료 자체가 롤백.
+
+### 9-3. 계산 실패 시 정책
+
+`findFramesBySessionId` 조회나 worst 구간 계산 자체가 실패하면(예: pose_data 0건인 극단 케이스) 어떻게 할지.
+- **후보 A**: 세션 완료 자체를 실패시킴(9-2와 연결, 엄격하지만 AI 콜백 재시도 정책과 상호작용 고려 필요)
+- **후보 B**: 세션 완료는 성공시키고 리포트는 null/기본값으로 저장 후 별도 배치로 나중에 채움(③번 갭이 다른 형태로 재발할 위험)
+
+### 9-4. 과거(precompute 이전) 완료 세션의 백필
+
+precompute 도입 이전에 이미 `COMPLETED`된 세션들은 `reports` row가 없거나 비어있을 수 있음.
+- **후보**: 일회성 마이그레이션 스크립트로 과거 세션 전체를 훑어 `reports`를 소급 생성. 단 이 프로젝트는 실사용자가 없는 캡스톤이라 백필 대상 자체가 미미할 가능성 높음(과잉설계 주의).
+
+---
+
+## 9-B. raw TTL(보존 정책) 설계 — 6가지 축 (2026-07-15)
+
+`pose_data` TTL(§6 ④)은 개념·실측(`realmysql-experiments.md` §4②d, DROP PARTITION 625배)까지만 되어 있고 **실제 `mysql/schema.sql`엔 파티셔닝이 반영돼 있지 않음**(파티션 실험은 `pose_data_scale`이라는 별도 스크래치 테이블에서만 함, `loadtest/measure_partition.sh`). 실제 도입하려면 아래 6가지가 필요 — ①~④는 **정책 설계**, ⑤~⑥은 **운영 실행**.
+
+| # | 축 | 내용 | 이 프로젝트 상태 |
+|---|---|---|---|
+| ① | 버퍼 vs 영속 구분 | `pose_data`(raw, 단기) vs `reports`(집계, 영속) | ✅ 판단 완료(`db-deep-dive.md` §2-0) |
+| ② | 삭제 근거 | raw를 지워도 되는 건 precompute로 요약이 `reports`에 이미 박제됐을 때뿐 — **precompute 선행 필요** | 🔶 precompute 자체가 미착수(§9) |
+| ③ | 삭제 메커니즘 | DROP PARTITION vs DELETE — DROP 채택(625배, 디스크 즉시 회수) | ✅ 실측 완료 |
+| ④ | 파티션 단위 | 월별 — 너무 잘게(일별) 관리부담, 너무 크게(연별) 만료 단위가 거칠어짐 | ✅ 월별 14파티션으로 실험(스크래치 테이블만) |
+| ⑤ | 실행 트리거 | 스케줄러가 주기적으로 DROP/ADD PARTITION 실행 — `SessionTimeoutScheduler`와 동일한 `@Scheduled` 패턴 재사용 가능(신규 클래스 `PoseDataPartitionScheduler` 필요) | ⬜ 미착수 |
+| ⑥ | 파티션 유지보수 | 미래 파티션(`pfuture`)이 계속 커지지 않도록, 다다음 달 파티션을 미리 `ADD PARTITION`으로 만들어둬야 함 | ⬜ 미착수 |
+
+**추가 안전장치 (⑤·⑥ 구현 시 반드시 고려)**:
+- **아카이빙 여부**: DROP 전에 콜드 스토리지(S3 등)로 백업할지, 완전 폐기할지 — precompute로 핵심 요약은 이미 보존되므로 raw 원본은 완전 폐기해도 될 가능성이 높으나 **결정 사안**
+- **경계 안전 마진**: 스케줄러가 아직 쓰기가 진행 중인 현재 달 파티션을 실수로 건드리면 안 됨 — "완전히 종료된 과거 파티션만" 대상으로 제한 필요
+- **DROP PARTITION은 되돌릴 수 없음** — 실행 전 검증(예상 파티션·행수 확인) 절차 없이는 위험
+
+**결론**: 파티셔닝을 실제 스키마에 도입하는 건 ②(precompute 선행)가 먼저 해결돼야 하고, 도입 후에도 ⑤⑥(운영 자동화)이 남는 별개 작업. 지금은 전부 설계·실측 단계이지 운영 자동화까지 만들어진 상태 아님 — 면접에서 "실제로 자동화까지 했냐"고 물으면 정직하게 이 경계선에서 답해야 함.
+
+---
+
+## 10. 관련 문서
 - [`../portfolio/db-deep-dive.md`](../portfolio/db-deep-dive.md) §B(읽기 최적화)·§2-0(raw→buffer/serving 분리)
 - [`../portfolio/realmysql-experiments.md`](../portfolio/realmysql-experiments.md) §②b(projection 측정)
 - [`./load-test-strategy.md`](./load-test-strategy.md) §4.6(살아남는 최적화 스토리)
