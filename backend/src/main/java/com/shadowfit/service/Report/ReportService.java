@@ -4,9 +4,9 @@ import com.shadowfit.dto.report.detailreport.ComparisonWithPreviousDto;
 import com.shadowfit.dto.report.detailreport.ExerciseSyncRateDto;
 import com.shadowfit.dto.report.detailreport.SessionReportResponseDto;
 import com.shadowfit.dto.report.detailreport.WorstSectionDto;
+import com.shadowfit.dto.report.PoseFrameProjection;
 import com.shadowfit.global.error.BusinessException;
 import com.shadowfit.global.error.ErrorCode;
-import com.shadowfit.model.exercise.PoseData;
 import com.shadowfit.model.exercise.Session;
 import com.shadowfit.model.exercise.Status;
 import com.shadowfit.model.report.Report;
@@ -52,17 +52,17 @@ public class ReportService {
                 Status.COMPLETED
         );
 
-        List<PoseData> poseDataList = poseDataRepository.findBySessionIdOrderByTimestampSecAsc(sessionId);
-        return buildReportResponse(currentSession, report, lastSession, poseDataList);
+        List<PoseFrameProjection> poseFrames = poseDataRepository.findFramesBySessionId(sessionId);
+        return buildReportResponse(currentSession, report, lastSession, poseFrames);
     }
 
 
     private SessionReportResponseDto buildReportResponse(Session session, Report report,
                                                          Optional<Session> lastSession,
-                                                         List<PoseData> poseDataList) {
+                                                         List<PoseFrameProjection> poseFrames) {
         SessionReportResponseDto responseDto = SessionReportResponseDto.of(session, report);
 
-        responseDto.setWorstSection(selectWorstSection(session, poseDataList));
+        responseDto.setWorstSection(selectWorstSection(session, poseFrames));
         responseDto.setSyncRateDetails(buildSyncRateDetails(session));
         lastSession.ifPresent(last ->
                 responseDto.setComparisonWithPrevious(buildComparisonWithPrevious(session, last))
@@ -75,17 +75,17 @@ public class ReportService {
     // 한 점이 아니라 구간을 보는 이유: 단일 프레임은 노이즈 영향이 커서 일시적 튐을 worst 로 잡을 위험.
     private static final int WORST_WINDOW_SIZE = 3;
 
-    private WorstSectionDto selectWorstSection(Session session, List<PoseData> poseDataList) {
-        if (poseDataList == null || poseDataList.size() < WORST_WINDOW_SIZE) {
+    private WorstSectionDto selectWorstSection(Session session, List<PoseFrameProjection> poseFrames) {
+        if (poseFrames == null || poseFrames.size() < WORST_WINDOW_SIZE) {
             return null;
         }
 
         int worstStart = 0;
         double worstAverage = Double.MAX_VALUE;
-        for (int i = 0; i <= poseDataList.size() - WORST_WINDOW_SIZE; i++) {
+        for (int i = 0; i <= poseFrames.size() - WORST_WINDOW_SIZE; i++) {
             double sum = 0.0;
             for (int j = 0; j < WORST_WINDOW_SIZE; j++) {
-                Double rate = poseDataList.get(i + j).getSyncRate();
+                Double rate = poseFrames.get(i + j).syncRate();
                 if (rate == null) {
                     sum = Double.MAX_VALUE;
                     break;
@@ -99,12 +99,12 @@ public class ReportService {
             }
         }
 
-        // 구간의 중앙 PoseData 를 대표 timestamp 로 사용
-        PoseData representative = poseDataList.get(worstStart + WORST_WINDOW_SIZE / 2);
+        // 구간의 중앙 프레임을 대표 timestamp 로 사용
+        PoseFrameProjection representative = poseFrames.get(worstStart + WORST_WINDOW_SIZE / 2);
         WorstSectionDto worst = new WorstSectionDto();
         worst.setExerciseName(session.getExercise().getName());
-        worst.setTimeStamp(formatTimestamp(representative.getTimestampSec()));
-        worst.setReason(buildWorstReason(worstAverage, poseDataList, worstStart));
+        worst.setTimeStamp(formatTimestamp(representative.timestampSec()));
+        worst.setReason(buildWorstReason(worstAverage, poseFrames, worstStart));
         return worst;
     }
 
@@ -114,7 +114,7 @@ public class ReportService {
         return String.format("%02d:%02d", totalSeconds / 60, totalSeconds % 60);
     }
 
-    private String buildWorstReason(double averageSyncRate, List<PoseData> list, int start) {
+    private String buildWorstReason(double averageSyncRate, List<PoseFrameProjection> list, int start) {
         int syncPercent = (int) Math.round(averageSyncRate);
         String dominantFeedback = pickDominantFeedback(list, start);
         if (dominantFeedback == null || dominantFeedback.isBlank()) {
@@ -124,10 +124,10 @@ public class ReportService {
     }
 
     // worst 구간 안의 feedback_message 중 가장 자주 등장한 것을 reason 보강에 사용
-    private String pickDominantFeedback(List<PoseData> list, int start) {
+    private String pickDominantFeedback(List<PoseFrameProjection> list, int start) {
         java.util.Map<String, Integer> counts = new java.util.HashMap<>();
         for (int j = 0; j < WORST_WINDOW_SIZE; j++) {
-            String message = list.get(start + j).getFeedbackMessage();
+            String message = list.get(start + j).feedbackMessage();
             if (message == null || message.isBlank()) continue;
             counts.merge(message, 1, Integer::sum);
         }

@@ -1,6 +1,6 @@
 # 리포트 기능 읽기 경로 감사 — 병목·갭·해결 로드맵
 
-상태: **분석 완료(코드 기준), 해결 착수 미결 — 결정은 사용자 confirm 후**
+상태: **① projection 적용 완료(2026-07-15)**. 나머지(②precompute·④~⑥)는 착수 미결 — 결정은 사용자 confirm 후
 작성: 2026-06-14
 대상: 백엔드(Spring) 포폴. 리포트 기능(`GET /reports/sessions/{id}`)의 **읽기 경로**를 코드로 감사 — 실제 병목/갭이 뭔지, 인덱스로 풀리는 것/안 풀리는 것, 일반(CRUD) 프로젝트와의 차이, 정직한 현재 상태 분류.
 연관: [`../portfolio/db-deep-dive.md`](../portfolio/db-deep-dive.md) §B, [`../portfolio/realmysql-experiments.md`](../portfolio/realmysql-experiments.md) §②b, [`./load-test-strategy.md`](./load-test-strategy.md) §4.6, [`./report-aggregation.md`](./report-aggregation.md), [`../portfolio/portfolio-narrative.md`](../portfolio/portfolio-narrative.md)
@@ -24,7 +24,7 @@ GET /reports/sessions/{id}
  1. findSessionWithExerciseById         ← JOIN FETCH s.exercise (SessionRepository.java:16)
  2. reportRepository.findBySessionId     ← Report 1행, 없으면 REPORT_NOT_FOUND (ReportService.java:41)
  3. findFirstByMemberIdAndExerciseIdAndStatusOrderByStartTimeDesc  ← 이전 세션(비교용)
- 4. findBySessionIdOrderByTimestampSecAsc ← pose_data 전체 로드 (★ 무거움, ReportService.java:51)
+ 4. findFramesBySessionId ← pose_data 3컬럼 projection (2026-07-15 적용, §7)
 ```
 
 이후 `buildReportResponse` → `selectWorstSection`([`:74`](../../backend/src/main/java/com/shadowfit/service/Report/ReportService.java))에서 연속 3프레임(`WORST_WINDOW_SIZE=3`) 슬라이딩으로 최저 syncRate 구간을 **자바 메모리에서 O(N) 재계산**.
@@ -37,7 +37,7 @@ GET /reports/sessions/{id}
 
 | # | 문제 | 상태 | 코드 근거 |
 |---|------|------|-----------|
-| ① | **fat 컬럼 over-fetch** — 풀엔티티 로드, worst 계산은 `syncRate`·`timestampSec`·`feedbackMessage` 3개만 씀. `joint_coordinates`는 **한 번도 안 씀** | ✅ 실재 + 측정 | `findBySessionIdOrderByTimestampSecAsc`(전체) vs `selectWorstSection` 사용 필드 |
+| ① | ~~**fat 컬럼 over-fetch** — 풀엔티티 로드, worst 계산은 `syncRate`·`timestampSec`·`feedbackMessage` 3개만 씀. `joint_coordinates`는 **한 번도 안 씀**~~ | **✅ 해결(2026-07-15)** | `findFramesBySessionId`(3컬럼 projection, §7)로 교체. 실측(§②b): payload −98.7%, warm 쿼리 8x |
 | ② | **재계산-on-read** — precompute 없이 매 GET마다 worst 구간 재계산 | ✅ 실재 | `selectWorstSection` 매 호출 |
 | ③ | **REPORT_NOT_FOUND 갭** — `completeAnalysis`가 `session`만 UPDATE, `reports`엔 안 씀 → 실제 세션은 Report 행 없음 → 404 | ✅ 실재(기능 끊김) | `applyCompleteFromApp`([`ExerciseAnalysisService.java:217`](../../backend/src/main/java/com/shadowfit/service/Exercise/ExerciseAnalysisService.java)) session만 UPDATE / `reports`는 [`data.sql:168`](../../mysql/data.sql) 시드뿐 |
 | ④ | ~~**exercise_sessions 인덱스 갭** — `(member_id, start_time)` 등 복합 인덱스 없음(FK 단일뿐) → 캘린더·이전세션 쿼리 filesort~~ | **✅ 해결(2026-07-11)** | `idx_session_member_starttime` 추가([`schema.sql:71`](../../mysql/schema.sql)), 실측: 월간 조회 1675행 Filter → 143행 Index range scan(cost 91.4→64.6), 연간 조회는 Covering index scan으로 전환. 커밋 `dbb0fec` |
@@ -111,9 +111,9 @@ GET /reports/sessions/{id}
 
 ---
 
-## 7. projection 구현 (③단계, 코드 — 미적용)
+## 7. projection 구현 (③단계, 코드 — **적용 완료 2026-07-15**)
 
-3파일 변경. **적용은 사용자 결정 대기**(3파일↑ 사전 범위 공유 규칙).
+3파일 변경(`PoseFrameProjection.java` 신규, `PoseDataRepository.java`, `ReportService.java`). 기존 `findBySessionIdOrderByTimestampSecAsc`는 제거(테스트는 `findAll`/`count`만 써서 영향 없음, 전체 테스트 통과 확인).
 
 **① 신규 DTO** — `dto/report/PoseFrameProjection.java`
 ```java
@@ -142,7 +142,7 @@ List<PoseFrameProjection> findFramesBySessionId(@Param("sessionId") Long session
 
 ## 8. 미결정 (사용자 confirm 필요)
 
-- [ ] projection 코드 적용 여부 (위 §7)
+- [x] projection 코드 적용 여부 (위 §7) — **적용 완료 2026-07-15**
 - [ ] precompute 착수 — `completeAnalysis`에서 Report 생성(③·⑥ 동시 해결). 단 `reports` write 경로 신설 = AI 측 요약 송신 계약과 맞물림([`report-aggregation.md`](./report-aggregation.md) 참조)
 - [ ] exercise_sessions 복합 인덱스 추가 `(member_id, start_time)` / `(member_id, exercise_id, status, start_time)`
 - [ ] 착수 순서: projection 먼저(가벼움) vs precompute 먼저(헤드라인·4개 해결)
