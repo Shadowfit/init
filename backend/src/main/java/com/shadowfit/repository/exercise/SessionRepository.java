@@ -45,4 +45,7 @@ public interface SessionRepository extends JpaRepository<Session,Long> {
 
     @Query("SELECT s FROM Session s JOIN FETCH s.exercise WHERE s.status = :status")
     List<Session> findByStatus(@Param("status") Status status);
+
+    // 회원당 활성 세션 1개 제약 — 세션 생성 전 중복 체크용.
+    boolean existsByMemberIdAndStatus(Long memberId, Status status);
 }

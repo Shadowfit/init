@@ -65,6 +65,12 @@ public class SessionService {
         Member member = memberRepository.findById(currentMemberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
+        // 한 사람이 동시에 두 운동을 할 수는 없다 — 진행 중인 세션이 있으면 새 세션 생성 자체를 막아
+        // daily_logs 등 하위 경합을 애초에 발생 불가능하게 만듦(방어적 upsert는 그 다음 depth).
+        if (sessionRepository.existsByMemberIdAndStatus(currentMemberId, Status.IN_PROGRESS)) {
+            throw new BusinessException(ErrorCode.SESSION_ALREADY_IN_PROGRESS);
+        }
+
         Exercise exercise = exercisesRepository.findByIdCached(appDto.getExerciseId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.EXERCISE_NOT_FOUND));
 
