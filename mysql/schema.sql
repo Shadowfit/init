@@ -84,7 +84,12 @@ CREATE TABLE IF NOT EXISTS exercise_sessions (
     -- 직전 동일 운동 조회(findFirstByMemberIdAndExerciseIdAndStatusOrderByStartTimeDesc, 이전 기록
     -- 비교용)가 위 인덱스만으론 member_id로 찾은 뒤 exercise_id·status를 filter(Using where,
     -- filtered 5.19%)하는 게 EXPLAIN으로 확인돼 추가 (2026-07-15, filtered 100%로 개선)
-    INDEX idx_session_member_exercise_status_start (member_id, exercise_id, status, start_time)
+    INDEX idx_session_member_exercise_status_start (member_id, exercise_id, status, start_time),
+    -- 회원당 활성 세션 체크(existsByMemberIdAndStatus, createSession 매 호출마다 실행)가 위
+    -- 인덱스로는 exercise_id가 중간에 껴서 status까지 seek 못 하고 member_id로 찾은 뒤 status를
+    -- filter(filtered 10%, rows 1675)하는 게 EXPLAIN으로 확인돼 추가 — (member_id, status)만으로
+    -- 바로 seek해 rows 1, filtered 100%로 개선 (2026-07-16).
+    INDEX idx_session_member_status (member_id, status)
     );
 
 -- 6. 자세 데이터
