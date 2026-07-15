@@ -146,7 +146,13 @@
 - **이 프로젝트 (a) 낙관락**: ✅ 구현 — 타임아웃 스케줄러 vs FastAPI 콜백(`Session.java:66 @Version`, `SessionTimeoutScheduler.java:84` 양보).
 - **이 프로젝트 (b) lost-update**: `DailyLog.updateStats()` 배선 완료(2026-07-15) — 네이티브 upsert(`upsertStats`, `INSERT ... ON DUPLICATE KEY UPDATE`) 한 문장으로 구현, 동시 종료 경합 방지 ✅. 첫 시도(원자 UPDATE→실패 시 `save()`→실패 시 catch 재시도)는 동시성 테스트에서 Hibernate 세션 손상으로 실패해 폐기 — 실측으로 잡은 함정.
 - **이 프로젝트 (c) 멱등성**: ✅ INSERT IGNORE (`FeedbackLogService.java:33`).
-- **이 프로젝트 (d) 회원당 활성 세션 제약**: ✅ 추가(2026-07-16) — `createSession()`(`SessionService.java`)에 `existsByMemberIdAndStatus(memberId, IN_PROGRESS)` 가드 추가, 이미 진행 중인 세션이 있으면 409(`SESSION_ALREADY_IN_PROGRESS`)로 생성 자체를 거부. 원래는 이 체크가 없어 멀티 디바이스·네트워크 재시도로 한 회원이 세션 두 개를 동시에 `IN_PROGRESS`로 가질 수 있었음(한 사람이 물리적으로 두 운동을 동시에 할 수 없으니 원래 불가능해야 하는 상태) — (b) daily_logs 경합이 발생할 수 있는 사실상 유일한 경로였는데, 이 가드로 그 경합 자체가 구조적으로 불가능해짐. **동시성 방어의 우선순위: ① 경합이 아예 생길 수 없게 정책으로 막기(이번 가드) → ② 그래도 못 막는 경로(레거시 데이터·배치 등)에 대한 방어적 원자 연산((b)의 native upsert)**. ①을 추가했다고 ②가 무의미해지는 게 아니라 depth-in-defense로 함께 유지.
+- **이 프로젝트 (d) 회원당 활성 세션 제약**: ✅ 추가(2026-07-16) — `createSession()`에 이미 진행 중인 세션이 있으면 409(`SESSION_ALREADY_IN_PROGRESS`)로 생성 자체를 거부. 원래는 이 체크가 없어 멀티 디바이스·네트워크 재시도로 한 회원이 세션 두 개를 동시에 `IN_PROGRESS`로 가질 수 있었음(한 사람이 물리적으로 두 운동을 동시에 할 수 없으니 원래 불가능해야 하는 상태) — (b) daily_logs 경합이 발생할 수 있는 사실상 유일한 경로였는데, 이 가드로 그 경합 자체가 구조적으로 불가능해짐. **동시성 방어의 우선순위: ① 경합이 아예 생길 수 없게 정책으로 막기(이번 가드) → ② 그래도 못 막는 경로(레거시 데이터·배치 등)에 대한 방어적 원자 연산((b)의 native upsert)**. ①을 추가했다고 ②가 무의미해지는 게 아니라 depth-in-defense로 함께 유지.
+  - **구현 과정에서 TOCTOU 레이스 발견 → 제약 시도 → MySQL 제약으로 막힘 → 비관락으로 최종 해결**(3단계 실측):
+    1. 첫 시도(`existsByMemberIdAndStatus` 체크 → `save()`)는 **check-then-act TOCTOU**: 두 요청이 거의 동시에 오면 둘 다 "커밋 전이라 상대가 안 보여" 체크를 통과해버림 — 격리수준과 무관(RC든 RR이든 커밋 안 된 데이터는 어차피 안 보임).
+    2. DB 유니크 제약으로 원천 차단 시도(`active_session_marker` generated column, `status=IN_PROGRESS`일 때만 `member_id` 값·나머지 NULL, 유니크 인덱스는 NULL끼리 안 부딪힘) — 로컬 MySQL에 실제로 적용하다 **`ERROR 1215 Cannot add foreign key constraint`**로 막힘. 원인: `member_id`가 `ON DELETE CASCADE` FK 컬럼인데, MySQL은 CASCADE FK 컬럼을 generated column의 재료로 못 쓰게 막음(캐스케이드 발생 시 생성값을 재계산할 방법이 없어서). 설계 단계에선 안 보였고 실제로 적용해봐야 나온 제약 — 실측 없이 설계만 했으면 그대로 배포됐을 접근.
+    3. 최종: `MemberRepository.findByIdForUpdate`(`@Lock(PESSIMISTIC_WRITE)`)로 회원 row를 잠그고, 그 잠금 안에서 `existsByMemberIdAndStatus` 체크 → 생성. 스키마 변경 없이 TOCTOU를 닫음 — 세션 생성이 유저가 연타하는 핫패스가 아니라 락 보유 비용도 무시할 만함. **이 프로젝트의 첫 실제 비관락 사용처**(그 전까진 `FOR UPDATE` 0건).
+  - **검증**: `SessionCreateConcurrencyTest` — 같은 회원이 세션 두 개를 정확히 동시에 생성 시도 → 정확히 1개만 성공, 나머지는 `SESSION_ALREADY_IN_PROGRESS`(409)로 거절, 실제 생성된 세션도 1개 확인.
+  - **제약 vs 락 선택 기준**(일반화): ① 위반 시 그냥 거절이면 충분한가(제약), 대기 후 통과시켜야 하는가(락) ② 단순 무결성 규칙 하나인가(제약), 여러 단계 절차 직렬화가 필요한가(락) ③ 호출 빈도·락 보유 시간이 큰가(제약 선호) ④ 제약으로 표현 가능한 걸 우선(모든 경로에서 보장되므로) — 단, 이번처럼 **스키마 제약이 기술적으로 막히면 락이 유일한 대안**이 됨.
 - **설계**: (b) 두 트랜잭션으로 lost-update **재현**(RC) → 원자 UPDATE / `SELECT FOR UPDATE` / `@Version` 비교, `performance_schema.data_locks`로 락 관찰, `SHOW ENGINE INNODB STATUS` → (a) 낙관락 충돌 시 양보 정책 근거.
 - **지표**: 손실 갱신 발생/방지, 락 종류·대기.
 - **결과 (b) lost-update 재현·방지 ✅ (2026-06-05, scratch `lock_lab`, daily_logs.updateStats 동형, 매 run 초기화)**:
@@ -164,7 +170,7 @@
   - **해석**: RC 격리만으론 read-modify-write 의 lost-update 를 **못 막는다**(MVCC 스냅샷 읽기라 둘 다 옛값). 막으려면 ① 읽기 자체를 없애거나(원자 UPDATE) ② 읽기에 락을 걸거나(FOR UPDATE) ③ 쓰기에 버전 가드(CAS). **단일 카운터 누적이면 원자 UPDATE 가 최적**(왕복·블로킹 0). `@Version` 은 충돌이 드물고 블로킹을 피하고 싶을 때(이 프로젝트의 타임아웃 vs 콜백 경합).
   - rig: `loadtest/measure_lock.sh`(재현, 4단계 + 락 스냅샷). 🟡 갭/넥스트키 락은 단일 PK 핫로우라 미관찰 — append-only 저경합 substrate 한계, 명시.
 - **(a) 낙관락 양보(실코드) 근거**: 타임아웃 스케줄러 vs FastAPI 콜백은 **저경합·서로 다른 세션 위주**라 비관락의 상시 블로킹 비용이 아깝다 → `@Version` 으로 충돌만 감지, 충돌 시 콜백이 재시도(`SessionService.completeSession` 최대 3회, FastAPI 결과 우선). 위 (b) 의 CAS 가 바로 이 정책의 축소 재현.
-- **면접**: "RC로는 lost-update 못 막음(MVCC 스냅샷이라 둘 다 옛값 읽음) → 단일 카운터 누적은 **원자 UPDATE**가 최적(왕복·블로킹 0). `data_locks`로 FOR UPDATE의 X,REC_NOT_GAP WAITING을 직접 관찰해 비관락이 핫로우를 직렬화함을 확인. 타임아웃 vs 콜백은 저경합·세션 분리라 낙관락(@Version)으로 블로킹 비용 회피, 충돌 시 3회 재시도." 🟡 갭/넥스트키 락은 단일 PK 핫로우라 미관찰 — 명시.
+- **면접**: "RC로는 lost-update 못 막음(MVCC 스냅샷이라 둘 다 옛값 읽음) → 단일 카운터 누적은 **원자 UPDATE**가 최적(왕복·블로킹 0). `data_locks`로 FOR UPDATE의 X,REC_NOT_GAP WAITING을 직접 관찰해 비관락이 핫로우를 직렬화함을 확인. 타임아웃 vs 콜백은 저경합·세션 분리라 낙관락(@Version)으로 블로킹 비용 회피, 충돌 시 3회 재시도. 회원당 활성 세션 제약은 처음엔 유니크 제약(DB가 모든 경로에서 보장)으로 막으려 했는데, `member_id`가 CASCADE FK라 MySQL이 generated column을 못 쓰게 막아서 — 세션 생성이 핫패스가 아니라는 점 근거로 `SELECT FOR UPDATE`(이 프로젝트 첫 비관락)로 대체, 콘커런시 테스트로 정확히 1개만 성공함을 검증." 🟡 갭/넥스트키 락은 단일 PK 핫로우라 미관찰 — 명시.
 
 ### ④ Ch.4 + Ch.15 — 아키텍처(MVCC·버퍼풀) & JSON 🟢🟡
 - **개념**: InnoDB 버퍼풀, undo, MVCC 스냅샷 / JSON 저장·함수·generated column 인덱스.
