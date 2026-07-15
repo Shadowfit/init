@@ -113,6 +113,19 @@
   - **offset = O(N) 선형** — 깊이 10배마다 시간 ~10배(`EXPLAIN`: rows 스캔량 = OFFSET+20, cost 0.09→149,953). keyset = **평탄(≈O(log n))**, PK 범위 점프라 깊이 무관.
   - ⚠️ cold/warm: OFFSET 1,000만 cold **8.9초** → warm **2.9초**(버퍼풀 캐시). **캐시돼도 선형 유지** → 병목은 디스크 I/O가 아니라 **행 스캔/폐기 자체(CPU)**. keyset은 그 스캔을 안 함이 핵심.
   - rig: `loadtest/measure_pagination.sh`(재현), 133,334 세션×750행=정확히 1억 행, 더미 JSON `{}`(행수·payload 디커플링 §0.3 — 실제 2.3KB JSON이면 255GB라 불가, 더미로 ~11GB). 버퍼풀 2GB·sort_buffer 64M로 시딩·인덱스 빌드 가속(`docker-compose.yml`).
+  - **✅ AWS 1억 행 real-JSON 재검증(2026-07-16)**: 기존 실험은 더미 JSON(`{}`)이라 payload 크기가 offset 비용에 미치는 영향은 안 담겨 있었음. `pose_data_real_scale`(진짜 2.3KB JSON, m6i.xlarge)에서 동일 깊이대로 재현.
+
+    | 깊이(OFFSET) | offset ms | keyset ms |
+    |---|---|---|
+    | 0 | 53.3 | 55.5 |
+    | 1만 | 59.3 | 54.7 |
+    | 10만 | 96.3 | 54.8 |
+    | 100만 | 1,996 | 55.8 |
+    | 1,000만 | 164,411 (2.7분) | 56.3 |
+    | 5,000만 | 941,218 (15.7분, run1/2 평균 — run3 도중 정리 과정에서 종료) | 56.3 |
+
+    - **offset이 더미보다 훨씬 나쁘게 커짐** — 같은 5,000만 깊이에서 더미 JSON은 26.0초인데 실제 JSON은 941.2초(**약 36배**). 실제 행이 무거워(2.3KB) 페이지당 담기는 행 수가 적어지고, OFFSET의 O(N) 스캔-후-폐기가 밟는 페이지 수(=물리 I/O)가 그만큼 늘어난 것 — "payload가 무거울수록 offset 문제가 악화된다"는 가설(§5 캐비엇 이전 기록)을 실측으로 확인.
+    - ⚠️ **keyset 절대값은 측정 한계**: 이번 측정은 `SET profiling`이 아니라 SSH+`docker exec` 왕복 wall-clock(`date`) 기반이라 ~50ms 클라이언트 오버헤드가 바닥에 깔림 — keyset이 깊이 무관 평탄(55~56ms)한 건 진짜지만 이 절대값은 쿼리 자체 비용이 아니라 오버헤드 바닥. offset은 100만 깊이 이상부터 이 바닥보다 압도적으로 커서 오염 영향이 무시할 만큼 작음. **결론(offset O(N) 폭증 vs keyset 평탄)은 유효, keyset 절대치만 액면가로 안 씀.**
 - **결과 (d) 파티션 ✅ (2026-06-03, 1억 행 → `created_at` 월별 14파티션, in-place ALTER)**:
   - **파티션 전환 비용**: `ALTER TABLE ... PARTITION BY RANGE(UNIX_TIMESTAMP(created_at))` = **5,767초(96분)** copy-to-tmp 풀 리빌드(~24,700행/초). → 운영이면 처음부터 파티션 테이블 or `pt-osc`/`INPLACE` 무중단(위 운영 캐비엇 실측 확인).
   - **pruning (EXPLAIN `partitions` 칼럼)**: 날짜범위 `WHERE created_at∈[6월]` → **`p2026_06` 1개만**(13개 안 읽음) / 범위 없으면 14개 전부 / ⚠️ **`session_id=…` → 14개 전부**(rows:750이나 파티션-로컬 인덱스라 14개 트리 모두 탐색) — **세션 쿼리는 pruning 이득 0, 오히려 미세 손해**. §4.3·정직 포지션 실측 확인.
