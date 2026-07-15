@@ -41,6 +41,7 @@ public class SessionService {
     private final ExercisesRepository exercisesRepository;
     private final MemberRepository memberRepository;
     private final ObjectMapper objectMapper;
+    private final com.shadowfit.service.Report.DailyLogService dailyLogService;
 
     // 자기 주입: completeSession → applyComplete 호출이 Spring 프록시를 통과해 @Transactional이 적용되도록 함.
     @Lazy
@@ -63,6 +64,12 @@ public class SessionService {
     public Session createSession(VideoRequestDto appDto, Long currentMemberId, String finalUrl) {
         Member member = memberRepository.findById(currentMemberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+
+        // 한 사람이 동시에 두 운동을 할 수는 없다 — 진행 중인 세션이 있으면 새 세션 생성 자체를 막아
+        // daily_logs 등 하위 경합을 애초에 발생 불가능하게 만듦(방어적 upsert는 그 다음 depth).
+        if (sessionRepository.existsByMemberIdAndStatus(currentMemberId, Status.IN_PROGRESS)) {
+            throw new BusinessException(ErrorCode.SESSION_ALREADY_IN_PROGRESS);
+        }
 
         Exercise exercise = exercisesRepository.findByIdCached(appDto.getExerciseId())
                 .orElseThrow(() -> new BusinessException(ErrorCode.EXERCISE_NOT_FOUND));
@@ -119,6 +126,10 @@ public class SessionService {
         session.setCaloriesBurned(java.math.BigDecimal.valueOf(request.getCaloriesBurned()));
 
         sessionRepository.saveAndFlush(session);
+
+        int exerciseMinutes = (int) java.time.Duration.between(session.getStartTime(), session.getEndTime()).toMinutes();
+        dailyLogService.accumulateStats(session.getMember().getId(), session.getStartTime().toLocalDate(),
+                exerciseMinutes, java.math.BigDecimal.valueOf(request.getCaloriesBurned()));
     }
 
     /**

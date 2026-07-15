@@ -24,6 +24,7 @@ spring:
       mode: always
 
   jpa:
+     open-in-view: false # 2026-07-15: lazy 필드 접근이 뷰 렌더링 단계까지 조용히 숨겨지는 것 방지, 코드 작을 때 끔
      hibernate:
        ddl-auto: none # 혹은 none (도커에서 schema.sql을 실행하므로)
      defer-datasource-initialization: true

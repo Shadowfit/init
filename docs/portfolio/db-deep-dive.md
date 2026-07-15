@@ -111,9 +111,9 @@
 
 | 항목 | 상태 | 근거 |
 |---|---|---|
-| **낙관적 락**: 타임아웃 스케줄러 vs FastAPI 완료 콜백 경합 | ✅ | `Session.java:65 @Version`, `SessionTimeoutScheduler.java:84` 충돌 시 양보 |
+| **낙관적 락**: 타임아웃 스케줄러 vs FastAPI 완료 콜백 경합 | ✅ | `Session.java:66 @Version`, `SessionTimeoutScheduler.java:84` 충돌 시 양보 |
 | **멱등성**: at-least-once gRPC 콜백 재전송 | ✅ | `FeedbackLogService.java:33` `INSERT IGNORE` + `uk_session_event` |
-| **일일 집계 lost-update** | 🔶 개발 | `DailyLog.updateStats()`(L45) 존재하나 **호출처 0** — 배선 시 동시 종료 경합 |
+| **일일 집계 lost-update** | ✅ 해결(2026-07-15) | `SessionService.applyComplete`에서 세션 완료 시 `DailyLogService.accumulateStats` 호출로 배선. `DailyLogRepository.upsertStats`(네이티브 `INSERT ... ON DUPLICATE KEY UPDATE` 한 문장)로 같은 날 두 세션 동시 종료돼도 lost-update 없음. **함정 발견**: 처음엔 원자 UPDATE 먼저 시도 후 실패 시(첫 기록) JPA `save()`로 INSERT, 그마저 유니크 위반이면 catch해서 재시도하는 방식으로 짰다가 동시성 테스트에서 실패(`org.hibernate.AssertionFailure: don't flush the Session after an exception occurs`) — `save()` 실패가 Hibernate 세션 자체를 손상시켜 같은 트랜잭션 내 후속 쿼리가 깨짐. 네이티브 upsert 한 문장으로 바꿔 해결 |
 | **report 생성 멱등성** | 🔶 후보 | `reports`에 session_id 유니크 없음 → 종료 재시도 시 중복 가능성 |
 
 상세 스토리는 [`problem-solving-log.md #3·#4`](./problem-solving-log.md).
@@ -163,4 +163,4 @@
 - [`../decisions/load-test-strategy.md`](../decisions/load-test-strategy.md) — 부하 테스트 전략·측정값(§7), 용량 산정(§4)
 - [`../decisions/redis-introduction.md`](../decisions/redis-introduction.md) — Redis 도입 보류 결정 (안 하기로 한 결정)
 - [`../tasks/25-portfolio-strategy.md`](../tasks/25-portfolio-strategy.md) — 진로 전략 회고, 깊이 트랙 후보
-- 코드: `backend/.../service/Exercise/PoseDataService.java`(batch insert), `SessionTimeoutScheduler.java`(낙관적 락), `FeedbackLogService.java`(멱등성), `model/exercise/Session.java:65`(@Version)
+- 코드: `backend/.../service/Exercise/PoseDataService.java`(batch insert), `SessionTimeoutScheduler.java`(낙관적 락), `FeedbackLogService.java`(멱등성), `model/exercise/Session.java:66`(@Version)

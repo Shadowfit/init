@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS users (
     password VARCHAR(255) NOT NULL,
     username VARCHAR(50) UNIQUE NOT NULL,
     sex ENUM('MALE', 'FEMALE', 'NONE') DEFAULT 'NONE',
-    role VARCHAR(20) DEFAULT 'ROLE_USER',
+    role VARCHAR(20) DEFAULT 'USER', -- UserRole enum(USER/ADMIN)의 실제 EnumType.STRING 값과 일치 (2026-07-15 정정, 기존 'ROLE_USER'는 한 번도 안 쓰이던 값)
     profile_image_url VARCHAR(500),
     height DECIMAL(5,1),
     weight DECIMAL(5,1),
@@ -24,6 +24,13 @@ CREATE TABLE IF NOT EXISTS users (
     tts_speed DECIMAL(3,1) NOT NULL DEFAULT 1.0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- DATETIME 대신 TIMESTAMP 권장 (타임존 대응)
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP -- 자동 갱신 설정
+    );
+
+-- 2-1. 리프레시 토큰 (RefreshToken.java — 기존에 ddl-auto=update로 암묵 생성되던 테이블, 2026-07-15 명시화)
+CREATE TABLE IF NOT EXISTS refresh_token (
+                                     member_id BIGINT PRIMARY KEY,
+                                     token VARCHAR(512) NOT NULL,
+                                     FOREIGN KEY (member_id) REFERENCES users(id)
     );
 
 -- 3. 운동 종목 마스터
@@ -73,7 +80,11 @@ CREATE TABLE IF NOT EXISTS exercise_sessions (
     -- 캘린더/주간활동 조회(member_id + start_time 범위)가 FK 단일 인덱스로는
     -- member_id로 찾은 뒤 range를 filesort/filter 하는 게 EXPLAIN으로 확인돼 추가
     -- (report-read-path.md §4 인덱스 갭 ④, production-signal-checklist.md §2-2 관련 조사)
-    INDEX idx_session_member_starttime (member_id, start_time)
+    INDEX idx_session_member_starttime (member_id, start_time),
+    -- 직전 동일 운동 조회(findFirstByMemberIdAndExerciseIdAndStatusOrderByStartTimeDesc, 이전 기록
+    -- 비교용)가 위 인덱스만으론 member_id로 찾은 뒤 exercise_id·status를 filter(Using where,
+    -- filtered 5.19%)하는 게 EXPLAIN으로 확인돼 추가 (2026-07-15, filtered 100%로 개선)
+    INDEX idx_session_member_exercise_status_start (member_id, exercise_id, status, start_time)
     );
 
 -- 6. 자세 데이터

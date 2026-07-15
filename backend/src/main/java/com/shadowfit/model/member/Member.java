@@ -5,6 +5,7 @@ import com.shadowfit.dto.preference.TtsPreferenceUpdateDto;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -26,8 +27,11 @@ public class Member {
     @Column(nullable = false, unique = true, length = 100)
     private String email;
 
-    @Column(nullable = false, length = 1000)
+    @Column(nullable = false, length = 255)
     private String password;
+
+    @Column(name = "profile_image_url", length = 500)
+    private String profileImageUrl;
 
     @Column(name = "preferred_url", length = 500)
     private String preferredUrl;
@@ -39,7 +43,8 @@ public class Member {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable=false)
-    private UserRole role;
+    @Builder.Default
+    private UserRole role = UserRole.USER;
 
     @Enumerated(EnumType.STRING)
     @Column(length = 10)
@@ -48,6 +53,10 @@ public class Member {
     @CreationTimestamp
     @Column(name="created_at",updatable=false, nullable = false)
     private LocalDateTime createdAt;
+
+    @UpdateTimestamp
+    @Column(name="updated_at")
+    private LocalDateTime updatedAt;
 
     // --- 온보딩 관련 데이터 추가 ---
 

@@ -48,7 +48,7 @@
 | BE-07 | 사용자 운동 패턴 분석 API — 주기성·강도 추세 | 🟢 | 데이터 축적 후 | 8h+ | | 📋 |
 | BE-08 | 개인화 루틴 추천 API — 알고리즘 설계 필요 | 🟢 | BE-07 | 10h+ | | 📋 |
 | BE-09 | 운동 세트 개념 도입 — DB 컬럼·DTO·gRPC 메시지 추가 ([`project-squat-first`](../../../C:/Users/khjae/.claude/projects/E--init/memory/project_squat_first.md) 와 협의) | ⚪ | 새 운동 추가 시점 | 5h | | 🟦 |
-| **BE-10** | AI gRPC 헬스체크 + Resilience4j Circuit Breaker (H2 채택 부속) | 🔴 | H2 확정 | 4h | | 📋 |
+| **BE-10** | AI gRPC 헬스체크 + Resilience4j Circuit Breaker (H2 채택 부속) | ✅ **완료(2026-07-11)** | H2 확정 | 4h | | ✅ |
 | **BE-11** | 콜백 PoseData 검증 게이트 (H2 채택 부속) | 🔴 | H2 확정 | 3h | | 📋 |
 | **BE-12** | 콜백 처리 Outbox 패턴 (H2 채택 부속, 운영 신뢰성) | 🟡 | BE-11 | 5h | | 📋 |
 | **BE-30** | TTS 피드백 효과 분석 (포폴 어필용, BE-07 와 묶기) | 🟢 | BE-07, 데이터 4주 축적 | 4h | | 📋 |

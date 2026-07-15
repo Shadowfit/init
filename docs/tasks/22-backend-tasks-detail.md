@@ -261,13 +261,15 @@
 
 ---
 
-## BE-10 — AI gRPC 헬스체크 + Resilience4j Circuit Breaker (H2 채택 부속)
+## BE-10 — AI gRPC 헬스체크 + Resilience4j Circuit Breaker (H2 채택 부속) — ✅ 완료(2026-07-11)
 
-**우선**: 🔴 | **추정**: 4h | **의존**: 분기 H = H2 확정
+**우선**: ~~🔴~~ | **추정**: 4h | **의존**: 분기 H = H2 확정
 
-### 현재 상태
-- ❌ AI 서버 헬스체크 없음 — Spring 이 AI 다운 여부 모름
-- ❌ Resilience4j 미도입
+**갱신(2026-07-15)**: 아래 "현재 상태"는 작성 시점(착수 전) 스냅샷 — 실제로는 2026-07-11에 Resilience4j 서킷브레이커 구현 + Docker 실측(docker stop/pause) 완료됨. 상세: [`../decisions/production-signal-checklist.md`](../decisions/production-signal-checklist.md) §2-3-3·§2-3-4, [`../decisions/grpc-integration-checklist.md`](../decisions/grpc-integration-checklist.md). 이 문서가 실제 진행상황 갱신을 못 따라간 채 방치돼 있던 것을 docs 감사 중 발견.
+
+### 현재 상태 (착수 전 스냅샷 — 아래는 옛 기록)
+- ~~❌ AI 서버 헬스체크 없음 — Spring 이 AI 다운 여부 모름~~
+- ~~❌ Resilience4j 미도입~~ → ✅ 도입 완료(`ExerciseAnalysisService`, `extractReferenceData`·`startAnalysis`·`stopAnalysis` 3개 호출 보호)
 - 📁 `service/Exercise/ExerciseAnalysisService.java` — gRPC 호출 후 실패 시 단순 throw
 
 ### 만질 파일

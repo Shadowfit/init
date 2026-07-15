@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>오프셋 vs Keyset 페이지네이션</title>
+<style>
+  .viz-root {
+    --surface-1:      #fcfcfb;
+    --page:           #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --series-offset:  #2a78d6;
+    --series-keyset:  #1baf7a;
+    --tooltip-bg:     #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    .viz-root {
+      --surface-1:      #1a1a19;
+      --page:           #0d0d0d;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --gridline:       #2c2c2a;
+      --baseline:       #383835;
+      --border:         rgba(255,255,255,0.10);
+      --series-offset:  #3987e5;
+      --series-keyset:  #199e70;
+      --tooltip-bg:     #26251f;
+    }
+  }
+  :root[data-theme="dark"] .viz-root {
+    --surface-1:      #1a1a19;
+    --page:           #0d0d0d;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --gridline:       #2c2c2a;
+    --baseline:       #383835;
+    --border:         rgba(255,255,255,0.10);
+    --series-offset:  #3987e5;
+    --series-keyset:  #199e70;
+    --tooltip-bg:     #26251f;
+  }
+  :root[data-theme="light"] .viz-root {
+    --surface-1:      #fcfcfb;
+    --page:           #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --series-offset:  #2a78d6;
+    --series-keyset:  #1baf7a;
+    --tooltip-bg:     #ffffff;
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); }
+  .viz-root {
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: var(--text-primary);
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 2rem 1.25rem 2.5rem;
+  }
+  .card {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.75rem 1.75rem 1.25rem;
+  }
+  .eyebrow {
+    font-size: .75rem; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--text-muted); font-weight: 600; margin-bottom: .4rem;
+  }
+  h1 { font-size: 1.3rem; font-weight: 700; margin: 0 0 .3rem; text-wrap: balance; }
+  .sub { color: var(--text-secondary); font-size: .88rem; margin: 0 0 1.4rem; max-width: 62ch; }
+
+  .chart-wrap { position: relative; overflow-x: auto; }
+  svg { display: block; width: 100%; height: auto; }
+
+  .gridline { stroke: var(--gridline); stroke-width: 1; }
+  .baseline { stroke: var(--baseline); stroke-width: 1; }
+  .axis-label { fill: var(--text-muted); font-size: 11px; }
+  .depth-label { fill: var(--text-secondary); font-size: 12px; font-weight: 600; }
+
+  .line-offset { fill: none; stroke: var(--series-offset); stroke-width: 2.5px; stroke-linecap: round; stroke-linejoin: round; }
+  .line-keyset { fill: none; stroke: var(--series-keyset); stroke-width: 2.5px; stroke-linecap: round; stroke-linejoin: round; }
+  .dot-offset { fill: var(--series-offset); }
+  .dot-keyset { fill: var(--series-keyset); }
+  .end-label-offset { fill: var(--text-primary); font-size: 12.5px; font-weight: 700; }
+  .end-label-keyset { fill: var(--text-primary); font-size: 12.5px; font-weight: 700; }
+  .speedup-label { fill: var(--text-secondary); font-size: 11px; font-weight: 600; }
+
+  .legend { display: flex; gap: 1.5rem; margin-top: .6rem; padding-left: 54px; }
+  .legend-item { display: flex; align-items: center; gap: .45rem; font-size: .82rem; color: var(--text-secondary); }
+  .legend-swatch { width: 14px; height: 3px; border-radius: 2px; }
+
+  .crosshair { stroke: var(--text-muted); stroke-width: 1; stroke-dasharray: 3 3; opacity: 0; pointer-events: none; }
+  .hover-target { fill: transparent; cursor: crosshair; }
+  .tooltip {
+    position: absolute; pointer-events: none; opacity: 0; transition: opacity .1s;
+    background: var(--tooltip-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: .55rem .7rem; font-size: .78rem; color: var(--text-primary);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15); white-space: nowrap; z-index: 10;
+  }
+  .tooltip .t-depth { color: var(--text-muted); font-size: .7rem; margin-bottom: .25rem; }
+  .tooltip .t-row { display: flex; justify-content: space-between; gap: 1rem; }
+  .tooltip .t-swatch { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: .35rem; }
+
+  .footnote { color: var(--text-muted); font-size: .74rem; margin-top: 1.1rem; }
+  table.data-table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: .82rem; }
+  table.data-table th, table.data-table td { text-align: right; padding: .4rem .5rem; border-bottom: 1px solid var(--gridline); font-variant-numeric: tabular-nums; }
+  table.data-table th:first-child, table.data-table td:first-child { text-align: left; }
+  table.data-table th { color: var(--text-muted); font-weight: 600; font-size: .72rem; text-transform: uppercase; letter-spacing: .03em; }
+  details summary { cursor: pointer; color: var(--text-secondary); font-size: .82rem; margin-top: .8rem; }
+</style>
+</head>
+<body>
+
+<div class="viz-root">
+  <div class="card">
+    <div class="eyebrow">Shadowfit · RealMySQL 실험 ②c</div>
+    <h1>오프셋(OFFSET) vs Keyset(Cursor) 페이지네이션 — 깊이에 따른 응답시간</h1>
+    <p class="sub">1억 행 위에서 시간순 페이지네이션 응답시간 비교(warm, EXPLAIN ANALYZE). OFFSET은 깊이에 비례해 선형(O(N))으로 느려지고, keyset은 깊이와 무관하게 평탄(O(log n))하다.</p>
+
+    <div class="chart-wrap">
+      <svg viewBox="0 0 820 400" id="chart" role="img" aria-label="오프셋과 keyset 페이지네이션의 깊이별 응답시간 비교 로그 스케일 라인 차트">
+        <!-- gridlines + y labels (log scale, 0.01ms to 100,000ms) -->
+        <g id="gridlines"></g>
+        <!-- x axis baseline -->
+        <line x1="54" y1="330" x2="800" y2="330" class="baseline" />
+        <!-- lines -->
+        <path id="path-offset" class="line-offset" />
+        <path id="path-keyset" class="line-keyset" />
+        <!-- dots -->
+        <g id="dots-offset"></g>
+        <g id="dots-keyset"></g>
+        <!-- speedup labels -->
+        <g id="speedup-labels"></g>
+        <!-- x axis labels -->
+        <g id="x-labels"></g>
+        <!-- end labels -->
+        <text id="label-offset" class="end-label-offset"></text>
+        <text id="label-keyset" class="end-label-keyset"></text>
+        <!-- crosshair -->
+        <line id="crosshair" class="crosshair" y1="20" y2="330" />
+        <!-- hover targets -->
+        <g id="hover-targets"></g>
+      </svg>
+      <div class="tooltip" id="tooltip"></div>
+    </div>
+
+    <div class="legend">
+      <div class="legend-item"><span class="legend-swatch" style="background:var(--series-offset)"></span>OFFSET</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:var(--series-keyset)"></span>Keyset (cursor)</div>
+    </div>
+
+    <details>
+      <summary>표로 보기</summary>
+      <table class="data-table">
+        <thead><tr><th>깊이</th><th>OFFSET</th><th>Keyset</th><th>배수</th></tr></thead>
+        <tbody id="table-body"></tbody>
+      </table>
+    </details>
+
+    <p class="footnote">출처: docs/FINAL-REPORT.md §5.4 · docs/portfolio/realmysql-experiments.md — pose_data_scale 1억 행 rig(더미 JSON, 행수·구조 실험)</p>
+  </div>
+</div>
+
+<script>
+const data = [
+  { depth: "1만",     depthVal: 10000,     offset: 3.04,    keyset: 0.079, speedup: "39x" },
+  { depth: "10만",    depthVal: 100000,    offset: 27.7,    keyset: 0.035, speedup: "798x" },
+  { depth: "100만",   depthVal: 1000000,   offset: 290,     keyset: 0.034, speedup: "8,504x" },
+  { depth: "1,000만",  depthVal: 10000000,  offset: 2933,    keyset: 0.046, speedup: "64,039x" },
+  { depth: "5,000만",  depthVal: 50000000,  offset: 25963,   keyset: 0.053, speedup: "489,868x" },
+];
+
+const svgNS = "http://www.w3.org/2000/svg";
+const plotLeft = 54, plotRight = 800, plotTop = 20, plotBottom = 330;
+const plotWidth = plotRight - plotLeft;
+
+// log scale: 0.01ms -> 100,000ms (7 decades)
+const logMin = Math.log10(0.01);
+const logMax = Math.log10(100000);
+function yForMs(ms) {
+  const l = Math.log10(ms);
+  const t = (l - logMin) / (logMax - logMin);
+  return plotBottom - t * (plotBottom - plotTop);
+}
+function xForIndex(i) {
+  return plotLeft + (i / (data.length - 1)) * plotWidth;
+}
+
+// gridlines at each decade
+const gridlinesG = document.getElementById("gridlines");
+const decades = [0.01, 0.1, 1, 10, 100, 1000, 10000, 100000];
+const decadeLabels = ["0.01ms","0.1ms","1ms","10ms","100ms","1,000ms","10,000ms","100,000ms"];
+decades.forEach((d, i) => {
+  const y = yForMs(d);
+  const line = document.createElementNS(svgNS, "line");
+  line.setAttribute("x1", plotLeft); line.setAttribute("x2", plotRight);
+  line.setAttribute("y1", y); line.setAttribute("y2", y);
+  line.setAttribute("class", "gridline");
+  gridlinesG.appendChild(line);
+  const label = document.createElementNS(svgNS, "text");
+  label.setAttribute("x", plotLeft - 8); label.setAttribute("y", y + 4);
+  label.setAttribute("text-anchor", "end"); label.setAttribute("class", "axis-label");
+  label.textContent = decadeLabels[i];
+  gridlinesG.appendChild(label);
+});
+
+// build paths
+const offsetPts = data.map((d, i) => [xForIndex(i), yForMs(d.offset)]);
+const keysetPts = data.map((d, i) => [xForIndex(i), yForMs(d.keyset)]);
+document.getElementById("path-offset").setAttribute("d", "M " + offsetPts.map(p => p.join(",")).join(" L "));
+document.getElementById("path-keyset").setAttribute("d", "M " + keysetPts.map(p => p.join(",")).join(" L "));
+
+// dots
+const dotsOffsetG = document.getElementById("dots-offset");
+const dotsKeysetG = document.getElementById("dots-keyset");
+offsetPts.forEach(([x,y]) => {
+  const c = document.createElementNS(svgNS, "circle");
+  c.setAttribute("cx", x); c.setAttribute("cy", y); c.setAttribute("r", 4.5);
+  c.setAttribute("class", "dot-offset");
+  dotsOffsetG.appendChild(c);
+});
+keysetPts.forEach(([x,y]) => {
+  const c = document.createElementNS(svgNS, "circle");
+  c.setAttribute("cx", x); c.setAttribute("cy", y); c.setAttribute("r", 4.5);
+  c.setAttribute("class", "dot-keyset");
+  dotsKeysetG.appendChild(c);
+});
+
+// speedup labels (above offset point)
+const speedupG = document.getElementById("speedup-labels");
+data.forEach((d, i) => {
+  const [x, y] = offsetPts[i];
+  const t = document.createElementNS(svgNS, "text");
+  t.setAttribute("x", x); t.setAttribute("y", y - 12);
+  t.setAttribute("text-anchor", "middle"); t.setAttribute("class", "speedup-label");
+  t.textContent = d.speedup;
+  speedupG.appendChild(t);
+});
+
+// x labels
+const xLabelsG = document.getElementById("x-labels");
+data.forEach((d, i) => {
+  const x = xForIndex(i);
+  const t = document.createElementNS(svgNS, "text");
+  t.setAttribute("x", x); t.setAttribute("y", plotBottom + 20);
+  t.setAttribute("text-anchor", "middle"); t.setAttribute("class", "depth-label");
+  t.textContent = d.depth;
+  xLabelsG.appendChild(t);
+});
+
+// end labels
+const lastOffset = offsetPts[offsetPts.length - 1];
+const lastKeyset = keysetPts[keysetPts.length - 1];
+const labelOffset = document.getElementById("label-offset");
+labelOffset.setAttribute("x", lastOffset[0] + 10);
+labelOffset.setAttribute("y", lastOffset[1] + 4);
+labelOffset.textContent = "OFFSET";
+const labelKeyset = document.getElementById("label-keyset");
+labelKeyset.setAttribute("x", lastKeyset[0] - 60);
+labelKeyset.setAttribute("y", lastKeyset[1] - 10);
+labelKeyset.textContent = "Keyset";
+
+// table
+const tbody = document.getElementById("table-body");
+data.forEach(d => {
+  const tr = document.createElement("tr");
+  tr.innerHTML = `<td>${d.depth}</td><td>${d.offset >= 1000 ? (d.offset/1000).toFixed(1)+'s' : d.offset+'ms'}</td><td>${d.keyset}ms</td><td>${d.speedup}</td>`;
+  tbody.appendChild(tr);
+});
+
+// hover interaction
+const chart = document.getElementById("chart");
+const tooltip = document.getElementById("tooltip");
+const crosshair = document.getElementById("crosshair");
+const hoverG = document.getElementById("hover-targets");
+const bandWidth = plotWidth / data.length;
+
+data.forEach((d, i) => {
+  const rect = document.createElementNS(svgNS, "rect");
+  rect.setAttribute("x", plotLeft + i * bandWidth);
+  rect.setAttribute("y", plotTop);
+  rect.setAttribute("width", bandWidth);
+  rect.setAttribute("height", plotBottom - plotTop);
+  rect.setAttribute("class", "hover-target");
+  rect.addEventListener("mouseenter", () => {
+    const x = xForIndex(i);
+    crosshair.setAttribute("x1", x); crosshair.setAttribute("x2", x);
+    crosshair.style.opacity = 1;
+    tooltip.style.opacity = 1;
+    tooltip.innerHTML = `
+      <div class="t-depth">깊이 ${d.depth}</div>
+      <div class="t-row"><span><span class="t-swatch" style="background:var(--series-offset)"></span>OFFSET</span><strong>${d.offset >= 1000 ? (d.offset/1000).toFixed(1)+'s' : d.offset+'ms'}</strong></div>
+      <div class="t-row"><span><span class="t-swatch" style="background:var(--series-keyset)"></span>Keyset</span><strong>${d.keyset}ms</strong></div>
+      <div class="t-row" style="margin-top:.25rem;color:var(--text-muted)"><span>배수</span><strong>${d.speedup}</strong></div>
+    `;
+    const svgRect = chart.getBoundingClientRect();
+    const scale = svgRect.width / 820;
+    tooltip.style.left = (x * scale) + 12 + "px";
+    tooltip.style.top = (yForMs(d.offset) * scale) - 10 + "px";
+  });
+  rect.addEventListener("mouseleave", () => {
+    crosshair.style.opacity = 0;
+    tooltip.style.opacity = 0;
+  });
+  hoverG.appendChild(rect);
+});
+</script>
+
+</body>
+</html>

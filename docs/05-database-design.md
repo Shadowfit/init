@@ -205,6 +205,7 @@ MediaPipe의 33개 관절 포인트에 대한 1초 평균 좌표:
 ## 데이터 저장 전략
 - **실시간 분석 데이터**: 모든 프레임이 아닌 **1초당 평균값**만 저장 (회의록 결정사항)
 - **좌표 데이터**: JSON 타입으로 유연하게 저장
+  - ⚠️ **타입 불일치(2026-07-15 발견, 미해결)**: `mysql/schema.sql`은 `joint_coordinates`를 `JSON` 타입으로 선언하지만, JPA 엔티티 `PoseData.java`는 `@Lob @Column(columnDefinition = "TEXT")`로 매핑돼 있음. 동작상 즉시 문제가 되진 않으나(Hibernate가 문자열로 다룸) 스키마와 엔티티 선언이 서로 다름 — 엔티티를 JSON 타입으로 맞출지, 스키마를 TEXT로 통일할지는 결정 필요.
 - **인덱스**: 세션별 시계열 조회를 위해 `(session_id, timestamp_sec)` 복합 인덱스 적용
 - **인코딩**: 전체 charset `utf8mb4` 강제 (한국어 피드백 메시지 깨짐 방지, 커밋 0fe056e)
 
