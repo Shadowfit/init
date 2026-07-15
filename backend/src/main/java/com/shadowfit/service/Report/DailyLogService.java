@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Optional;
 
@@ -46,6 +47,18 @@ public class DailyLogService {
                     .build());
         }
     }
+    /**
+     * 세션 종료(완료) 시 그날의 누적 운동시간·칼로리에 반영. INSERT-또는-누적 판단과 실제 누적을
+     * DB 네이티브 upsert 한 문장(ON DUPLICATE KEY UPDATE)으로 처리 — 같은 날 두 세션이 동시에
+     * 종료돼도 lost-update가 안 생김. JPA save()로 먼저 시도하고 실패하면 catch해서 재시도하는
+     * 방식은 Hibernate 세션이 flush 실패로 손상돼 같은 트랜잭션 내 후속 쿼리가 깨짐(실측으로 확인,
+     * DailyLogServiceConcurrencyTest 최초 버전 실패 사유) — 그래서 이 방식은 쓰지 않음.
+     */
+    @Transactional
+    public void accumulateStats(Long memberId, LocalDate logDate, int addTime, BigDecimal addCalories) {
+        dailyLogRepository.upsertStats(memberId, logDate, addTime, addCalories);
+    }
+
     @Transactional(readOnly = true)
     public DailyLogResponseDto getDailyLog(Long memberId, LocalDate date) {
         DailyLog log = dailyLogRepository.findByMemberIdAndLogDate(memberId, date)

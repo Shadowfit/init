@@ -41,6 +41,7 @@ public class SessionService {
     private final ExercisesRepository exercisesRepository;
     private final MemberRepository memberRepository;
     private final ObjectMapper objectMapper;
+    private final com.shadowfit.service.Report.DailyLogService dailyLogService;
 
     // 자기 주입: completeSession → applyComplete 호출이 Spring 프록시를 통과해 @Transactional이 적용되도록 함.
     @Lazy
@@ -119,6 +120,10 @@ public class SessionService {
         session.setCaloriesBurned(java.math.BigDecimal.valueOf(request.getCaloriesBurned()));
 
         sessionRepository.saveAndFlush(session);
+
+        int exerciseMinutes = (int) java.time.Duration.between(session.getStartTime(), session.getEndTime()).toMinutes();
+        dailyLogService.accumulateStats(session.getMember().getId(), session.getStartTime().toLocalDate(),
+                exerciseMinutes, java.math.BigDecimal.valueOf(request.getCaloriesBurned()));
     }
 
     /**
