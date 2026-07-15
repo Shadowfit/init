@@ -33,13 +33,10 @@ public class ReportService {
     public SessionReportResponseDto getSessionReport(Long sessionId, Long currentMemberId) {
         log.info("세션 리포트 생성 시작 - 세션 ID: {}", sessionId);
 
-        // 1. 기초 세션 정보 및 운동 조회
-        Session currentSession = sessionRepository.findSessionWithExerciseById(sessionId)
+        // 1. 기초 세션 정보 및 운동 조회 — 소유권을 WHERE절에 박아 조회 후 검증(fetch-then-check) 회피.
+        // 존재하지 않는 세션·남의 세션 둘 다 동일하게 SESSION_NOT_FOUND(존재 여부 비공개).
+        Session currentSession = sessionRepository.findSessionWithExerciseByIdAndMemberId(sessionId, currentMemberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SESSION_NOT_FOUND));
-
-        if (!currentSession.getMember().getId().equals(currentMemberId)) {
-            throw new BusinessException(ErrorCode.ACCESS_DENIED);
-        }
 
         // 2. AI 분석 리포트 엔티티 조회
         Report report = reportRepository.findBySessionId(sessionId)

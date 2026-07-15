@@ -14,8 +14,11 @@ import java.util.Optional;
 
 @Repository
 public interface SessionRepository extends JpaRepository<Session,Long> {
-    @Query("SELECT s FROM Session s JOIN FETCH s.exercise WHERE s.id = :sessionId")
-    Optional<Session> findSessionWithExerciseById(@Param("sessionId") Long sessionId);
+    // 소유권을 WHERE절에 박아 조회-후-검증(fetch-then-check) 대신 구조적으로 IDOR 차단.
+    // 본인 세션이 아니거나 존재하지 않으면 똑같이 empty — "존재하지만 남의 것"이라는 정보를 노출 안 함.
+    @Query("SELECT s FROM Session s JOIN FETCH s.exercise WHERE s.id = :sessionId AND s.member.id = :memberId")
+    Optional<Session> findSessionWithExerciseByIdAndMemberId(@Param("sessionId") Long sessionId,
+                                                              @Param("memberId") Long memberId);
 
     Optional<Session> findFirstByMemberIdAndExerciseIdAndStatusOrderByStartTimeDesc(
             Long memberId, Long exerciseId, Status status
