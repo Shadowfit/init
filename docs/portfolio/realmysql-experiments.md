@@ -68,8 +68,12 @@
 - **가설**: 모든 후속 실험의 "증거"는 추측이 아니라 PS 지표로 댄다.
 - **설계**: `events_statements_summary_by_digest`(쿼리 다이제스트), `data_locks`/`data_lock_waits`(락 대기), `table_io_waits_summary`(테이블 I-O), `file_summary`(디스크). sys: `sys.statement_analysis`, `sys.schema_index_statistics`.
 - **지표**: 느린 쿼리 digest, 락 대기 건수, 버퍼풀 hit율.
-- **결과**: ⬜
-- **면접**: "감으로 '느리다'가 아니라 PS digest로 범인 쿼리 특정."
+- **결과 ✅ (별도 카드가 아니라 전 실험에 걸쳐 실제로 사용된 백본 — 여기서 모아서 정리)**:
+  - **`data_locks`**: lost-update 실험(③b, `lock_lab`)에서 trx A `X,REC_NOT_GAP GRANTED` / trx B `WAITING` 관찰해 비관락의 직렬화를 실물 확인. MVCC 실험(④)에서 RR은 `data_locks` **0행**(락 없이 undo로 읽음) vs SERIALIZABLE은 `RECORD S GRANTED`(암묵적 잠금읽기)로 대조. 이번 세션 활성 세션 비관락(`findByIdForUpdate`)도 `REC_NOT_GAP GRANTED/WAITING`으로 갭 없는 레코드 락임을 확인.
+  - **status 카운터(`Innodb_buffer_pool_reads`/`read_requests`/`read_ahead`, `Innodb_data_read`)**: 버퍼풀 실험(④)에서 표준 hit율 공식(1−reads/read_requests)이 read-ahead 때문에 거짓 99%로 나오는 함정을 발견 — `data_read`(실제 물리 I/O 바이트)로 봐야 진짜 84%/485MB가 드러남. `FLUSH STATUS`가 InnoDB 버퍼풀 카운터를 리셋 안 한다는 것도 이 과정에서 실측으로 확인(before/after 델타 수동 계산으로 우회).
+  - **`EXPLAIN`/`ANALYZE TABLE`**: 인덱스(①), projection(②b), 파티션 pruning(②d), 옵티마이저 크로스오버(⑤) 전 실험의 1차 증거.
+  - **`SET profiling=1`/`SHOW PROFILES`**: wall-clock(SSH+docker exec 왕복 ~50ms 오버헤드)이 sub-100ms 쿼리 측정을 오염시키는 문제를 발견하고 우회한 도구 — projection 실험 첫 시도(오버헤드 때문에 2x로 나왔던 것)를 이걸로 재측정해 진짜 29~41x를 찾음.
+- **면접**: "감으로 '느리다'가 아니라 `data_locks`로 락 대기를 실물 관찰하고, `Innodb_data_read`로 진짜 물리 I/O를 확인하고, wall-clock 오염을 `SET profiling`으로 우회하는 식으로 — 이번 프로젝트의 모든 실측 결론이 PS 지표 위에 서 있다."
 
 ### ① Ch.8 + Ch.10 — 인덱스 & 실행계획 🟢
 - **개념**: 클러스터링 인덱스, covering index, 카디널리티 / `EXPLAIN` type·key·rows·Extra.
@@ -207,10 +211,26 @@
 
 ### ⑤ Ch.9 — 옵티마이저·힌트 🟢
 - **개념**: 통계정보, 비용기반 최적화, 조인 알고리즘(8.0 hash join), 힌트.
-- **이 프로젝트**: cross-session 집계(admin 통계·패턴 분석) — `reports ⋈ sessions ⋈ users`.
-- **설계**: `ANALYZE TABLE`로 통계 갱신 전후 plan 변화, 옵티마이저의 인덱스 선택/오선택, `STRAIGHT_JOIN`·index 힌트로 교정, nested loop vs hash join 관찰.
-- **결과**: ⬜
-- **면접**: "옵티마이저가 통계 부정확으로 잘못된 인덱스 선택 → ANALYZE/힌트로 교정."
+- **이 프로젝트**: `pose_data_real_scale`(AWS 1억 행 real-JSON)에서 `session_id` 선택도에 따른 인덱스 vs 풀스캔 전환 — `reports ⋈ sessions ⋈ users` 3-way 조인(hash join 관찰)은 그 테이블들이 AWS엔 비어있어 별도 시딩 필요, 이번엔 범위 밖(단일 테이블 선택도 실험으로 축소).
+- **설계**: `session_id BETWEEN 1 AND N`의 N을 좁게(세션 1개)→넓게(세션 10만+)로 늘려가며 `EXPLAIN` — `type`이 `range`(idx_session_timestamp)에서 `ALL`(풀스캔)로 바뀌는 선택도 임계값 관찰, 실제 실행시간으로 그 전환이 진짜 비용에 부합하는지 검증.
+- **결과 ✅ (2026-07-16, AWS `pose_data_real_scale` 1억 행, `idx_session_timestamp(session_id, timestamp_sec)`)**:
+
+  | session_id 범위(1~N) | 세션 수 | type | rows(추정) | filtered |
+  |---|---|---|---|---|
+  | 1 | 1 | ref | 750 | 100% |
+  | 100 | 100 | range | 157,650 | 100% |
+  | 1,000 | 1,000 | range | 1,544,918 | 100% |
+  | 10,000 | 10,000 | range | 15,502,716 | 100% |
+  | 11,000~15,000 | 11,000~15,000 | range | ~1,675만~2,492만 | 100% |
+  | **16,000** | 16,000 | **ALL** | 79,825,338 | 34.81% |
+  | 17,000 | 17,000 | range(!) | 2,608만 | 100% |
+  | 18,000+ | 18,000+ | **ALL** | 79,825,338 | ~36~50% |
+  | 20,000~133,334 | 20,000+ | ALL | 79,825,338 | 40~50% |
+
+  - **크로스오버는 15,000~18,000세션(전체 133,334세션의 11~13%) 사이** — 딱 한 지점이 아니라 16,000에서 ALL로 넘어갔다가 17,000에서 다시 range로 돌아오는 등 **좁은 구간에서 흔들림**. 두 플랜의 비용 추정치가 그 근방에서 거의 같아서, 통계(`ANALYZE TABLE` 샘플링) 오차가 선택을 좌우하는 "아슬아슬한 경계" 구간임을 그대로 보여줌 — 깔끔한 이분점이 아니라는 것 자체가 실측 포인트.
+  - **실제 실행시간으로 크로스오버 검증**: `session_id BETWEEN 1 AND 10000`(자연 선택: range, 750만 행 북마크 룩업) 실행 **919.7초**. 이미 측정된 풀스캔 비용(1억 행, 2,120.9초, §4 ②b)과 결합해 행당 비용 역산 — range(북마크 룩업) **122.6μs/행** vs 풀스캔(순차) **21.2μs/행**(range가 **5.8배** 비쌈, 랜덤 I/O 대가). 이 두 행당 비용으로 "몇 행부터 풀스캔이 더 싸지는가"를 역산하면 **약 1,730만 행(≈23,067세션)** — 실제 EXPLAIN 전환 지점(15,000~18,000세션)과 **거의 일치**. 옵티마이저의 선택이 감이 아니라 실측 가능한 비용 모델에 부합함을 확인.
+  - rig: `loadtest/measure_optimizer.sh`(재현 — 위 EXPLAIN 스윕 + 타이밍).
+- **면접**: "session_id 범위를 넓혀가며 EXPLAIN을 보면 15,000~18,000세션 근방에서 range→풀스캔으로 전환되는데, 이게 감이 아니라 실측: range는 북마크 룩업이라 행당 122.6μs, 풀스캔은 순차라 21.2μs — 5.8배 차이를 그대로 역산하면 크로스오버가 약 23,000세션으로 나오고, 이게 실제 EXPLAIN 전환 지점과 거의 일치한다. 옵티마이저가 통계 기반으로 계산한 비용이 실측 비용과 맞아떨어짐을 확인했다."
 
 ### 선택 — Ch.6 압축 🟡
 - `pose_data` JSON 시계열은 압축률 높음 → InnoDB page compression 적용 시 스토리지·I-O 트레이드오프 측정. niche, 여유 시.
