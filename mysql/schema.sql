@@ -93,8 +93,16 @@ CREATE TABLE IF NOT EXISTS exercise_sessions (
     );
 
 -- 6. 자세 데이터
+-- pose_data: 날짜 파티셔닝 적용 (TTL 만료 시 DROP PARTITION이 DELETE보다 ~625배 빠름,
+-- 실측: loadtest/measure_partition.sh, docs/portfolio/realmysql-experiments.md).
+-- MySQL/InnoDB는 FK 걸린 테이블의 파티셔닝을 지원 안 해서(ERROR 1506) 아래 두 가지를 함께 변경:
+--   1) FK(session_id → exercise_sessions, ON DELETE CASCADE) 제거
+--      → 참조무결성은 애플리케이션이 대체: INSERT 시 세션 존재 검증(PoseDataService.savePoseDataBatch),
+--        회원 탈퇴 시 이벤트 트리거 비동기 정리(MemberService.deleteAccount, PoseDataCleanupService)
+--      → docs/decisions/pose-data-partition-fk-tradeoff.md 참조
+--   2) PK를 id 단일키 → (id, created_at) 복합키로 변경 (파티션 키가 모든 유니크키에 포함돼야 하는 제약)
 CREATE TABLE IF NOT EXISTS pose_data (
-                                         id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                                         id BIGINT AUTO_INCREMENT,
                                          session_id BIGINT NOT NULL,
                                          timestamp_sec DECIMAL(10,3) NOT NULL, -- [수정] 소수점 타임스탬프 대응을 위해 DECIMAL로 변경
     joint_coordinates JSON NOT NULL,
@@ -102,8 +110,26 @@ CREATE TABLE IF NOT EXISTS pose_data (
     is_correct BOOLEAN DEFAULT TRUE,
     feedback_message VARCHAR(500),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (session_id) REFERENCES exercise_sessions(id) ON DELETE CASCADE,
+    PRIMARY KEY (id, created_at),
     INDEX idx_session_timestamp (session_id, timestamp_sec)
+    )
+    PARTITION BY RANGE (UNIX_TIMESTAMP(created_at)) (
+      PARTITION p2026_01 VALUES LESS THAN (UNIX_TIMESTAMP('2026-02-01 00:00:00')),
+      PARTITION p2026_02 VALUES LESS THAN (UNIX_TIMESTAMP('2026-03-01 00:00:00')),
+      PARTITION p2026_03 VALUES LESS THAN (UNIX_TIMESTAMP('2026-04-01 00:00:00')),
+      PARTITION p2026_04 VALUES LESS THAN (UNIX_TIMESTAMP('2026-05-01 00:00:00')),
+      PARTITION p2026_05 VALUES LESS THAN (UNIX_TIMESTAMP('2026-06-01 00:00:00')),
+      PARTITION p2026_06 VALUES LESS THAN (UNIX_TIMESTAMP('2026-07-01 00:00:00')),
+      PARTITION p2026_07 VALUES LESS THAN (UNIX_TIMESTAMP('2026-08-01 00:00:00')),
+      PARTITION p2026_08 VALUES LESS THAN (UNIX_TIMESTAMP('2026-09-01 00:00:00')),
+      PARTITION p2026_09 VALUES LESS THAN (UNIX_TIMESTAMP('2026-10-01 00:00:00')),
+      PARTITION p2026_10 VALUES LESS THAN (UNIX_TIMESTAMP('2026-11-01 00:00:00')),
+      PARTITION p2026_11 VALUES LESS THAN (UNIX_TIMESTAMP('2026-12-01 00:00:00')),
+      PARTITION p2026_12 VALUES LESS THAN (UNIX_TIMESTAMP('2027-01-01 00:00:00')),
+      PARTITION p2027_01 VALUES LESS THAN (UNIX_TIMESTAMP('2027-02-01 00:00:00')),
+      -- 위 범위를 넘는 미래 데이터는 임시로 이 파티션에 적재됨 — 운영 시 주기적으로
+      -- ALTER TABLE ... REORGANIZE PARTITION pfuture INTO (...) 로 월별 파티션을 추가해야 함
+      PARTITION pfuture VALUES LESS THAN MAXVALUE
     );
 
 -- 7. 달력 일지

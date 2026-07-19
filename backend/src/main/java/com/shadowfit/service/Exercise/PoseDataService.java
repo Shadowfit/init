@@ -47,7 +47,9 @@ public class PoseDataService {
     public void savePoseDataBatch(Long sessionId, List<com.shadowfit.grpc.PoseDataRequest> grpcList) {
         if (grpcList == null || grpcList.isEmpty()) return;
 
-        // 세션 존재 검증 (FK 보호 + 기존 SESSION_NOT_FOUND 계약 유지)
+        // 세션 존재 검증 — pose_data는 파티셔닝을 위해 FK(CASCADE)를 제거해서(2026-07-20,
+        // docs/decisions/pose-data-partition-fk-tradeoff.md), 이 체크가 DB의 백업이 아니라
+        // 참조무결성을 보장하는 유일한 장치가 됨. 기존 SESSION_NOT_FOUND 계약도 그대로 유지.
         if (!sessionRepository.existsById(sessionId)) {
             throw new BusinessException(ErrorCode.SESSION_NOT_FOUND);
         }

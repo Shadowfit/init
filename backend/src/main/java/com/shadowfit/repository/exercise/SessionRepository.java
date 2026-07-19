@@ -49,4 +49,10 @@ public interface SessionRepository extends JpaRepository<Session,Long> {
     // 회원당 활성 세션 1개 제약 — MemberRepository.findByIdForUpdate로 잠근 뒤 체크해야
     // TOCTOU 없이 안전함(단독 호출 시엔 레이스 존재).
     boolean existsByMemberIdAndStatus(Long memberId, Status status);
+
+    // 회원 탈퇴 시 pose_data 비동기 정리용 — session_id 목록만 가볍게 조회.
+    // pose_data의 FK(CASCADE)를 파티셔닝 때문에 제거해서, 탈퇴로 세션이 사라지기 전에
+    // 미리 확보해둬야 함 (docs/decisions/pose-data-partition-fk-tradeoff.md).
+    @Query("SELECT s.id FROM Session s WHERE s.member.id = :memberId")
+    List<Long> findIdsByMemberId(@Param("memberId") Long memberId);
 }
