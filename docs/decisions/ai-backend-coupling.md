@@ -129,7 +129,9 @@ DP-4 (AI 측 직접 알람) 는 정확도는 가장 높지만 [`feedback-minimiz
 | **B4. proto 별도 저장소 + 버전 태그** | 독립 repo, 양쪽이 git submodule/패키지로 의존 | 빌드 설정 | 빌드 설정 | 중 | 운영 복잡도 ↑ |
 | **B5. buf 같은 도구 도입** | `buf` lint·breaking check 추가 | CI 추가 | CI 추가 | 중 | CI 러닝 비용 |
 
-**추천**: **B3 (루트 `proto/` 단일 소스)** — 한 번만 손대면 이후 자동 동기. AI 빌드 설정은 import path만 바꾸는 정도라 "AI 동작 코드 변경"은 아니라고 본다. 하지만 buf까지는 과잉.
+**추천**: ~~**B3 (루트 `proto/` 단일 소스)**~~ → **B1 유지 + CI 드리프트 체크 채택** (2026-07-19, §11 결정 로그 참조).
+
+B3 잠정 추천이었으나, 실제로 시도해보니 `docker-compose.yml`의 빌드 컨텍스트가 서비스별로 좁게 잡혀 있어(`context: ./backend`, `context: ./ai-server`) 루트 `proto/`를 `../proto`로 참조하면 Docker 빌드 자체가 깨짐. 게다가 `split-modules.yml`이 `backend/`·`ai-server/`를 각각 독립 저장소로 쪼개는 워크플로우라 루트 파일을 추가하면 그쪽도 별도로 챙겨줘야 함 — B3의 실제 구현 비용이 문서 작성 시점 추정("빌드 설정 1줄")보다 훨씬 큼이 확인됨.
 
 **구체적인 변경 면**:
 - B3 진행 시 AI 측은 `ai-server/Dockerfile` 의 `python -m grpc_tools.protoc -I./app/proto …` 줄을 `-I../proto …` 로, `ai-server/app/proto/exercise.proto` 는 삭제(또는 symlink).
@@ -330,3 +332,4 @@ H1 잠정 추천이었으나 사용자 의도(PPT 아키텍처 = 프론트 → A
   - `c7657f1` 의 `expose` 차단은 H 미결 + AI 무인증 상태의 잠정 조치였음 — `ports` 복귀
   - 영향: BE-01 (백엔드 프록시) 폐기, BE-10·11·12 신설 (헬스체크·콜백 검증·Outbox 패턴), 새 sub-분기 I 신설
 - **2026-05-24**: 분기 I (인증 토큰 흐름) → **I1 (`INTERNAL_API_TOKEN` 정적 공유) 잠정 채택**. 운영 단계에서 I2 (세션 단위 단기 토큰) 전환 검토. 사유: 시연·베타까지 사용자 격리 필요성 낮음, 이미 c52f677 에서 양쪽 환경변수 주입됨.
+- **2026-07-19**: 분기 B (proto 중복) → **B1 유지 + CI 드리프트 체크 채택**. B3(루트 단일 소스) 시도 중 Docker 빌드 컨텍스트·`split-modules.yml` 분리 워크플로우와 충돌 확인, 실제 구현 비용이 예상보다 큼을 이유로 폐기. 대신 `.github/workflows/proto-sync-check.yml` 신설 — `backend/src/main/proto/exercise.proto`와 `ai-server/app/proto/exercise.proto`를 diff해서 다르면 PR/main push를 실패시킴. 파일 위치·Dockerfile·build.gradle·docker-compose 전부 무변경, 중복 자체는 그대로 두고 "깜빡하면 CI가 잡는" 안전망만 추가. 한계: 예방이 아닌 사후 발견, 완전 동일해야만 통과(포맷 차이도 실패), `exercise.proto`만 하드코딩, 브랜치 보호 규칙에 required check로 등록 안 하면 강제력 없음(미확인).
