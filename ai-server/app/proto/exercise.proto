@@ -147,3 +147,4 @@ message FeedbackBatchResponse {
   int64 session_id = 1;
   int32 saved_count = 2;                       // INSERT 된 row 수 (중복 흡수 제외)
 }
+// TEMP: intentional drift for CI test, will be reverted
