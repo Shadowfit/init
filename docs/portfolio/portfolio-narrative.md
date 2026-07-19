@@ -71,12 +71,13 @@
 - **활동 피드 팬아웃**: 면접 친화 서사지만 **혼자 운동 도메인엔 억지** + 미착수 → 헤드라인에서 제외(이미 푼 세션 정합성이 더 정직·강함).
 - **DAU 1,000 가정** 기준으로 설계·정당화. "작아서 드묾"으로 회피하지 않음. 단 **"N 동시부하 TPS 실측 자랑"과는 구분**(단일 클라 측정).
 - **분포 의존 실험 미수행**(값 분포 균일 한계) 정직 명시.
+- **"시계열 대용량 처리"로 오버셀 금지**: TSDB(TimescaleDB/InfluxDB)가 정당화되는 임계(수십억 행 / 디바이스 1,000개×10초=일 8,640만 행)에 비해 ~750행/세션은 한참 아래 — MySQL+JSON 진영과 별개 체급. 정직한 프레임은 **"TSDB가 자동화하는 패턴(다운샘플·retention·working-set/버퍼풀)을 임계 이하 규모에서 MySQL로 직접 구현·측정했다"**. 보너스: `daily_logs`(precompute)가 정확히 TSDB의 **continuous aggregate**에 대응 — "TimescaleDB의 continuous aggregate를 MySQL에서 손으로 한 셈."
 
 ---
 
 ## 5. 30초 엘리베이터 피치
 
-> "운동 세션이 Spring과 FastAPI 두 서비스에 걸쳐 있어서, 세션 종료 시 **타임아웃 스케줄러와 AI 비동기 콜백이 같은 레코드를 두고 경쟁**합니다. 이걸 `@Version` 낙관락 + 멱등 수신(first-write-wins) + afterCommit 외부 호출로 정합성 있게 풀었고, lost-update·MVCC를 직접 재현·관찰해 근거를 만들었습니다. 그 아래 데이터 계층은 1억 행 시계열에서 배치 적재·파티션 TTL·keyset 페이지네이션을 실측으로 엔지니어링했고, read-ahead가 hit율 공식을 속이는 함정까지 잡았습니다."
+> "운동 세션이 Spring과 FastAPI 두 서비스에 걸쳐 있어서, 세션 종료 시 **타임아웃 스케줄러와 AI 비동기 콜백이 같은 레코드를 두고 경쟁**합니다. 이걸 `@Version` 낙관락 + 멱등 수신(first-write-wins) + afterCommit 외부 호출로 정합성 있게 풀었고, lost-update·MVCC를 직접 재현·관찰해 근거를 만들었습니다. 그 아래 데이터 계층은 1억 행 시계열 substrate에서 **TSDB가 자동화하는 패턴(다운샘플·retention·working-set)을 MySQL로 직접 구현·측정**했습니다 — 배치 적재·파티션 TTL·keyset 페이지네이션을 실측으로 엔지니어링했고, read-ahead가 hit율 공식을 속이는 함정까지 잡았습니다."
 
 ---
 

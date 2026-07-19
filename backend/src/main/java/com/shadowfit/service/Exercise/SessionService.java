@@ -62,11 +62,13 @@ public class SessionService {
      */
     @Transactional
     public Session createSession(VideoRequestDto appDto, Long currentMemberId, String finalUrl) {
-        Member member = memberRepository.findById(currentMemberId)
+        // 회원 row를 잠그고 그 안에서 활성 세션 체크 → 다른 트랜잭션이 같은 회원에 대해 끼어들 수
+        // 없어 존재하지 않는지 확인하고 나서 즉시 액세스 삽입 사이의 레이스(TOCTOU)가 안 생김. 유니크
+        // 제약(generated column) 시도는 member_id의 FK가 ON DELETE CASCADE라 MySQL이 막아서 폐기
+        // (2026-07-16, "Cannot add foreign key constraint").
+        Member member = memberRepository.findByIdForUpdate(currentMemberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
-        // 한 사람이 동시에 두 운동을 할 수는 없다 — 진행 중인 세션이 있으면 새 세션 생성 자체를 막아
-        // daily_logs 등 하위 경합을 애초에 발생 불가능하게 만듦(방어적 upsert는 그 다음 depth).
         if (sessionRepository.existsByMemberIdAndStatus(currentMemberId, Status.IN_PROGRESS)) {
             throw new BusinessException(ErrorCode.SESSION_ALREADY_IN_PROGRESS);
         }

@@ -68,8 +68,12 @@
 - **가설**: 모든 후속 실험의 "증거"는 추측이 아니라 PS 지표로 댄다.
 - **설계**: `events_statements_summary_by_digest`(쿼리 다이제스트), `data_locks`/`data_lock_waits`(락 대기), `table_io_waits_summary`(테이블 I-O), `file_summary`(디스크). sys: `sys.statement_analysis`, `sys.schema_index_statistics`.
 - **지표**: 느린 쿼리 digest, 락 대기 건수, 버퍼풀 hit율.
-- **결과**: ⬜
-- **면접**: "감으로 '느리다'가 아니라 PS digest로 범인 쿼리 특정."
+- **결과 ✅ (별도 카드가 아니라 전 실험에 걸쳐 실제로 사용된 백본 — 여기서 모아서 정리)**:
+  - **`data_locks`**: lost-update 실험(③b, `lock_lab`)에서 trx A `X,REC_NOT_GAP GRANTED` / trx B `WAITING` 관찰해 비관락의 직렬화를 실물 확인. MVCC 실험(④)에서 RR은 `data_locks` **0행**(락 없이 undo로 읽음) vs SERIALIZABLE은 `RECORD S GRANTED`(암묵적 잠금읽기)로 대조. 이번 세션 활성 세션 비관락(`findByIdForUpdate`)도 `REC_NOT_GAP GRANTED/WAITING`으로 갭 없는 레코드 락임을 확인.
+  - **status 카운터(`Innodb_buffer_pool_reads`/`read_requests`/`read_ahead`, `Innodb_data_read`)**: 버퍼풀 실험(④)에서 표준 hit율 공식(1−reads/read_requests)이 read-ahead 때문에 거짓 99%로 나오는 함정을 발견 — `data_read`(실제 물리 I/O 바이트)로 봐야 진짜 84%/485MB가 드러남. `FLUSH STATUS`가 InnoDB 버퍼풀 카운터를 리셋 안 한다는 것도 이 과정에서 실측으로 확인(before/after 델타 수동 계산으로 우회).
+  - **`EXPLAIN`/`ANALYZE TABLE`**: 인덱스(①), projection(②b), 파티션 pruning(②d), 옵티마이저 크로스오버(⑤) 전 실험의 1차 증거.
+  - **`SET profiling=1`/`SHOW PROFILES`**: wall-clock(SSH+docker exec 왕복 ~50ms 오버헤드)이 sub-100ms 쿼리 측정을 오염시키는 문제를 발견하고 우회한 도구 — projection 실험 첫 시도(오버헤드 때문에 2x로 나왔던 것)를 이걸로 재측정해 진짜 29~41x를 찾음.
+- **면접**: "감으로 '느리다'가 아니라 `data_locks`로 락 대기를 실물 관찰하고, `Innodb_data_read`로 진짜 물리 I/O를 확인하고, wall-clock 오염을 `SET profiling`으로 우회하는 식으로 — 이번 프로젝트의 모든 실측 결론이 PS 지표 위에 서 있다."
 
 ### ① Ch.8 + Ch.10 — 인덱스 & 실행계획 🟢
 - **개념**: 클러스터링 인덱스, covering index, 카디널리티 / `EXPLAIN` type·key·rows·Extra.
@@ -146,7 +150,13 @@
 - **이 프로젝트 (a) 낙관락**: ✅ 구현 — 타임아웃 스케줄러 vs FastAPI 콜백(`Session.java:66 @Version`, `SessionTimeoutScheduler.java:84` 양보).
 - **이 프로젝트 (b) lost-update**: `DailyLog.updateStats()` 배선 완료(2026-07-15) — 네이티브 upsert(`upsertStats`, `INSERT ... ON DUPLICATE KEY UPDATE`) 한 문장으로 구현, 동시 종료 경합 방지 ✅. 첫 시도(원자 UPDATE→실패 시 `save()`→실패 시 catch 재시도)는 동시성 테스트에서 Hibernate 세션 손상으로 실패해 폐기 — 실측으로 잡은 함정.
 - **이 프로젝트 (c) 멱등성**: ✅ INSERT IGNORE (`FeedbackLogService.java:33`).
-- **이 프로젝트 (d) 회원당 활성 세션 제약**: ✅ 추가(2026-07-16) — `createSession()`(`SessionService.java`)에 `existsByMemberIdAndStatus(memberId, IN_PROGRESS)` 가드 추가, 이미 진행 중인 세션이 있으면 409(`SESSION_ALREADY_IN_PROGRESS`)로 생성 자체를 거부. 원래는 이 체크가 없어 멀티 디바이스·네트워크 재시도로 한 회원이 세션 두 개를 동시에 `IN_PROGRESS`로 가질 수 있었음(한 사람이 물리적으로 두 운동을 동시에 할 수 없으니 원래 불가능해야 하는 상태) — (b) daily_logs 경합이 발생할 수 있는 사실상 유일한 경로였는데, 이 가드로 그 경합 자체가 구조적으로 불가능해짐. **동시성 방어의 우선순위: ① 경합이 아예 생길 수 없게 정책으로 막기(이번 가드) → ② 그래도 못 막는 경로(레거시 데이터·배치 등)에 대한 방어적 원자 연산((b)의 native upsert)**. ①을 추가했다고 ②가 무의미해지는 게 아니라 depth-in-defense로 함께 유지.
+- **이 프로젝트 (d) 회원당 활성 세션 제약**: ✅ 추가(2026-07-16) — `createSession()`에 이미 진행 중인 세션이 있으면 409(`SESSION_ALREADY_IN_PROGRESS`)로 생성 자체를 거부. 원래는 이 체크가 없어 멀티 디바이스·네트워크 재시도로 한 회원이 세션 두 개를 동시에 `IN_PROGRESS`로 가질 수 있었음(한 사람이 물리적으로 두 운동을 동시에 할 수 없으니 원래 불가능해야 하는 상태) — (b) daily_logs 경합이 발생할 수 있는 사실상 유일한 경로였는데, 이 가드로 그 경합 자체가 구조적으로 불가능해짐. **동시성 방어의 우선순위: ① 경합이 아예 생길 수 없게 정책으로 막기(이번 가드) → ② 그래도 못 막는 경로(레거시 데이터·배치 등)에 대한 방어적 원자 연산((b)의 native upsert)**. ①을 추가했다고 ②가 무의미해지는 게 아니라 depth-in-defense로 함께 유지.
+  - **구현 과정에서 TOCTOU 레이스 발견 → 제약 시도 → MySQL 제약으로 막힘 → 비관락으로 최종 해결**(3단계 실측):
+    1. 첫 시도(`existsByMemberIdAndStatus` 체크 → `save()`)는 **check-then-act TOCTOU**: 두 요청이 거의 동시에 오면 둘 다 "커밋 전이라 상대가 안 보여" 체크를 통과해버림 — 격리수준과 무관(RC든 RR이든 커밋 안 된 데이터는 어차피 안 보임).
+    2. DB 유니크 제약으로 원천 차단 시도(`active_session_marker` generated column, `status=IN_PROGRESS`일 때만 `member_id` 값·나머지 NULL, 유니크 인덱스는 NULL끼리 안 부딪힘) — 로컬 MySQL에 실제로 적용하다 **`ERROR 1215 Cannot add foreign key constraint`**로 막힘. 원인: `member_id`가 `ON DELETE CASCADE` FK 컬럼인데, MySQL은 CASCADE FK 컬럼을 generated column의 재료로 못 쓰게 막음(캐스케이드 발생 시 생성값을 재계산할 방법이 없어서). 설계 단계에선 안 보였고 실제로 적용해봐야 나온 제약 — 실측 없이 설계만 했으면 그대로 배포됐을 접근.
+    3. 최종: `MemberRepository.findByIdForUpdate`(`@Lock(PESSIMISTIC_WRITE)`)로 회원 row를 잠그고, 그 잠금 안에서 `existsByMemberIdAndStatus` 체크 → 생성. 스키마 변경 없이 TOCTOU를 닫음 — 세션 생성이 유저가 연타하는 핫패스가 아니라 락 보유 비용도 무시할 만함. **이 프로젝트의 첫 실제 비관락 사용처**(그 전까진 `FOR UPDATE` 0건).
+  - **검증**: `SessionCreateConcurrencyTest` — 같은 회원이 세션 두 개를 정확히 동시에 생성 시도 → 정확히 1개만 성공, 나머지는 `SESSION_ALREADY_IN_PROGRESS`(409)로 거절, 실제 생성된 세션도 1개 확인.
+  - **제약 vs 락 선택 기준**(일반화): ① 위반 시 그냥 거절이면 충분한가(제약), 대기 후 통과시켜야 하는가(락) ② 단순 무결성 규칙 하나인가(제약), 여러 단계 절차 직렬화가 필요한가(락) ③ 호출 빈도·락 보유 시간이 큰가(제약 선호) ④ 제약으로 표현 가능한 걸 우선(모든 경로에서 보장되므로) — 단, 이번처럼 **스키마 제약이 기술적으로 막히면 락이 유일한 대안**이 됨.
 - **설계**: (b) 두 트랜잭션으로 lost-update **재현**(RC) → 원자 UPDATE / `SELECT FOR UPDATE` / `@Version` 비교, `performance_schema.data_locks`로 락 관찰, `SHOW ENGINE INNODB STATUS` → (a) 낙관락 충돌 시 양보 정책 근거.
 - **지표**: 손실 갱신 발생/방지, 락 종류·대기.
 - **결과 (b) lost-update 재현·방지 ✅ (2026-06-05, scratch `lock_lab`, daily_logs.updateStats 동형, 매 run 초기화)**:
@@ -164,7 +174,10 @@
   - **해석**: RC 격리만으론 read-modify-write 의 lost-update 를 **못 막는다**(MVCC 스냅샷 읽기라 둘 다 옛값). 막으려면 ① 읽기 자체를 없애거나(원자 UPDATE) ② 읽기에 락을 걸거나(FOR UPDATE) ③ 쓰기에 버전 가드(CAS). **단일 카운터 누적이면 원자 UPDATE 가 최적**(왕복·블로킹 0). `@Version` 은 충돌이 드물고 블로킹을 피하고 싶을 때(이 프로젝트의 타임아웃 vs 콜백 경합).
   - rig: `loadtest/measure_lock.sh`(재현, 4단계 + 락 스냅샷). 🟡 갭/넥스트키 락은 단일 PK 핫로우라 미관찰 — append-only 저경합 substrate 한계, 명시.
 - **(a) 낙관락 양보(실코드) 근거**: 타임아웃 스케줄러 vs FastAPI 콜백은 **저경합·서로 다른 세션 위주**라 비관락의 상시 블로킹 비용이 아깝다 → `@Version` 으로 충돌만 감지, 충돌 시 콜백이 재시도(`SessionService.completeSession` 최대 3회, FastAPI 결과 우선). 위 (b) 의 CAS 가 바로 이 정책의 축소 재현.
-- **면접**: "RC로는 lost-update 못 막음(MVCC 스냅샷이라 둘 다 옛값 읽음) → 단일 카운터 누적은 **원자 UPDATE**가 최적(왕복·블로킹 0). `data_locks`로 FOR UPDATE의 X,REC_NOT_GAP WAITING을 직접 관찰해 비관락이 핫로우를 직렬화함을 확인. 타임아웃 vs 콜백은 저경합·세션 분리라 낙관락(@Version)으로 블로킹 비용 회피, 충돌 시 3회 재시도." 🟡 갭/넥스트키 락은 단일 PK 핫로우라 미관찰 — 명시.
+  - **✅ 반사실 실측(2026-07-16, 로컬 도커 MySQL, `users` PK 행 대상)**: "만약 세션 완료에도 비관락(`FOR UPDATE`)을 썼다면"을 직접 재현 — 트랜잭션 A가 5초간 행을 잠그고, 그 사이 트랜잭션 B가 `innodb_lock_wait_timeout=2`로 같은 행을 잠그려 시도 → **2.831초 만에 `ERROR 1205 Lock wait timeout exceeded`**로 실패(2초 타임아웃+클라이언트 왕복 오버헤드). 대조: 실제로 쓰는 낙관락(CAS)은 위 (b) 표에서 이미 확인했듯 **블로킹 0, 충돌 시 즉시 재시도** — "비관락은 최악의 경우 초 단위로 대기하다 에러까지 날 수 있는데, 낙관락은 그 자리에서 바로 재시도할 수 있다"는 게 추론이 아니라 실측 대조로 확인됨.
+  - **✅ `data_locks`로 레코드 락(갭 없음) 실물 확인(2026-07-16)**: `findByIdForUpdate`가 쓰는 PK 등치 조건(`WHERE id=?`)의 락 범위를 직접 관찰 — 두 트랜잭션이 같은 회원 행을 동시에 `FOR UPDATE`로 잠그려 하면 `performance_schema.data_locks`에 `RECORD X,REC_NOT_GAP GRANTED`(LOCK_DATA=해당 PK) / `RECORD X,REC_NOT_GAP WAITING`(같은 LOCK_DATA)만 찍힘 — **갭 락 없이 그 행 하나만** 잠그는 것을 실물로 확인(PK 등치 조회는 레인지가 아니라서 예상대로).
+  - rig: `loadtest/measure_lock_timeout.sh`(재현, 로컬 도커 MySQL — 동시성 메커니즘 실험이라 AWS 불필요, ①②를 하나의 스크립트로 재현).
+- **면접**: "RC로는 lost-update 못 막음(MVCC 스냅샷이라 둘 다 옛값 읽음) → 단일 카운터 누적은 **원자 UPDATE**가 최적(왕복·블로킹 0). `data_locks`로 FOR UPDATE의 X,REC_NOT_GAP WAITING을 직접 관찰해 비관락이 핫로우를 직렬화함을 확인. 타임아웃 vs 콜백은 저경합·세션 분리라 낙관락(@Version)으로 블로킹 비용 회피, 충돌 시 3회 재시도. 회원당 활성 세션 제약은 처음엔 유니크 제약(DB가 모든 경로에서 보장)으로 막으려 했는데, `member_id`가 CASCADE FK라 MySQL이 generated column을 못 쓰게 막아서 — 세션 생성이 핫패스가 아니라는 점 근거로 `SELECT FOR UPDATE`(이 프로젝트 첫 비관락)로 대체, 콘커런시 테스트로 정확히 1개만 성공함을 검증. 이 비관락(PK 등치 조건)이 실제로 레코드 락만 걸고 갭은 안 거는지, 그리고 '만약 세션 완료도 비관락이었다면' 최악의 경우 lock wait timeout으로 몇 초 만에 에러가 나는지(2.831초)까지 `data_locks`·반사실 재현으로 실측 확인." 🟡 갭/넥스트키 락은 단일 PK 핫로우라 미관찰 — 명시.
 
 ### ④ Ch.4 + Ch.15 — 아키텍처(MVCC·버퍼풀) & JSON 🟢🟡
 - **개념**: InnoDB 버퍼풀, undo, MVCC 스냅샷 / JSON 저장·함수·generated column 인덱스.
@@ -198,10 +211,26 @@
 
 ### ⑤ Ch.9 — 옵티마이저·힌트 🟢
 - **개념**: 통계정보, 비용기반 최적화, 조인 알고리즘(8.0 hash join), 힌트.
-- **이 프로젝트**: cross-session 집계(admin 통계·패턴 분석) — `reports ⋈ sessions ⋈ users`.
-- **설계**: `ANALYZE TABLE`로 통계 갱신 전후 plan 변화, 옵티마이저의 인덱스 선택/오선택, `STRAIGHT_JOIN`·index 힌트로 교정, nested loop vs hash join 관찰.
-- **결과**: ⬜
-- **면접**: "옵티마이저가 통계 부정확으로 잘못된 인덱스 선택 → ANALYZE/힌트로 교정."
+- **이 프로젝트**: `pose_data_real_scale`(AWS 1억 행 real-JSON)에서 `session_id` 선택도에 따른 인덱스 vs 풀스캔 전환 — `reports ⋈ sessions ⋈ users` 3-way 조인(hash join 관찰)은 그 테이블들이 AWS엔 비어있어 별도 시딩 필요, 이번엔 범위 밖(단일 테이블 선택도 실험으로 축소).
+- **설계**: `session_id BETWEEN 1 AND N`의 N을 좁게(세션 1개)→넓게(세션 10만+)로 늘려가며 `EXPLAIN` — `type`이 `range`(idx_session_timestamp)에서 `ALL`(풀스캔)로 바뀌는 선택도 임계값 관찰, 실제 실행시간으로 그 전환이 진짜 비용에 부합하는지 검증.
+- **결과 ✅ (2026-07-16, AWS `pose_data_real_scale` 1억 행, `idx_session_timestamp(session_id, timestamp_sec)`)**:
+
+  | session_id 범위(1~N) | 세션 수 | type | rows(추정) | filtered |
+  |---|---|---|---|---|
+  | 1 | 1 | ref | 750 | 100% |
+  | 100 | 100 | range | 157,650 | 100% |
+  | 1,000 | 1,000 | range | 1,544,918 | 100% |
+  | 10,000 | 10,000 | range | 15,502,716 | 100% |
+  | 11,000~15,000 | 11,000~15,000 | range | ~1,675만~2,492만 | 100% |
+  | **16,000** | 16,000 | **ALL** | 79,825,338 | 34.81% |
+  | 17,000 | 17,000 | range(!) | 2,608만 | 100% |
+  | 18,000+ | 18,000+ | **ALL** | 79,825,338 | ~36~50% |
+  | 20,000~133,334 | 20,000+ | ALL | 79,825,338 | 40~50% |
+
+  - **크로스오버는 15,000~18,000세션(전체 133,334세션의 11~13%) 사이** — 딱 한 지점이 아니라 16,000에서 ALL로 넘어갔다가 17,000에서 다시 range로 돌아오는 등 **좁은 구간에서 흔들림**. 두 플랜의 비용 추정치가 그 근방에서 거의 같아서, 통계(`ANALYZE TABLE` 샘플링) 오차가 선택을 좌우하는 "아슬아슬한 경계" 구간임을 그대로 보여줌 — 깔끔한 이분점이 아니라는 것 자체가 실측 포인트.
+  - **실제 실행시간으로 크로스오버 검증**: `session_id BETWEEN 1 AND 10000`(자연 선택: range, 750만 행 북마크 룩업) 실행 **919.7초**. 이미 측정된 풀스캔 비용(1억 행, 2,120.9초, §4 ②b)과 결합해 행당 비용 역산 — range(북마크 룩업) **122.6μs/행** vs 풀스캔(순차) **21.2μs/행**(range가 **5.8배** 비쌈, 랜덤 I/O 대가). 이 두 행당 비용으로 "몇 행부터 풀스캔이 더 싸지는가"를 역산하면 **약 1,730만 행(≈23,067세션)** — 실제 EXPLAIN 전환 지점(15,000~18,000세션)과 **거의 일치**. 옵티마이저의 선택이 감이 아니라 실측 가능한 비용 모델에 부합함을 확인.
+  - rig: `loadtest/measure_optimizer.sh`(재현 — 위 EXPLAIN 스윕 + 타이밍).
+- **면접**: "session_id 범위를 넓혀가며 EXPLAIN을 보면 15,000~18,000세션 근방에서 range→풀스캔으로 전환되는데, 이게 감이 아니라 실측: range는 북마크 룩업이라 행당 122.6μs, 풀스캔은 순차라 21.2μs — 5.8배 차이를 그대로 역산하면 크로스오버가 약 23,000세션으로 나오고, 이게 실제 EXPLAIN 전환 지점과 거의 일치한다. 옵티마이저가 통계 기반으로 계산한 비용이 실측 비용과 맞아떨어짐을 확인했다."
 
 ### 선택 — Ch.6 압축 🟡
 - `pose_data` JSON 시계열은 압축률 높음 → InnoDB page compression 적용 시 스토리지·I-O 트레이드오프 측정. niche, 여유 시.
