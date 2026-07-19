@@ -3,6 +3,7 @@ package com.shadowfit.repository.exercise;
 import com.shadowfit.dto.report.PoseFrameProjection;
 import com.shadowfit.model.exercise.PoseData;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -16,4 +17,11 @@ public interface PoseDataRepository extends JpaRepository<PoseData, Long> {
            "p.timestampSec, p.syncRate, p.feedbackMessage) " +
            "FROM PoseData p WHERE p.session.id = :sessionId ORDER BY p.timestampSec ASC")
     List<PoseFrameProjection> findFramesBySessionId(@Param("sessionId") Long sessionId);
+
+    // 회원 탈퇴 시 pose_data 참조무결성 대체(FK CASCADE 제거로 인한 애플리케이션 정리).
+    // PoseDataCleanupService에서 afterCommit 이후 비동기로 호출됨.
+    // docs/decisions/pose-data-partition-fk-tradeoff.md 분기 B(B5) 참조.
+    @Modifying
+    @Query("DELETE FROM PoseData p WHERE p.session.id IN :sessionIds")
+    void deleteBySessionIdIn(@Param("sessionIds") List<Long> sessionIds);
 }
