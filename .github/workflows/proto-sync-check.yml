@@ -1,0 +1,26 @@
+name: Check proto files are in sync
+
+on:
+  pull_request:
+    paths:
+      - 'backend/src/main/proto/exercise.proto'
+      - 'ai-server/app/proto/exercise.proto'
+  push:
+    branches: [main]
+    paths:
+      - 'backend/src/main/proto/exercise.proto'
+      - 'ai-server/app/proto/exercise.proto'
+
+jobs:
+  check-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Diff backend/ai-server exercise.proto
+        run: |
+          if ! diff -u backend/src/main/proto/exercise.proto ai-server/app/proto/exercise.proto; then
+            echo "::error::backend와 ai-server의 exercise.proto가 서로 다릅니다. 한쪽만 고치면 런타임 직렬화 오류가 납니다 — 양쪽을 동일하게 맞춰주세요."
+            exit 1
+          fi
+          echo "proto 파일 동기화 확인됨."
