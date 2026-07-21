@@ -23,6 +23,8 @@ public class AdminExerciseService {
     @Transactional
     @CacheEvict(cacheNames = "exercises", key = "#exerciseId")
     public ExerciseThresholdResponseDto updateThresholds(Long exerciseId, ThresholdUpdateDto dto) {
+        // beginner < advanced만 검증. diet/rehab은 숙련도 축이 아니라 목적(체중감량/안전)이 달라
+        // beginner·advanced와 순서 관계를 강제할 이유가 없음 — 개별 범위(0~100)만 DTO에서 검증.
         if (dto.beginner().compareTo(dto.advanced()) >= 0) {
             throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
         }
@@ -30,13 +32,17 @@ public class AdminExerciseService {
         Exercise exercise = exercisesRepository.findById(exerciseId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.EXERCISE_NOT_FOUND));
 
-        log.info("운동 {} 임계값 변경: beginner {} -> {}, advanced {} -> {}",
+        log.info("운동 {} 임계값 변경: beginner {} -> {}, advanced {} -> {}, diet {} -> {}, rehab {} -> {}",
                 exerciseId,
                 exercise.getSyncThresholdBeginner(), dto.beginner(),
-                exercise.getSyncThresholdAdvanced(), dto.advanced());
+                exercise.getSyncThresholdAdvanced(), dto.advanced(),
+                exercise.getSyncThresholdDiet(), dto.diet(),
+                exercise.getSyncThresholdRehab(), dto.rehab());
 
         exercise.setSyncThresholdBeginner(dto.beginner());
         exercise.setSyncThresholdAdvanced(dto.advanced());
+        exercise.setSyncThresholdDiet(dto.diet());
+        exercise.setSyncThresholdRehab(dto.rehab());
 
         return ExerciseThresholdResponseDto.fromEntity(exercise);
     }

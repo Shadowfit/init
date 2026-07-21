@@ -43,6 +43,8 @@ CREATE TABLE IF NOT EXISTS exercises (
     target_joints JSON,
     sync_threshold_beginner DECIMAL(5,2) DEFAULT 60.00,
     sync_threshold_advanced DECIMAL(5,2) DEFAULT 85.00,
+    sync_threshold_diet DECIMAL(5,2) DEFAULT 70.00,
+    sync_threshold_rehab DECIMAL(5,2) DEFAULT 50.00,
     expected_duration_minutes INT DEFAULT 15,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP -- DEFAULT 추가
     );
