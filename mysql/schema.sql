@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS refresh_token (
                                      member_id BIGINT PRIMARY KEY,
                                      token VARCHAR(512) NOT NULL,
-                                     FOREIGN KEY (member_id) REFERENCES users(id)
+                                     FOREIGN KEY (member_id) REFERENCES users(id) ON DELETE CASCADE
     );
 
 -- 3. 운동 종목 마스터
