@@ -47,6 +47,10 @@ dependencies {
 	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.13.0'
 	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.13.0'
 
+	// Boot 3.5.16이 관리하는 jackson-databind(2.21.4)가 GHSA-5jmj-h7xm-6q6v(2.19.0~2.21.4
+	// 취약)에 걸려 있어 이 모듈만 명시적으로 상향(jackson-bom의 나머지 모듈은 그대로 둠).
+	implementation 'com.fasterxml.jackson.core:jackson-databind:2.21.5'
+
 	// --- Lombok & Dev ---
 	compileOnly 'org.projectlombok:lombok'
 	annotationProcessor 'org.projectlombok:lombok'
