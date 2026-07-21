@@ -1,0 +1,39 @@
+language: "ko-KR"
+
+reviews:
+  profile: "chill"
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  collapse_walkthrough: false
+  auto_review:
+    enabled: true
+    drafts: false
+  path_filters:
+    - "!**/build/**"
+    - "!**/.venv/**"
+    - "!**/node_modules/**"
+    - "!ai-server/exercise_pb2.py"
+    - "!ai-server/exercise_pb2_grpc.py"
+    - "!ai-server/app/proto/exercise_pb2.py"
+    - "!ai-server/app/proto/exercise_pb2_grpc.py"
+    - "!mysql/**"
+  path_instructions:
+    - path: "backend/**/*.java"
+      instructions: >
+        Spring Boot 백엔드. 프로덕션 수준으로 리뷰: 트랜잭션 경계, N+1, 인덱스 활용,
+        동시성(낙관적 락 등), 예외 처리 일관성, 입력 검증을 중점적으로 본다.
+    - path: "ai-server/**/*.py"
+      instructions: >
+        FastAPI/AI 서버. 이 프로젝트에서는 변경 면적을 최소화하는 방침이라, 리팩터링이나
+        스타일 변경보다 실제 동작 변경 여부와 부작용(특히 세션 상태·gRPC 계약)에 집중해서 본다.
+    - path: "frontend/**/*.{ts,tsx}"
+      instructions: >
+        React Native 프론트엔드. API 계약 일치 여부, 에러 처리, 불필요한 리렌더링을 본다.
+    - path: "mysql/*.sql"
+      instructions: >
+        스키마/시드 데이터. schema.sql과 data.sql의 컬럼 정의가 어긋나지 않는지,
+        FK의 ON DELETE 정책이 실제 삭제 흐름과 맞는지 확인한다.
+
+chat:
+  auto_reply: true
