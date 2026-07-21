@@ -34,8 +34,9 @@ services:
       - "${MYSQL_PORT:-3306}:3306"
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./mysql/schema.sql:/docker-entrypoint-initdb.d/schema.sql
-      - ./mysql/data.sql:/docker-entrypoint-initdb.d/data.sql
+      # 01-/02- 접두어로 실행 순서 강제 (data.sql은 순수 시드, schema.sql이 먼저 돌아야 함. 2026-07-22)
+      - ./mysql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+      - ./mysql/data.sql:/docker-entrypoint-initdb.d/02-data.sql
       - ./mysql/my.cnf:/etc/mysql/conf.d/charset.cnf:ro   # 한글 charset 강제 (커밋 0fe056e)
     command: >
       --character-set-server=utf8mb4

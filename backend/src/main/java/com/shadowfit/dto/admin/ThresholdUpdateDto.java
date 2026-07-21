@@ -15,6 +15,16 @@ public record ThresholdUpdateDto(
         @NotNull
         @DecimalMin(value = "0.0", message = "고급자 임계값은 0 이상이어야 합니다")
         @DecimalMax(value = "100.0", message = "고급자 임계값은 100 이하여야 합니다")
-        BigDecimal advanced
+        BigDecimal advanced,
+
+        @NotNull
+        @DecimalMin(value = "0.0", message = "다이어트 임계값은 0 이상이어야 합니다")
+        @DecimalMax(value = "100.0", message = "다이어트 임계값은 100 이하여야 합니다")
+        BigDecimal diet,
+
+        @NotNull
+        @DecimalMin(value = "0.0", message = "재활 임계값은 0 이상이어야 합니다")
+        @DecimalMax(value = "100.0", message = "재활 임계값은 100 이하여야 합니다")
+        BigDecimal rehab
 ) {
 }

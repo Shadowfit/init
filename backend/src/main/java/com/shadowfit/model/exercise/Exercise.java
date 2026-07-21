@@ -49,6 +49,14 @@ public class Exercise {
     private BigDecimal syncThresholdAdvanced = new BigDecimal("85.00");
 
     @Builder.Default
+    @Column(precision = 5, scale = 2)
+    private BigDecimal syncThresholdDiet = new BigDecimal("70.00");
+
+    @Builder.Default
+    @Column(precision = 5, scale = 2)
+    private BigDecimal syncThresholdRehab = new BigDecimal("50.00");
+
+    @Builder.Default
     @Column(nullable = false)
     private Integer expectedDurationMinutes = 15; // 예상 운동시간 (기본값: 15분)
 
