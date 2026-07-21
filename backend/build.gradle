@@ -24,14 +24,6 @@ repositories {
 	mavenCentral()
 }
 
-configurations.all {
-	resolutionStrategy.eachDependency { DependencyResolveDetails details ->
-		if (details.requested.group == 'io.grpc') {
-			details.useVersion '1.62.2'
-		}
-	}
-}
-
 dependencies {
 	// --- Spring Boot 핵심 ---
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
@@ -50,8 +42,7 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
 	implementation 'io.github.resilience4j:resilience4j-spring-boot3:2.4.0'
 
-	// --- AWS & Security ---
-	implementation 'org.springframework.cloud:spring-cloud-starter-aws:2.2.6.RELEASE'
+	// --- Security ---
 	implementation 'io.jsonwebtoken:jjwt-api:0.13.0'
 	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.13.0'
 	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.13.0'
@@ -63,7 +54,7 @@ dependencies {
 
 	// --- gRPC & Protobuf (버전 정합성 해결) ---
 	def grpcVersion = '1.82.2'
-	def protobufVersion = '3.25.1'
+	def protobufVersion = '3.25.5'
 
 	// Starter는 API만 제공하고 실제 구현체는 아래에서 버전 고정
 	implementation 'net.devh:grpc-client-spring-boot-starter:3.1.0.RELEASE'
@@ -92,7 +83,7 @@ dependencies {
 
 protobuf {
 	protoc {
-		artifact = "com.google.protobuf:protoc:3.25.1"
+		artifact = "com.google.protobuf:protoc:3.25.5"
 	}
 	plugins {
 		grpc {
