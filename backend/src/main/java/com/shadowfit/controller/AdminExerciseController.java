@@ -20,7 +20,7 @@ public class AdminExerciseController {
     private final AdminExerciseService adminExerciseService;
 
     @Operation(summary = "운동 싱크로율 임계값 변경",
-               description = "4개 페르소나(초보자/고급자/다이어트/재활) 임계값을 즉시 갱신. 신규 세션부터 적용. beginner < advanced 필수.")
+               description = "초보자/고급자 임계값을 즉시 갱신. 신규 세션부터 적용. beginner < advanced 필수.")
     @PatchMapping("/{exerciseId}/thresholds")
     public ResponseEntity<ExerciseThresholdResponseDto> updateThresholds(
             @PathVariable Long exerciseId,

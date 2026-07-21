@@ -146,7 +146,7 @@ public class ExerciseAnalysisService {
         Long sessionId = savedSession.getId();
 
         // 비동기로 FastAPI에 분석 요청
-        this.sendAnalysisRequestToFastApi(sessionId, appDto, finalUrl, member.getSelectedPersona().name());
+        this.sendAnalysisRequestToFastApi(sessionId, appDto, finalUrl);
 
         return sessionId;
     }
@@ -157,7 +157,7 @@ public class ExerciseAnalysisService {
      */
     @Async
     @Transactional(readOnly = true)
-    public void sendAnalysisRequestToFastApi(Long sessionId, VideoRequestDto appDto, String finalUrl, String persona) {
+    public void sendAnalysisRequestToFastApi(Long sessionId, VideoRequestDto appDto, String finalUrl) {
         log.info("비동기 분석 요청 시작 - 세션 ID: {}", sessionId);
 
         List<ExerciseReference> referencePoses = referenceRepository.findByExerciseId(appDto.getExerciseId());
@@ -165,8 +165,7 @@ public class ExerciseAnalysisService {
         AnalyzeRequest.Builder requestBuilder = AnalyzeRequest.newBuilder()
                 .setExerciseId(appDto.getExerciseId())
                 .setSessionId(sessionId)
-                .setReferenceSource(finalUrl)
-                .setPersona(persona);
+                .setReferenceSource(finalUrl);
 
         for (ExerciseReference ref : referencePoses) {
             requestBuilder.addReferencePoses(PoseDataRequest.newBuilder()

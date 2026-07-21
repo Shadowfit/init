@@ -96,7 +96,6 @@
 - **결과** (공정 측정, 워밍업 통제, [`load-test-strategy §7.6`](../decisions/load-test-strategy.md)):
   - throughput **23.5 → 46.7 RPS (+99%)**, p50 −64%, p99 7,549→4,784ms (**−37%**)
 - 면접: "왜 config(`hibernate.jdbc.batch_size`)로 안 풀고 JdbcTemplate? → IDENTITY라 Hibernate batch 미발동, 드라이버 레벨 batch가 정석."
-- **면접(꼬리질문 대비)**: "왜 ID 전략을 SEQUENCE로 안 바꿨나? → SEQUENCE는 INSERT 전에 미리 ID를 확보할 수 있어 이론상 Hibernate batch가 가능하지만, MySQL엔 네이티브 SEQUENCE가 없어 별도 ID발급 테이블로 흉내내야 함(추가 오버헤드) + 엔티티 전체의 PK 생성 전략을 바꾸는 더 큰 변경. `JdbcTemplate.batchUpdate`는 이 저장 경로 하나만 국소적으로 우회해 같은 효과를 더 작은 변경으로 냄."
 
 ### B. 읽기 최적화 — projection / 캐싱 / precompute ⬜ 헤드라인 본편
 
@@ -119,18 +118,16 @@
 
 상세 스토리는 [`problem-solving-log.md #3·#4`](./problem-solving-log.md).
 
-### D. 시계열 보존 — pose_data 버퍼의 TTL ✅ 파티션 스키마 구현 / ⬜ 자동 만료 트리거 미착수
+### D. 시계열 보존 — pose_data 버퍼의 TTL ⬜ 설계+트리거
 
 > §0 재설계의 하위 도구. pose_data를 **단기 버퍼**로 만드는 만료 메커니즘.
 
-- ⚠️ **현재 실제 상태(2026-07-20, PR #43 반영 후)**: `mysql/schema.sql`에 `pose_data` **Range 파티션 스키마 자체는 실제로 반영됨**(월별 14개 파티션+`pfuture`, PK `(id, created_at)`). 근데 **오래된 파티션을 주기적으로 `DROP PARTITION`하는 자동화(스케줄러)는 코드에 없음** — 지금은 파티션 구조만 있고 실제 만료 자동화는 미착수. 아래 내용은 그 만료 메커니즘이 붙었을 때의 **설계 의도**이지, 지금 자동으로 실행 중인 게 아님.
-- **pose_data는 중간 산출물(버퍼)이어야 함** — precompute(§0, 아래 참고)로 worst 구간을 `reports`에 옮긴 직후 cold → TTL 안전(UX 손실 0)해진다는 게 설계 의도. **단, precompute-on-write 자체도 아직 미구현**(§B-3 참고, `ReportService.getSessionReport`는 조회 시마다 `pose_data`를 즉석 재계산 — TTL을 지금 걸면 재계산할 원본이 없어질 위험이 있어 precompute 구현이 선행돼야 함).
-- **구현 방향은 DELETE 아니라 DROP PARTITION**: 날짜 Range 파티셔닝 → 가장 오래된 파티션을 **O(1) 메타데이터 연산**으로 제거(락 거의 없음). 대량 DELETE는 락·undo 폭발. → **실측 확인**(1억 행 rig, [`realmysql-experiments §②(d)`](./realmysql-experiments.md)): 같은 ~8M행 만료가 **DELETE 18.6분(빈 952MB 파일 잔존) vs DROP PARTITION 1.8초(파일째 회수) ≈ 625x**.
+- **pose_data는 중간 산출물(버퍼)** — precompute(§0)로 worst 구간을 `reports`에 옮긴 직후 cold → TTL 안전(UX 손실 0). precompute가 TTL을 *안전하게* 만든다(상호 강화).
+- **구현은 DELETE 아니라 DROP PARTITION**: 날짜 Range 파티셔닝 → 가장 오래된 파티션을 **O(1) 메타데이터 연산**으로 제거(락 거의 없음). 대량 DELETE는 락·undo 폭발. → **실측 확인**(1억 행 rig, [`realmysql-experiments §②(d)`](./realmysql-experiments.md)): 같은 ~8M행 만료가 **DELETE 18.6분(빈 952MB 파일 잔존) vs DROP PARTITION 1.8초(파일째 회수) ≈ 625x**.
 - **파티셔닝의 진짜 가치 = 쿼리 pruning 아니라 "값싼 TTL"** (쿼리는 이미 인덱스로 빠름, §4.3). 이 reframe이 핵심.
-- ⚠️ **파티션 전제 = PK에 파티션 키 포함** — pose_data PK `id`만으론 created_at 파티션 불가, PK를 `(id, created_at)`로 변경 완료(위 참고).
+- ⚠️ **파티션 전제 = PK에 파티션 키 포함** — pose_data PK `id`만으론 created_at 파티션 불가, PK를 `(id, created_at)`로 바꿔야(실험 시 처리).
 - **샤딩은 안 함** — 단일 MySQL로 충분. 스케일 시에도 샤딩 전에 raw를 S3 티어링이 먼저(§0).
-- (선택) S3 아카이빙 → DROP.
-- ⚠️ **FK는 이미 제거됨**: `session→pose_data ON DELETE CASCADE`는 파티셔닝과 호환 안 돼(`ERROR 1506`) 제거됐고, 회원 탈퇴 시 정리는 애플리케이션 레벨 비동기 트리거(B5, `PoseDataCleanupService`)로 대체됨 — 상세 트레이드오프는 [`pose-data-partition-fk-tradeoff.md`](../decisions/pose-data-partition-fk-tradeoff.md).
+- (선택) S3 아카이빙 → DROP. FK `session→pose_data` ON DELETE CASCADE.
 - **트리거 명시**: DAU 50엔 불필요. 버퍼 보존기간×볼륨이 커져 DELETE 만료가 부담될 때 발동.
 - 포폴 가치: 보존정책 + partition-drop은 신입이 거의 안 함 (§4.7).
 
