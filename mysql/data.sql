@@ -1,107 +1,29 @@
 -- 인코딩 강제 (한글 깨짐 방지). 클라이언트 charset이 latin1 이어도 utf8mb4 로 협상.
 SET NAMES utf8mb4;
 
--- 1. 기존 데이터 및 테이블 정리
+-- 이 파일은 순수 시드 데이터 전용 (초기 시드). 테이블 구조는 schema.sql이 전담 —
+-- 여기서 CREATE TABLE을 만들지 않는다. docker-entrypoint-initdb.d는 파일을 알파벳
+-- 순으로 실행하므로 docker-compose.yml에서 01-schema.sql / 02-data.sql로 순서를 강제해
+-- schema.sql이 먼저 실행된 뒤 이 파일이 그 위에 시드를 얹는 구조.
+-- (예전엔 이 파일이 자체 CREATE TABLE을 갖고 있어 schema.sql과 구조가 갈라졌었음 —
+--  exercise_sessions.version 컬럼·pose_data 파티셔닝·reports의 JSON 컬럼 등이 누락된
+--  구버전 스키마가 만들어지는 문제였음. 2026-07-22 정리.)
+
+-- 1. 기존 시드 데이터 정리 (테이블 구조는 그대로 두고 행만 비움)
 SET FOREIGN_KEY_CHECKS = 0;
-DROP TABLE IF EXISTS body_records, reports, daily_logs, pose_data, session_feedback_logs, exercise_feedback_templates, exercise_sessions, exercise_references, exercises, refresh_token, users;
-SET FOREIGN_KEY_CHECKS = 1;
+TRUNCATE TABLE body_records;
+TRUNCATE TABLE reports;
+TRUNCATE TABLE daily_logs;
+TRUNCATE TABLE pose_data;
+TRUNCATE TABLE session_feedback_logs;
+TRUNCATE TABLE exercise_feedback_templates;
+TRUNCATE TABLE exercise_sessions;
+TRUNCATE TABLE exercise_references;
+TRUNCATE TABLE exercises;
+TRUNCATE TABLE refresh_token;
+TRUNCATE TABLE users;
 
--- 2. 사용자 테이블 (자바 Member 엔티티와 1:1 매칭)
-CREATE TABLE users (
-                       id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                       email VARCHAR(100) UNIQUE NOT NULL,
-                       password VARCHAR(1000) NOT NULL,
-                       username VARCHAR(50) UNIQUE NOT NULL, -- nullable = false 대응
-                       role VARCHAR(20) NOT NULL,           -- Enum (USER, ADMIN)
-                       selected_persona VARCHAR(10) NOT NULL DEFAULT 'BEGINNER',
-                       preferred_url VARCHAR(500),          -- preferredUrl -> preferred_url (언더바)
-                       height DECIMAL(5,1),
-                       weight DECIMAL(5,1),
-                       workout_level VARCHAR(20),
-                       onboarding_completed BOOLEAN NOT NULL DEFAULT FALSE,
-                       sex VARCHAR(10),
-                       tts_enabled BOOLEAN NOT NULL DEFAULT TRUE,
-                       tts_speed DECIMAL(3,1) NOT NULL DEFAULT 1.0,
-                       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- 3. 운동 테이블 (자바 Exercise 엔티티와 1:1 매칭)
-CREATE TABLE exercises (
-                           id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                           name VARCHAR(100) NOT NULL,
-                           category VARCHAR(20) NOT NULL,       -- LOWER, CORE 등
-                           description TEXT,
-                           preferred_url VARCHAR(500),          -- Preferredurl -> preferred_url (언더바)
-                           target_joints JSON,
-                           sync_threshold_beginner DECIMAL(5,2) DEFAULT 60.00,
-                           sync_threshold_advanced DECIMAL(5,2) DEFAULT 85.00,
-                           expected_duration_minutes INT DEFAULT 15,
-                           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS exercise_sessions (
-                                                 id BIGINT AUTO_INCREMENT PRIMARY KEY,
-                                                 member_id BIGINT NOT NULL,
-                                                 exercise_id BIGINT NOT NULL,
-                                                 reference_source VARCHAR(500),
-    start_time DATETIME NOT NULL,
-    end_time DATETIME,
-    total_reps INT DEFAULT 0,
-    avg_sync_rate DECIMAL(5,2),
-    max_sync_rate DECIMAL(5,2),
-    min_sync_rate DECIMAL(5,2),
-    calories_burned DECIMAL(7,2),
-    difficulty_level INT DEFAULT 1,
-    status VARCHAR(20) DEFAULT 'IN_PROGRESS',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (member_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (exercise_id) REFERENCES exercises(id)
-    );
-
-CREATE TABLE reports (
-                         id BIGINT AUTO_INCREMENT PRIMARY KEY, -- 자동 증가 추가
-                         session_id BIGINT,
-                         member_id BIGINT,
-                         report_type VARCHAR(20),
-                         summary TEXT,
-                         improvement_tips TEXT,
-                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                         FOREIGN KEY (session_id) REFERENCES exercise_sessions(id),
-                         FOREIGN KEY (member_id) REFERENCES users(id)
-);
-
-CREATE TABLE IF NOT EXISTS refresh_token (
-                                             member_id BIGINT PRIMARY KEY,
-                                             token VARCHAR(255) NOT NULL,
-    FOREIGN KEY (member_id) REFERENCES users(id) ON DELETE CASCADE
-    );
-
-CREATE TABLE IF NOT EXISTS exercise_feedback_templates (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    exercise_id BIGINT NOT NULL,
-    feedback_type VARCHAR(30) NOT NULL,
-    persona VARCHAR(10) NULL,
-    message VARCHAR(200) NOT NULL,
-    priority INT NOT NULL DEFAULT 100,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE CASCADE,
-    UNIQUE KEY uk_exercise_feedback_persona (exercise_id, feedback_type, persona)
-);
-
-CREATE TABLE IF NOT EXISTS session_feedback_logs (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    session_id BIGINT NOT NULL,
-    feedback_type VARCHAR(30) NOT NULL,
-    sync_rate_at_trigger DECIMAL(5,2),
-    occurred_at DATETIME NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (session_id) REFERENCES exercise_sessions(id) ON DELETE CASCADE,
-    INDEX idx_session_feedback (session_id, occurred_at),
-    UNIQUE KEY uk_session_event (session_id, occurred_at, feedback_type)
-);
-
--- 3. 데이터 삽입 시작
-SET FOREIGN_KEY_CHECKS = 0;
+-- 2. 데이터 삽입 시작
 
 -- 1. 유저 데이터 (ID 1번 확실히 생성)
 INSERT INTO users (email, password, username, role, onboarding_completed, preferred_url)

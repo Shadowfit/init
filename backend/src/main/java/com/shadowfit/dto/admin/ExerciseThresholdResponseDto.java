@@ -8,14 +8,18 @@ public record ExerciseThresholdResponseDto(
         Long exerciseId,
         String name,
         BigDecimal syncThresholdBeginner,
-        BigDecimal syncThresholdAdvanced
+        BigDecimal syncThresholdAdvanced,
+        BigDecimal syncThresholdDiet,
+        BigDecimal syncThresholdRehab
 ) {
     public static ExerciseThresholdResponseDto fromEntity(Exercise e) {
         return new ExerciseThresholdResponseDto(
                 e.getId(),
                 e.getName(),
                 e.getSyncThresholdBeginner(),
-                e.getSyncThresholdAdvanced()
+                e.getSyncThresholdAdvanced(),
+                e.getSyncThresholdDiet(),
+                e.getSyncThresholdRehab()
         );
     }
 }
