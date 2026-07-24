@@ -145,8 +145,11 @@ public class ExerciseAnalysisService {
         Session savedSession = sessionService.createSession(appDto, currentMemberId, finalUrl);
         Long sessionId = savedSession.getId();
 
-        // 비동기로 FastAPI에 분석 요청
-        this.sendAnalysisRequestToFastApi(sessionId, appDto, finalUrl, member.getSelectedPersona().name());
+        // 비동기로 FastAPI에 분석 요청 — self를 거쳐야 @Async가 Spring 프록시를 타고 실제로
+        // 비동기 실행됨. this.로 호출하면 자기호출(self-invocation)이라 AOP 프록시를 우회해서
+        // @Async가 조용히 무시되고 동기 실행되는 문제가 있었음(2026-07-24, 테스트로 발견) —
+        // completeSession→applyCompleteFromApp에 이미 쓰던 self 패턴을 여기에도 동일 적용.
+        self.sendAnalysisRequestToFastApi(sessionId, appDto, finalUrl, member.getSelectedPersona().name());
 
         return sessionId;
     }
