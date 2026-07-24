@@ -45,11 +45,12 @@ public class ReportService {
         Report report = reportRepository.findBySessionId(sessionId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.REPORT_NOT_FOUND));
 
-        // 3. 이전 동일 운동 세션 조회
-        Optional<Session> lastSession = sessionRepository.findFirstByMemberIdAndExerciseIdAndStatusOrderByStartTimeDesc(
+        // 3. 이전 동일 운동 세션 조회 — 현재 세션 자체가 뽑히지 않도록 제외(자기비교 버그 방지)
+        Optional<Session> lastSession = sessionRepository.findFirstByMemberIdAndExerciseIdAndStatusAndIdNotOrderByStartTimeDesc(
                 currentSession.getMember().getId(),
                 currentSession.getExercise().getId(),
-                Status.COMPLETED
+                Status.COMPLETED,
+                currentSession.getId()
         );
 
         return buildReportResponse(currentSession, report, lastSession);

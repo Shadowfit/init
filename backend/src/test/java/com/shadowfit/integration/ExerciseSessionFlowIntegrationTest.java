@@ -1,5 +1,6 @@
 package com.shadowfit.integration;
 
+import com.shadowfit.dto.report.detailreport.SessionReportResponseDto;
 import com.shadowfit.global.error.BusinessException;
 import com.shadowfit.global.error.ErrorCode;
 import com.shadowfit.grpc.*;
@@ -23,6 +24,7 @@ import com.shadowfit.repository.member.MemberRepository;
 import com.shadowfit.repository.report.ReportRepository;
 import com.shadowfit.service.Exercise.ExerciseGrpcService;
 import com.shadowfit.service.Exercise.SessionService;
+import com.shadowfit.service.Report.ReportService;
 import io.grpc.stub.StreamObserver;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -61,6 +63,7 @@ class ExerciseSessionFlowIntegrationTest {
 
     @Autowired private ExerciseGrpcService grpcService;
     @Autowired private SessionService sessionService;
+    @Autowired private ReportService reportService;
 
     @Autowired private SessionRepository sessionRepository;
     @Autowired private PoseDataRepository poseDataRepository;
@@ -361,6 +364,41 @@ class ExerciseSessionFlowIntegrationTest {
                     .isEqualTo(ErrorCode.SESSION_NOT_FOUND);
 
             assertThat(sessionRepository.findById(sessionId)).isPresent(); // 삭제 안 됨
+        }
+    }
+
+    @Nested
+    @DisplayName("이전 세션과 비교 (CodeRabbit 발견 — 자기 자신과 비교하는 버그)")
+    class ReportComparisonWithPrevious {
+
+        @Test
+        @DisplayName("가장 최근 완료 세션을 조회해도 comparisonWithPrevious는 자기 자신이 아닌 진짜 이전 세션 기준")
+        void comparisonExcludesCurrentSession() {
+            // given: 같은 회원·같은 운동으로 먼저 끝난 세션(older, avg 70) → 나중에 끝난 세션(newer, avg 80)
+            Session olderSession = sessionRepository.saveAndFlush(Session.builder()
+                    .member(testMember).exercise(testExercise)
+                    .startTime(LocalDateTime.now().minusHours(2))
+                    .status(Status.IN_PROGRESS).totalReps(0).difficultyLevel(1)
+                    .build());
+            @SuppressWarnings("unchecked")
+            StreamObserver<SessionCompleteResponse> olderObs = mock(StreamObserver.class);
+            grpcService.completeAnalysis(sampleComplete(olderSession.getId(), 8, 70.0), olderObs);
+
+            Session newerSession = sessionRepository.saveAndFlush(Session.builder()
+                    .member(testMember).exercise(testExercise)
+                    .startTime(LocalDateTime.now().minusMinutes(10))
+                    .status(Status.IN_PROGRESS).totalReps(0).difficultyLevel(1)
+                    .build());
+            @SuppressWarnings("unchecked")
+            StreamObserver<SessionCompleteResponse> newerObs = mock(StreamObserver.class);
+            grpcService.completeAnalysis(sampleComplete(newerSession.getId(), 10, 80.0), newerObs);
+
+            // when: 가장 최근(newer) 세션의 리포트 조회
+            SessionReportResponseDto result = reportService.getSessionReport(newerSession.getId(), testMember.getId());
+
+            // then: newer가 자기 자신과 비교(diff 0)된 게 아니라 older(70.0) 기준으로 diff 10이어야 함
+            assertThat(result.getComparisonWithPrevious()).isNotNull();
+            assertThat(result.getComparisonWithPrevious().getSyncRateDiff()).isEqualTo(10);
         }
     }
 }

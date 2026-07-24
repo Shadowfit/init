@@ -85,8 +85,8 @@ class ReportServiceTest {
 
         when(sessionRepository.findSessionWithExerciseByIdAndMemberId(SESSION_ID, MEMBER_ID))
                 .thenReturn(Optional.of(session));
-        when(sessionRepository.findFirstByMemberIdAndExerciseIdAndStatusOrderByStartTimeDesc(
-                anyLong(), anyLong(), any(Status.class))).thenReturn(Optional.empty());
+        when(sessionRepository.findFirstByMemberIdAndExerciseIdAndStatusAndIdNotOrderByStartTimeDesc(
+                anyLong(), anyLong(), any(Status.class), anyLong())).thenReturn(Optional.empty());
     }
 
     @Test
@@ -154,13 +154,19 @@ class ReportServiceTest {
     void malformedAnalysis_fallsBackGracefully() {
         report.setDetailedAnalysis("{이건 JSON이 아님");
         when(reportRepository.findBySessionId(SESSION_ID)).thenReturn(Optional.of(report));
-        when(poseDataRepository.findFramesBySessionId(SESSION_ID)).thenReturn(List.of());
-        when(worstSectionCalculator.calculate(any(), any())).thenReturn(null);
+        List<PoseFrameProjection> frames = List.of(new PoseFrameProjection(0.0, 50.0, "KNEE_OUT"));
+        when(poseDataRepository.findFramesBySessionId(SESSION_ID)).thenReturn(frames);
+        WorstSectionDto recomputed = new WorstSectionDto();
+        recomputed.setReason("재계산됨");
+        when(worstSectionCalculator.calculate(session, frames)).thenReturn(recomputed);
 
         SessionReportResponseDto result = reportService.getSessionReport(SESSION_ID, MEMBER_ID);
 
-        assertThat(result).isNotNull(); // 예외 없이 정상 응답
+        // 파싱 실패 시 예외를 삼키고 끝나는 게 아니라, 실제로 pose_data 재계산까지 수행됐는지 검증
+        // (CodeRabbit 지적 — 예전엔 calculate()가 null을 반환해도 통과하는 부실한 테스트였음)
+        assertThat(result.getWorstSection().getReason()).isEqualTo("재계산됨");
         verify(poseDataRepository, times(1)).findFramesBySessionId(SESSION_ID);
+        verify(worstSectionCalculator).calculate(session, frames);
     }
 
     @Test
@@ -178,8 +184,8 @@ class ReportServiceTest {
                 .avgSyncRate(new BigDecimal("70.0"))
                 .caloriesBurned(new BigDecimal("40.0"))
                 .build();
-        when(sessionRepository.findFirstByMemberIdAndExerciseIdAndStatusOrderByStartTimeDesc(
-                MEMBER_ID, session.getExercise().getId(), Status.COMPLETED))
+        when(sessionRepository.findFirstByMemberIdAndExerciseIdAndStatusAndIdNotOrderByStartTimeDesc(
+                MEMBER_ID, session.getExercise().getId(), Status.COMPLETED, SESSION_ID))
                 .thenReturn(Optional.of(lastSession));
 
         SessionReportResponseDto result = reportService.getSessionReport(SESSION_ID, MEMBER_ID);
