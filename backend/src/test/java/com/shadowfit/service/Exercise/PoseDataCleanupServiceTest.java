@@ -93,11 +93,27 @@ class PoseDataCleanupServiceTest {
         // @Test 메서드 실행만 트랜잭션으로 감싸고, JUnit이 직접 호출하는 @BeforeEach/@AfterEach
         // 콜백 자체는 TestContextManager를 안 거쳐서 @Transactional이 조용히 무시됐던 것.
         // TransactionTemplate으로 직접 트랜잭션을 열어서 우회한다.
+        //
+        // ⚠️ 2026-07-24 (CodeRabbit): setUp()이 중간에 실패하면 targetSession/otherSession/
+        // exerciseId/memberId가 null인 채로 여기 진입할 수 있어서, null 체크 없이 그대로
+        // deleteById 등을 부르면 NPE가 나면서 원래 setUp 실패 원인을 가려버린다 — null이 아닌
+        // 것만 골라서 정리.
+        List<Long> sessionIds = List.of(targetSession, otherSession).stream()
+                .filter(java.util.Objects::nonNull)
+                .map(Session::getId)
+                .toList();
+
         new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
-            poseDataRepository.deleteBySessionIdIn(List.of(targetSession.getId(), otherSession.getId()));
-            sessionRepository.deleteAllById(List.of(targetSession.getId(), otherSession.getId()));
-            exercisesRepository.deleteById(exerciseId);
-            memberRepository.deleteById(memberId);
+            if (!sessionIds.isEmpty()) {
+                poseDataRepository.deleteBySessionIdIn(sessionIds);
+                sessionRepository.deleteAllById(sessionIds);
+            }
+            if (exerciseId != null) {
+                exercisesRepository.deleteById(exerciseId);
+            }
+            if (memberId != null) {
+                memberRepository.deleteById(memberId);
+            }
         });
     }
 
@@ -114,10 +130,11 @@ class PoseDataCleanupServiceTest {
 
     @Test
     @DisplayName("빈 리스트/null이면 아무 것도 지우지 않고 조용히 반환")
-    void cleanupBySessionIds_emptyOrNull_noop() throws InterruptedException {
+    void cleanupBySessionIds_emptyOrNull_noop() {
+        // CodeRabbit 지적 반영(2026-07-24): null/빈 리스트는 repository를 아예 안 부르는
+        // no-op 경로라 비동기 디스패치 완료를 기다릴 필요 자체가 없음 — 고정 sleep 제거.
         cleanupService.cleanupBySessionIds(List.of());
         cleanupService.cleanupBySessionIds(null);
-        Thread.sleep(200); // no-op이라 폴링할 상태 변화가 없음 — 비동기 디스패치가 끝날 정도만 대기
 
         assertThat(poseDataRepository.findFramesBySessionId(targetSession.getId())).hasSize(1);
         assertThat(poseDataRepository.findFramesBySessionId(otherSession.getId())).hasSize(1);
