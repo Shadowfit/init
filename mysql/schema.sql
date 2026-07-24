@@ -161,7 +161,11 @@ CREATE TABLE IF NOT EXISTS reports (
     comparison_with_previous JSON,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- DEFAULT 추가
     FOREIGN KEY (member_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (session_id) REFERENCES exercise_sessions(id) ON DELETE CASCADE
+    FOREIGN KEY (session_id) REFERENCES exercise_sessions(id) ON DELETE CASCADE,
+    -- 세션당 리포트 1건 보장 (report 생성 멱등성, db-deep-dive.md §C) — 현재 report를 생성하는
+    -- 애플리케이션 코드는 없고 시드(data.sql)로만 채워지지만, 추후 생성 로직이 들어올 때
+    -- 재시도로 인한 중복 생성을 DB 제약으로 막기 위해 선반영
+    UNIQUE KEY uk_report_session (session_id)
     );
 
 -- 9-A. 운동별 피드백 메시지 템플릿 (TTS 멘트, 페르소나별 분기)
@@ -187,11 +191,19 @@ CREATE TABLE IF NOT EXISTS session_feedback_logs (
     occurred_at DATETIME NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (session_id) REFERENCES exercise_sessions(id) ON DELETE CASCADE,
-    INDEX idx_session_feedback (session_id, occurred_at),
+    -- idx_session_feedback(session_id, occurred_at)는 2026-07-24 제거 — uk_session_event가 앞 2컬럼을
+    -- 그대로 포함해 읽기 쪽엔 이득 0(EXPLAIN 확인: findBySessionIdOrderByOccurredAtAsc·GROUP BY
+    -- feedback_type 집계 둘 다 옵티마이저가 idx_session_feedback 존재 시에도 uk_session_event만 선택),
+    -- batch INSERT 유지비용만 이중 (production-signal-checklist.md:343, loadtest/measure_redundant_index.sh)
     UNIQUE KEY uk_session_event (session_id, occurred_at, feedback_type)
 );
 
--- 9. 신체 변화 기록 (user_id -> member_id 변경)
+-- 10. 신체 변화 기록 (user_id -> member_id 변경)
+-- ⚠️ 현재 Entity/Repository/Service 전부 없는 미구현 테이블(production-signal-checklist.md).
+-- ON DELETE CASCADE는 2026-07-24 선반영 — MemberService.deleteAccount가 memberRepository.delete()
+-- 하나로 회원 삭제를 처리하고 나머지 테이블 정리를 전부 FK CASCADE에 의존하는 구조라, CASCADE 없이
+-- 이 테이블에 쓰기 기능이 생기면 refresh_token과 동일한 FK violation 500 버그가 재현됨(8efbca1에서
+-- refresh_token 대상으로 실제 발견·수정한 바 있음).
 CREATE TABLE body_records (
                               id BIGINT AUTO_INCREMENT PRIMARY KEY,
                               member_id BIGINT NOT NULL,          -- 수정 완료
@@ -200,6 +212,6 @@ CREATE TABLE body_records (
                               body_fat_percentage DECIMAL(4,1),
                               muscle_mass DECIMAL(5,1),
                               created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                              FOREIGN KEY (member_id) REFERENCES users(id),
+                              FOREIGN KEY (member_id) REFERENCES users(id) ON DELETE CASCADE,
                               INDEX idx_member_date (member_id, record_date)
 );

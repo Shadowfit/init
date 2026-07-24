@@ -198,10 +198,11 @@ List<PoseFrameProjection> findFramesBySessionId(@Param("sessionId") Long session
 ## 8. 미결정 (사용자 confirm 필요)
 
 - [x] projection 코드 적용 여부 (위 §7) — **적용 완료 2026-07-15**
-- [ ] precompute 착수 — `completeAnalysis`에서 Report 생성(③·⑥ 동시 해결). 단 `reports` write 경로 신설 = AI 측 요약 송신 계약과 맞물림([`report-aggregation.md`](./report-aggregation.md) 참조). 세부 미결정 4가지는 §9
+- [x] precompute 착수 — **완료(2026-07-24)**. `SessionService.applyComplete`가 세션 완료 시 `WorstSectionCalculator`로 계산해 `reports.detailed_analysis`에 저장(③·⑥ 동시 해결). 세부 결정 4가지는 §9
 - [x] exercise_sessions 복합 인덱스 추가 — **완료(2026-07-11)**, `mysql/schema.sql:83` `idx_session_member_starttime(member_id, start_time)` (§2 ④ 참고). 체크박스 갱신 누락 발견(2026-07-15)
-- [ ] 착수 순서: projection 먼저(가벼움) vs precompute 먼저(헤드라인·4개 해결)
-- [ ] raw TTL(보존 정책) 착수 — pose_data 파티셔닝을 실제 schema.sql에 반영할지. 설계 정리는 §9-B
+- [x] 착수 순서 — **precompute 먼저 완료**(2026-07-24), projection은 이미 그 이전(2026-07-15)에 적용 완료라 사실상 둘 다 완료
+- [x] pose_data 파티션 스키마 자체 반영 — **완료(2026-07-20, PR #43)**. FK 제거 대체(B5) 포함. [`pose-data-partition-fk-tradeoff.md`](./pose-data-partition-fk-tradeoff.md)
+- [x] raw TTL(보존 정책) **자동화**(DROP PARTITION 스케줄러) — **완료(2026-07-24)**. `PoseDataPartitionScheduler` 신설. 설계 정리는 §9-B
 
 ---
 
@@ -209,10 +210,10 @@ List<PoseFrameProjection> findFramesBySessionId(@Param("sessionId") Long session
 
 precompute 자체("세션 완료 시 1회 계산해 `reports`에 저장, 조회는 읽기만")는 §6·§8에서 방향은 잡혔음. 아래 4개는 **그 방향 안에서 아직 안 정한 세부 설계** — 결정 마크는 사용자 confirm 후에만.
 
-### 9-1. 계산 로직 위치 — 순환 의존 회피
+### 9-1. 계산 로직 위치 — 순환 의존 회피 — ✅ 결정(2026-07-24)
 
 `selectWorstSection`/`buildWorstReason`/`pickDominantFeedback`(현재 `ReportService`, 읽기 경로 전용)를 쓰기 경로(`SessionService.applyComplete`)에서도 호출해야 함. `SessionService`가 `ReportService`를 직접 의존하면, 훗날 `ReportService`가 `SessionService`를 참조할 일이 생겼을 때 순환 의존이 됨.
-- **후보**: 계산 로직을 별도 컴포넌트(예: `ReportCalculator` 또는 `WorstSectionCalculator`)로 추출, `ReportService`·`SessionService` 둘 다 이걸 의존하는 구조로 변경.
+- **결정: 후보 A 채택** — 계산 로직을 별도 컴포넌트 `WorstSectionCalculator`로 추출, `ReportService`(읽기)·`SessionService`(쓰기, precompute) 둘 다 이걸 의존. `SessionService.applyComplete`가 이미 `DailyLogService`를 같은 패턴(완료 시점 부가 서비스 호출)으로 의존하고 있어(`SessionService.java:133`) 일관성 있음. `ReportService`의 "읽기 경로 전용" 관례도 유지됨. (기각한 후보 B: `SessionService`가 `ReportService`를 직접 의존 — 클래스 하나 덜 늘지만 read-only 관례가 깨지고 향후 확장 시 순환 위험.)
 
 ### 9-2. 트랜잭션 경계 — 세션 완료와 리포트 생성의 원자성
 
@@ -232,25 +233,28 @@ precompute 도입 이전에 이미 `COMPLETED`된 세션들은 `reports` row가 
 
 ---
 
-## 9-B. raw TTL(보존 정책) 설계 — 6가지 축 (2026-07-15)
+## 9-B. raw TTL(보존 정책) 설계 — 6가지 축 — ✅ 전부 완료(2026-07-24)
 
-`pose_data` TTL(§6 ④)은 개념·실측(`realmysql-experiments.md` §4②d, DROP PARTITION 625배)까지만 되어 있고 **실제 `mysql/schema.sql`엔 파티셔닝이 반영돼 있지 않음**(파티션 실험은 `pose_data_scale`이라는 별도 스크래치 테이블에서만 함, `loadtest/measure_partition.sh`). 실제 도입하려면 아래 6가지가 필요 — ①~④는 **정책 설계**, ⑤~⑥은 **운영 실행**.
+> **2026-07-24 최종 갱신**: precompute-on-write(§9)가 먼저 구현되면서 ②(삭제 근거)가 풀렸고, 그 위에 TTL 자동화(⑤⑥) 및 나머지 안전장치(보존기간·아카이빙·안전마진·검증)까지 전부 결정·구현 완료. `PoseDataPartitionScheduler`(신규, `com.shadowfit.service.Exercise`) 참조.
+
+`pose_data` TTL(§6 ④)은 개념·실측(`realmysql-experiments.md` §4②d, DROP PARTITION 625배)에 스키마 반영(PR #43)과 자동화까지 모두 끝났다. 6가지 축 — ①~④는 **정책 설계**, ⑤~⑥은 **운영 실행**.
 
 | # | 축 | 내용 | 이 프로젝트 상태 |
 |---|---|---|---|
 | ① | 버퍼 vs 영속 구분 | `pose_data`(raw, 단기) vs `reports`(집계, 영속) | ✅ 판단 완료(`db-deep-dive.md` §2-0) |
-| ② | 삭제 근거 | raw를 지워도 되는 건 precompute로 요약이 `reports`에 이미 박제됐을 때뿐 — **precompute 선행 필요** | 🔶 precompute 자체가 미착수(§9) |
+| ② | 삭제 근거 | raw를 지워도 되는 건 precompute로 요약이 `reports`에 이미 박제됐을 때뿐 | ✅ precompute-on-write 완료(2026-07-24, §9) — 삭제 근거 확보 |
 | ③ | 삭제 메커니즘 | DROP PARTITION vs DELETE — DROP 채택(625배, 디스크 즉시 회수) | ✅ 실측 완료 |
-| ④ | 파티션 단위 | 월별 — 너무 잘게(일별) 관리부담, 너무 크게(연별) 만료 단위가 거칠어짐 | ✅ 월별 14파티션으로 실험(스크래치 테이블만) |
-| ⑤ | 실행 트리거 | 스케줄러가 주기적으로 DROP/ADD PARTITION 실행 — `SessionTimeoutScheduler`와 동일한 `@Scheduled` 패턴 재사용 가능(신규 클래스 `PoseDataPartitionScheduler` 필요) | ⬜ 미착수 |
-| ⑥ | 파티션 유지보수 | 미래 파티션(`pfuture`)이 계속 커지지 않도록, 다다음 달 파티션을 미리 `ADD PARTITION`으로 만들어둬야 함 | ⬜ 미착수 |
+| ④ | 파티션 단위 | 월별 — 너무 잘게(일별) 관리부담, 너무 크게(연별) 만료 단위가 거칠어짐 | ✅ 월별 14파티션 + `pfuture`, 실스키마 반영(`mysql/schema.sql`, PR #43) |
+| ⑤ | 실행 트리거 | 스케줄러가 주기적으로 DROP/ADD PARTITION 실행 | ✅ `PoseDataPartitionScheduler` 신설, 매일 새벽 4시(`@Scheduled(cron=...)`), `SessionTimeoutScheduler`와 동일 패턴 |
+| ⑥ | 파티션 유지보수 | 미래 파티션(`pfuture`)이 계속 커지지 않도록, 다다음 달 파티션을 미리 만들어둬야 함 | ✅ 이번 달 기준 +2개월(`lookahead-months`)까지 항상 실명 파티션 유지, 부족하면 `REORGANIZE PARTITION pfuture INTO (...)`로 확장 |
 
-**추가 안전장치 (⑤·⑥ 구현 시 반드시 고려)**:
-- **아카이빙 여부**: DROP 전에 콜드 스토리지(S3 등)로 백업할지, 완전 폐기할지 — precompute로 핵심 요약은 이미 보존되므로 raw 원본은 완전 폐기해도 될 가능성이 높으나 **결정 사안**
-- **경계 안전 마진**: 스케줄러가 아직 쓰기가 진행 중인 현재 달 파티션을 실수로 건드리면 안 됨 — "완전히 종료된 과거 파티션만" 대상으로 제한 필요
-- **DROP PARTITION은 되돌릴 수 없음** — 실행 전 검증(예상 파티션·행수 확인) 절차 없이는 위험
+**결정된 안전장치 (2026-07-24 확정)**:
+- **보존 기간**: 이번 달(쓰기 중) + 지난 1개월(버퍼, `retention-buffer-months: 1`)만 남기고 그 이전 파티션 드롭. precompute가 이미 있어 원본을 오래 붙들 product 근거가 없고, 개인정보보호법 제21조 "지체없이 파기" 취지상 짧게 유지하는 쪽으로 판단.
+- **아카이빙 여부**: **안 함 — 완전 폐기**. S3 이전은 "저장 위치 변경"일 뿐 파기가 아니고, precompute로 핵심 요약은 이미 `reports`에 남아 있어 원본을 따로 보관할 이유가 약함. 새 인프라(S3 버킷·수명주기)를 벌이는 것도 `db-portfolio-roadmap.md §9` "의식적으로 안 할 것" 기조와 안 맞음.
+- **경계 안전마진 + 실행 전 검증**: 정보스키마(`information_schema.partitions`)에서 조회한 파티션 이름이 `pYYYY_MM` 패턴과 정확히 일치할 때만 드롭 후보로 인정(패턴 불일치 시 건드리지 않고 경고만), `pfuture`는 쿼리 단계에서부터 제외. 드롭 직전 예상 행수를 로그로 남겨 사후 감사 흔적 확보(실행을 막진 않음 — 운영 자동화라 사람 확인 없이 돎).
+- **실행 주기**: 매일 1회(새벽 4시). 월 단위 하우스키핑이라 `SessionTimeoutScheduler`(1분 주기)만큼 자주 돌 필요 없고, 매번 실제 파티션 목록을 다시 조회해 판단하므로 어느 날 실행되든 멱등적으로 안전.
 
-**결론**: 파티셔닝을 실제 스키마에 도입하는 건 ②(precompute 선행)가 먼저 해결돼야 하고, 도입 후에도 ⑤⑥(운영 자동화)이 남는 별개 작업. 지금은 전부 설계·실측 단계이지 운영 자동화까지 만들어진 상태 아님 — 면접에서 "실제로 자동화까지 했냐"고 물으면 정직하게 이 경계선에서 답해야 함.
+**결론**: TTL 보존 정책 6가지 축 + 안전장치까지 전부 결정·구현 완료. precompute-on-write가 먼저 풀리면서 자연스럽게 이어진 마지막 조각이었음 — [`27-implementation-gaps.md`](../tasks/27-implementation-gaps.md)에도 완료로 반영.
 
 ---
 

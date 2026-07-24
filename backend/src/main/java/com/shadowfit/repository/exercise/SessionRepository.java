@@ -20,8 +20,14 @@ public interface SessionRepository extends JpaRepository<Session,Long> {
     Optional<Session> findSessionWithExerciseByIdAndMemberId(@Param("sessionId") Long sessionId,
                                                               @Param("memberId") Long memberId);
 
-    Optional<Session> findFirstByMemberIdAndExerciseIdAndStatusOrderByStartTimeDesc(
-            Long memberId, Long exerciseId, Status status
+    // 개별 세션 삭제(deleteSession) 전용 — exercise fetch join 불필요, 소유권만 WHERE절로 확인.
+    Optional<Session> findByIdAndMemberId(Long sessionId, Long memberId);
+
+    // 현재 조회 중인 세션 자체를 "이전 세션"으로 잘못 뽑지 않도록 excludeSessionId로 제외
+    // (CodeRabbit 리뷰로 발견 — 현재 세션이 해당 운동의 가장 최근 완료 세션이면 자기 자신과
+    // 비교하는 조용한 버그가 있었음, ReportService.getSessionReport §3).
+    Optional<Session> findFirstByMemberIdAndExerciseIdAndStatusAndIdNotOrderByStartTimeDesc(
+            Long memberId, Long exerciseId, Status status, Long excludeSessionId
     );
 
     List<Session> findByMemberIdAndStartTimeBetween(Long memberId, LocalDateTime start, LocalDateTime end);

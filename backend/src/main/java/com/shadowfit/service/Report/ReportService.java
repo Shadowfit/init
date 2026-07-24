@@ -1,5 +1,6 @@
 package com.shadowfit.service.Report;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shadowfit.dto.report.detailreport.ComparisonWithPreviousDto;
 import com.shadowfit.dto.report.detailreport.ExerciseSyncRateDto;
 import com.shadowfit.dto.report.detailreport.SessionReportResponseDto;
@@ -28,6 +29,8 @@ public class ReportService {
     private final ReportRepository reportRepository;
     private final SessionRepository sessionRepository;
     private final PoseDataRepository poseDataRepository;
+    private final WorstSectionCalculator worstSectionCalculator;
+    private final ObjectMapper objectMapper;
 
     @Transactional(readOnly = true)
     public SessionReportResponseDto getSessionReport(Long sessionId, Long currentMemberId) {
@@ -42,24 +45,23 @@ public class ReportService {
         Report report = reportRepository.findBySessionId(sessionId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.REPORT_NOT_FOUND));
 
-        // 3. 이전 동일 운동 세션 조회
-        Optional<Session> lastSession = sessionRepository.findFirstByMemberIdAndExerciseIdAndStatusOrderByStartTimeDesc(
+        // 3. 이전 동일 운동 세션 조회 — 현재 세션 자체가 뽑히지 않도록 제외(자기비교 버그 방지)
+        Optional<Session> lastSession = sessionRepository.findFirstByMemberIdAndExerciseIdAndStatusAndIdNotOrderByStartTimeDesc(
                 currentSession.getMember().getId(),
                 currentSession.getExercise().getId(),
-                Status.COMPLETED
+                Status.COMPLETED,
+                currentSession.getId()
         );
 
-        List<PoseFrameProjection> poseFrames = poseDataRepository.findFramesBySessionId(sessionId);
-        return buildReportResponse(currentSession, report, lastSession, poseFrames);
+        return buildReportResponse(currentSession, report, lastSession);
     }
 
 
     private SessionReportResponseDto buildReportResponse(Session session, Report report,
-                                                         Optional<Session> lastSession,
-                                                         List<PoseFrameProjection> poseFrames) {
+                                                         Optional<Session> lastSession) {
         SessionReportResponseDto responseDto = SessionReportResponseDto.of(session, report);
 
-        responseDto.setWorstSection(selectWorstSection(session, poseFrames));
+        responseDto.setWorstSection(resolveWorstSection(session, report));
         responseDto.setSyncRateDetails(buildSyncRateDetails(session));
         lastSession.ifPresent(last ->
                 responseDto.setComparisonWithPrevious(buildComparisonWithPrevious(session, last))
@@ -68,74 +70,23 @@ public class ReportService {
         return responseDto;
     }
 
-    // 연속 WORST_WINDOW_SIZE 개의 PoseData 평균 syncRate 가 가장 낮은 구간을 worst 로 선정.
-    // 한 점이 아니라 구간을 보는 이유: 단일 프레임은 노이즈 영향이 커서 일시적 튐을 worst 로 잡을 위험.
-    private static final int WORST_WINDOW_SIZE = 3;
-
-    private WorstSectionDto selectWorstSection(Session session, List<PoseFrameProjection> poseFrames) {
-        if (poseFrames == null || poseFrames.size() < WORST_WINDOW_SIZE) {
-            return null;
-        }
-
-        int worstStart = 0;
-        double worstAverage = Double.MAX_VALUE;
-        for (int i = 0; i <= poseFrames.size() - WORST_WINDOW_SIZE; i++) {
-            double sum = 0.0;
-            for (int j = 0; j < WORST_WINDOW_SIZE; j++) {
-                Double rate = poseFrames.get(i + j).syncRate();
-                if (rate == null) {
-                    sum = Double.MAX_VALUE;
-                    break;
-                }
-                sum += rate;
-            }
-            double average = sum / WORST_WINDOW_SIZE;
-            if (average < worstAverage) {
-                worstAverage = average;
-                worstStart = i;
+    // precompute-on-write(SessionService.applyComplete)가 세션 완료 시점에 이미 계산해 저장한
+    // detailed_analysis가 있으면 그걸 읽기만 하고 pose_data는 스캔하지 않음(db-deep-dive.md §B-3).
+    // precompute 이전에 생성된 리포트(시드 데이터 등)는 detailed_analysis가 비어 있으므로, 그 경우에만
+    // 예전처럼 pose_data에서 즉석 계산 — 별도 백필 없이 하위호환(report-read-path.md §9-4).
+    private WorstSectionDto resolveWorstSection(Session session, Report report) {
+        String detailedAnalysis = report.getDetailedAnalysis();
+        if (detailedAnalysis != null && !detailedAnalysis.isBlank()) {
+            try {
+                return objectMapper.readValue(detailedAnalysis, WorstSectionDto.class);
+            } catch (Exception e) {
+                log.warn("세션 {} detailed_analysis 파싱 실패 — pose_data 즉석 재계산으로 대체", session.getId(), e);
             }
         }
-
-        // 구간의 중앙 프레임을 대표 timestamp 로 사용
-        PoseFrameProjection representative = poseFrames.get(worstStart + WORST_WINDOW_SIZE / 2);
-        WorstSectionDto worst = new WorstSectionDto();
-        worst.setExerciseName(session.getExercise().getName());
-        worst.setTimeStamp(formatTimestamp(representative.timestampSec()));
-        worst.setReason(buildWorstReason(worstAverage, poseFrames, worstStart));
-        return worst;
+        List<PoseFrameProjection> poseFrames = poseDataRepository.findFramesBySessionId(session.getId());
+        return worstSectionCalculator.calculate(session, poseFrames);
     }
 
-    private String formatTimestamp(Double timestampSec) {
-        if (timestampSec == null) return "00:00";
-        int totalSeconds = timestampSec.intValue();
-        return String.format("%02d:%02d", totalSeconds / 60, totalSeconds % 60);
-    }
-
-    private String buildWorstReason(double averageSyncRate, List<PoseFrameProjection> list, int start) {
-        int syncPercent = (int) Math.round(averageSyncRate);
-        String dominantFeedback = pickDominantFeedback(list, start);
-        if (dominantFeedback == null || dominantFeedback.isBlank()) {
-            return String.format("싱크로율 %d%%", syncPercent);
-        }
-        return String.format("싱크로율 %d%% · %s", syncPercent, dominantFeedback);
-    }
-
-    // worst 구간 안의 feedback_message 중 가장 자주 등장한 것을 reason 보강에 사용
-    private String pickDominantFeedback(List<PoseFrameProjection> list, int start) {
-        java.util.Map<String, Integer> counts = new java.util.HashMap<>();
-        for (int j = 0; j < WORST_WINDOW_SIZE; j++) {
-            String message = list.get(start + j).feedbackMessage();
-            if (message == null || message.isBlank()) continue;
-            counts.merge(message, 1, Integer::sum);
-        }
-        return counts.entrySet().stream()
-                .max(java.util.Map.Entry.comparingByValue())
-                .map(java.util.Map.Entry::getKey)
-                .orElse(null);
-    }
-
-    // 본 프로젝트는 한 세션 = 한 운동 (project-squat-first) 이므로 단일 원소 리스트.
-    // BE-09 (세트 도입) 또는 한 세션 다중 운동 정책이 들어오면 이 메서드부터 확장.
     private List<ExerciseSyncRateDto> buildSyncRateDetails(Session session) {
         double avgSyncRate = session.getAvgSyncRate() == null ? 0.0 : session.getAvgSyncRate().doubleValue();
         int totalReps = session.getTotalReps() == null ? 0 : session.getTotalReps();

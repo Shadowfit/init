@@ -1,8 +1,11 @@
 package com.shadowfit.service.Exercise;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shadowfit.dto.exercises.VideoRequestDto;
+import com.shadowfit.dto.report.PoseFrameProjection;
 import com.shadowfit.dto.report.detailreport.ExerciseSessionDto;
+import com.shadowfit.dto.report.detailreport.WorstSectionDto;
 import com.shadowfit.dto.report.record.CalendarDayDto;
 import com.shadowfit.dto.report.record.CalendarMainResponseDto;
 import com.shadowfit.dto.report.record.DailyActivityResponseDto;
@@ -14,9 +17,14 @@ import com.shadowfit.model.exercise.Exercise;
 import com.shadowfit.model.exercise.Session;
 import com.shadowfit.model.exercise.Status;
 import com.shadowfit.model.member.Member;
+import com.shadowfit.model.report.Report;
+import com.shadowfit.model.report.ReportType;
 import com.shadowfit.repository.exercise.ExercisesRepository;
+import com.shadowfit.repository.exercise.PoseDataRepository;
 import com.shadowfit.repository.member.MemberRepository;
 import com.shadowfit.repository.exercise.SessionRepository;
+import com.shadowfit.repository.report.ReportRepository;
+import com.shadowfit.service.Report.WorstSectionCalculator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
@@ -42,6 +50,9 @@ public class SessionService {
     private final MemberRepository memberRepository;
     private final ObjectMapper objectMapper;
     private final com.shadowfit.service.Report.DailyLogService dailyLogService;
+    private final PoseDataRepository poseDataRepository;
+    private final WorstSectionCalculator worstSectionCalculator;
+    private final ReportRepository reportRepository;
 
     // 자기 주입: completeSession → applyComplete 호출이 Spring 프록시를 통과해 @Transactional이 적용되도록 함.
     @Lazy
@@ -132,6 +143,34 @@ public class SessionService {
         int exerciseMinutes = (int) java.time.Duration.between(session.getStartTime(), session.getEndTime()).toMinutes();
         dailyLogService.accumulateStats(session.getMember().getId(), session.getStartTime().toLocalDate(),
                 exerciseMinutes, java.math.BigDecimal.valueOf(request.getCaloriesBurned()));
+
+        precomputeReport(session);
+    }
+
+    /**
+     * precompute-on-write (report-read-path.md §9) — 세션 완료 시점에 worst 구간을 1회 계산해
+     * reports에 저장. GET /reports/sessions/{id} 조회 때마다 pose_data를 재계산하던 것을 제거하는
+     * 게 목적(db-deep-dive.md §B-3). applyComplete와 같은 트랜잭션(§9-2)이라 여기서 예외가 나면
+     * 세션 완료 자체가 롤백된다(§9-3) — completeSession의 낙관적 락 재시도, AI 콜백 재전송이 그대로
+     * 재시도 경로가 됨. pose_data가 아직 없는 경우는 WorstSectionCalculator가 null을 돌려주는
+     * 정상 케이스라 예외가 아니다(§9-3에서 실패로 분류하지 않기로 함).
+     */
+    private void precomputeReport(Session session) {
+        List<PoseFrameProjection> poseFrames = poseDataRepository.findFramesBySessionId(session.getId());
+        WorstSectionDto worstSection = worstSectionCalculator.calculate(session, poseFrames);
+
+        Report report = new Report();
+        report.setMember(session.getMember());
+        report.setSession(session);
+        report.setReportType(ReportType.SESSION);
+        if (worstSection != null) {
+            try {
+                report.setDetailedAnalysis(objectMapper.writeValueAsString(worstSection));
+            } catch (JsonProcessingException e) {
+                throw new IllegalStateException("worst 구간 직렬화 실패 - 세션 " + session.getId(), e);
+            }
+        }
+        reportRepository.save(report);
     }
 
     /**
@@ -169,6 +208,30 @@ public class SessionService {
                     }
                 }
         );
+    }
+
+    /**
+     * [개별 세션 삭제] 세션 1건만 지운다 (pose-data-partition-fk-tradeoff.md §5-1).
+     *
+     * - IN_PROGRESS는 삭제 불가(SESSION_DELETE_NOT_ALLOWED) — AI가 아직 분석 중일 수 있어, 먼저
+     *   종료(또는 타임아웃)된 뒤에만 삭제 가능.
+     * - pose_data는 파티셔닝 때문에 FK(CASCADE)가 없어 명시적으로 먼저 지움. reports·
+     *   session_feedback_logs는 exercise_sessions FK가 ON DELETE CASCADE라 세션 삭제로 자동 정리.
+     * - 세션 1건(~750행) 규모라 동기 삭제로 충분 — 회원 탈퇴(대량, PoseDataCleanupService 비동기)와
+     *   달리 별도 배치/비동기 불필요.
+     */
+    @Transactional
+    public void deleteSession(Long sessionId, Long currentMemberId) {
+        Session session = sessionRepository.findByIdAndMemberId(sessionId, currentMemberId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.SESSION_NOT_FOUND));
+
+        if (session.getStatus() == Status.IN_PROGRESS) {
+            throw new BusinessException(ErrorCode.SESSION_DELETE_NOT_ALLOWED);
+        }
+
+        poseDataRepository.deleteBySessionIdIn(List.of(session.getId()));
+        sessionRepository.delete(session);
+        sessionRepository.flush();
     }
 
     /**

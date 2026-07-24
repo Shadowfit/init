@@ -98,13 +98,13 @@
 - 면접: "왜 config(`hibernate.jdbc.batch_size`)로 안 풀고 JdbcTemplate? → IDENTITY라 Hibernate batch 미발동, 드라이버 레벨 batch가 정석."
 - **면접(꼬리질문 대비)**: "왜 ID 전략을 SEQUENCE로 안 바꿨나? → SEQUENCE는 INSERT 전에 미리 ID를 확보할 수 있어 이론상 Hibernate batch가 가능하지만, MySQL엔 네이티브 SEQUENCE가 없어 별도 ID발급 테이블로 흉내내야 함(추가 오버헤드) + 엔티티 전체의 PK 생성 전략을 바꾸는 더 큰 변경. `JdbcTemplate.batchUpdate`는 이 저장 경로 하나만 국소적으로 우회해 같은 효과를 더 작은 변경으로 냄."
 
-### B. 읽기 최적화 — projection / 캐싱 / precompute ⬜ 헤드라인 본편
+### B. 읽기 최적화 — projection / 캐싱 / precompute ✅ projection·precompute 완료 / 캐싱만 미착수
 
 목표 = `GET /reports/sessions/{id}` 응답시간 before/after.
 
 1. **projection** ✅ 측정 — `ReportService`가 엔티티 전체 로드 → worst 구간 계산은 `syncRate`·`feedbackMessage`·`timestampSec` 3개만 쓰는데 `joint_coordinates`(JSON 2.3KB)까지 끌어옴. → 3컬럼 projection DTO. **실측(2026-06-02, warm, 750행/세션): payload 1,716.8KB→22.4KB (−98.7%), warm 쿼리 12.1ms→1.5ms (8x)**. 같은 인덱스 — 차이는 JSON이 InnoDB **off-page 저장**이라 SELECT 시 overflow 페이지 random I/O, projection이 회피([`realmysql-experiments ②`](./realmysql-experiments.md)).
 2. **Redis 캐싱** ⬜ — 세션 종료 후 리포트 불변 → cache-aside, 높은 적중률. stampede 방지.
-3. **precompute-on-write** ⬜ — worst 구간을 세션 종료 시 1회 계산해 `reports`에 저장 → GET 때 pose_data 스캔 제거. denormalization.
+3. **precompute-on-write** ✅ **완료(2026-07-24)** — worst 구간을 세션 종료 시 1회 계산(`WorstSectionCalculator`)해 `reports.detailed_analysis`(JSON)에 저장, `SessionService.applyComplete`와 같은 트랜잭션. `ReportService.getSessionReport`는 이제 GET 때 `pose_data` 재스캔 없이 이 값을 읽기만 함(precompute 이전 리포트만 하위호환 fallback). 세부 설계 4가지(계산 위치·트랜잭션 경계·실패정책·백필)는 [`report-read-path.md §9`](../decisions/report-read-path.md).
 
 > ⚠️ 구 "인덱스 추가 → 850ms→12ms" 가설은 **폐기**. `schema.sql:86 idx_session_timestamp(session_id, timestamp_sec)`이 이미 쿼리에 최적이고 세션 단위라 테이블 성장에 무관(§4.3). 헤드라인은 인덱스가 아니라 **payload 축소**.
 
@@ -115,21 +115,22 @@
 | **낙관적 락**: 타임아웃 스케줄러 vs FastAPI 완료 콜백 경합 | ✅ | `Session.java:66 @Version`, `SessionTimeoutScheduler.java:84` 충돌 시 양보 |
 | **멱등성**: at-least-once gRPC 콜백 재전송 | ✅ | `FeedbackLogService.java:33` `INSERT IGNORE` + `uk_session_event` |
 | **일일 집계 lost-update** | ✅ 해결(2026-07-15) | `SessionService.applyComplete`에서 세션 완료 시 `DailyLogService.accumulateStats` 호출로 배선. `DailyLogRepository.upsertStats`(네이티브 `INSERT ... ON DUPLICATE KEY UPDATE` 한 문장)로 같은 날 두 세션 동시 종료돼도 lost-update 없음. **함정 발견**: 처음엔 원자 UPDATE 먼저 시도 후 실패 시(첫 기록) JPA `save()`로 INSERT, 그마저 유니크 위반이면 catch해서 재시도하는 방식으로 짰다가 동시성 테스트에서 실패(`org.hibernate.AssertionFailure: don't flush the Session after an exception occurs`) — `save()` 실패가 Hibernate 세션 자체를 손상시켜 같은 트랜잭션 내 후속 쿼리가 깨짐. 네이티브 upsert 한 문장으로 바꿔 해결 |
-| **report 생성 멱등성** | 🔶 후보 | `reports`에 session_id 유니크 없음 → 종료 재시도 시 중복 가능성 |
+| **report 생성 멱등성** | ✅ 완료 | `reports.session_id` UNIQUE(`uk_report_session`, `schema.sql`) + `SessionService.precomputeReport`(같은 날 구현된 precompute-on-write)가 실제 report 생성 경로. `applyComplete`의 기존 멱등성 체크(이미 COMPLETED면 조기 반환)와 UNIQUE 제약이 이중 방어 |
 
 상세 스토리는 [`problem-solving-log.md #3·#4`](./problem-solving-log.md).
 
-### D. 시계열 보존 — pose_data 버퍼의 TTL ✅ 파티션 스키마 구현 / ⬜ 자동 만료 트리거 미착수
+### D. 시계열 보존 — pose_data 버퍼의 TTL ✅ 완료(2026-07-24, 자동 만료 스케줄러 포함)
 
 > §0 재설계의 하위 도구. pose_data를 **단기 버퍼**로 만드는 만료 메커니즘.
 
-- ⚠️ **현재 실제 상태(2026-07-20, PR #43 반영 후)**: `mysql/schema.sql`에 `pose_data` **Range 파티션 스키마 자체는 실제로 반영됨**(월별 14개 파티션+`pfuture`, PK `(id, created_at)`). 근데 **오래된 파티션을 주기적으로 `DROP PARTITION`하는 자동화(스케줄러)는 코드에 없음** — 지금은 파티션 구조만 있고 실제 만료 자동화는 미착수. 아래 내용은 그 만료 메커니즘이 붙었을 때의 **설계 의도**이지, 지금 자동으로 실행 중인 게 아님.
-- **pose_data는 중간 산출물(버퍼)이어야 함** — precompute(§0, 아래 참고)로 worst 구간을 `reports`에 옮긴 직후 cold → TTL 안전(UX 손실 0)해진다는 게 설계 의도. **단, precompute-on-write 자체도 아직 미구현**(§B-3 참고, `ReportService.getSessionReport`는 조회 시마다 `pose_data`를 즉석 재계산 — TTL을 지금 걸면 재계산할 원본이 없어질 위험이 있어 precompute 구현이 선행돼야 함).
+- **완료(2026-07-24)**: `PoseDataPartitionScheduler`(`@Scheduled`, 매일 새벽 4시) 신설. 이번 달(쓰기 중) + 지난 1개월(버퍼)만 남기고 그 이전 파티션을 `DROP PARTITION` — 아카이빙 없이 완전 폐기(개인정보보호법 제21조 "지체없이 파기" 취지, S3 이전은 파기가 아니라는 판단). `pfuture`가 실데이터를 안 떠안도록 이번 달 기준 +2개월치 파티션을 `REORGANIZE`로 미리 생성. 안전마진: 파티션 이름이 `pYYYY_MM` 패턴과 정확히 일치할 때만 드롭 후보로 인정(정보스키마 조회 + 이름 파싱 이중 확인), `pfuture`는 쿼리 단계에서부터 제외. 세부 설계(보존기간·아카이빙·안전마진·실행주기)는 [`report-read-path.md §9-B`](../decisions/report-read-path.md).
+- **precompute-on-write 선행 완료(2026-07-24, §B-3)** — TTL이 안전하게 켜질 수 있었던 전제. 세션 완료 시 worst 구간이 이미 `reports`에 저장되므로, `pose_data` 원본이 드롭돼도 리포트는 영향 없음.
+- **pose_data는 중간 산출물(버퍼)** — precompute로 worst 구간을 `reports`에 옮긴 직후 cold → TTL 안전(UX 손실 0).
 - **구현 방향은 DELETE 아니라 DROP PARTITION**: 날짜 Range 파티셔닝 → 가장 오래된 파티션을 **O(1) 메타데이터 연산**으로 제거(락 거의 없음). 대량 DELETE는 락·undo 폭발. → **실측 확인**(1억 행 rig, [`realmysql-experiments §②(d)`](./realmysql-experiments.md)): 같은 ~8M행 만료가 **DELETE 18.6분(빈 952MB 파일 잔존) vs DROP PARTITION 1.8초(파일째 회수) ≈ 625x**.
 - **파티셔닝의 진짜 가치 = 쿼리 pruning 아니라 "값싼 TTL"** (쿼리는 이미 인덱스로 빠름, §4.3). 이 reframe이 핵심.
 - ⚠️ **파티션 전제 = PK에 파티션 키 포함** — pose_data PK `id`만으론 created_at 파티션 불가, PK를 `(id, created_at)`로 변경 완료(위 참고).
 - **샤딩은 안 함** — 단일 MySQL로 충분. 스케일 시에도 샤딩 전에 raw를 S3 티어링이 먼저(§0).
-- (선택) S3 아카이빙 → DROP.
+- **S3 아카이빙은 안 함 — 완전 폐기로 결정(2026-07-24)**. precompute로 요약이 이미 `reports`에 남으므로 원본을 따로 옮겨 보관할 이유가 없고, S3 이전은 "저장 위치 변경"일 뿐 개인정보보호법상 "파기"가 아니라 오히려 압축·수명주기 관리 부담만 늘어남.
 - ⚠️ **FK는 이미 제거됨**: `session→pose_data ON DELETE CASCADE`는 파티셔닝과 호환 안 돼(`ERROR 1506`) 제거됐고, 회원 탈퇴 시 정리는 애플리케이션 레벨 비동기 트리거(B5, `PoseDataCleanupService`)로 대체됨 — 상세 트레이드오프는 [`pose-data-partition-fk-tradeoff.md`](../decisions/pose-data-partition-fk-tradeoff.md).
 - **트리거 명시**: DAU 50엔 불필요. 버퍼 보존기간×볼륨이 커져 DELETE 만료가 부담될 때 발동.
 - 포폴 가치: 보존정책 + partition-drop은 신입이 거의 안 함 (§4.7).
