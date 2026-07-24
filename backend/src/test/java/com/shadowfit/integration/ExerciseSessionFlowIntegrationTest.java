@@ -1,5 +1,7 @@
 package com.shadowfit.integration;
 
+import com.shadowfit.global.error.BusinessException;
+import com.shadowfit.global.error.ErrorCode;
 import com.shadowfit.grpc.*;
 import com.shadowfit.model.exercise.Exercise;
 import com.shadowfit.model.exercise.ExerciseCategory;
@@ -9,10 +11,13 @@ import com.shadowfit.model.exercise.Status;
 import com.shadowfit.model.member.Member;
 import com.shadowfit.model.member.SelectedPersona;
 import com.shadowfit.model.member.UserRole;
+import com.shadowfit.model.report.Report;
+import com.shadowfit.model.report.ReportType;
 import com.shadowfit.repository.exercise.ExercisesRepository;
 import com.shadowfit.repository.exercise.PoseDataRepository;
 import com.shadowfit.repository.exercise.SessionRepository;
 import com.shadowfit.repository.member.MemberRepository;
+import com.shadowfit.repository.report.ReportRepository;
 import com.shadowfit.service.Exercise.ExerciseGrpcService;
 import com.shadowfit.service.Exercise.SessionService;
 import io.grpc.stub.StreamObserver;
@@ -30,6 +35,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -57,6 +63,7 @@ class ExerciseSessionFlowIntegrationTest {
     @Autowired private PoseDataRepository poseDataRepository;
     @Autowired private MemberRepository memberRepository;
     @Autowired private ExercisesRepository exercisesRepository;
+    @Autowired private ReportRepository reportRepository;
 
     private Member testMember;
     private Exercise testExercise;
@@ -178,6 +185,14 @@ class ExerciseSessionFlowIntegrationTest {
             assertThat(finished.getAvgSyncRate()).isEqualByComparingTo(new BigDecimal("77.5"));
             assertThat(finished.getEndTime()).isNotNull();
             assertThat(finished.getVersion()).isGreaterThanOrEqualTo(1L);
+
+            // then: precompute-on-write — 세션 완료와 같은 트랜잭션에서 reports가 미리 생성됨
+            // (report-read-path.md §9, 조회 시점 pose_data 재계산 없이 바로 읽을 수 있어야 함)
+            Report report = reportRepository.findBySessionId(sessionId).orElseThrow();
+            assertThat(report.getReportType()).isEqualTo(ReportType.SESSION);
+            assertThat(report.getMember().getId()).isEqualTo(testMember.getId());
+            assertThat(report.getDetailedAnalysis()).isNotBlank();
+            assertThat(report.getDetailedAnalysis()).contains("싱크로율");
         }
     }
 
@@ -263,6 +278,75 @@ class ExerciseSessionFlowIntegrationTest {
             // SESSION_NOT_FOUND → catch → onError 호출
             verify(obs, times(1)).onError(any(Throwable.class));
             assertThat(poseDataRepository.count()).isZero();
+        }
+    }
+
+    @Nested
+    @DisplayName("개별 세션 삭제 (pose-data-partition-fk-tradeoff.md §5-1)")
+    class DeleteSession {
+
+        @Test
+        @DisplayName("완료된 세션 삭제 → 세션·pose_data·reports 모두 정리됨")
+        void delete_completed_session_removes_pose_data_and_report() {
+            // given: rep 완성 콜백 + 종료 콜백까지 거쳐 COMPLETED + pose_data + report(precompute) 생성
+            Session session = createInProgressSession();
+            Long sessionId = session.getId();
+
+            @SuppressWarnings("unchecked")
+            StreamObserver<PoseDataResponse> batchObs = mock(StreamObserver.class);
+            grpcService.savePoseDataBatch(sampleBatch(sessionId, 5, 80.0), batchObs);
+
+            @SuppressWarnings("unchecked")
+            StreamObserver<SessionCompleteResponse> completeObs = mock(StreamObserver.class);
+            grpcService.completeAnalysis(sampleComplete(sessionId, 1, 80.0), completeObs);
+
+            assertThat(poseDataRepository.count()).isEqualTo(5);
+            assertThat(reportRepository.findBySessionId(sessionId)).isPresent();
+
+            // when
+            sessionService.deleteSession(sessionId, testMember.getId());
+
+            // then: 세션 자체도, pose_data(명시적 삭제)도, reports(FK CASCADE)도 전부 사라짐
+            assertThat(sessionRepository.findById(sessionId)).isEmpty();
+            assertThat(poseDataRepository.count()).isZero();
+            assertThat(reportRepository.findBySessionId(sessionId)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("IN_PROGRESS 세션 삭제 시도 → SESSION_DELETE_NOT_ALLOWED, 세션 그대로 남음")
+        void delete_in_progress_session_is_rejected() {
+            Session session = createInProgressSession();
+            Long sessionId = session.getId();
+
+            assertThatThrownBy(() -> sessionService.deleteSession(sessionId, testMember.getId()))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getErrorCode())
+                    .isEqualTo(ErrorCode.SESSION_DELETE_NOT_ALLOWED);
+
+            assertThat(sessionRepository.findById(sessionId)).isPresent();
+        }
+
+        @Test
+        @DisplayName("본인 세션이 아니면 SESSION_NOT_FOUND — 존재 여부 비공개")
+        void delete_others_session_is_not_found() {
+            Session session = createInProgressSession();
+            Long sessionId = session.getId();
+            sessionService.markAsFailedIfStillInProgress(sessionId, LocalDateTime.now()); // FAILED로 종료 처리
+
+            Member otherMember = memberRepository.saveAndFlush(Member.builder()
+                    .email("other@test.com")
+                    .username("다른유저")
+                    .password("dummy")
+                    .selectedPersona(SelectedPersona.BEGINNER)
+                    .role(UserRole.USER)
+                    .build());
+
+            assertThatThrownBy(() -> sessionService.deleteSession(sessionId, otherMember.getId()))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getErrorCode())
+                    .isEqualTo(ErrorCode.SESSION_NOT_FOUND);
+
+            assertThat(sessionRepository.findById(sessionId)).isPresent(); // 삭제 안 됨
         }
     }
 }

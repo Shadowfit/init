@@ -30,4 +30,15 @@ public class SessionController {
         sessionService.endSession(sessionId, userDetails.getMember().getId());
         return ResponseEntity.ok().build();
     }
+
+    @Operation(summary = "세션 삭제",
+               description = "세션 1건 삭제(pose_data 포함). 본인 세션 아니거나 존재하지 않으면 404, 진행 중(IN_PROGRESS)인 세션은 409 — 먼저 종료 후 삭제 가능.")
+    @DeleteMapping("/{sessionId}")
+    public ResponseEntity<Void> deleteSession(
+            @PathVariable Long sessionId,
+            @AuthenticationPrincipal CustomUserDetails userDetails
+    ) {
+        sessionService.deleteSession(sessionId, userDetails.getMember().getId());
+        return ResponseEntity.noContent().build();
+    }
 }

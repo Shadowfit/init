@@ -38,6 +38,8 @@ exercise_sessions(id) ──ON DELETE CASCADE──▶ pose_data.session_id  (+ 
 
 이건 이 문서의 본론(FK+파티션 비호환)과는 별개의 **제품 기능 공백**이지만, 나중에 이 기능이 추가되면 `pose_data` 삭제 트리거가 하나 더 생기는 것이므로 분기 B 설계에 영향을 준다 (§5-1 참조).
 
+> **완료(2026-07-24)**: `DELETE /sessions/{sessionId}` 구현 완료. §5-1 설계(동기 삭제로 충분) 그대로 적용. [`27-implementation-gaps.md`](../tasks/27-implementation-gaps.md) 참조.
+
 ---
 
 ## 2. 현재 보유 자원 · 제약

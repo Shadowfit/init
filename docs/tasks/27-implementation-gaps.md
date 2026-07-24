@@ -6,10 +6,10 @@
 
 ## 1. DB/백엔드 핵심 — 오늘 코드로 확인한 미구현
 
-- [ ] **precompute-on-write** — 리포트 worst 구간을 세션 종료 시 미리 계산해 `reports`에 저장하는 구조. 지금은 `ReportService.getSessionReport`가 조회할 때마다 `pose_data`를 즉석 재계산(`selectWorstSection`). 설계는 [`db-deep-dive.md §B-3`](../portfolio/db-deep-dive.md) ⬜.
-- [ ] **TTL 자동 만료 스케줄러** — `mysql/schema.sql`에 파티션 스키마(월별 RANGE, PK `(id, created_at)`)는 PR #43로 반영됨. 근데 오래된 파티션을 주기적으로 `DROP PARTITION`하는 `@Scheduled` 잡이 코드에 없음. 설계는 [`db-deep-dive.md §D`](../portfolio/db-deep-dive.md).
-- [ ] **개별 세션 삭제 기능** — 세션 1건만 지우는 API 자체가 없음(회원 탈퇴 전체 삭제 경로만 있음). [`pose-data-partition-fk-tradeoff.md §1-1`](../decisions/pose-data-partition-fk-tradeoff.md)에서 발견된 별도 feature gap.
-- [ ] **report 생성 멱등성** — `reports`에 `session_id` 유니크 제약 없음, 세션 종료 재시도 시 중복 생성 가능성. [`db-deep-dive.md §C`](../portfolio/db-deep-dive.md)에 🔶 후보로 남아있음.
+- [x] **precompute-on-write** — **완료(2026-07-24)**. `WorstSectionCalculator`로 계산 로직 분리, `SessionService.applyComplete`가 세션 완료와 같은 트랜잭션에서 `reports`에 worst 구간 저장(`detailed_analysis` JSON). `ReportService.getSessionReport`는 이제 이 값을 우선 읽고, precompute 이전 리포트(시드 등 `detailed_analysis` 없음)만 하위호환으로 즉석 재계산. 세부 설계 결정 4가지는 [`report-read-path.md §9`](../decisions/report-read-path.md). 설계는 [`db-deep-dive.md §B-3`](../portfolio/db-deep-dive.md) ✅.
+- [x] **TTL 자동 만료 스케줄러** — **완료(2026-07-24)**. `PoseDataPartitionScheduler`(매일 새벽 4시) 신설 — 이번 달+지난 1개월 버퍼만 남기고 그 이전 파티션 `DROP PARTITION`(아카이빙 없음, 완전 폐기), `pfuture`가 실데이터를 안 떠안게 이번 달 기준 +2개월치 파티션을 `REORGANIZE`로 미리 생성. precompute-on-write가 선행돼 있어 원본 삭제돼도 리포트 요약은 보존됨. 세부 설계는 [`report-read-path.md §9-B`](../decisions/report-read-path.md).
+- [x] **개별 세션 삭제 기능** — **완료(2026-07-24)**. `DELETE /sessions/{sessionId}`(`SessionController`) → `SessionService.deleteSession` — 소유권 확인, `IN_PROGRESS`는 409(`SESSION_DELETE_NOT_ALLOWED`, AI 분석 중일 수 있어 종료 후에만 삭제 가능), `pose_data`는 명시적 동기 삭제(FK 없음), `reports`·`session_feedback_logs`는 FK CASCADE로 자동 정리(§5-1 설계 그대로: 세션 1건 규모라 동기 삭제로 충분, 회원 탈퇴 같은 비동기 불필요). 구현 중 **entity-schema drift 발견·수정**: `Report`/`SessionFeedbackLog`의 `session` 필드가 Hibernate `@OnDelete` 없이 매핑돼 있어 테스트(H2, JPA 엔티티 기반 DDL)엔 실 `schema.sql`의 `ON DELETE CASCADE`가 반영 안 되고 있었음 — `@OnDelete(action=CASCADE)` 추가로 정정. [`pose-data-partition-fk-tradeoff.md §1-1·§5-1`](../decisions/pose-data-partition-fk-tradeoff.md).
+- [x] **report 생성 멱등성** — `reports.session_id`에 UNIQUE(`uk_report_session`) 추가 완료(2026-07-24, `mysql/schema.sql`). 단 report를 생성하는 애플리케이션 코드 자체가 없어(현재는 `data.sql` 시드로만 채워짐) 실사용 검증은 아직 아님 — 생성 로직 도입 시 재시도 중복을 막기 위한 선반영. [`db-deep-dive.md §C`](../portfolio/db-deep-dive.md).
 
 ## 2. 판단 완료, 착수 여부만 미결정
 
@@ -37,4 +37,4 @@
 
 ## 우선순위 제안
 
-인터뷰 준비 관점에서는 **1번(DB 핵심 미구현)**이 가장 중요 — 오늘 리뷰한 실험 깊이(precompute·TTL·정합성) 바로 다음 단계라 자연스럽게 이어지는 이야기가 됨. 2~3번은 "왜 아직 안 했는지"를 정직하게 설명할 수 있으면 충분. 4~5번은 지금 당장 급하지 않음.
+인터뷰 준비 관점에서는 **1번(DB 핵심 미구현)**이 가장 중요했음 — 2026-07-24로 **4개 전부 완료**(report 멱등성·precompute-on-write·TTL 스케줄러·개별 세션 삭제). 2~3번은 "왜 아직 안 했는지"를 정직하게 설명할 수 있으면 충분. 4~5번은 지금 당장 급하지 않음.

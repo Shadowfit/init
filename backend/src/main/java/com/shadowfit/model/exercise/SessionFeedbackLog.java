@@ -3,6 +3,8 @@ package com.shadowfit.model.exercise;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.OnDelete;
+import org.hibernate.annotations.OnDeleteAction;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -17,7 +19,6 @@ import java.time.LocalDateTime;
  */
 @Entity
 @Table(name = "session_feedback_logs",
-       indexes = @Index(name = "idx_session_feedback", columnList = "session_id, occurred_at"),
        uniqueConstraints = @UniqueConstraint(
                name = "uk_session_event",
                columnNames = {"session_id", "occurred_at", "feedback_type"}))
@@ -33,6 +34,7 @@ public class SessionFeedbackLog {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "session_id", nullable = false)
+    @OnDelete(action = OnDeleteAction.CASCADE) // 실 schema.sql의 ON DELETE CASCADE와 일치 — 세션 삭제 시 함께 정리
     private Session session;
 
     @Enumerated(EnumType.STRING)

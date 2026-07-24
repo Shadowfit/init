@@ -130,6 +130,16 @@ exercise:
       # 스케줄러 체크 간격(분) - 매 1분마다 체크
       check-interval-minutes: 1
 
+# [6] pose_data 파티션 TTL 설정 (report-read-path.md §9-B, 2026-07-24 확정)
+pose-data:
+  partition:
+    # 이번 달 + 이 개월 수만큼은 보존(버퍼), 그보다 오래된 파티션은 드롭
+    retention-buffer-months: 1
+    # pfuture가 실데이터를 안 떠안도록 이번 달 기준 몇 개월 앞까지 미리 파티션을 만들어둘지
+    lookahead-months: 2
+    # 파티션 점검 주기 - 월 단위 하우스키핑이라 매일 1회(새벽 4시)면 충분
+    check-cron: "0 0 4 * * *"
+
 # [4] 로깅 설정 (최상단 레벨)
 logging:
   level:

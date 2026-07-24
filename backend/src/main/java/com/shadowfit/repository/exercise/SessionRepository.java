@@ -20,6 +20,9 @@ public interface SessionRepository extends JpaRepository<Session,Long> {
     Optional<Session> findSessionWithExerciseByIdAndMemberId(@Param("sessionId") Long sessionId,
                                                               @Param("memberId") Long memberId);
 
+    // 개별 세션 삭제(deleteSession) 전용 — exercise fetch join 불필요, 소유권만 WHERE절로 확인.
+    Optional<Session> findByIdAndMemberId(Long sessionId, Long memberId);
+
     Optional<Session> findFirstByMemberIdAndExerciseIdAndStatusOrderByStartTimeDesc(
             Long memberId, Long exerciseId, Status status
     );
