@@ -160,15 +160,23 @@ class SessionServiceTest {
         }
 
         @Test
-        @DisplayName("이미 종료된 세션 재호출은 멱등 — endTime 안 바뀜, AI 재통보 없음")
+        @DisplayName("이미 종료된 세션 재호출은 멱등 — endTime 안 바뀜, AI 재통보도 정확히 1회만(중복 등록 안 됨)")
         void endSession_alreadyEnded_isIdempotent() {
             Session session = inProgressSession();
             sessionService.endSession(session.getId(), member.getId());
             LocalDateTime firstEndTime = sessionRepository.findById(session.getId()).orElseThrow().getEndTime();
 
-            sessionService.endSession(session.getId(), member.getId());
+            sessionService.endSession(session.getId(), member.getId()); // 멱등 경로 — 동기화 재등록 안 해야 함
 
             assertThat(sessionRepository.findById(session.getId()).orElseThrow().getEndTime()).isEqualTo(firstEndTime);
+
+            // CodeRabbit 지적 반영(2026-07-24): 이전엔 afterCommit을 시뮬레이션 안 해서
+            // stopAnalysis가 애초에 호출될 일이 없어 "재통보 없음"을 증명하지 못했음 — 커밋
+            // 시뮬레이션 후 정확히 1회(첫 endSession분)만 호출됐는지 직접 검증.
+            List<TransactionSynchronization> syncs = TransactionSynchronizationManager.getSynchronizations();
+            syncs.forEach(TransactionSynchronization::afterCommit);
+
+            verify(analysisService, times(1)).stopAnalysis(session.getId());
         }
 
         @Test

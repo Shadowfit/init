@@ -9,12 +9,14 @@ import com.shadowfit.model.exercise.Status;
 import com.shadowfit.model.member.Member;
 import com.shadowfit.model.member.SelectedPersona;
 import com.shadowfit.model.member.UserRole;
+import com.shadowfit.model.report.DailyLog;
 import com.shadowfit.model.report.Report;
 import com.shadowfit.model.report.ReportType;
 import com.shadowfit.repository.exercise.ExercisesRepository;
 import com.shadowfit.repository.exercise.SessionFeedbackLogRepository;
 import com.shadowfit.repository.exercise.SessionRepository;
 import com.shadowfit.repository.member.MemberRepository;
+import com.shadowfit.repository.report.DailyLogRepository;
 import com.shadowfit.repository.report.ReportRepository;
 import com.shadowfit.service.Member.MemberService;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,6 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -50,6 +53,7 @@ class MemberDeletionCascadeIntegrationTest {
     @Autowired private ExercisesRepository exercisesRepository;
     @Autowired private ReportRepository reportRepository;
     @Autowired private SessionFeedbackLogRepository feedbackLogRepository;
+    @Autowired private DailyLogRepository dailyLogRepository;
     @Autowired private EntityManager entityManager;
 
     private Member member;
@@ -93,6 +97,11 @@ class MemberDeletionCascadeIntegrationTest {
                 .occurredAt(LocalDateTime.now())
                 .build());
 
+        dailyLogRepository.saveAndFlush(DailyLog.builder()
+                .member(member).logDate(LocalDate.now())
+                .totalExerciseTime(20).totalCalories(new BigDecimal("100.0"))
+                .build());
+
         // refresh_token/body_records는 이 통합테스트로 검증 불가:
         // - refresh_token: RefreshToken 엔티티가 Member로 가는 @ManyToOne 매핑 자체가 없어서
         //   (memberId가 단순 Long 컬럼) H2 테스트 스키마엔 FK조차 안 생김 — 별도 구조 개선 필요.
@@ -102,10 +111,11 @@ class MemberDeletionCascadeIntegrationTest {
     }
 
     @Test
-    @DisplayName("탈퇴 시 세션·리포트·피드백로그 전부 정리됨 (실제 JPA cascade로 검증 가능한 범위)")
+    @DisplayName("탈퇴 시 세션·리포트·피드백로그·일일로그 전부 정리됨 (실제 JPA cascade로 검증 가능한 범위)")
     void deleteAccount_cascadesToAllOwnedData() {
         Long memberId = member.getId();
         Long sessionId = session.getId();
+        LocalDate logDate = LocalDate.now();
 
         memberService.deleteAccount(member.getEmail());
 
@@ -120,5 +130,8 @@ class MemberDeletionCascadeIntegrationTest {
         assertThat(sessionRepository.findById(sessionId)).isEmpty();
         assertThat(reportRepository.findBySessionId(sessionId)).isEmpty();
         assertThat(feedbackLogRepository.findBySessionIdOrderByOccurredAtAsc(sessionId)).isEmpty();
+        // CodeRabbit 지적 반영(2026-07-24): DailyLog.member도 오늘 @OnDelete를 추가한 대상인데
+        // 이 테스트가 빠뜨리고 있었음 — 실제 cascade까지 확인.
+        assertThat(dailyLogRepository.findByMemberIdAndLogDate(memberId, logDate)).isEmpty();
     }
 }

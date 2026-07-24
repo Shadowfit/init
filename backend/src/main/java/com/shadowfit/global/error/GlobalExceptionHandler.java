@@ -22,13 +22,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponseDto> handleBusinessException(BusinessException e) {
         ErrorCode code = e.getErrorCode();
         log.warn("BusinessException: {} ({})", code.getCode(), code.getMessage());
-        return ResponseEntity
-                .status(code.getStatus())
-                .body(ErrorResponseDto.builder()
-                        .status(code.getStatus())
-                        .message(code.getMessage())
-                        .timestamp(LocalDateTime.now())
-                        .build());
+        return buildResponse(code);
     }
 
     /**
@@ -40,15 +34,8 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ErrorResponseDto> handleAccessDeniedException(AccessDeniedException e) {
-        ErrorCode code = ErrorCode.ACCESS_DENIED;
         log.warn("AccessDeniedException: {}", e.getMessage());
-        return ResponseEntity
-                .status(code.getStatus())
-                .body(ErrorResponseDto.builder()
-                        .status(code.getStatus())
-                        .message(code.getMessage())
-                        .timestamp(LocalDateTime.now())
-                        .build());
+        return buildResponse(ErrorCode.ACCESS_DENIED);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -58,24 +45,27 @@ public class GlobalExceptionHandler {
                 .map(err -> err.getField() + ": " + err.getDefaultMessage())
                 .collect(Collectors.joining(", "));
         log.warn("Validation failed: {}", message);
-        return ResponseEntity
-                .status(code.getStatus())
-                .body(ErrorResponseDto.builder()
-                        .status(code.getStatus())
-                        .message(message.isEmpty() ? code.getMessage() : message)
-                        .timestamp(LocalDateTime.now())
-                        .build());
+        return buildResponse(code, message.isEmpty() ? code.getMessage() : message);
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponseDto> handleUnexpectedException(Exception e) {
-        ErrorCode code = ErrorCode.INTERNAL_SERVER_ERROR;
         log.error("Unhandled exception", e);
+        return buildResponse(ErrorCode.INTERNAL_SERVER_ERROR);
+    }
+
+    // CodeRabbit 지적 반영(2026-07-24): 4개 핸들러가 거의 동일한 ErrorResponseDto 생성 로직을
+    // 반복하고 있어 공통 헬퍼로 추출.
+    private ResponseEntity<ErrorResponseDto> buildResponse(ErrorCode code) {
+        return buildResponse(code, code.getMessage());
+    }
+
+    private ResponseEntity<ErrorResponseDto> buildResponse(ErrorCode code, String message) {
         return ResponseEntity
                 .status(code.getStatus())
                 .body(ErrorResponseDto.builder()
                         .status(code.getStatus())
-                        .message(code.getMessage())
+                        .message(message)
                         .timestamp(LocalDateTime.now())
                         .build());
     }
