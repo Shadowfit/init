@@ -26,23 +26,34 @@ public class WorstSectionCalculator {
             return null;
         }
 
-        int worstStart = 0;
+        // null syncRate가 하나라도 낀 구간은 평균을 낼 수 없으므로 후보에서 완전히 배제(continue) —
+        // 예전엔 그 구간에 Double.MAX_VALUE를 줘서 "웬만하면 안 뽑히게"만 했는데, 모든 구간에 null이
+        // 껴있는 극단 케이스엔 그래도 첫 구간이 뽑혀 터무니없는 평균이 나가는 버그가 있었음(CodeRabbit).
+        int worstStart = -1;
         double worstAverage = Double.MAX_VALUE;
         for (int i = 0; i <= poseFrames.size() - WORST_WINDOW_SIZE; i++) {
             double sum = 0.0;
+            boolean windowValid = true;
             for (int j = 0; j < WORST_WINDOW_SIZE; j++) {
                 Double rate = poseFrames.get(i + j).syncRate();
                 if (rate == null) {
-                    sum = Double.MAX_VALUE;
+                    windowValid = false;
                     break;
                 }
                 sum += rate;
+            }
+            if (!windowValid) {
+                continue;
             }
             double average = sum / WORST_WINDOW_SIZE;
             if (average < worstAverage) {
                 worstAverage = average;
                 worstStart = i;
             }
+        }
+
+        if (worstStart < 0) {
+            return null; // 유효한(null 없는) 구간이 하나도 없음
         }
 
         // 구간의 중앙 프레임을 대표 timestamp 로 사용

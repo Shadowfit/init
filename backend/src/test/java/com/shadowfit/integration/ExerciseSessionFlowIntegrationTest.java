@@ -5,8 +5,10 @@ import com.shadowfit.global.error.ErrorCode;
 import com.shadowfit.grpc.*;
 import com.shadowfit.model.exercise.Exercise;
 import com.shadowfit.model.exercise.ExerciseCategory;
+import com.shadowfit.model.exercise.FeedbackType;
 import com.shadowfit.model.exercise.PoseData;
 import com.shadowfit.model.exercise.Session;
+import com.shadowfit.model.exercise.SessionFeedbackLog;
 import com.shadowfit.model.exercise.Status;
 import com.shadowfit.model.member.Member;
 import com.shadowfit.model.member.SelectedPersona;
@@ -15,6 +17,7 @@ import com.shadowfit.model.report.Report;
 import com.shadowfit.model.report.ReportType;
 import com.shadowfit.repository.exercise.ExercisesRepository;
 import com.shadowfit.repository.exercise.PoseDataRepository;
+import com.shadowfit.repository.exercise.SessionFeedbackLogRepository;
 import com.shadowfit.repository.exercise.SessionRepository;
 import com.shadowfit.repository.member.MemberRepository;
 import com.shadowfit.repository.report.ReportRepository;
@@ -64,6 +67,7 @@ class ExerciseSessionFlowIntegrationTest {
     @Autowired private MemberRepository memberRepository;
     @Autowired private ExercisesRepository exercisesRepository;
     @Autowired private ReportRepository reportRepository;
+    @Autowired private SessionFeedbackLogRepository feedbackLogRepository;
 
     private Member testMember;
     private Exercise testExercise;
@@ -286,7 +290,7 @@ class ExerciseSessionFlowIntegrationTest {
     class DeleteSession {
 
         @Test
-        @DisplayName("완료된 세션 삭제 → 세션·pose_data·reports 모두 정리됨")
+        @DisplayName("완료된 세션 삭제 → 세션·pose_data·reports·session_feedback_logs 모두 정리됨")
         void delete_completed_session_removes_pose_data_and_report() {
             // given: rep 완성 콜백 + 종료 콜백까지 거쳐 COMPLETED + pose_data + report(precompute) 생성
             Session session = createInProgressSession();
@@ -296,20 +300,30 @@ class ExerciseSessionFlowIntegrationTest {
             StreamObserver<PoseDataResponse> batchObs = mock(StreamObserver.class);
             grpcService.savePoseDataBatch(sampleBatch(sessionId, 5, 80.0), batchObs);
 
+            // 이번 삭제로 같이 정리돼야 할 session_feedback_logs (SessionFeedbackLog.session의
+            // @OnDelete(CASCADE) 계약 검증 — CodeRabbit 리뷰로 보강)
+            feedbackLogRepository.saveAndFlush(SessionFeedbackLog.builder()
+                    .session(session)
+                    .feedbackType(FeedbackType.KNEE_OUT)
+                    .occurredAt(LocalDateTime.now())
+                    .build());
+
             @SuppressWarnings("unchecked")
             StreamObserver<SessionCompleteResponse> completeObs = mock(StreamObserver.class);
             grpcService.completeAnalysis(sampleComplete(sessionId, 1, 80.0), completeObs);
 
             assertThat(poseDataRepository.count()).isEqualTo(5);
             assertThat(reportRepository.findBySessionId(sessionId)).isPresent();
+            assertThat(feedbackLogRepository.findBySessionIdOrderByOccurredAtAsc(sessionId)).hasSize(1);
 
             // when
             sessionService.deleteSession(sessionId, testMember.getId());
 
-            // then: 세션 자체도, pose_data(명시적 삭제)도, reports(FK CASCADE)도 전부 사라짐
+            // then: 세션 자체도, pose_data(명시적 삭제)도, reports·session_feedback_logs(FK CASCADE)도 전부 사라짐
             assertThat(sessionRepository.findById(sessionId)).isEmpty();
             assertThat(poseDataRepository.count()).isZero();
             assertThat(reportRepository.findBySessionId(sessionId)).isEmpty();
+            assertThat(feedbackLogRepository.findBySessionIdOrderByOccurredAtAsc(sessionId)).isEmpty();
         }
 
         @Test

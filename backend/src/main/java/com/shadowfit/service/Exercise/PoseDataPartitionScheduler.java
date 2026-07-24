@@ -125,8 +125,15 @@ public class PoseDataPartitionScheduler {
             log.warn("pose_data 파티션 이름이 예상 패턴(pYYYY_MM)과 다름 — 안전을 위해 유지보수 대상에서 제외: {}", name);
             return null;
         }
-        YearMonth month = YearMonth.of(Integer.parseInt(m.group(1)), Integer.parseInt(m.group(2)));
-        return new PartitionInfo(name, month, approxRows);
+        try {
+            YearMonth month = YearMonth.of(Integer.parseInt(m.group(1)), Integer.parseInt(m.group(2)));
+            return new PartitionInfo(name, month, approxRows);
+        } catch (java.time.DateTimeException e) {
+            // 패턴은 맞지만 월 값이 유효 범위(01~12) 밖인 경우(예: p2026_13) — 스케줄러 전체가
+            // 죽지 않도록 패턴 불일치와 동일하게 유지보수 대상에서만 제외
+            log.warn("pose_data 파티션 이름의 월 값이 유효하지 않음 — 유지보수 대상에서 제외: {}", name, e);
+            return null;
+        }
     }
 
     private String partitionName(YearMonth month) {

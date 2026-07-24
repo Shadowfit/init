@@ -115,7 +115,7 @@
 | **낙관적 락**: 타임아웃 스케줄러 vs FastAPI 완료 콜백 경합 | ✅ | `Session.java:66 @Version`, `SessionTimeoutScheduler.java:84` 충돌 시 양보 |
 | **멱등성**: at-least-once gRPC 콜백 재전송 | ✅ | `FeedbackLogService.java:33` `INSERT IGNORE` + `uk_session_event` |
 | **일일 집계 lost-update** | ✅ 해결(2026-07-15) | `SessionService.applyComplete`에서 세션 완료 시 `DailyLogService.accumulateStats` 호출로 배선. `DailyLogRepository.upsertStats`(네이티브 `INSERT ... ON DUPLICATE KEY UPDATE` 한 문장)로 같은 날 두 세션 동시 종료돼도 lost-update 없음. **함정 발견**: 처음엔 원자 UPDATE 먼저 시도 후 실패 시(첫 기록) JPA `save()`로 INSERT, 그마저 유니크 위반이면 catch해서 재시도하는 방식으로 짰다가 동시성 테스트에서 실패(`org.hibernate.AssertionFailure: don't flush the Session after an exception occurs`) — `save()` 실패가 Hibernate 세션 자체를 손상시켜 같은 트랜잭션 내 후속 쿼리가 깨짐. 네이티브 upsert 한 문장으로 바꿔 해결 |
-| **report 생성 멱등성** | ✅ 스키마 선반영 | `reports.session_id` UNIQUE(`uk_report_session`, `schema.sql`) 추가. 단 report를 생성하는 애플리케이션 코드 자체가 아직 없어(현재 데이터는 `data.sql` 시드뿐) 실사용 검증은 아님 — 생성 로직 도입 시 재시도 중복을 DB 제약으로 막기 위한 선반영 |
+| **report 생성 멱등성** | ✅ 완료 | `reports.session_id` UNIQUE(`uk_report_session`, `schema.sql`) + `SessionService.precomputeReport`(같은 날 구현된 precompute-on-write)가 실제 report 생성 경로. `applyComplete`의 기존 멱등성 체크(이미 COMPLETED면 조기 반환)와 UNIQUE 제약이 이중 방어 |
 
 상세 스토리는 [`problem-solving-log.md #3·#4`](./problem-solving-log.md).
 
