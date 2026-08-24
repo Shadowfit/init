@@ -262,6 +262,13 @@ public class SessionService {
         // 싱크 통계는 AI 가 보낸 값을 쓰지 않고 pose_data 에서 직접 집계한다 (이슈 #75).
         SyncStats sync = resolveSyncStats(session, request);
 
+        LocalDateTime completedAt = LocalDateTime.now();
+        java.time.Duration duration = java.time.Duration.between(session.getStartTime(), completedAt);
+
+        // 칼로리도 AI 가 보낸 값을 쓰지 않고 Spring 이 계산한다 (이슈 #268 — #75 와 같은 이유:
+        // AI 는 하드코딩 0 을 보내고 있었다). 체중이 없으면 계산하지 않는다(resolveCaloriesBurned).
+        java.math.BigDecimal calories = resolveCaloriesBurned(session, duration);
+
         // 멱등성: FastAPI가 응답 유실로 같은 결과를 재전송한 경우(2-1, 2-2) 첫 완료 시각/기록을 보존하고
         // 즉시 종료한다. 판정은 Session.complete 안에만 있다 — 여기서 미리 한 번 더 보면 위 집계
         // 쿼리를 아낄 수 있지만, 그러면 가드가 두 곳이 되고 엔티티 쪽 분기는 도달 불가능해진다.
@@ -269,21 +276,46 @@ public class SessionService {
         boolean transitioned = session.complete(
                 request.getTotalReps(),
                 sync,
-                java.math.BigDecimal.valueOf(request.getCaloriesBurned()),
-                LocalDateTime.now());
+                calories,
+                completedAt);
         if (!transitioned) {
             return;
         }
 
         sessionRepository.saveAndFlush(session);
 
-        int exerciseMinutes = (int) java.time.Duration.between(session.getStartTime(), session.getEndTime()).toMinutes();
+        int exerciseMinutes = (int) duration.toMinutes();
+        // 이번 세션 칼로리가 null(체중 미입력)이면 daily_logs 누적엔 0 을 더한다 — null 을 그대로
+        // 넘기면 upsertStats 의 "total_calories = total_calories + VALUES(...)" 가 그날 누적치
+        // 전체를 NULL 로 오염시킨다(DailyLogRepository:32, MySQL 은 NULL + 값 = NULL).
         dailyLogService.accumulateStats(session.getMember().getId(), session.getStartTime().toLocalDate(),
-                exerciseMinutes, java.math.BigDecimal.valueOf(request.getCaloriesBurned()));
+                exerciseMinutes, calories != null ? calories : java.math.BigDecimal.ZERO);
 
         precomputeReport(session);
 
         sessionMetrics.sessionTransition(Status.COMPLETED, "ai-callback");
+    }
+
+    // 2024 Adult Compendium of Physical Activities(Herrmann et al.) 의 "bodyweight squats,
+    // general effort" 항목 — 문헌 MET 값이지 이 프로젝트의 실측치가 아니다.
+    // 🔴 2차 출처(검색 요약) 교차확인만 했다 — 원문 PDF 접근이 막혀 활동 코드까지는 직접 대조하지
+    // 못했다. 정확한 값이 필요해지면(예: 논문 재인용) 원문 대조가 선행돼야 한다.
+    private static final double SQUAT_MET = 3.0;
+
+    /**
+     * [칼로리 계산] MET × 체중(kg) × 운동시간(시간). AI 가 보낸 값(하드코딩 0)을 쓰지 않는다
+     * (이슈 #268). 체중이 없으면(온보딩 미완료 등) {@code null} 을 돌려준다 — 근거 없는 기본
+     * 체중을 박지 않는다([[feedback_no_arbitrary_threshold_values]]). 호출부가 이 null 을
+     * daily_logs 누적에 그대로 넘기면 안 된다({@code applyComplete} 의 주석 참고).
+     */
+    private java.math.BigDecimal resolveCaloriesBurned(Session session, java.time.Duration duration) {
+        Double weightKg = session.getMember().getWeight();
+        if (weightKg == null) {
+            return null;
+        }
+        double hours = duration.toMillis() / 3_600_000.0;
+        double calories = SQUAT_MET * weightKg * hours;
+        return java.math.BigDecimal.valueOf(calories).setScale(2, java.math.RoundingMode.HALF_UP);
     }
 
     /**
