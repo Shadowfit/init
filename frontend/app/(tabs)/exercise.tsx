@@ -7,7 +7,7 @@ import { exercisesService } from '@/services/exercisesService';
 import { aiService, aiConfigError } from '@/services/aiService';
 import type { FeedbackTemplate } from '@/types/feedback';
 import { FEEDBACK_TYPE_LABEL } from '@/types/feedback';
-import type { AiFeedbackType } from '@/types/pose';
+import type { AiFeedbackType, OnboardingGuideItem } from '@/types/pose';
 import {
   Camera as CameraIcon,
   ChevronLeft,
@@ -23,6 +23,14 @@ import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { COLORS, FONT_SIZE, SPACING, RADIUS } from '@/constants/Colors';
 import Button from '@/components/ui/Button';
+
+// 촬영 가이드 항목 key → 이모지. 서버(#292 정본)가 고정한 4종만 온다.
+const GUIDE_EMOJI: Record<string, string> = {
+  angle: '📐',
+  distance: '🧍',
+  lighting: '💡',
+  mirror: '🚫',
+};
 
 /** 색상을 rgba 문자열로 변환 (hex만 지원) */
 function hexToRgba(hex: string, alpha: number) {
@@ -67,6 +75,8 @@ export default function ExerciseScreen() {
   const [isRecording, setIsRecording] = useState(false);
   const [syncRate, setSyncRate] = useState(0);
   const [guideOpen, setGuideOpen] = useState(false);
+  // 촬영 가이드 (GET AI /sync/onboarding-guide) — 정적 콘텐츠라 마운트 시 1회만 조회
+  const [guideItems, setGuideItems] = useState<OnboardingGuideItem[]>([]);
 
   // 백엔드 세션 (POST /exercises/sessions → PATCH /sessions/{id}/end)
   const [sessionId, setSessionId] = useState<number | null>(null);
@@ -153,6 +163,16 @@ export default function ExerciseScreen() {
     const t = setTimeout(() => setLastFeedback(null), 4000);
     return () => clearTimeout(t);
   }, [lastFeedback]);
+
+  // 촬영 가이드 (GET AI /sync/onboarding-guide) — 정적 콘텐츠라 마운트 시 1회만 조회
+  useEffect(() => {
+    aiService
+      .getOnboardingGuide()
+      .then((res) => setGuideItems(res.data.items))
+      .catch((e) => {
+        console.warn('[onboarding-guide] status=', e?.response?.status);
+      });
+  }, []);
 
   // ── AI 폴링 (분기 H2) ────────────────────────────────────
   // takePictureAsync 는 셔터·인코딩 비용이 크므로 10fps 는 비현실적.
@@ -356,26 +376,31 @@ export default function ExerciseScreen() {
           </View>
         )}
 
-        {/* 촬영 가이드 (접기/펴기) */}
-        <TouchableOpacity
-          style={styles.guideToggle}
-          onPress={() => setGuideOpen(!guideOpen)}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.guideToggleText}>촬영 가이드</Text>
-          {guideOpen ? (
-            <ChevronUp size={14} color={COLORS.textSecondary} strokeWidth={2} />
-          ) : (
-            <ChevronDown size={14} color={COLORS.textSecondary} strokeWidth={2} />
-          )}
-        </TouchableOpacity>
-        {guideOpen && (
-          <View style={styles.guidePanel}>
-            <Text style={styles.guideRow}>📐  정면 또는 측면(45°)에서 촬영</Text>
-            <Text style={styles.guideRow}>🧍  전신이 보이도록 1.5m 이상 거리 확보</Text>
-            <Text style={styles.guideRow}>💡  밝은 조명, 단색 배경 권장</Text>
-            <Text style={styles.guideRow}>🚫  거울 반사, 여러 사람 환경 주의</Text>
-          </View>
+        {/* 촬영 가이드 (접기/펴기) — 값 정본은 서버(#292), 못 받으면 토글 자체를 숨긴다 */}
+        {guideItems.length > 0 && (
+          <>
+            <TouchableOpacity
+              style={styles.guideToggle}
+              onPress={() => setGuideOpen(!guideOpen)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.guideToggleText}>촬영 가이드</Text>
+              {guideOpen ? (
+                <ChevronUp size={14} color={COLORS.textSecondary} strokeWidth={2} />
+              ) : (
+                <ChevronDown size={14} color={COLORS.textSecondary} strokeWidth={2} />
+              )}
+            </TouchableOpacity>
+            {guideOpen && (
+              <View style={styles.guidePanel}>
+                {guideItems.map((item) => (
+                  <Text key={item.key} style={styles.guideRow}>
+                    {(GUIDE_EMOJI[item.key] ?? '•') + '  ' + item.body}
+                  </Text>
+                ))}
+              </View>
+            )}
+          </>
         )}
 
         {/* DEV: 싱크로율 수동 조절 (AI 서버 연동 전 테스트용) */}

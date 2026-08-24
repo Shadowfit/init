@@ -1,7 +1,7 @@
 import axios from 'axios';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
-import type { PoseDetectRequest, PoseDetectResponse } from '@/types/pose';
+import type { PoseDetectRequest, PoseDetectResponse, OnboardingGuideResponse } from '@/types/pose';
 
 // AI 서버(FastAPI)는 Spring(:8080)이 아니라 별도 :8000 /api/v1 로 직결한다 (분기 H2).
 //
@@ -80,4 +80,8 @@ export const aiService = {
   // 실시간 포즈 감지 (POST {ai}:8000/api/v1/pose)
   detectPose: (data: PoseDetectRequest) =>
     aiApi.post<PoseDetectResponse>('/pose', data),
+
+  // 촬영 가이드 (GET {ai}:8000/api/v1/sync/onboarding-guide) — 정본은 서버(#292).
+  getOnboardingGuide: () =>
+    aiApi.get<OnboardingGuideResponse>('/sync/onboarding-guide'),
 };

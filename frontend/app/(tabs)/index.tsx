@@ -19,7 +19,17 @@ import {
 import { COLORS, FONT_SIZE, SPACING, RADIUS } from '@/constants/Colors';
 import Button from '@/components/ui/Button';
 import { reportService } from '@/services/reportService';
+import { aiService } from '@/services/aiService';
 import type { CalendarMainResponse, CalendarDay, DailyActivityResponse } from '@/types/report';
+import type { OnboardingGuideItem } from '@/types/pose';
+
+// 촬영 가이드 항목 key → 아이콘. 서버(#292 정본)가 고정한 4종만 온다.
+const GUIDE_ICONS: Record<string, LucideIcon> = {
+  angle: Ruler,
+  distance: PersonStanding,
+  lighting: Lightbulb,
+  mirror: Ban,
+};
 
 function getSyncColor(rate: number) {
   if (rate >= 80) return COLORS.primary;
@@ -61,6 +71,17 @@ export default function HomeScreen() {
   // 선택 날짜의 운동 목록 (GET /reports/daily)
   const [daily, setDaily] = useState<DailyActivityResponse | null>(null);
   const [dailyLoading, setDailyLoading] = useState(false);
+  // 촬영 가이드 (GET AI /sync/onboarding-guide) — 정적 콘텐츠라 마운트 시 1회만 조회
+  const [guideItems, setGuideItems] = useState<OnboardingGuideItem[]>([]);
+
+  useEffect(() => {
+    aiService
+      .getOnboardingGuide()
+      .then((res) => setGuideItems(res.data.items))
+      .catch((e) => {
+        console.warn('[onboarding-guide] status=', e?.response?.status);
+      });
+  }, []);
 
   // 화면 포커스 / 연·월 변경마다 캘린더 데이터 재조회
   useFocusEffect(
@@ -216,17 +237,22 @@ export default function HomeScreen() {
           </TouchableOpacity>
         ))}
 
-        {/* 촬영 가이드 */}
-        <View style={styles.guideBox}>
-          <View style={styles.guideHeaderRow}>
-            <Camera size={16} color={COLORS.text} strokeWidth={2} />
-            <Text style={styles.guideHeader}>운동 촬영 가이드</Text>
+        {/* 촬영 가이드 — 값 정본은 서버(#292) */}
+        {guideItems.length > 0 && (
+          <View style={styles.guideBox}>
+            <View style={styles.guideHeaderRow}>
+              <Camera size={16} color={COLORS.text} strokeWidth={2} />
+              <Text style={styles.guideHeader}>운동 촬영 가이드</Text>
+            </View>
+            {guideItems.map((item) => (
+              <GuideItem
+                key={item.key}
+                Icon={GUIDE_ICONS[item.key] ?? Camera}
+                text={item.body}
+              />
+            ))}
           </View>
-          <GuideItem Icon={Ruler} text="정면 또는 측면(45°)에서 촬영" />
-          <GuideItem Icon={PersonStanding} text="전신이 보이도록 1.5m 이상 거리 확보" />
-          <GuideItem Icon={Lightbulb} text="밝은 조명, 단색 배경 권장" />
-          <GuideItem Icon={Ban} text="거울 반사, 여러 사람이 보이는 환경은 피해주세요" />
-        </View>
+        )}
 
         {/* 운동 시작 버튼 */}
         <Button

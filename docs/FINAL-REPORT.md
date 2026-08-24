@@ -368,7 +368,7 @@ ShadowFit은 카메라 한 대로 운동 자세를 정량 분석·교정하는 �
 | 피드백 템플릿 | `GET /exercises/{id}/feedback-templates` |
 | 리포트 | `GET /reports/weekly-summary`·`/calendar`·`/session/{id}`, `POST /reports/daily-logs` |
 | TTS/관리자 | `GET·PATCH /preferences/tts`, `PATCH /admin/exercises/{id}/thresholds` |
-| AI 서버 | `POST /pose` (유일한 실사용) · 🔴 `/sync`·`/video/analyze`·`GET /sync/onboarding-guide` 는 호출자 0건 ([#293](https://github.com/Shadowfit/init/issues/293)) |
+| AI 서버 | `POST /pose`·`GET /sync/onboarding-guide` (2026-08-24, [#292](https://github.com/Shadowfit/init/issues/292)) · 🔴 `POST /sync`·`/video/analyze` 는 여전히 호출자 0건 ([#293](https://github.com/Shadowfit/init/issues/293)) |
 
 ## 부록 B. 데이터베이스 스키마 요약
 

@@ -33,6 +33,20 @@ export type PoseSkipReason =
   | 'SESSION_NOT_FOUND'
   | 'UNSUPPORTED_EXERCISE';
 
+// 온보딩/촬영 가이드 항목 — GET /api/v1/sync/onboarding-guide
+// key 는 서버가 고정한 4종(angle, distance, lighting, mirror)만 온다.
+export interface OnboardingGuideItem {
+  key: string;
+  title: string;
+  body: string;
+}
+
+export interface OnboardingGuideResponse {
+  step: number;
+  title: string;
+  items: OnboardingGuideItem[];
+}
+
 export interface PoseDetectResponse {
   // 🔴 «판정에 들어갔는가» 다 (이슈 #267 에서 의미가 좁혀졌다). «요청이 처리됐는가» 가 아니다.
   //

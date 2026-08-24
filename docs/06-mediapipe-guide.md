@@ -47,10 +47,11 @@ React Native에서 직접 실행하는 대신 서버에서 처리하는 이유:
 | POST | `/api/v1/pose` | 실시간 프레임 → 관절 좌표 + 각도 | ✅ 프론트 (`services/aiService.ts`) |
 | POST | `/api/v1/sync` | 각도 시퀀스 비교 → 싱크로율(%) | 🔴 **없음** ([#293](https://github.com/Shadowfit/init/issues/293)) |
 | POST | `/api/v1/video/analyze` | 참고 영상 전처리 (사전 분석) | 🔴 **없음** ([#293](https://github.com/Shadowfit/init/issues/293)) |
-| GET | `/api/v1/sync/onboarding-guide` | 온보딩 촬영 가이드 문구 | 🔴 **없음** ([#293](https://github.com/Shadowfit/init/issues/293)) |
+| GET | `/api/v1/sync/onboarding-guide` | 촬영 가이드 문구 | ✅ 프론트 홈·운동 화면 (2026-08-24, [#292](https://github.com/Shadowfit/init/issues/292)) |
 | GET | `/health` | 서버 상태 확인 | ✅ 컨테이너 헬스체크 |
 
-> 🔴 **AI 로 가는 실제 트래픽은 두 갈래뿐이다** — 프론트의 `POST /pose`, 그리고 **Spring↔AI 의 gRPC**.
+> 🔴 **AI 로 가는 실제 HTTP 트래픽은 세 갈래다** — 프론트의 `POST /pose`·`GET /sync/onboarding-guide`,
+> 그리고 **Spring↔AI 의 gRPC**. `POST /sync`·`POST /video/analyze` 는 여전히 호출자가 없다([#293](https://github.com/Shadowfit/init/issues/293)).
 > 위 표에서 「없음」인 셋은 저장소 안에 호출자가 0건이다(2026-08-22 확인). 싱크로율의 정본은
 > `squat_analyzer` → gRPC `SavePoseDataBatch` 이고, 기준 좌표 추출의 정본은 gRPC
 > `ExtractReferenceData` 다. **지우지 않고 표시만 하기로 했다**(#293) — 저장소 밖 소비자를

@@ -125,11 +125,12 @@
 |---|---|---|
 | `POST /pose` | 단일 이미지 포즈 추정 | ✅ 프론트 |
 | `POST /sync` | 싱크로율 계산 | 🔴 없음 ([#293](https://github.com/Shadowfit/init/issues/293)) |
-| `GET /sync/onboarding-guide` | 온보딩 가이드 데이터 | 🔴 없음 ([#293](https://github.com/Shadowfit/init/issues/293)) |
+| `GET /sync/onboarding-guide` | 촬영 가이드 문구 | ✅ 프론트 홈·운동 화면 (2026-08-24, [#292](https://github.com/Shadowfit/init/issues/292)) |
 | `POST /video/analyze` | 영상 업로드 분석 (기준 좌표 추출용) | 🔴 없음 ([#293](https://github.com/Shadowfit/init/issues/293)) |
 
-> 🔴 「없음」인 셋은 **구현돼 있고 뜨지만 아무도 안 부른다**(2026-08-22 확인). 정본은 gRPC 쪽이다 —
-> 싱크로율은 `SavePoseDataBatch`, 기준 좌표는 `ExtractReferenceData`. 지우지 않고 표시만 하기로 했다(#293).
+> 🔴 `POST /sync`·`/video/analyze`는 **구현돼 있고 뜨지만 아무도 안 부른다**(2026-08-22 확인, #293).
+> 정본은 gRPC 쪽이다 — 싱크로율은 `SavePoseDataBatch`, 기준 좌표는 `ExtractReferenceData`.
+> `GET /sync/onboarding-guide`만 2026-08-24에 프론트와 연결해 값을 서버로 단일화했다(#292).
 
 ---
 
