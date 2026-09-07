@@ -166,12 +166,15 @@ apply_arm() {
     # 🔴 A 는 «AI 단독» 이 아니다 ((a)안, 2026-08-16 사용자 결정 — #222). 컨테이너 구성은
     #    B 와 **똑같이** 세우고, A 가 흔드는 것은 «옆이 일하는가»(ghz 부하) 하나다.
     #    Spring 을 내리면 부하기가 세션을 못 연다(`load_ai.py:107`) — 그게 초판의 결함이었다.
+    # 🔴 BACKEND_CPU_LIMIT/AI_CPU_LIMIT=0 을 명시한다 — docker-compose.yml 기본값이 08-26/27
+    #    (#212·#570)부터 ${AI_CPU_LIMIT:-4} 로 바뀌어, 그냥 up -d 만 하면 "캡 없음" 팔인데도
+    #    기본 4코어 캡이 걸린다(#686). 0 은 docker --cpus=0 과 같은 뜻(무제한).
     A) $SSH "cd $REPO_DIR && rm -f docker-compose.cap.yml; \
              docker compose --profile obs stop prometheus grafana mysqld-exporter 2>/dev/null; \
-             docker compose up -d mysql shadowfit-backend shadowfit-ai" ;;
+             BACKEND_CPU_LIMIT=0 AI_CPU_LIMIT=0 docker compose up -d mysql shadowfit-backend shadowfit-ai" ;;
     B) $SSH "cd $REPO_DIR && rm -f docker-compose.cap.yml; \
              docker compose --profile obs stop prometheus grafana mysqld-exporter 2>/dev/null; \
-             docker compose up -d mysql shadowfit-backend shadowfit-ai" ;;
+             BACKEND_CPU_LIMIT=0 AI_CPU_LIMIT=0 docker compose up -d mysql shadowfit-backend shadowfit-ai" ;;
     C) $SSH "cd $REPO_DIR && cat > docker-compose.cap.yml <<'YML'
 services:
   shadowfit-ai:   { cpus: \"\${AI_CPUS:?팔 C 는 AI_CPUS 가 필요하다}\" }
