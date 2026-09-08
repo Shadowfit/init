@@ -129,6 +129,13 @@ services:
       # 소스는 여기 하나(${AI_WORKER_COUNT}) 뿐이고, 아래 shadowfit-ai 서비스도 같은 변수를 읽는다.
       AI_CHANNEL_POOL_SIZE: ${AI_WORKER_COUNT:-3}
       JWT_SECRET: ${JWT_SECRET:-shadowfit-prod-secret-key-change-this}
+      # access token 수명(초). application.yml 이 ${JWT_EXPIRATION_TIME:1800} 로 읽는데
+      # 여기서 안 넘겨주면 **컨테이너 배포에서는 그 손잡이가 없는 것과 같다** — .env 에 값을
+      # 넣어도 compose 치환에만 쓰이고 컨테이너 환경에는 안 들어가서 조용히 기본값 1800 이 된다.
+      # 2026-09-08 EBS 인과 라운드에서 실제로 밟았다: .env 를 고치고 backend 를 재기동했는데
+      # 토큰 exp 가 그대로 1800 이었고, 토큰을 디코드해 보고서야 알았다.
+      # 기본값은 그대로라 동작은 안 바뀐다.
+      JWT_EXPIRATION_TIME: ${JWT_EXPIRATION_TIME:-1800}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       # 데드락 재시도 상한 (#276 ②). 기본 5 는 팔당 6판 재측정으로 재확정한 값이다(2026-08-26
       # 사용자 confirm, r276-ceiling-rank-aws-2026-08-26: 잔여 실패율 3=8.0% > 4=5.9% > 5=2.5%,
