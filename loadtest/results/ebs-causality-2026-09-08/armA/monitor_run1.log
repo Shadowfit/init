@@ -1,0 +1,20 @@
+=== PULL START 2026-09-08T13:59:05Z src=/root/monitor_run1.log ===
+epoch,restart_count,status,health,oom_killed,mem_pct,cpu_pct,in_progress_sessions
+START 2026-09-08T13:57:40Z base_restart_count=0 interval=60s duration=2400s tail=600s
+1788875860,0,running,healthy,false,3.66%,0.46%,0
+1788875922,0,running,healthy,false,3.66%,0.52%,0
+1788875984,0,running,healthy,false,3.66%,0.41%,0
+1788876045,0,running,healthy,false,3.66%,7.17%,0
+1788876107,0,running,healthy,false,3.66%,0.49%,0
+1788876169,0,running,healthy,false,3.66%,0.43%,0
+1788876231,0,running,healthy,false,3.66%,0.55%,0
+1788876294,0,running,healthy,false,3.66%,0.43%,0
+1788876356,0,running,healthy,false,3.66%,0.42%,0
+1788876418,0,running,healthy,false,3.66%,0.42%,0
+1788876481,0,running,healthy,false,3.66%,7.38%,0
+1788876542,0,running,healthy,false,3.66%,0.47%,0
+1788877292,1,running,starting,false,1.41%,177.63%,206
+EVENT 2026-09-08T14:21:36Z restart_count changed: 0 -> 1
+1788877356,1,running,healthy,false,3.92%,0.47%,208
+1788877419,1,running,healthy,false,3.93%,0.48%,208
+1788877481,1,running,healthy,false,3.93%,1.00%,173
