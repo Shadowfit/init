@@ -34,6 +34,14 @@ PUBLIC_PATHS: frozenset[str] = frozenset(
     {"/health", "/metrics", "/docs", "/redoc", "/openapi.json"}
 )
 
+# Spring → AI 요청 방향 RPC 4개의 REST 미러(실측 비교용, docs/decisions/
+# grpc-webclient-empirical-comparison.md §8.2). 이 경로는 AI_PUBLIC_TOKEN(앱 번들에 배포되는
+# 값)이 아니라 INTERNAL_API_TOKEN(서버 밖으로 안 나가는 값)으로 지킨다 — 그대로 방치하면
+# #134/#230이 막았던 구멍이 이 4개 RPC에서 재발한다: 앱 번들에서 추출 가능한 토큰만으로
+# 세션 시작·재부착까지 칠 수 있게 된다. gRPC 쪽 AuthInterceptor가 같은 값으로 지키는 것과
+# 대칭이다.
+INTERNAL_TOKEN_PREFIX = "/api/v1/internal/analysis"
+
 
 class InternalAuthMiddleware(BaseHTTPMiddleware):
     def __init__(self, app: ASGIApp, public_paths: frozenset[str] = PUBLIC_PATHS):
@@ -46,6 +54,13 @@ class InternalAuthMiddleware(BaseHTTPMiddleware):
         if request.method == "OPTIONS" or request.url.path in self._public_paths:
             return await call_next(request)
 
+        if request.url.path.startswith(INTERNAL_TOKEN_PREFIX):
+            return await self._check_bearer(request, call_next, settings.INTERNAL_API_TOKEN)
+
+        return await self._check_bearer(request, call_next, settings.AI_PUBLIC_TOKEN)
+
+    @staticmethod
+    async def _check_bearer(request: Request, call_next, expected_token: str) -> Response:
         auth_header = request.headers.get("Authorization", "")
         if not auth_header.startswith("Bearer "):
             return JSONResponse(
@@ -53,7 +68,7 @@ class InternalAuthMiddleware(BaseHTTPMiddleware):
             )
 
         token = auth_header[len("Bearer ") :]
-        if not settings.AI_PUBLIC_TOKEN or token != settings.AI_PUBLIC_TOKEN:
+        if not expected_token or token != expected_token:
             return JSONResponse(
                 status_code=401, content={"detail": "Invalid token"}
             )
