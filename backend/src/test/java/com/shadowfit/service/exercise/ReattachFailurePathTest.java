@@ -2,9 +2,6 @@ package com.shadowfit.service.exercise;
 import com.shadowfit.global.error.BusinessException;
 import com.shadowfit.global.error.ErrorCode;
 import com.shadowfit.global.observability.SessionMetrics;
-import com.shadowfit.grpc.ExerciseServiceGrpc;
-import com.shadowfit.grpc.ReattachRequest;
-import com.shadowfit.grpc.ReattachResponse;
 import com.shadowfit.model.exercise.Exercise;
 import com.shadowfit.model.exercise.Session;
 import com.shadowfit.model.member.Member;
@@ -17,12 +14,12 @@ import com.shadowfit.repository.member.MemberRepository;
 import com.shadowfit.repository.outbox.OutboxEventRepository;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
-import io.grpc.Status.Code;
 import io.grpc.StatusRuntimeException;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -34,7 +31,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -49,6 +45,10 @@ import static org.mockito.Mockito.when;
  * ({@code sendAnalysisRequestToFastApi})는 정반대로 즉시 FAILED 처리하므로, 나중에 누군가
  * 두 경로를 "일관되게" 맞추려다 이 차이를 지울 수 있다. 그러면 되살릴 수 있었던 rep 을
  * 재부착 기능이 스스로 없애게 된다.
+ *
+ * <p>🔄 AI 클라이언트가 {@link AiAnalysisClient} 인터페이스로 바뀌면서(docs/decisions/
+ * grpc-webclient-empirical-comparison.md §8), gRPC 스텁을 reflection 으로 주입하던 옛 방식 대신
+ * 인터페이스를 그냥 mock 한다.
  */
 @DisplayName("재부착 실패 경로 테스트")
 class ReattachFailurePathTest {
@@ -59,9 +59,9 @@ class ReattachFailurePathTest {
     @Mock private ExerciseReferenceRepository referenceRepository;
     @Mock private PoseDataRepository poseDataRepository;
     @Mock private OutboxEventRepository outboxEventRepository;
+    @Mock private AiAnalysisClient aiAnalysisClient;
     private final SessionMetrics metrics = new SessionMetrics(new SimpleMeterRegistry());
     private CircuitBreakerRegistry circuitBreakerRegistry;
-    private ExerciseServiceGrpc.ExerciseServiceBlockingStub blockingStub;
     private ExerciseAnalysisService service;
     private static final Long SESSION_ID = 42L;
     private static final Long MEMBER_ID = 7L;
@@ -69,9 +69,6 @@ class ReattachFailurePathTest {
     void setUp() {
         MockitoAnnotations.openMocks(this);
         circuitBreakerRegistry = CircuitBreakerRegistry.ofDefaults();
-        blockingStub = mock(ExerciseServiceGrpc.ExerciseServiceBlockingStub.class);
-        when(blockingStub.withInterceptors(any(io.grpc.ClientInterceptor[].class))).thenReturn(blockingStub);
-        when(blockingStub.withDeadlineAfter(anyLong(), any())).thenReturn(blockingStub);
         // reattachSession 의 DB 작업은 별도 빈 ReattachRequestBuilder 가 갖는다(이슈 #76, #175).
         // 여기 mock 들(sessionService/poseDataRepository/referenceRepository)을 그대로 넣은
         // 실제 인스턴스를 조립해서 넘긴다 — 트랜잭션 경계는 단위 테스트의 관심사가 아니고,
@@ -80,10 +77,9 @@ class ReattachFailurePathTest {
                 new ReattachRequestBuilder(sessionService, poseDataRepository, referenceRepository);
         service = new ExerciseAnalysisService(sessionRepository, exercisesRepository,
                 memberRepository, sessionService, referenceRepository,
-                circuitBreakerRegistry, metrics, outboxEventRepository, reattachRequestBuilder);
-        ReflectionTestUtils.setField(service, "internalToken", "test-token");
+                circuitBreakerRegistry, metrics, outboxEventRepository, reattachRequestBuilder,
+                aiAnalysisClient);
         ReflectionTestUtils.setField(service, "aiChannelPoolSize", 1);
-        ReflectionTestUtils.setField(service, "aiBlockingStubPool", List.of(blockingStub));
         when(sessionService.findReattachableSession(SESSION_ID, MEMBER_ID)).thenReturn(session());
         when(poseDataRepository.findMaxRepNumberBySessionId(eq(SESSION_ID), any())).thenReturn(3);
         when(referenceRepository.findByExerciseId(anyLong())).thenReturn(List.of());
@@ -110,10 +106,11 @@ class ReattachFailurePathTest {
         circuitBreakerRegistry.circuitBreaker("aiServer-0").transitionToOpenState();
     }
     @Test
-    @DisplayName("gRPC 통신 장애 → 503, 세션은 FAILED 로 바뀌지 않는다")
-    void gRPC장애_503_세션보존() {
-        when(blockingStub.reattachAnalysis(any(ReattachRequest.class)))
-                .thenThrow(new StatusRuntimeException(io.grpc.Status.UNAVAILABLE));
+    @DisplayName("AI 통신 장애 → 503, 세션은 FAILED 로 바뀌지 않는다")
+    void 통신장애_503_세션보존() {
+        StatusRuntimeException cause = new StatusRuntimeException(io.grpc.Status.UNAVAILABLE);
+        when(aiAnalysisClient.reattachAnalysis(anyLong(), any(AiAnalysisClient.ReattachCommand.class)))
+                .thenReturn(new AiCallOutcome.TransientFailure<>(cause.getMessage(), cause));
         assertThatThrownBy(() -> service.reattachSession(SESSION_ID, MEMBER_ID))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.SESSION_REATTACH_UNAVAILABLE);
@@ -121,23 +118,22 @@ class ReattachFailurePathTest {
         verify(sessionService, never()).markAsFailedIfStillInProgress(anyLong(), any());
     }
     @Test
-    @DisplayName("서킷 OPEN → gRPC 를 부르지도 않고 503, 세션 보존")
+    @DisplayName("서킷 OPEN → AI 를 부르지도 않고 503, 세션 보존")
     void 서킷OPEN_503_세션보존() {
         openCircuit();
         assertThatThrownBy(() -> service.reattachSession(SESSION_ID, MEMBER_ID))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.SESSION_REATTACH_UNAVAILABLE);
-        verify(blockingStub, never()).reattachAnalysis(any(ReattachRequest.class));
+        verify(aiAnalysisClient, never()).reattachAnalysis(anyLong(), any());
         verify(sessionService, never()).markAsFailedIfStillInProgress(anyLong(), any());
     }
     @Test
     @DisplayName("AI 가 success=false 로 거절 → 503, 세션 보존")
     void AI거절_503_세션보존() {
         // 통신은 성공했고 AI 가 업무적으로 거절한 경우(기준 좌표 복원 실패 등).
-        when(blockingStub.reattachAnalysis(any(ReattachRequest.class)))
-                .thenReturn(ReattachResponse.newBuilder()
-                        .setSuccess(false).setSessionId(SESSION_ID)
-                        .setMessage("기준 좌표를 복원하지 못했습니다.").build());
+        when(aiAnalysisClient.reattachAnalysis(anyLong(), any(AiAnalysisClient.ReattachCommand.class)))
+                .thenReturn(new AiCallOutcome.Success<>(new AiAnalysisClient.ReattachResult(
+                        false, 0, false, "기준 좌표를 복원하지 못했습니다.")));
         assertThatThrownBy(() -> service.reattachSession(SESSION_ID, MEMBER_ID))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", ErrorCode.SESSION_REATTACH_UNAVAILABLE);
@@ -146,8 +142,9 @@ class ReattachFailurePathTest {
     @Test
     @DisplayName("서킷은 통신 실패만 실패로 센다 — AI 의 업무적 거절은 서킷을 열지 않는다")
     void AI거절은_서킷실패로_치지않는다() {
-        when(blockingStub.reattachAnalysis(any(ReattachRequest.class)))
-                .thenReturn(ReattachResponse.newBuilder().setSuccess(false).build());
+        when(aiAnalysisClient.reattachAnalysis(anyLong(), any(AiAnalysisClient.ReattachCommand.class)))
+                .thenReturn(new AiCallOutcome.Success<>(
+                        new AiAnalysisClient.ReattachResult(false, 0, false, null)));
         CircuitBreaker cb = circuitBreakerRegistry.circuitBreaker("aiServer-0"); // pool=1 → 항상 인덱스 0
         long before = cb.getMetrics().getNumberOfFailedCalls();
         assertThatThrownBy(() -> service.reattachSession(SESSION_ID, MEMBER_ID))
@@ -158,15 +155,15 @@ class ReattachFailurePathTest {
     @Test
     @DisplayName("DB 의 MAX(rep_number) 가 initial_rep_count 로 실려 나간다")
     void rep수가_요청에_실린다() {
-        when(blockingStub.reattachAnalysis(any(ReattachRequest.class)))
-                .thenReturn(ReattachResponse.newBuilder()
-                        .setSuccess(true).setSessionId(SESSION_ID).setRepCount(3).build());
+        when(aiAnalysisClient.reattachAnalysis(anyLong(), any(AiAnalysisClient.ReattachCommand.class)))
+                .thenReturn(new AiCallOutcome.Success<>(
+                        new AiAnalysisClient.ReattachResult(true, 3, false, null)));
         var result = service.reattachSession(SESSION_ID, MEMBER_ID);
-        org.mockito.ArgumentCaptor<ReattachRequest> captor =
-                org.mockito.ArgumentCaptor.forClass(ReattachRequest.class);
-        verify(blockingStub).reattachAnalysis(captor.capture());
-        assertThat(captor.getValue().getInitialRepCount()).isEqualTo(3);
-        assertThat(captor.getValue().getSessionId()).isEqualTo(SESSION_ID);
+        ArgumentCaptor<AiAnalysisClient.ReattachCommand> captor =
+                ArgumentCaptor.forClass(AiAnalysisClient.ReattachCommand.class);
+        verify(aiAnalysisClient).reattachAnalysis(anyLong(), captor.capture());
+        assertThat(captor.getValue().initialRepCount()).isEqualTo(3);
+        assertThat(captor.getValue().sessionId()).isEqualTo(SESSION_ID);
         assertThat(result.getRestoredRepCount()).isEqualTo(3);
         assertThat(result.getAnalyzerStateReset()).isTrue();
     }
@@ -196,17 +193,17 @@ class ReattachFailurePathTest {
         when(sessionService.findReattachableSession(SESSION_ID, MEMBER_ID))
                 .thenReturn(sessionStartedMinutesAgo(3));
         when(poseDataRepository.findMaxTimestampSecBySessionId(eq(SESSION_ID), any())).thenReturn(lastRecorded);
-        when(blockingStub.reattachAnalysis(any(ReattachRequest.class)))
-                .thenReturn(ReattachResponse.newBuilder()
-                        .setSuccess(true).setSessionId(SESSION_ID).setRepCount(3).build());
+        when(aiAnalysisClient.reattachAnalysis(anyLong(), any(AiAnalysisClient.ReattachCommand.class)))
+                .thenReturn(new AiCallOutcome.Success<>(
+                        new AiAnalysisClient.ReattachResult(true, 3, false, null)));
 
         service.reattachSession(SESSION_ID, MEMBER_ID);
 
-        org.mockito.ArgumentCaptor<ReattachRequest> captor =
-                org.mockito.ArgumentCaptor.forClass(ReattachRequest.class);
-        verify(blockingStub).reattachAnalysis(captor.capture());
+        ArgumentCaptor<AiAnalysisClient.ReattachCommand> captor =
+                ArgumentCaptor.forClass(AiAnalysisClient.ReattachCommand.class);
+        verify(aiAnalysisClient).reattachAnalysis(anyLong(), captor.capture());
 
-        assertThat(captor.getValue().getElapsedSec())
+        assertThat(captor.getValue().elapsedSec())
                 .as("elapsed_sec 가 저장된 마지막 프레임 시각과 다르면 AI 와 원점이 갈린다 "
                         + "— session.start_time 기준으로 되돌아가면 여기서 180 근처가 나온다")
                 .isEqualTo(lastRecorded);
@@ -224,17 +221,17 @@ class ReattachFailurePathTest {
         when(sessionService.findReattachableSession(SESSION_ID, MEMBER_ID))
                 .thenReturn(sessionStartedMinutesAgo(3));
         when(poseDataRepository.findMaxTimestampSecBySessionId(eq(SESSION_ID), any())).thenReturn(0.0);
-        when(blockingStub.reattachAnalysis(any(ReattachRequest.class)))
-                .thenReturn(ReattachResponse.newBuilder()
-                        .setSuccess(true).setSessionId(SESSION_ID).setRepCount(0).build());
+        when(aiAnalysisClient.reattachAnalysis(anyLong(), any(AiAnalysisClient.ReattachCommand.class)))
+                .thenReturn(new AiCallOutcome.Success<>(
+                        new AiAnalysisClient.ReattachResult(true, 0, false, null)));
 
         service.reattachSession(SESSION_ID, MEMBER_ID);
 
-        org.mockito.ArgumentCaptor<ReattachRequest> captor =
-                org.mockito.ArgumentCaptor.forClass(ReattachRequest.class);
-        verify(blockingStub).reattachAnalysis(captor.capture());
+        ArgumentCaptor<AiAnalysisClient.ReattachCommand> captor =
+                ArgumentCaptor.forClass(AiAnalysisClient.ReattachCommand.class);
+        verify(aiAnalysisClient).reattachAnalysis(anyLong(), captor.capture());
 
-        assertThat(captor.getValue().getElapsedSec()).isZero();
+        assertThat(captor.getValue().elapsedSec()).isZero();
     }
 
     private Session sessionStartedMinutesAgo(int minutes) {
@@ -248,8 +245,8 @@ class ReattachFailurePathTest {
     /**
      * 이슈 #76 회귀 방지.
      *
-     * <p>여기서 지키는 것은 "gRPC 를 트랜잭션 밖에서 한다"는 <b>경계 자체</b>다. 트랜잭션 안에서
-     * 부르면 커넥션을 쥔 채 최대 5초(gRPC deadline)를 기다리게 되고, AI 가 느려지는 순간 풀(15)이
+     * <p>여기서 지키는 것은 "AI 호출을 트랜잭션 밖에서 한다"는 <b>경계 자체</b>다. 트랜잭션 안에서
+     * 부르면 커넥션을 쥔 채 최대 5초(구현체 데드라인)를 기다리게 되고, AI 가 느려지는 순간 풀(15)이
      * 마르면서 재부착과 무관한 요청까지 막힌다. 재부착은 드물지만 AI 재시작 직후에 <b>몰려서</b>
      * 들어오므로 정확히 그때 터진다.
      *
@@ -258,13 +255,13 @@ class ReattachFailurePathTest {
      * 붙이면 여기서 깨진다.
      */
     @Test
-    @DisplayName("gRPC 는 트랜잭션 밖에서 호출한다 — 커넥션을 쥔 채 AI 를 기다리지 않는다 (#76)")
-    void gRPC는_트랜잭션_밖에서() throws NoSuchMethodException {
+    @DisplayName("AI 호출은 트랜잭션 밖에서 한다 — 커넥션을 쥔 채 AI 를 기다리지 않는다 (#76)")
+    void AI호출은_트랜잭션_밖에서() throws NoSuchMethodException {
         var reattach = ExerciseAnalysisService.class.getMethod("reattachSession", Long.class, Long.class);
         var build = ReattachRequestBuilder.class.getMethod("build", Long.class, Long.class);
 
         assertThat(reattach.getAnnotation(Transactional.class))
-                .as("reattachSession 에 @Transactional 이 붙으면 gRPC 왕복 내내 커넥션을 점유한다 (#76)")
+                .as("reattachSession 에 @Transactional 이 붙으면 AI 왕복 내내 커넥션을 점유한다 (#76)")
                 .isNull();
         assertThat(build.getAnnotation(Transactional.class))
                 .as("DB 작업은 ReattachRequestBuilder.build 안에서 끝나야 한다")
