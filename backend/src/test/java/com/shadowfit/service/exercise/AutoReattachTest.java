@@ -3,9 +3,6 @@ package com.shadowfit.service.exercise;
 import com.shadowfit.global.error.BusinessException;
 import com.shadowfit.global.error.ErrorCode;
 import com.shadowfit.global.observability.SessionMetrics;
-import com.shadowfit.grpc.ExerciseServiceGrpc;
-import com.shadowfit.grpc.ReattachRequest;
-import com.shadowfit.grpc.ReattachResponse;
 import com.shadowfit.model.exercise.Exercise;
 import com.shadowfit.model.exercise.Session;
 import com.shadowfit.model.exercise.Status;
@@ -40,7 +37,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -51,9 +47,11 @@ import static org.mockito.Mockito.when;
  *
  * <p>{@code ReattachFailurePathTest} 가 <b>사용자 요청</b> 재부착({@code reattachSession})의 실패
  * 경로를 고정한다면, 여기는 그 시스템 트리거 짝인 {@code reattachFromOutbox}(발행기가 부른다)와
- * {@code enqueueReattachForWorker}(서킷브레이커 OPEN 리스너가 부른다)를 고정한다. 이 둘은 구현될
- * 때 같이 들어왔지만 테스트 없이 워킹트리에만 있었다 — 신뢰성 기능이 회귀 감시 없이 남는 것을
- * 막으려고 추가한다.
+ * {@code enqueueReattachForWorker}(서킷브레이커 OPEN 리스너가 부른다)를 고정한다.
+ *
+ * <p>🔄 AI 클라이언트가 {@link AiAnalysisClient} 인터페이스로 바뀌면서(docs/decisions/
+ * grpc-webclient-empirical-comparison.md §8), gRPC 스텁을 reflection 으로 주입하던 옛 방식 대신
+ * 인터페이스를 그냥 mock 한다 — 프로토콜 세부사항(채널·스텁·인증 헤더)을 몰라도 되는 만큼 더 가벼워졌다.
  */
 @DisplayName("자동 재부착(#581) 테스트")
 class AutoReattachTest {
@@ -65,10 +63,10 @@ class AutoReattachTest {
     @Mock private ExerciseReferenceRepository referenceRepository;
     @Mock private PoseDataRepository poseDataRepository;
     @Mock private OutboxEventRepository outboxEventRepository;
+    @Mock private AiAnalysisClient aiAnalysisClient;
     private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
     private final SessionMetrics metrics = new SessionMetrics(registry);
     private CircuitBreakerRegistry circuitBreakerRegistry;
-    private ExerciseServiceGrpc.ExerciseServiceBlockingStub blockingStub;
     private ExerciseAnalysisService service;
     private static final Long SESSION_ID = 42L;
 
@@ -76,9 +74,6 @@ class AutoReattachTest {
     void setUp() {
         MockitoAnnotations.openMocks(this);
         circuitBreakerRegistry = CircuitBreakerRegistry.ofDefaults();
-        blockingStub = mock(ExerciseServiceGrpc.ExerciseServiceBlockingStub.class);
-        when(blockingStub.withInterceptors(any(io.grpc.ClientInterceptor[].class))).thenReturn(blockingStub);
-        when(blockingStub.withDeadlineAfter(anyLong(), any())).thenReturn(blockingStub);
         // reattachFromOutbox 의 DB 작업은 별도 빈 ReattachRequestBuilder 가 갖는다(이슈 #175).
         // 여기 mock 들(sessionService/poseDataRepository/referenceRepository)을 그대로 넣은
         // 실제 인스턴스를 조립해서 넘긴다 — ReattachFailurePathTest 와 같은 이유.
@@ -86,10 +81,9 @@ class AutoReattachTest {
                 new ReattachRequestBuilder(sessionService, poseDataRepository, referenceRepository);
         service = new ExerciseAnalysisService(sessionRepository, exercisesRepository,
                 memberRepository, sessionService, referenceRepository,
-                circuitBreakerRegistry, metrics, outboxEventRepository, reattachRequestBuilder);
-        ReflectionTestUtils.setField(service, "internalToken", "test-token");
+                circuitBreakerRegistry, metrics, outboxEventRepository, reattachRequestBuilder,
+                aiAnalysisClient);
         ReflectionTestUtils.setField(service, "aiChannelPoolSize", 1);
-        ReflectionTestUtils.setField(service, "aiBlockingStubPool", List.of(blockingStub));
     }
 
     private Session session() {
@@ -100,7 +94,7 @@ class AutoReattachTest {
                 .startTime(LocalDateTime.now()).build();
     }
 
-    /** 재부착 준비(DB 조회) 단계가 성공하도록 공통 목을 세운다 — gRPC 응답만 각 테스트가 정한다. */
+    /** 재부착 준비(DB 조회) 단계가 성공하도록 공통 목을 세운다 — AI 응답만 각 테스트가 정한다. */
     private void stubReattachRequestAssembly() {
         when(sessionService.findReattachableSessionById(SESSION_ID)).thenReturn(session());
         when(poseDataRepository.findMaxRepNumberBySessionId(eq(SESSION_ID), any())).thenReturn(3);
@@ -117,7 +111,7 @@ class AutoReattachTest {
     class ReattachFromOutbox {
 
         @Test
-        @DisplayName("이어붙일 대상이 아니면(SESSION_NOT_FOUND 등) TERMINAL_FAILED, gRPC 는 안 부른다")
+        @DisplayName("이어붙일 대상이 아니면(SESSION_NOT_FOUND 등) TERMINAL_FAILED, AI 는 안 부른다")
         void 대상아님_TERMINAL_FAILED() {
             when(sessionService.findReattachableSessionById(SESSION_ID))
                     .thenThrow(new BusinessException(ErrorCode.SESSION_NOT_FOUND));
@@ -126,11 +120,11 @@ class AutoReattachTest {
 
             assertThat(outcome).isEqualTo(DispatchOutcome.TERMINAL_FAILED);
             assertThat(counter("not-reattachable")).isEqualTo(1.0);
-            verify(blockingStub, never()).reattachAnalysis(any());
+            verify(aiAnalysisClient, never()).reattachAnalysis(anyLong(), any());
         }
 
         @Test
-        @DisplayName("서킷 OPEN → gRPC 를 부르지도 않고 RETRY")
+        @DisplayName("서킷 OPEN → AI 를 부르지도 않고 RETRY")
         void 서킷OPEN_RETRY() {
             stubReattachRequestAssembly();
             circuitBreakerRegistry.circuitBreaker("aiServer-0").transitionToOpenState();
@@ -139,15 +133,16 @@ class AutoReattachTest {
 
             assertThat(outcome).isEqualTo(DispatchOutcome.RETRY);
             assertThat(counter("circuit-open")).isEqualTo(1.0);
-            verify(blockingStub, never()).reattachAnalysis(any());
+            verify(aiAnalysisClient, never()).reattachAnalysis(anyLong(), any());
         }
 
         @Test
-        @DisplayName("gRPC 통신 실패 → RETRY, 서킷 실패로 센다(컨테이너가 계속 안 살아나면 OPEN 유지)")
-        void gRPC실패_RETRY() {
+        @DisplayName("AI 통신 실패 → RETRY, 서킷 실패로 센다(컨테이너가 계속 안 살아나면 OPEN 유지)")
+        void 통신실패_RETRY() {
             stubReattachRequestAssembly();
-            when(blockingStub.reattachAnalysis(any(ReattachRequest.class)))
-                    .thenThrow(new StatusRuntimeException(io.grpc.Status.UNAVAILABLE));
+            StatusRuntimeException cause = new StatusRuntimeException(io.grpc.Status.UNAVAILABLE);
+            when(aiAnalysisClient.reattachAnalysis(anyLong(), any(AiAnalysisClient.ReattachCommand.class)))
+                    .thenReturn(new AiCallOutcome.TransientFailure<>(cause.getMessage(), cause));
             CircuitBreaker cb = circuitBreakerRegistry.circuitBreaker("aiServer-0");
             long before = cb.getMetrics().getNumberOfFailedCalls();
 
@@ -162,10 +157,9 @@ class AutoReattachTest {
         @DisplayName("AI 가 success=false 로 거절 → TERMINAL_FAILED (재시도해도 같은 결과)")
         void AI거절_TERMINAL_FAILED() {
             stubReattachRequestAssembly();
-            when(blockingStub.reattachAnalysis(any(ReattachRequest.class)))
-                    .thenReturn(ReattachResponse.newBuilder()
-                            .setSuccess(false).setSessionId(SESSION_ID)
-                            .setMessage("기준 좌표를 복원하지 못했습니다.").build());
+            when(aiAnalysisClient.reattachAnalysis(anyLong(), any(AiAnalysisClient.ReattachCommand.class)))
+                    .thenReturn(new AiCallOutcome.Success<>(new AiAnalysisClient.ReattachResult(
+                            false, 0, false, "기준 좌표를 복원하지 못했습니다.")));
 
             DispatchOutcome outcome = service.reattachFromOutbox(SESSION_ID);
 
@@ -177,10 +171,9 @@ class AutoReattachTest {
         @DisplayName("성공(신규) → SENT, outcome=ok")
         void 성공_SENT_ok() {
             stubReattachRequestAssembly();
-            when(blockingStub.reattachAnalysis(any(ReattachRequest.class)))
-                    .thenReturn(ReattachResponse.newBuilder()
-                            .setSuccess(true).setSessionId(SESSION_ID).setRepCount(3)
-                            .setAlreadyActive(false).build());
+            when(aiAnalysisClient.reattachAnalysis(anyLong(), any(AiAnalysisClient.ReattachCommand.class)))
+                    .thenReturn(new AiCallOutcome.Success<>(
+                            new AiAnalysisClient.ReattachResult(true, 3, false, null)));
 
             DispatchOutcome outcome = service.reattachFromOutbox(SESSION_ID);
 
@@ -192,10 +185,9 @@ class AutoReattachTest {
         @DisplayName("성공(이미 활성) → SENT, outcome=already-active — 서킷 플래핑으로 중복 큐잉된 경우")
         void 성공_SENT_alreadyActive() {
             stubReattachRequestAssembly();
-            when(blockingStub.reattachAnalysis(any(ReattachRequest.class)))
-                    .thenReturn(ReattachResponse.newBuilder()
-                            .setSuccess(true).setSessionId(SESSION_ID).setRepCount(3)
-                            .setAlreadyActive(true).build());
+            when(aiAnalysisClient.reattachAnalysis(anyLong(), any(AiAnalysisClient.ReattachCommand.class)))
+                    .thenReturn(new AiCallOutcome.Success<>(
+                            new AiAnalysisClient.ReattachResult(true, 3, true, null)));
 
             DispatchOutcome outcome = service.reattachFromOutbox(SESSION_ID);
 
