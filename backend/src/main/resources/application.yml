@@ -142,6 +142,14 @@ grpc:
 # (docs/decisions/ai-channel-pool-hardening.md).
 ai:
   channel-pool-size: ${AI_CHANNEL_POOL_SIZE:3}
+  # gRPC vs WebClient 실측 비교(docs/decisions/grpc-webclient-empirical-comparison.md §8).
+  # grpc(기본) | webclient — AiAnalysisClient 구현체 스위치.
+  client-type: ${AI_CLIENT_TYPE:grpc}
+  webclient:
+    # gRPC 채널 풀(8585-8587, Spring이 직접 연결)과 달리 ai-nginx(8000)를 거친다 — 프론트의
+    # POST /pose 가 이미 쓰는 X-AI-Worker 헤더 기반 라우팅을 그대로 재사용한다(§8.3). 로컬
+    # bootRun 은 AI_NGINX_HOST=localhost 로 override(호스트에 8000 포트가 매핑돼 있다).
+    base-url: 'http://${AI_NGINX_HOST:ai-nginx}:${AI_NGINX_PORT:8000}'
 
 # [3] Swagger 및 기타 설정 (최상단 레벨)
 #
