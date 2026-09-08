@@ -6,7 +6,7 @@ orjson==3.10.18
 pybase64==1.5.0
 
 mediapipe==0.10.21
-opencv-python-headless==4.11.0.86
+opencv-python-headless==5.0.0.93
 numpy<2
 
 dtaidistance==2.3.12
