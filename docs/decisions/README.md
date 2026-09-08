@@ -105,6 +105,7 @@
 - [circuit-breaker-worker-aggregation.md](./circuit-breaker-worker-aggregation.md) — 서킷브레이커 워커 3개 실패율 합산(#556) (진행중 — 워킹트리에 반영, 커밋은 별도 요청 시)
 - [grpc-integration-checklist.md](./grpc-integration-checklist.md) — gRPC 좌표 송수신(AI↔Backend) 설계 체크리스트 (진행중 — 일부 완료, 관련 이슈 열려있음)
 - [grpc-vs-webclient.md](./grpc-vs-webclient.md) — gRPC vs WebClient 통신 방식 (보류 — 결정 로그가 "사용자 confirm 대기"로 비어있음)
+- [grpc-webclient-empirical-comparison.md](./grpc-webclient-empirical-comparison.md) — gRPC vs WebClient 실측 비교 착수 여부 (보류 — 문서만 갱신 1차 추천, 좁은 실측은 BE-07/08 이후로 미룸)
 - [latency-perception.md](./latency-perception.md) — Latency 단위(ms·s) 의미와 컴포넌트 매핑 (진행중 — 계속 갱신, 분기 7 격상 검토 트리거 남음)
 - [observability-correlation-id.md](./observability-correlation-id.md) — 관측성 1차 — correlation id 전파 + 커스텀 메트릭 (확정 — PR #54 머지 완료)
 - [outbox-reliable-messaging.md](./outbox-reliable-messaging.md) — 신뢰성 있는 비동기 통보(Outbox, 세션종료 통보 유실 E1) (확정 — 설계·구현·측정·리뷰반영 전부 완료)
