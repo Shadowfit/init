@@ -542,9 +542,14 @@ docker exec -i -e SCALING_WORKERS=1 -w /app shadowfit-ai \
   | tee coresidency/calibration_scaling.txt
 ```
 
-⚠️ **이 손 명령은 아직 실제로 안 돌려봤다** — `docker exec` 로 stdin 스크립트를 먹이는 경로와
-컨테이너 안 import 경로(`WORKDIR /app`)는 Dockerfile 을 읽고 유도한 것이지 실측이 아니다.
-다음 P6 라운드에서 처음 밟을 때 이 줄이 안 되면 여기부터 고칠 것.
+✅ **2026-09-08 검증 완료** — 별도 `c7i.4xlarge` 1대(ROLE=p6-target 단독, 코레지던시 부하 없이
+box 보정만 목적)에서 위 두 줄을 그대로 돌렸다. `docker cp` rc=0 · `docker exec` rc=0, 출력은
+ai-venv 경로와 동일한 표 형식(1워커 행: **스레드 67.2 fps · 프로세스 66.5 fps**)이라
+`run_all.sh`의 `awk '/^ *1 /{...}'` 추출도 그대로 통과 확인. `tee coresidency/...` 부분은 그
+디렉터리가 미리 있어야 한다(`mkdir -p`) — 원문은 `docker exec` 표준출력 리다이렉트로
+대체해서 확인했다. ⚠️ **이 67.2 fps 는 검증용으로 새로 띄운 별개 인스턴스 값**이라 08-17·09-08
+등 기존 라운드의 박스 보정용으로는 못 쓴다(그 박스들은 이미 종료됨) — 앞으로 P6 라운드를
+띄울 때 **그 라운드의 대상 박스 자신**에서 한 번 더 걸어야 한다.
 
 ## 설정
 
