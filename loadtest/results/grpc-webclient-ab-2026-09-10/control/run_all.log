@@ -1,0 +1,121 @@
+# gRPC vs WebClient — 전송 계층 A/B
+  대상    : 172.31.2.143 (gRPC 8585 · nginx 8000 · direct 18000)
+  설계    : 5블록(0 버림) x 동시성[1 3] x 크기[S L] x 팔[grpc rest-nginx rest-direct]
+  판당    : n=200 (닫힌 루프)
+  ghz     : v0.120.0
+  k6      : k6 v2.1.0 (commit/83a87a41e2, go1.26.4, linux/amd64)
+
+## [1] 페이로드 생성
+  stop      → /root/out/abctrl-20260909-1544/payload/stop.json  (24 bytes JSON)
+  reattach  → /root/out/abctrl-20260909-1544/payload/reattach.json  (84,449 bytes JSON)
+
+## [2] 프리플라이트 (팔당 1건)
+  ✅ grpc-k6
+  ✅ rest-nginx (200)
+  ✅ rest-direct (200)
+
+## [3] 측정
+  ── 블록 0 (버림)
+      grpc-k6     S c=1   ok=200  fail=0   p50=1.0       p95=1.0       p99=2.0
+      rest-nginx  S c=1   ok=200  fail=0   p50=1.0       p95=2.0       p99=2.01
+      rest-direct S c=1   ok=200  fail=0   p50=1.0       p95=2.0       p99=2.01
+      grpc-k6     L c=1   ok=200  fail=0   p50=2.0       p95=3.0       p99=4.0
+      rest-nginx  L c=1   ok=200  fail=0   p50=2.0       p95=3.0       p99=4.0
+      rest-direct L c=1   ok=200  fail=0   p50=2.0       p95=3.0       p99=3.0
+      grpc-k6     S c=3   ok=200  fail=0   p50=1.0       p95=1.0       p99=2.0
+      rest-nginx  S c=3   ok=200  fail=0   p50=3.0       p95=4.0       p99=6.0
+      rest-direct S c=3   ok=200  fail=0   p50=2.0       p95=4.0       p99=5.0
+      grpc-k6     L c=3   ok=200  fail=0   p50=3.0       p95=5.0       p99=9.01
+      rest-nginx  L c=3   ok=200  fail=0   p50=5.0       p95=6.0       p99=8.0
+      rest-direct L c=3   ok=200  fail=0   p50=4.0       p95=6.0       p99=7.0
+  ── 블록 1
+      rest-nginx  S c=1   ok=200  fail=0   p50=1.0       p95=2.0       p99=3.0
+      rest-direct S c=1   ok=200  fail=0   p50=1.0       p95=2.0       p99=2.0
+      grpc-k6     S c=1   ok=200  fail=0   p50=0.0       p95=1.0       p99=2.0
+      rest-nginx  L c=1   ok=200  fail=0   p50=2.0       p95=3.0       p99=4.0
+      rest-direct L c=1   ok=200  fail=0   p50=2.0       p95=3.0       p99=3.01
+      grpc-k6     L c=1   ok=200  fail=0   p50=2.0       p95=4.0       p99=4.0
+      rest-nginx  S c=3   ok=200  fail=0   p50=2.0       p95=4.0       p99=5.01
+      rest-direct S c=3   ok=200  fail=0   p50=2.0       p95=4.0       p99=5.01
+      grpc-k6     S c=3   ok=200  fail=0   p50=1.0       p95=2.0       p99=2.0
+      rest-nginx  L c=3   ok=200  fail=0   p50=5.0       p95=6.0       p99=7.0
+      rest-direct L c=3   ok=200  fail=0   p50=4.0       p95=6.0       p99=6.01
+      grpc-k6     L c=3   ok=200  fail=0   p50=3.0       p95=5.0       p99=9.0
+  ── 블록 2
+      rest-direct S c=1   ok=200  fail=0   p50=1.0       p95=1.0       p99=3.0
+      grpc-k6     S c=1   ok=200  fail=0   p50=0.0       p95=1.0       p99=2.0
+      rest-nginx  S c=1   ok=200  fail=0   p50=1.0       p95=2.0       p99=2.0
+      rest-direct L c=1   ok=200  fail=0   p50=2.0       p95=3.0       p99=3.0
+      grpc-k6     L c=1   ok=200  fail=0   p50=2.0       p95=4.0       p99=4.0
+      rest-nginx  L c=1   ok=200  fail=0   p50=2.0       p95=3.0       p99=3.01
+      rest-direct S c=3   ok=200  fail=0   p50=2.0       p95=4.0       p99=4.01
+      grpc-k6     S c=3   ok=200  fail=0   p50=1.0       p95=1.05      p99=2.01
+      rest-nginx  S c=3   ok=200  fail=0   p50=3.0       p95=4.0       p99=6.01
+      rest-direct L c=3   ok=200  fail=0   p50=4.0       p95=6.0       p99=7.01
+      grpc-k6     L c=3   ok=200  fail=0   p50=3.0       p95=5.05      p99=8.0
+      rest-nginx  L c=3   ok=200  fail=0   p50=5.0       p95=7.0       p99=39.0
+  ── 블록 3
+      grpc-k6     S c=1   ok=200  fail=0   p50=0.0       p95=1.0       p99=1.0
+      rest-nginx  S c=1   ok=200  fail=0   p50=1.0       p95=2.0       p99=3.0
+      rest-direct S c=1   ok=200  fail=0   p50=1.0       p95=2.0       p99=2.01
+      grpc-k6     L c=1   ok=200  fail=0   p50=2.0       p95=3.0       p99=4.0
+      rest-nginx  L c=1   ok=200  fail=0   p50=2.0       p95=3.0       p99=4.01
+      rest-direct L c=1   ok=200  fail=0   p50=2.0       p95=3.0       p99=3.01
+      grpc-k6     S c=3   ok=200  fail=0   p50=1.0       p95=2.0       p99=2.0
+      rest-nginx  S c=3   ok=200  fail=0   p50=2.0       p95=4.0       p99=5.01
+      rest-direct S c=3   ok=200  fail=0   p50=2.0       p95=4.0       p99=5.0
+      grpc-k6     L c=3   ok=200  fail=0   p50=3.0       p95=5.0       p99=8.01
+      rest-nginx  L c=3   ok=200  fail=0   p50=5.0       p95=6.0       p99=7.02
+      rest-direct L c=3   ok=200  fail=0   p50=4.0       p95=6.0       p99=6.01
+  ── 블록 4
+      rest-nginx  S c=1   ok=200  fail=0   p50=1.0       p95=2.0       p99=2.01
+      rest-direct S c=1   ok=200  fail=0   p50=1.0       p95=2.0       p99=3.01
+      grpc-k6     S c=1   ok=200  fail=0   p50=0.0       p95=1.0       p99=1.0
+      rest-nginx  L c=1   ok=200  fail=0   p50=2.0       p95=3.0       p99=4.0
+      rest-direct L c=1   ok=200  fail=0   p50=2.0       p95=3.0       p99=3.0
+      grpc-k6     L c=1   ok=200  fail=0   p50=2.0       p95=4.0       p99=4.01
+      rest-nginx  S c=3   ok=200  fail=0   p50=3.0       p95=4.0       p99=6.0
+      rest-direct S c=3   ok=200  fail=0   p50=2.0       p95=4.0       p99=5.0
+      grpc-k6     S c=3   ok=200  fail=0   p50=1.0       p95=2.0       p99=2.0
+      rest-nginx  L c=3   ok=200  fail=0   p50=5.0       p95=6.0       p99=8.0
+      rest-direct L c=3   ok=200  fail=0   p50=4.0       p95=6.0       p99=7.01
+      grpc-k6     L c=3   ok=200  fail=0   p50=3.0       p95=5.05      p99=8.0
+
+## [4] 라우팅 probe (워커 0·1·2 로 1건씩)
+# X-AI-Worker 헤더별 StopAnalysis 1건 — 대상 박스에서 아래 session_id 로 로그를 대조할 것
+#   docker compose logs shadowfit-ai | grep 'StopAnalysis 수신'
+# 워커 인덱스별로 다른 pid 가 찍혀야 nginx map 이 실제로 갈라 보낸 것이다.
+worker=0 session_id=999000010 http=200
+worker=1 session_id=999000011 http=200
+worker=2 session_id=999000012 http=200
+
+## [5] 집계 — 유효 블록(0 제외)의 중앙값
+# gRPC vs WebClient — 전송 계층 A/B
+
+대상 `172.31.2.143` · 5블록(0 버림) · n=200/판 · 전 팔 워커 0 고정
+
+| 동시성 | 크기 | 팔 | p50(ms) | p95(ms) | p99(ms) | fail |
+|--:|:-:|---|--:|--:|--:|--:|
+| 1 | S | rest-nginx | 1.000 | 2.000 | 2.505 | 0 |
+| 1 | S | rest-direct | 1.000 | 2.000 | 2.505 | 0 |
+| 1 | S | grpc-k6 | 0.000 | 1.000 | 1.500 | 0 |
+| 1 | L | rest-nginx | 2.000 | 3.000 | 4.000 | 0 |
+| 1 | L | rest-direct | 2.000 | 3.000 | 3.005 | 0 |
+| 1 | L | grpc-k6 | 2.000 | 4.000 | 4.000 | 0 |
+| 3 | S | rest-nginx | 2.500 | 4.000 | 5.505 | 0 |
+| 3 | S | rest-direct | 2.000 | 4.000 | 5.000 | 0 |
+| 3 | S | grpc-k6 | 1.000 | 2.000 | 2.000 | 0 |
+| 3 | L | rest-nginx | 5.000 | 6.000 | 7.510 | 0 |
+| 3 | L | rest-direct | 4.000 | 6.000 | 6.510 | 0 |
+| 3 | L | grpc-k6 | 3.000 | 5.025 | 8.005 | 0 |
+
+> 🔴 절대값을 인용하지 말 것 — 이 rig 는 닫힌 루프 지연 비교다. 읽는 법은 **팔 사이 델타**다.
+>
+> - `rest-nginx` − `rest-direct` = **nginx 홉 비용** (같은 프로토콜, 홉만 다름)
+> - `rest-direct` − `grpc` = **프로토콜·직렬화 비용** (같은 홉 수, 형식만 다름)
+> - S 와 L 의 차이가 이 둘을 크기 축으로 다시 가른다 — S 는 고정비, L 은 디코드 비용
+
+> 원자료: `raw.tsv` · 로그: `logs/` · 라우팅: `routing_probe.txt`
+
+결과 → /root/out/abctrl-20260909-1544
+AB_CTRL_DONE rc=0 out=/root/out/abctrl-20260909-1544
