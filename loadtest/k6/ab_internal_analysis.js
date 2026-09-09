@@ -20,6 +20,12 @@ const ITERS = parseInt(__ENV.ITERS || '200', 10);
 const BODY = open(__ENV.BODY_FILE);
 
 const tCall = new Trend('t_call', true);
+// 🔴 t_wall 은 «같은 도구 대조군» 전용이다. t_call(res.timings.duration)은 k6 가 재는
+//    네트워크 왕복이라 ghz 의 지연 정의와 완전히 같지 않고, 그래서 rest 팔과 grpc(ghz) 팔의
+//    차이에는 «도구 차이» 가 섞일 수 있다. k6 의 gRPC 모듈(ab_internal_analysis_grpc.js)은
+//    timings 를 안 주므로 벽시계로만 잴 수 있는데, 그 팔과 나란히 놓으려면 이 팔도 같은
+//    방식(벽시계)으로 잰 값이 있어야 한다. 두 값을 다 남겨 두고 표에서 골라 쓴다.
+const tWall = new Trend('t_wall', true);
 const badStatus = new Counter('bad_status');
 
 export const options = {
@@ -40,6 +46,7 @@ export const options = {
 };
 
 export default function () {
+  const started = Date.now();
   const res = http.post(URL, BODY, {
     headers: {
       'Content-Type': 'application/json',
@@ -55,6 +62,7 @@ export default function () {
     tags: { name: 'internal_analysis' },
   });
 
+  tWall.add(Date.now() - started);
   tCall.add(res.timings.duration);
   // 이 두 페이로드는 «업무적으로는 실패»(success=false)지만 HTTP 는 200 이 정상이다.
   // 401 이면 토큰, 404 면 라우터 미등록, 000 이면 아예 못 닿은 것 — 전부 판을 버려야 한다.
