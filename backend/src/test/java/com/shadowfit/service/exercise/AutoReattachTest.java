@@ -65,7 +65,7 @@ class AutoReattachTest {
     @Mock private OutboxEventRepository outboxEventRepository;
     @Mock private AiAnalysisClient aiAnalysisClient;
     private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
-    private final SessionMetrics metrics = new SessionMetrics(registry);
+    private final SessionMetrics metrics = new SessionMetrics(registry, "grpc");
     private CircuitBreakerRegistry circuitBreakerRegistry;
     private ExerciseAnalysisService service;
     private static final Long SESSION_ID = 42L;

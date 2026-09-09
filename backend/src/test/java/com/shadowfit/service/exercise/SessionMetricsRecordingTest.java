@@ -77,11 +77,12 @@ SessionMetricsRecordingTest {
     @BeforeEach
     void setUpRegistry() {
         registry = new SimpleMeterRegistry();
-        metrics = new SessionMetrics(registry);
+        metrics = new SessionMetrics(registry, "grpc");
     }
 
     private double transitions(Status status, String source) {
-        return registry.counter(TRANSITIONS, "status", status.name(), "source", source).count();
+        return registry.counter(TRANSITIONS, "status", status.name(), "source", source,
+                "protocol", "grpc").count();
     }
 
     private double conflicts(String source, String outcome) {
@@ -89,7 +90,7 @@ SessionMetricsRecordingTest {
     }
 
     private double stopResults(String outcome) {
-        return registry.counter(AI_STOP_RESULT, "outcome", outcome).count();
+        return registry.counter(AI_STOP_RESULT, "outcome", outcome, "protocol", "grpc").count();
     }
 
     @Nested

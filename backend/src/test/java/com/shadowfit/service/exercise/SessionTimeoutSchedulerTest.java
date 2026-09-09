@@ -50,7 +50,7 @@ class SessionTimeoutSchedulerTest {
         MockitoAnnotations.openMocks(this);
         meterRegistry = new SimpleMeterRegistry();
         scheduler = new SessionTimeoutScheduler(sessionRepository, sessionService,
-                new SessionMetrics(meterRegistry), 10, 30);
+                new SessionMetrics(meterRegistry, "grpc"), 10, 30);
     }
 
     /** {@link SessionRepository.TimeoutCandidate} 목 — id·startTime·expectedDurationMinutes 만 지정하면 된다. */
@@ -164,7 +164,7 @@ class SessionTimeoutSchedulerTest {
                 "source", "timeout-scheduler", "outcome", "yield").count());
         // 성공적으로 FAILED 전환된 쪽은 상태 전이 지표로
         assertEquals(1.0, meterRegistry.counter("shadowfit.session.transitions",
-                "status", "FAILED", "source", "timeout-scheduler").count());
+                "status", "FAILED", "source", "timeout-scheduler", "protocol", "grpc").count());
     }
 
     @Test
