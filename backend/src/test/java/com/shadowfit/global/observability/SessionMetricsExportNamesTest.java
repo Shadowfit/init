@@ -38,7 +38,7 @@ class SessionMetricsExportNamesTest {
     @BeforeEach
     void setUp() {
         registry = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
-        metrics = new SessionMetrics(registry);
+        metrics = new SessionMetrics(registry, "grpc");
 
         // 9종 전부 한 번씩 기록한다 — 기록해야 meter 가 생긴다.
         metrics.sessionTransition(Status.COMPLETED, "ai-callback");
@@ -81,6 +81,24 @@ class SessionMetricsExportNamesTest {
         assertThat(scrape).contains("outcome=\"yield\"");
         assertThat(scrape).contains("outcome=\"sent\"");
         assertThat(scrape).contains("stage=\"stored\"").contains("stage=\"received\"");
+    }
+
+    @Test
+    @DisplayName("protocol 태그가 A/B 팔을 가른다 — 이름은 그대로라 기존 패널은 안 끊긴다")
+    void protocolTagIdentifiesTheArm() {
+        // gRPC vs WebClient 실측 비교의 두 팔을 지표에서 사후에 가르기 위한 태그
+        // (docs/decisions/grpc-webclient-empirical-comparison.md §9.2 의 (다)안).
+        assertThat(registry.scrape()).contains("protocol=\"grpc\"");
+
+        // 값은 ai.client-type 을 그대로 따른다 — 프로퍼티가 어느 구현체를 띄울지 정하므로
+        // 이 둘은 어긋날 수 없다.
+        PrometheusMeterRegistry other = new PrometheusMeterRegistry(PrometheusConfig.DEFAULT);
+        new SessionMetrics(other, "webclient").aiStopResult("ok");
+        assertThat(other.scrape()).contains("protocol=\"webclient\"");
+
+        // 🔴 핵심 — 태그를 «더한» 것이라 지표 «이름» 은 안 바뀌었다. 대시보드 패널이 거는
+        // PromQL 은 protocol 라벨을 안 쓰므로 그대로 매칭된다(개명이었다면 끊겼다).
+        assertThat(other.scrape()).contains("shadowfit_ai_stop_result_total");
     }
 
     @Test

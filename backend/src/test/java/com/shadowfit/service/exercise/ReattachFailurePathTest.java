@@ -60,7 +60,7 @@ class ReattachFailurePathTest {
     @Mock private PoseDataRepository poseDataRepository;
     @Mock private OutboxEventRepository outboxEventRepository;
     @Mock private AiAnalysisClient aiAnalysisClient;
-    private final SessionMetrics metrics = new SessionMetrics(new SimpleMeterRegistry());
+    private final SessionMetrics metrics = new SessionMetrics(new SimpleMeterRegistry(), "grpc");
     private CircuitBreakerRegistry circuitBreakerRegistry;
     private ExerciseAnalysisService service;
     private static final Long SESSION_ID = 42L;
