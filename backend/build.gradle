@@ -33,6 +33,10 @@ dependencies {
 	// 다중사용자 실시간 동기화(그룹, WebSocket) — docs/decisions/multiuser-realtime-sync.md,
 	// 2026-08-30 사용자 confirm으로 채택 확정. Redis 스타터는 단일 인스턴스 1차 구현 범위 밖이라 안 넣는다.
 	implementation 'org.springframework.boot:spring-boot-starter-websocket'
+	// WebClient — gRPC vs WebClient 실측 비교(docs/decisions/grpc-webclient-empirical-comparison.md
+	// §8)의 WebClientAiAnalysisClient 전용. 서버는 그대로 Tomcat/MVC다 — WebFlux는 클라이언트로만
+	// 쓴다(앱 전체를 리액티브로 바꾸는 게 아니다, 별개 결정으로 이미 비추천됨).
+	implementation 'org.springframework.boot:spring-boot-starter-webflux'
 
 	// --- DB & Utility ---
 	runtimeOnly 'com.mysql:mysql-connector-j'

@@ -1,6 +1,6 @@
 # Spring ↔ FastAPI 결합 — 월별 작업 로그
 
-마지막 업데이트: **2026-08-08** (이전 2026-05-24 — 그 사이 2026-06·07·08 을 뒤늦게 채웠다)
+마지막 업데이트: **2026-09-10** (2026-09 절 추가 — 이전 2026-08-08, 그때 06·07·08 을 뒤늦게 채웠다)
 
 > ⚠️ **06~08 절의 수록 기준은 앞 절들과 다르다.** 03~05 는 거의 전 커밋을 담았지만, 이 3개월은 커밋이 332건이라 **결합 계약(RPC·메시지·인증·메타데이터)이나 전달 의미론에 영향을 준 것만** 담았다. 나머지(DB·부하테스트·관리자 API·CI 등 Spring 단독 작업)는 [`../tasks/28-remaining-work-plan.md`](../tasks/28-remaining-work-plan.md)·[`../handoff/`](../handoff/) 와 git log 를 볼 것.
 >
@@ -859,3 +859,64 @@
 **FastAPI 측** — (없음)
 
 **결합 결과**: ⚠️ **관측성이 Spring 만 덮는다.** ai-server 는 계측이 없어 스크레이프 타깃에 넣지 않았다(넣으면 영원히 DOWN 인 타깃이 생긴다). 즉 `07-11` 의 서킷브레이커가 회로를 열어도 **AI 쪽 상태를 볼 지표가 없다** — 결합 관점에서 **관측의 절반이 빈칸**이다.
+
+---
+
+## 2026-08-09 ~ 09-07 — 🔴 안 훑었다 (빈칸)
+
+이 한 달은 **확인하고 «없음» 이라고 적은 게 아니라, 훑지 않은 구간**이다. `git log` 상으로는 부하테스트·측정 라운드(풀 사이징 A~I, 파티션, 코레지던시)와 이슈 수정이 대부분이라 결합 계약 변경이 없을 가능성이 높지만, **그 판정을 한 사람이 없다.** 이 문서가 2.5개월 밀렸던 것과 같은 종류의 빈칸이므로 숨기지 않고 적는다.
+
+- 훑을 때 쓸 기준: [`README.md`](./README.md) 의 갱신 트리거 5항목(RPC·전달 보장·proto 밖 계약·실패 처리·판정 기준).
+- 특히 놓치기 쉬운 것: **Spring 파일만 건드리면서 계약을 바꾼 커밋** (아웃박스가 그랬다).
+
+---
+
+## 2026-09 — 프로토콜 A/B 준비 (결합면 4커밋) 🆕
+
+⚠️ **대체가 아니라 A/B 준비다** — 기본 경로는 여전히 gRPC 이고, REST 미러는 `ai.client-type=webclient` 일 때만 쓰인다.
+
+### 09-08 — 설계와 추상화 (Spring 단독)
+
+#### f538cd5b (09-08) — docs(decisions): gRPC vs WebClient 실측 비교 설계
+
+**Spring 측** — (없음) · **FastAPI 측** — (없음)
+
+**결합 결과**: 문서만. 발견 하나가 여기서 기록됐다 — **«어느 AI 프로세스로 보낼까» 를 푸는 메커니즘이 이미 두 개**이고(`ai-nginx` 의 `X-AI-Worker` map vs Spring 이 손으로 짠 채널 풀), **손으로 짠 쪽에서만 버그가 났다.**
+
+#### a446807d (09-08) — refactor(exercise): `AiAnalysisClient` 인터페이스 분리
+
+**Spring 측** — `ExerciseAnalysisService` 에서 gRPC 채널·스텁·인증 헤더를 `GrpcAiAnalysisClient` 로 이관. `AiCallOutcome` 으로 에러 정규화. 영향받은 테스트 3개를 스텁 reflection mock → 인터페이스 mock 으로 교체.
+
+**FastAPI 측** — (없음)
+
+**결합 결과**: 🔴 **proto 0줄·AI 0줄인데 관측 계약이 바뀌었다.** `shadowfit.ai.stop.result` 의 `grpc-error`/`error` 구분이 `error` 하나로 병합. 아웃박스(07-29)와 같은 모양의 «파일 위치로는 안 보이는 계약 변경» 이다.
+
+### 09-09 — 두 번째 경로가 실제로 생겼다 (양쪽) ⭐
+
+#### 04a0ccd2 (09-09) — feat(exercise): `WebClientAiAnalysisClient`
+
+**Spring 측** — 두 번째 구현체 + `ai.client-type` 스위치(기본 `grpc`) + `spring-boot-starter-webflux`(클라이언트로만, 서버는 Tomcat 유지). 테스트는 JDK 내장 `HttpServer` 로 실제 HTTP 왕복을 태운다.
+
+**FastAPI 측** — (없음)
+
+**결합 결과**: **요청 경로가 두 갈래로 갈렸다.** gRPC 는 `ai-nginx` 를 건너뛰고 8585-8587 직결, WebClient 는 `ai-nginx`(8000) 경유 + `X-AI-Worker` 헤더. 후자엔 **Spring 쪽 수동 채널 풀이 없다** — 09-08 이 발견한 메커니즘 중복의 한쪽을 안 쓰는 첫 구현.
+
+#### 0bb5df19 (09-09) — feat(ai-server): Spring→AI REST 미러 4개
+
+**Spring 측** — (없음)
+
+**FastAPI 측** — `/api/v1/internal/analysis/{extract-reference,start,reattach,stop}` 4개 라우트 + Pydantic 모델 + **인증 미들웨어 토큰 분기**. 기존 `ExerciseServicer` 를 in-process 호출하는 얇은 어댑터라 판정 로직 복제 없음.
+
+**결합 결과**: 🔴 **AI 의 HTTP 표면이 두 등급으로 갈렸다** — 내부 접두사는 `INTERNAL_API_TOKEN`(서버 밖으로 안 나감), 나머지는 `AI_PUBLIC_TOKEN`(앱 번들 배포값). 이 분기가 없으면 #134/#230 이 막은 구멍이 이 4개 RPC 에서 재발한다. **proto 밖 계약(토큰 경계) 변경**이다.
+
+### 📌 이 달의 결합면 요약
+
+| | 값 |
+|---|---|
+| RPC 표면 | gRPC 7개 유지 **+ REST 미러 4개 병존** (요청 방향만) |
+| 새 파일 (Spring) | `AiAnalysisClient`·`AiCallOutcome`·`GrpcAiAnalysisClient`·`WebClientAiAnalysisClient` |
+| 새 파일 (AI) | `api/endpoints/internal_analysis.py`·`models/internal_analysis.py` |
+| 삭제 | 없음 — **아무것도 안 걷어냈다** |
+| 판정 기준 | 무변경 (미러가 같은 서비서를 부른다) |
+
+🔴 **«삭제 없음» 이 이 달의 핵심 리스크다.** 이건 대체가 아니라 A/B 준비이므로 한쪽이 반드시 걷혀야 하는데, **측정은 아직 0건**이다. [`../decisions/grpc-webclient-empirical-comparison.md`](../decisions/grpc-webclient-empirical-comparison.md) §9.3 참조.

@@ -2,17 +2,11 @@ package com.shadowfit.service.exercise;
 
 import com.shadowfit.dto.exercises.VideoRequestDto;
 import com.shadowfit.global.observability.SessionMetrics;
-import com.shadowfit.grpc.AnalyzeRequest;
-import com.shadowfit.grpc.AnalyzeResponse;
-import com.shadowfit.grpc.ExerciseServiceGrpc;
-import com.shadowfit.grpc.StopRequest;
-import com.shadowfit.grpc.StopResponse;
 import com.shadowfit.model.exercise.Session;
 import com.shadowfit.model.outbox.DispatchOutcome;
 import com.shadowfit.model.exercise.Status;
 import com.shadowfit.repository.exercise.ExerciseReferenceRepository;
 import com.shadowfit.repository.exercise.ExercisesRepository;
-import com.shadowfit.repository.exercise.PoseDataRepository;
 import com.shadowfit.repository.exercise.SessionRepository;
 import com.shadowfit.repository.member.MemberRepository;
 import com.shadowfit.repository.outbox.OutboxEventRepository;
@@ -20,7 +14,6 @@ import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.grpc.Status.Code;
 import io.grpc.StatusRuntimeException;
-import io.grpc.stub.StreamObserver;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -33,6 +26,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -58,9 +52,15 @@ import static org.mockito.Mockito.when;
  * 나중에 대시보드의 "충돌 0건"이 진짜 0건인지 계측 고장인지 구분할 수 없게 된다. 그래서 실제 레지스트리에
  * 그 이름·그 태그로 조회했을 때 값이 나오는지까지 확인한다. ({@code SessionTimeoutSchedulerTest} 와 동일 패턴)
  *
- * <p>[왜 단위 테스트인가] 낙관락 충돌·gRPC onError 는 통합 컨텍스트에서 결정적으로 재현하기 어렵다
+ * <p>[왜 단위 테스트인가] 낙관락 충돌·AI 호출 실패는 통합 컨텍스트에서 결정적으로 재현하기 어렵다
  * (전자는 실제 동시 커밋, 후자는 죽은 AI 서버 + 테스트 트랜잭션 밖 콜백 스레드가 필요). 프록시를 거치지 않고
  * 원객체를 직접 호출하면 {@code @Async}/{@code @Transactional} 없이 그 분기만 정확히 때릴 수 있다.
+ *
+ * <p>🔄 AI 클라이언트가 {@link AiAnalysisClient} 인터페이스로 바뀌면서(docs/decisions/
+ * grpc-webclient-empirical-comparison.md §8), gRPC 스텁을 reflection 으로 주입하던 옛 방식 대신
+ * 인터페이스를 그냥 mock 한다. 또한 {@code stopAnalysis}의 실패 지표 태그가 "grpc-error"/"error"
+ * 이원화에서 "error" 하나로 합쳐졌다 — AiCallOutcome이 프로토콜 특유 예외 타입을 호출자에 안 흘리기
+ * 때문에(발견 3) 그 구분 자체를 여기서 더는 할 수 없다.
  */
 @DisplayName("세션 지표 기록 테스트")
 class
@@ -77,11 +77,12 @@ SessionMetricsRecordingTest {
     @BeforeEach
     void setUpRegistry() {
         registry = new SimpleMeterRegistry();
-        metrics = new SessionMetrics(registry);
+        metrics = new SessionMetrics(registry, "grpc");
     }
 
     private double transitions(Status status, String source) {
-        return registry.counter(TRANSITIONS, "status", status.name(), "source", source).count();
+        return registry.counter(TRANSITIONS, "status", status.name(), "source", source,
+                "protocol", "grpc").count();
     }
 
     private double conflicts(String source, String outcome) {
@@ -89,7 +90,7 @@ SessionMetricsRecordingTest {
     }
 
     private double stopResults(String outcome) {
-        return registry.counter(AI_STOP_RESULT, "outcome", outcome).count();
+        return registry.counter(AI_STOP_RESULT, "outcome", outcome, "protocol", "grpc").count();
     }
 
     @Nested
@@ -104,32 +105,21 @@ SessionMetricsRecordingTest {
         @Mock private OutboxEventRepository outboxEventRepository;
         // 재부착 준비(ReattachRequestBuilder)는 이 테스트가 보는 경로가 안 쓴다.
         @Mock private ReattachRequestBuilder reattachRequestBuilder;
+        @Mock private AiAnalysisClient aiAnalysisClient;
 
         private CircuitBreakerRegistry circuitBreakerRegistry;
-        private ExerciseServiceGrpc.ExerciseServiceStub stub;
-        // 중단 송신만 블로킹 스텁을 쓴다 — 발행기가 결과로 행 상태를 정하므로 반환값이 필요하다.
-        private ExerciseServiceGrpc.ExerciseServiceBlockingStub blockingStub;
         private ExerciseAnalysisService service;
 
         @BeforeEach
         void setUp() {
             MockitoAnnotations.openMocks(this);
             circuitBreakerRegistry = CircuitBreakerRegistry.ofDefaults();
-            stub = mock(ExerciseServiceGrpc.ExerciseServiceStub.class);
-            // getAuthenticatedStub() 의 빌더 체인 — 어느 단계든 같은 목을 돌려주면 된다
-            when(stub.withInterceptors(any(io.grpc.ClientInterceptor[].class))).thenReturn(stub);
-            when(stub.withDeadlineAfter(anyLong(), any())).thenReturn(stub);
-            blockingStub = mock(ExerciseServiceGrpc.ExerciseServiceBlockingStub.class);
-            when(blockingStub.withInterceptors(any(io.grpc.ClientInterceptor[].class))).thenReturn(blockingStub);
-            when(blockingStub.withDeadlineAfter(anyLong(), any())).thenReturn(blockingStub);
 
             service = new ExerciseAnalysisService(sessionRepository, exercisesRepository,
                     memberRepository, sessionService, referenceRepository,
-                    circuitBreakerRegistry, metrics, outboxEventRepository, reattachRequestBuilder);
-            ReflectionTestUtils.setField(service, "internalToken", "test-token");
+                    circuitBreakerRegistry, metrics, outboxEventRepository, reattachRequestBuilder,
+                    aiAnalysisClient);
             ReflectionTestUtils.setField(service, "aiChannelPoolSize", 1);
-            ReflectionTestUtils.setField(service, "aiAsyncStubPool", List.of(stub));
-            ReflectionTestUtils.setField(service, "aiBlockingStubPool", List.of(blockingStub));
 
             when(referenceRepository.findByExerciseId(anyLong())).thenReturn(List.of());
         }
@@ -163,7 +153,7 @@ SessionMetricsRecordingTest {
         }
 
         @Test
-        @DisplayName("gRPC onError로 세션을 걷어내면 FAILED 전이가 source=grpc-error 로 기록된다")
+        @DisplayName("AI 호출 실패로 세션을 걷어내면 FAILED 전이가 source=grpc-error 로 기록된다")
         void grpcError_recordsFailedTransition() {
             // 서킷은 CLOSED — 호출은 나가고 그 호출이 실패하는 경로.
             // notifyAi=true 로 스텁하는 이유: 이 경로는 StartAnalysis 를 실제로 보냈으므로 AI 에
@@ -172,10 +162,11 @@ SessionMetricsRecordingTest {
             when(sessionService.markAsFailedIfStillInProgress(eq(2L), any(LocalDateTime.class), eq(true)))
                     .thenReturn(true);
             doAnswer(invocation -> {
-                StreamObserver<AnalyzeResponse> observer = invocation.getArgument(1);
-                observer.onError(new StatusRuntimeException(io.grpc.Status.fromCode(Code.UNAVAILABLE)));
+                Consumer<AiCallOutcome<AiAnalysisClient.AnalyzeResult>> onResult = invocation.getArgument(2);
+                StatusRuntimeException cause = new StatusRuntimeException(io.grpc.Status.fromCode(Code.UNAVAILABLE));
+                onResult.accept(new AiCallOutcome.TransientFailure<>(cause.getMessage(), cause));
                 return null;
-            }).when(stub).startAnalysis(any(AnalyzeRequest.class), any());
+            }).when(aiAnalysisClient).startAnalysis(anyLong(), any(AiAnalysisClient.AnalyzeCommand.class), any());
 
             service.sendAnalysisRequestToFastApi(2L, dto(), "https://youtu.be/dummy", "BEGINNER", "test-nonce");
 
@@ -300,19 +291,23 @@ SessionMetricsRecordingTest {
             assertThat(outcome).isEqualTo(DispatchOutcome.RETRY);
             assertThat(stopResults("skipped-circuit-open")).isEqualTo(1.0);
             // 서킷이 열려 있으니 호출 자체가 나가지 않아야 한다
-            verify(blockingStub, never()).stopAnalysis(any(StopRequest.class));
+            verify(aiAnalysisClient, never()).stopAnalysis(anyLong(), any());
         }
 
         @Test
-        @DisplayName("gRPC 오류면 RETRY — 나중에 될 수 있는 실패라 종결하지 않는다")
+        @DisplayName("AI 통신 오류면 RETRY — 나중에 될 수 있는 실패라 종결하지 않는다")
         void stopAnalysis_grpcError_retries() {
-            when(blockingStub.stopAnalysis(any(StopRequest.class)))
-                    .thenThrow(new StatusRuntimeException(io.grpc.Status.fromCode(Code.UNAVAILABLE)));
+            StatusRuntimeException cause = new StatusRuntimeException(io.grpc.Status.fromCode(Code.UNAVAILABLE));
+            when(aiAnalysisClient.stopAnalysis(anyLong(), any(AiAnalysisClient.StopCommand.class)))
+                    .thenReturn(new AiCallOutcome.TransientFailure<>(cause.getMessage(), cause));
 
             DispatchOutcome outcome = service.stopAnalysis(12L, false);
 
             assertThat(outcome).isEqualTo(DispatchOutcome.RETRY);
-            assertThat(stopResults("grpc-error")).isEqualTo(1.0);
+            // 🔄 이전엔 "grpc-error"였다 — AiCallOutcome이 프로토콜 특유 예외 타입을 호출자에
+            // 안 흘리므로(발견 3) ClientRejected/TransientFailure를 더는 구분해 태깅할 수 없어
+            // "error" 하나로 합쳤다(ExerciseAnalysisService.stopAnalysis 참고).
+            assertThat(stopResults("error")).isEqualTo(1.0);
             // 전송 실패는 서킷에 실패로 기록돼야 한다(업무 실패인 session-missing 과 다른 축)
             assertThat(circuitBreakerRegistry.circuitBreaker("aiServer-0").getMetrics()
                     .getNumberOfFailedCalls()).isEqualTo(1);
@@ -321,8 +316,8 @@ SessionMetricsRecordingTest {
         }
 
         private void stubStopResponse(boolean success, String message) {
-            when(blockingStub.stopAnalysis(any(StopRequest.class)))
-                    .thenReturn(StopResponse.newBuilder().setSuccess(success).setMessage(message).build());
+            when(aiAnalysisClient.stopAnalysis(anyLong(), any(AiAnalysisClient.StopCommand.class)))
+                    .thenReturn(new AiCallOutcome.Success<>(new AiAnalysisClient.StopResult(success, message)));
         }
 
     }

@@ -3,6 +3,7 @@ package com.shadowfit.global.observability;
 import com.shadowfit.model.exercise.Status;
 import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
@@ -17,7 +18,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class SessionMetrics {
 
-    /** 세션 상태 전이 건수. tags: status(COMPLETED/FAILED), source(전이를 일으킨 흐름) */
+    /** 세션 상태 전이 건수. tags: status(COMPLETED/FAILED), source(전이를 일으킨 흐름), protocol(grpc/webclient — {@link #aiProtocol}) */
     private static final String TRANSITIONS = "shadowfit.session.transitions";
 
     /** 낙관적 락 충돌 건수. tags: source(충돌을 만난 흐름), outcome(retry/yield) */
@@ -58,7 +59,12 @@ public class SessionMetrics {
 
     /**
      * AI 분석 중단(StopAnalysis) 응답의 업무 결과.
-     * tags: outcome(ok/session-missing/session-missing-redelivery/grpc-error/error/skipped-circuit-open)
+     * tags: outcome(ok/session-missing/session-missing-redelivery/error/skipped-circuit-open), protocol(grpc/webclient)
+     *
+     * <p>🔄 {@code grpc-error} 는 더 이상 나가지 않는다 — {@code AiCallOutcome} 이 프로토콜 특유
+     * 예외 타입을 호출자에 안 흘려서 {@code ExerciseAnalysisService} 가 옛 {@code grpc-error}/
+     * {@code error} 를 못 가르고 {@code error} 하나로 합쳤다. 대시보드에서 {@code grpc-error} 로
+     * 필터를 걸어둔 게 있으면 조용히 0 이 된다 (docs/decisions/observability-correlation-id.md §7-1).
      *
      * <p>{@code session-missing} 과 {@code session-missing-redelivery} 는 AI 응답이 같지만(둘 다
      * {@code success=false}) 뜻이 다르다 — 앞은 «결과 유실», 뒤는 «회수분 재송신이라 첫 송신이
@@ -66,7 +72,7 @@ public class SessionMetrics {
      */
     private static final String AI_STOP_RESULT = "shadowfit.ai.stop.result";
 
-    /** 서킷브레이커 OPEN 자동 재부착 결과. tags: outcome(ok/already-active/circuit-open/grpc-error/not-reattachable) */
+    /** 서킷브레이커 OPEN 자동 재부착 결과. tags: outcome(ok/already-active/circuit-open/grpc-error/not-reattachable), protocol(grpc/webclient) */
     private static final String AI_REATTACH_RESULT = "shadowfit.ai.reattach.result";
 
     /** 아웃박스 발행 결과. tags: outcome(sent/retry/failed) */
@@ -86,8 +92,26 @@ public class SessionMetrics {
 
     private final MeterRegistry registry;
 
-    public SessionMetrics(MeterRegistry registry) {
+    /**
+     * 이 프로세스가 Spring → AI 호출에 쓰는 프로토콜 — {@code grpc} 또는 {@code webclient}.
+     * {@code ai.client-type} 프로퍼티가 어느 {@code AiAnalysisClient} 구현체를 띄울지 정하므로
+     * (@ConditionalOnProperty, 기본 {@code grpc}) 이 값과 실제 구현체는 어긋날 수 없다.
+     *
+     * <p><b>왜 태그로 다나</b> — gRPC vs WebClient 실측 비교(A/B)에서 두 팔의 지표를 사후에
+     * 가르기 위해서다. 이 값은 <b>프로세스당 상수</b>라 시계열 카디널리티가 요청마다 늘지 않고
+     * 배포 축으로만 갈린다. 그리고 이름이 아니라 <b>라벨</b>을 더하는 것이라, 라벨을 안 거는
+     * 기존 PromQL·대시보드 패널은 그대로 매칭된다(개명이었다면 끊겼다).
+     *
+     * <p>🔴 이걸 붙여도 {@code source=grpc-error}·{@code outcome=grpc-error} 라는 <b>값</b> 자체는
+     * 여전히 webclient 팔에서 이름이 어긋난다 — 그 개명은 시계열이 끊기는 별개 결정이라 안 했다
+     * ({@code docs/decisions/grpc-webclient-empirical-comparison.md} §9.2).
+     */
+    private final String aiProtocol;
+
+    public SessionMetrics(MeterRegistry registry,
+                          @Value("${ai.client-type:grpc}") String aiProtocol) {
         this.registry = registry;
+        this.aiProtocol = aiProtocol;
     }
 
     /**
@@ -95,7 +119,8 @@ public class SessionMetrics {
      *               같은 FAILED라도 "AI가 죽어서"와 "타임아웃이 걷어내서"는 운영상 완전히 다른 사건이다.
      */
     public void sessionTransition(Status status, String source) {
-        registry.counter(TRANSITIONS, "status", status.name(), "source", source).increment();
+        registry.counter(TRANSITIONS, "status", status.name(), "source", source,
+                "protocol", aiProtocol).increment();
     }
 
     /**
@@ -116,7 +141,7 @@ public class SessionMetrics {
      * @param outcome ok / session-missing
      */
     public void aiStopResult(String outcome) {
-        registry.counter(AI_STOP_RESULT, "outcome", outcome).increment();
+        registry.counter(AI_STOP_RESULT, "outcome", outcome, "protocol", aiProtocol).increment();
     }
 
     /**
@@ -126,7 +151,7 @@ public class SessionMetrics {
      * @param outcome ok / already-active / circuit-open / grpc-error / not-reattachable
      */
     public void aiReattachResult(String outcome) {
-        registry.counter(AI_REATTACH_RESULT, "outcome", outcome).increment();
+        registry.counter(AI_REATTACH_RESULT, "outcome", outcome, "protocol", aiProtocol).increment();
     }
 
     /**

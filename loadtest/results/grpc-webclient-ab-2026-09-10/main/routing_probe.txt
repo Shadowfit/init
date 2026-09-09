@@ -1,0 +1,6 @@
+# X-AI-Worker 헤더별 StopAnalysis 1건 — 대상 박스에서 아래 session_id 로 로그를 대조할 것
+#   docker compose logs shadowfit-ai | grep 'StopAnalysis 수신'
+# 워커 인덱스별로 다른 pid 가 찍혀야 nginx map 이 실제로 갈라 보낸 것이다.
+worker=0 session_id=999000010 http=200
+worker=1 session_id=999000011 http=200
+worker=2 session_id=999000012 http=200

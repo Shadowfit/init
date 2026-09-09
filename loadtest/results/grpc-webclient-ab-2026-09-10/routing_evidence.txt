@@ -1,0 +1,17 @@
+2026-09-10 00:38:17,658 [INFO] [ai-http-c90716acd47f] app.core.mediapipe_detector: 검출기 풀 크기 = 1 (컨테이너 메모리 한도에서 유도, 세션당 106.74MiB)
+2026-09-10 00:39:51,444 [INFO] [ai-http-10abdf7d0be8] app.grpc.exercise_servicer: [Spring → AI] StopAnalysis 수신 (session=999000010)
+2026-09-10 00:39:51,444 [WARNING] [ai-http-10abdf7d0be8] app.grpc.exercise_servicer: [Spring → AI] StopAnalysis — 보유 기간 내 종료 기록이 없는 세션 (session=999000010)
+2026-09-10 00:39:51,451 [INFO] [ai-http-e61800272200] app.grpc.exercise_servicer: [Spring → AI] StopAnalysis 수신 (session=999000011)
+2026-09-10 00:39:51,451 [INFO] [ai-http-e61800272200] app.core.mediapipe_detector: 검출기 풀 크기 = 1 (컨테이너 메모리 한도에서 유도, 세션당 106.74MiB)
+2026-09-10 00:39:51,451 [WARNING] [ai-http-e61800272200] app.grpc.exercise_servicer: [Spring → AI] StopAnalysis — 보유 기간 내 종료 기록이 없는 세션 (session=999000011)
+2026-09-10 00:39:51,458 [INFO] [ai-http-50f8aea9fceb] app.grpc.exercise_servicer: [Spring → AI] StopAnalysis 수신 (session=999000012)
+2026-09-10 00:39:51,458 [INFO] [ai-http-50f8aea9fceb] app.core.mediapipe_detector: 검출기 풀 크기 = 1 (컨테이너 메모리 한도에서 유도, 세션당 106.74MiB)
+2026-09-10 00:39:51,458 [WARNING] [ai-http-50f8aea9fceb] app.grpc.exercise_servicer: [Spring → AI] StopAnalysis — 보유 기간 내 종료 기록이 없는 세션 (session=999000012)
+2026-09-10 00:45:13,442 [INFO] [ai-http-4e27c202d634] app.grpc.exercise_servicer: [Spring → AI] StopAnalysis 수신 (session=999000010)
+2026-09-10 00:45:13,443 [WARNING] [ai-http-4e27c202d634] app.grpc.exercise_servicer: [Spring → AI] StopAnalysis — 보유 기간 내 종료 기록이 없는 세션 (session=999000010)
+2026-09-10 00:45:13,449 [INFO] [ai-http-79f39188cd45] app.grpc.exercise_servicer: [Spring → AI] StopAnalysis 수신 (session=999000011)
+2026-09-10 00:45:13,449 [WARNING] [ai-http-79f39188cd45] app.grpc.exercise_servicer: [Spring → AI] StopAnalysis — 보유 기간 내 종료 기록이 없는 세션 (session=999000011)
+2026-09-10 00:45:13,455 [INFO] [ai-http-5b44e3469b96] app.grpc.exercise_servicer: [Spring → AI] StopAnalysis 수신 (session=999000012)
+2026-09-10 00:45:13,455 [WARNING] [ai-http-5b44e3469b96] app.grpc.exercise_servicer: [Spring → AI] StopAnalysis — 보유 기간 내 종료 기록이 없는 세션 (session=999000012)
+--- 워커 프로세스 ---
+0

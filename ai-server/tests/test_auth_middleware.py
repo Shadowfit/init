@@ -43,6 +43,10 @@ def _make_client() -> TestClient:
     async def pose():
         return {"ok": True}
 
+    @app.post("/api/v1/internal/analysis/start")
+    async def internal_start():
+        return {"ok": True}
+
     return TestClient(app)
 
 
@@ -124,10 +128,42 @@ def test_internal_token_is_rejected():
 
     깨졌을 때의 의미: 앱 번들에서 추출한 토큰으로 Spring 내부 gRPC 까지 칠 수 있게
     된다 — decisions/ai-auth-token-flow.md §2②.
+
+    ⚠️ 이 계약은 `/api/v1/internal/analysis/*`(Spring→AI REST 미러, §8.2)에는 **적용되지
+    않는다** — 그 경로는 의도적으로 반대 값(INTERNAL_API_TOKEN)만 받는다. 아래
+    `test_internal_analysis_prefix_*` 가 그 반대쪽 계약을 잠근다.
     """
     client = _make_client()
 
     res = client.post("/pose", headers={"Authorization": f"Bearer {INTERNAL_TOKEN}"})
+
+    assert res.status_code == 401
+    assert res.json()["detail"] == "Invalid token"
+
+
+def test_internal_analysis_prefix_accepts_internal_token():
+    """Spring→AI REST 미러(§8.2)는 INTERNAL_API_TOKEN으로 통과한다 — gRPC AuthInterceptor와 대칭."""
+    client = _make_client()
+
+    res = client.post(
+        "/api/v1/internal/analysis/start", headers={"Authorization": f"Bearer {INTERNAL_TOKEN}"}
+    )
+
+    assert res.status_code == 200
+    assert res.json() == {"ok": True}
+
+
+def test_internal_analysis_prefix_rejects_public_token():
+    """#134가 막은 구멍의 반대쪽 — 앱 번들 노출값(AI_PUBLIC_TOKEN)으로는 이 경로를 못 연다.
+
+    이게 뚫리면 앱 번들에서 추출한 토큰만으로 세션 시작·재부착까지 칠 수 있게 된다
+    (docs/decisions/grpc-webclient-empirical-comparison.md §8.2).
+    """
+    client = _make_client()
+
+    res = client.post(
+        "/api/v1/internal/analysis/start", headers={"Authorization": f"Bearer {VALID_TOKEN}"}
+    )
 
     assert res.status_code == 401
     assert res.json()["detail"] == "Invalid token"

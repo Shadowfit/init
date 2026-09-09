@@ -1,6 +1,6 @@
 # Spring ↔ FastAPI 결합 — 커밋별 구체 변경
 
-마지막 업데이트: **2026-08-08** (이전 2026-05-23 — 그룹 9 와 부록 3개를 갱신했다)
+마지막 업데이트: **2026-09-10** (그룹 10 추가 + 부록 2개 갱신 — 이전 2026-08-08)
 범위: 각 커밋이 Spring(`backend/`)·FastAPI(`ai-server/`)·`proto`·`docker-compose.yml` 어디를 어떻게 바꿨는지 기능 단위로 정리.
 
 > 🔴 **이 문서의 네 칸 분류에는 함정이 있다** (2026-08-08 추가). *"proto 는 항상 결합 인터페이스의 변경이라 가장 위"* 라는 읽기 규칙이 **proto 가 안 바뀌면 결합 변경이 아니다** 로 오해되기 쉽다. 실제로 이 프로젝트 최대의 결합 변경(아웃박스, `993dfa1`)은 **proto 0줄·AI 0줄**이면서 `StopAnalysis` 의 전달 의미론을 바꿨다. **계약은 시그니처만이 아니다** — 전달 보장, 멱등 요구, proto 밖 메타데이터(`x-request-id`)도 계약이다.
@@ -438,6 +438,59 @@ proto의 `int64`와 Spring DTO 타입 정렬 + REST 시대 잔재 제거.
 
 ---
 
+## 그룹 10: 프로토콜 A/B — REST 미러 (2026-09-08 ~ 09-09) 🆕
+
+> ⚠️ **대체가 아니라 A/B 준비다** — 기본값은 여전히 gRPC(`ai.client-type` 기본 `grpc`). 근거: [`../decisions/grpc-webclient-empirical-comparison.md`](../decisions/grpc-webclient-empirical-comparison.md)
+
+### f538cd5b — docs(decisions): gRPC vs WebClient 실측 비교 설계
+
+| 칸 | 변경 |
+|---|---|
+| proto | — |
+| Spring | — |
+| AI | — |
+| Infra | — |
+
+문서만. §8 에 스코프(요청 방향 4개)·인증(§8.2)·라우팅(§8.3)·인터페이스(§8.4)·부하 rig(§8.5) 스펙을 미리 굳혔다.
+
+### a446807d — refactor(exercise): AI 클라이언트를 `AiAnalysisClient` 인터페이스로 분리
+
+| 칸 | 변경 |
+|---|---|
+| proto | **없음** |
+| Spring | `AiAnalysisClient`(인터페이스)·`AiCallOutcome`(sealed) 신설 · `GrpcAiAnalysisClient` 신설(채널 풀·스텁·인증 헤더 이관) · `ExerciseAnalysisService` 546줄 재작성 · `ReattachRequestBuilder` 가 proto 메시지 대신 DTO 반환 |
+| AI | **없음** |
+| Infra | — |
+
+🔴 **proto 0줄·AI 0줄인데 계약이 바뀌었다** — 이 문서 상단 경고의 두 번째 실물 사례다(첫 번째는 아웃박스 `993dfa1`). 바뀐 것은 **관측 계약**: `shadowfit.ai.stop.result` 의 `grpc-error`/`error` 이원화가 `error` 하나로 합쳐졌다. 워커별 서킷브레이커 등록·재부착 자동 큐잉은 채널 풀 생명주기와 무관한 개념이라 `@PostConstruct` 로 따로 뺐다.
+
+### 04a0ccd2 — feat(exercise): `WebClientAiAnalysisClient` 추가
+
+| 칸 | 변경 |
+|---|---|
+| proto | **없음** |
+| Spring | `WebClientAiAnalysisClient` 신설 · `application.yml` 에 `ai.client-type`·`ai.webclient.base-url` · `build.gradle` 에 `spring-boot-starter-webflux` |
+| AI | **없음** (다음 커밋에서 붙는다) |
+| Infra | `ai-nginx`(8000) 를 Spring 이 처음으로 쓴다 — 설정 파일 변경은 없고 **경유 여부만 달라진다** |
+
+두 구현체의 차이는 둘뿐이다: (1) 라우팅 — 수동 채널 풀 대신 `X-AI-Worker` 헤더 + `ai-nginx`, (2) 인증 — gRPC 메타데이터 대신 HTTP `Authorization` 헤더. 호출 모양(Extract/Start 는 fire-and-forget, Reattach/Stop 은 블로킹)은 gRPC 판을 그대로 지켰다 — `.subscribe()` / `.block()`.
+
+⚠️ **JSON 표기 주의**: ai-server 의 Pydantic 모델이 proto 필드명(snake_case)을 쓰므로 **이 WebClient 전용 `ObjectMapper` 만** SNAKE_CASE 다. Spring↔프론트의 camelCase JSON 은 영향 없다.
+
+### 0bb5df19 — feat(ai-server): Spring→AI REST 미러
+
+| 칸 | 변경 |
+|---|---|
+| proto | **없음** — 미러가 같은 메시지를 파이썬 객체로 조립한다 |
+| Spring | **없음** |
+| AI | `app/api/endpoints/internal_analysis.py`(신설, 4개 라우트) · `app/models/internal_analysis.py`(Pydantic 1:1 대응) · `app/api/router.py` 등록 · `app/middleware/auth.py` **토큰 분기** |
+| Infra | — |
+
+🔴 **proto 밖 계약 변경** — `INTERNAL_TOKEN_PREFIX = "/api/v1/internal/analysis"` 아래 경로는 `AI_PUBLIC_TOKEN`(앱 번들 배포값)이 아니라 `INTERNAL_API_TOKEN` 을 요구한다. 이 분기가 없으면 #134/#230 이 막은 구멍이 재발한다.
+
+`context.abort()`(StartAnalysis 가 미지원 종목을 거절할 때)는 `_FakeContext` 로 gRPC 컨텍스트의 «예외로 핸들러 중단» 을 흉내낸 뒤 HTTP 400 으로 옮긴다 — Spring `GrpcAiAnalysisClient` 의 `INVALID_ARGUMENT` 분류와 대칭.
+
+---
 ## 보조 그룹: 직접 영향 적은 잡정리
 
 ### 0fe056e — fix: MySQL 클라이언트 charset 을 utf8mb4 로 강제 (2026-05-16)
@@ -491,7 +544,7 @@ proto의 `int64`와 Spring DTO 타입 정렬 + REST 시대 잔재 제거.
 | `dto/exercises/session/SessionUpdateRequestDto` | ea1c636 | — | 유지 (`/complete` deprecated) |
 | `dto/exercises/session/SessionUpdateResponseDto` | ea1c636 | 8ac8248 | 유지 (`Long` 정렬) |
 | `dto/exercises/session/ExercisesResponseDto` | 660e294 (구버전) | 8ac8248 | 유지 (`Long` 정렬) |
-| `service/Exercise/ExerciseAnalysisService` | 660e294 | 8ac8248 | gRPC 클라이언트 본체 |
+| `service/Exercise/ExerciseAnalysisService` | 660e294 | **a446807d** | 🔄 **더 이상 gRPC 클라이언트 본체가 아니다** — 전송은 `AiAnalysisClient` 로 나가고 업무 반응(서킷 기록·세션 FAILED·아웃박스)만 남았다 |
 | `service/Exercise/ExerciseGrpcService` | 953bad6 | f172933 | gRPC 서버 본체 (콜백 수신) |
 | `service/Exercise/PoseDataService` | 0d89668 | f172933 | 콜백 저장 본체 |
 | `service/Exercise/SessionService` | (기존) | 143a2e4 흐름 | 세션 상태 전이 본체 |
@@ -499,6 +552,9 @@ proto의 `int64`와 Spring DTO 타입 정렬 + REST 시대 잔재 제거.
 | `global/grpc/UserGrpcService` | 6ce9a43 | — | **48bb0fc에서 삭제** |
 | `global/config/InternalAuthInterceptor` | c52f677 | — | 유지 (gRPC 인증) |
 | `global/config/WebClientConfig` | 660e294 | — | 유지 (단, gRPC 전환 후 사실상 미사용) |
+| **`service/exercise/AiAnalysisClient`·`AiCallOutcome`** | **a446807d** | — | 유지 — 프로토콜 무관 계약 + 에러 정규화 |
+| **`service/exercise/GrpcAiAnalysisClient`** | **a446807d** | — | 유지 — 채널 풀·스텁·인증이 여기로 모였다 |
+| **`service/exercise/WebClientAiAnalysisClient`** | **04a0ccd2** | — | 유지 — `ai.client-type=webclient` 일 때만 뜬다(기본값 아님) |
 | **`service/Exercise/OutboxPublisher`** | **993dfa1** | — | 유지 — **`StopAnalysis` 의 실제 호출자.** `ExerciseAnalysisService` 는 이벤트만 적재한다 |
 | **`model/outbox/OutboxEvent`·`EventType`·`Status`·`DispatchOutcome`** | cb26e4a · 993dfa1 | eebf852(CAS) | 유지 — 전달 보장의 저장소 |
 | **`repository/outbox/OutboxEventRepository`** | cb26e4a | eebf852 | 유지 |
@@ -528,6 +584,9 @@ proto의 `int64`와 Spring DTO 타입 정렬 + REST 시대 잔재 제거.
 | `app/core/squat_analyzer.py` | 2b6b11c | 1a50c14 | 유지 (스트리밍 분석기) |
 | `app/core/mediapipe_detector.py` | (초기) | c7657f1 | 유지 (thread-local) |
 | `app/api/endpoints/pose.py` | (초기) | c7657f1 | 유지 (sync 핸들러) |
+| **`app/api/endpoints/internal_analysis.py`** | **0bb5df19** | — | 유지 — REST 미러 4개, `ExerciseServicer` in-process 호출 |
+| **`app/models/internal_analysis.py`** | **0bb5df19** | — | 유지 — proto 메시지의 Pydantic 1:1 대응 |
+| `app/middleware/auth.py` | (초기) | **0bb5df19** | 🔄 **토큰이 경로별로 갈렸다** — 내부 접두사는 `INTERNAL_API_TOKEN`, 나머지는 `AI_PUBLIC_TOKEN` |
 | `app/config.py` | (초기) | e8e1b65/1a50c14 | 유지 (gRPC 타깃·토큰) |
 | `app/main.py` | (초기) | b568706 · aaf576a | 유지 (로거·라우터 등록 + cid) |
 | **`app/grpc/correlation.py`** | **aaf576a** | bfa4d50 | 유지 — `ContextVar` 기반 cid 수신·전파 |
