@@ -78,6 +78,12 @@ K6_BIN=${K6_BIN:-/usr/local/bin/k6}
 PY=${PY:-python3}
 PROTO=${PROTO:-$HERE/../ai-server/app/proto/exercise.proto}
 K6_SCRIPT=${K6_SCRIPT:-$HERE/k6/ab_internal_analysis.js}
+K6_GRPC_SCRIPT=${K6_GRPC_SCRIPT:-$HERE/k6/ab_internal_analysis_grpc.js}
+# 팔 목록을 밖에서 갈아끼울 수 있게 둔다. 기본은 본 측정(ghz + k6 HTTP).
+# 같은 도구 대조군은  ARMS_LIST="grpc-k6 rest-nginx rest-direct" K6_METRIC=t_wall  로 돌린다 —
+# 그 판은 팔 셋이 전부 k6 라 «도구 오프셋» 이 뺄셈에서 사라진다.
+ARMS_LIST=${ARMS_LIST:-}
+export K6_METRIC=${K6_METRIC:-t_call}
 REST_PREFIX=/api/v1/internal/analysis
 
 die() { echo "🔴 중단 — $*" >&2; exit 1; }
@@ -106,8 +112,12 @@ echo "## [1] 페이로드 생성"
   || die "페이로드 생성 실패"
 echo
 
-ARMS=(grpc rest-nginx)
-[ -n "$DIRECT_PORT" ] && ARMS+=(rest-direct)
+if [ -n "$ARMS_LIST" ]; then
+  read -r -a ARMS <<< "$ARMS_LIST"
+else
+  ARMS=(grpc rest-nginx)
+  [ -n "$DIRECT_PORT" ] && ARMS+=(rest-direct)
+fi
 
 call_of()    { if [ "$1" = S ]; then echo "ExerciseService.StopAnalysis"; else echo "ExerciseService.ReattachAnalysis"; fi; }
 path_of()    { if [ "$1" = S ]; then echo "$REST_PREFIX/stop";            else echo "$REST_PREFIX/reattach"; fi; }
@@ -122,7 +132,7 @@ printf '{"authorization":"Bearer %s"}' "$TOKEN" > "$OUT/_meta.json"
 echo "## [2] 프리플라이트 (팔당 1건)"
 preflight_fail=0
 for arm in "${ARMS[@]}"; do
-  if [ "$arm" = grpc ]; then
+  if [ "$arm" = grpc ] || [ "$arm" = grpc-k6 ]; then
     "$GHZ_BIN" --insecure --proto "$PROTO" -i "$(dirname "$PROTO")" \
       --call "$(call_of S)" --metadata-file "$OUT/_meta.json" \
       --data-file "$(payload_of S)" -c 1 -n 1 -O json -o "$OUT/logs/_pre-$arm.json" \
@@ -163,7 +173,15 @@ emit_k6() {  # $1=json $2=block $3=conc $4=size $5=arm
 
 run_cell() { # $1=block $2=conc $3=size $4=arm
   local b=$1 c=$2 sz=$3 arm=$4 tag="b${1}-c${2}-${3}-${4}"
-  if [ "$arm" = grpc ]; then
+  if [ "$arm" = grpc-k6 ]; then
+    # 같은 도구 대조군 — k6 가 gRPC 도 직접 친다. ghz 팔과 같은 페이로드 파일을 쓴다.
+    GRPC_ADDR="$AI_HOST:$GRPC_PORT" TOKEN="$TOKEN" \
+    GRPC_METHOD="$(call_of "$sz" | tr '.' '/')" PROTO_DIR="$(dirname "$PROTO")" \
+    BODY_FILE="$(payload_of "$sz")" VUS="$c" ITERS="$N" \
+      "$K6_BIN" run --quiet --summary-trend-stats "avg,med,p(95),p(99),max" \
+      --summary-export="$OUT/logs/$tag.json" "$K6_GRPC_SCRIPT" > "$OUT/logs/$tag.log" 2>&1
+    emit_k6 "$OUT/logs/$tag.json" "$b" "$c" "$sz" "$arm"
+  elif [ "$arm" = grpc ]; then
     "$GHZ_BIN" --insecure --proto "$PROTO" -i "$(dirname "$PROTO")" \
       --call "$(call_of "$sz")" --metadata-file "$OUT/_meta.json" \
       --data-file "$(payload_of "$sz")" -c "$c" -n "$N" \

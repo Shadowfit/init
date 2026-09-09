@@ -14,6 +14,7 @@ measure_grpc_vs_webclient.sh 전용. 스크립트 안에 heredoc 으로 넣지 �
 """
 
 import json
+import os
 import sys
 
 
@@ -64,13 +65,18 @@ def main() -> None:
     count = int(v("iterations", "count", 0))
     bad = int(v("bad_status", "count", 0))
 
+    # 기본은 t_call(res.timings.duration — k6 가 재는 네트워크 왕복).
+    # 같은 도구 대조군 판에서는 K6_METRIC=t_wall 로 벽시계 값을 뽑는다. k6 의 gRPC 모듈은
+    # timings 를 안 줘서 그 팔은 벽시계밖에 없고, 나란히 놓으려면 HTTP 팔도 같은 방식이어야 한다.
+    metric = os.environ.get("K6_METRIC", "t_call")
+
     def r(x):
         return round(float(x), 3) if x not in (None, "") else ""
 
     _row(
         raw, block, conc, size, arm, count, count - bad, bad,
-        r(v("t_call", "med")), r(v("t_call", "p(95)")),
-        r(v("t_call", "p(99)")), r(v("t_call", "max")),
+        r(v(metric, "med")), r(v(metric, "p(95)")),
+        r(v(metric, "p(99)")), r(v(metric, "max")),
     )
 
 
