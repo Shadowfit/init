@@ -440,7 +440,7 @@ proto의 `int64`와 Spring DTO 타입 정렬 + REST 시대 잔재 제거.
 
 ## 그룹 10: 프로토콜 A/B — REST 미러 (2026-09-08 ~ 09-09) 🆕
 
-> ⚠️ **브랜치 `explore/grpc-webclient-ab` 전용. `origin/main` 에 없다.** 근거: [`../decisions/grpc-webclient-empirical-comparison.md`](../decisions/grpc-webclient-empirical-comparison.md)
+> ⚠️ **대체가 아니라 A/B 준비다** — 기본값은 여전히 gRPC(`ai.client-type` 기본 `grpc`). 근거: [`../decisions/grpc-webclient-empirical-comparison.md`](../decisions/grpc-webclient-empirical-comparison.md)
 
 ### f538cd5b — docs(decisions): gRPC vs WebClient 실측 비교 설계
 
@@ -552,9 +552,9 @@ proto의 `int64`와 Spring DTO 타입 정렬 + REST 시대 잔재 제거.
 | `global/grpc/UserGrpcService` | 6ce9a43 | — | **48bb0fc에서 삭제** |
 | `global/config/InternalAuthInterceptor` | c52f677 | — | 유지 (gRPC 인증) |
 | `global/config/WebClientConfig` | 660e294 | — | 유지 (단, gRPC 전환 후 사실상 미사용) |
-| **`service/exercise/AiAnalysisClient`·`AiCallOutcome`** | **a446807d** | — | ⚠️ 브랜치 전용 — 프로토콜 무관 계약 + 에러 정규화 |
-| **`service/exercise/GrpcAiAnalysisClient`** | **a446807d** | — | ⚠️ 브랜치 전용 — 채널 풀·스텁·인증이 여기로 모였다 |
-| **`service/exercise/WebClientAiAnalysisClient`** | **04a0ccd2** | — | ⚠️ 브랜치 전용 — `ai.client-type=webclient` 일 때만 뜬다 |
+| **`service/exercise/AiAnalysisClient`·`AiCallOutcome`** | **a446807d** | — | 유지 — 프로토콜 무관 계약 + 에러 정규화 |
+| **`service/exercise/GrpcAiAnalysisClient`** | **a446807d** | — | 유지 — 채널 풀·스텁·인증이 여기로 모였다 |
+| **`service/exercise/WebClientAiAnalysisClient`** | **04a0ccd2** | — | 유지 — `ai.client-type=webclient` 일 때만 뜬다(기본값 아님) |
 | **`service/Exercise/OutboxPublisher`** | **993dfa1** | — | 유지 — **`StopAnalysis` 의 실제 호출자.** `ExerciseAnalysisService` 는 이벤트만 적재한다 |
 | **`model/outbox/OutboxEvent`·`EventType`·`Status`·`DispatchOutcome`** | cb26e4a · 993dfa1 | eebf852(CAS) | 유지 — 전달 보장의 저장소 |
 | **`repository/outbox/OutboxEventRepository`** | cb26e4a | eebf852 | 유지 |
@@ -584,8 +584,8 @@ proto의 `int64`와 Spring DTO 타입 정렬 + REST 시대 잔재 제거.
 | `app/core/squat_analyzer.py` | 2b6b11c | 1a50c14 | 유지 (스트리밍 분석기) |
 | `app/core/mediapipe_detector.py` | (초기) | c7657f1 | 유지 (thread-local) |
 | `app/api/endpoints/pose.py` | (초기) | c7657f1 | 유지 (sync 핸들러) |
-| **`app/api/endpoints/internal_analysis.py`** | **0bb5df19** | — | ⚠️ 브랜치 전용 — REST 미러 4개, `ExerciseServicer` in-process 호출 |
-| **`app/models/internal_analysis.py`** | **0bb5df19** | — | ⚠️ 브랜치 전용 — proto 메시지의 Pydantic 1:1 대응 |
+| **`app/api/endpoints/internal_analysis.py`** | **0bb5df19** | — | 유지 — REST 미러 4개, `ExerciseServicer` in-process 호출 |
+| **`app/models/internal_analysis.py`** | **0bb5df19** | — | 유지 — proto 메시지의 Pydantic 1:1 대응 |
 | `app/middleware/auth.py` | (초기) | **0bb5df19** | 🔄 **토큰이 경로별로 갈렸다** — 내부 접두사는 `INTERNAL_API_TOKEN`, 나머지는 `AI_PUBLIC_TOKEN` |
 | `app/config.py` | (초기) | e8e1b65/1a50c14 | 유지 (gRPC 타깃·토큰) |
 | `app/main.py` | (초기) | b568706 · aaf576a | 유지 (로거·라우터 등록 + cid) |

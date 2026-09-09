@@ -192,11 +192,11 @@ sessionId는 metadata가 아니라 메시지 payload 안에 있어 인터셉터�
 
 ## 7. 🔄 2026-09-10 정정 — 프로토콜 A/B 가 이 문서의 두 곳을 어긋나게 했다
 
-브랜치 `explore/grpc-webclient-ab` 에서 Spring→AI 호출이 `AiAnalysisClient` 인터페이스 뒤로 들어가고 REST 미러가 병존하게 됐다([`grpc-webclient-empirical-comparison.md`](./grpc-webclient-empirical-comparison.md) §9). 그 결과 이 문서의 서술 두 곳이 사실과 어긋났다. ⚠️ **아직 `origin/main` 에는 없다** — main 만 보면 아래 «이전» 열이 여전히 맞다.
+Spring→AI 호출이 `AiAnalysisClient` 인터페이스 뒤로 들어가고 REST 미러가 병존하게 되면서([`grpc-webclient-empirical-comparison.md`](./grpc-webclient-empirical-comparison.md) §9) 이 문서의 서술 두 곳이 사실과 어긋났다. 아래 «이전» 열은 그 변경 전 기준이다.
 
 ### 7-1. `shadowfit.ai.stop.result` 에서 `grpc-error` 태그가 사라졌다
 
-| | 이전 | 지금 (브랜치) |
+| | 이전 | 지금 |
 |---|---|---|
 | `StatusRuntimeException` | `grpc-error` | `error` |
 | 그 외 `RuntimeException` | `error` | `error` |

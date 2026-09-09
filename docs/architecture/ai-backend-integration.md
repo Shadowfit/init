@@ -122,7 +122,9 @@ Docker 네트워크는 `shadowfit-net` 브리지 한 개. 외부 노출은 backe
 
 ### 3-3. 🆕 (2026-09-09) REST 미러 — 프로토콜 A/B 를 위한 두 번째 경로
 
-`explore/grpc-webclient-ab` 브랜치에서 **Spring → AI 요청 방향 4개 RPC 에 한해** REST 경로가 하나 더 생겼다. 목적은 대체가 아니라 **실측 비교**다 — 같은 계약을 두 프로토콜로 태워 재 보고 하나를 고른 뒤 다른 하나를 걷어낸다([`../decisions/grpc-webclient-empirical-comparison.md`](../decisions/grpc-webclient-empirical-comparison.md)). 🔴 **아직 측정은 0건이고 채택도 미결정이다.**
+> 번호가 3-1 다음 3-3 인 것은 오타가 아니다 — §3-2(RPC별 stub 종류)는 **다른 브랜치**에서 오는 절이라 번호를 비워 뒀다. 두 브랜치가 같은 번호를 쓰면 머지에서 충돌한다.
+
+**Spring → AI 요청 방향 4개 RPC 에 한해** REST 경로가 하나 더 있다. 목적은 대체가 아니라 **실측 비교**다 — 같은 계약을 두 프로토콜로 태워 재 보고 하나를 고른 뒤 다른 하나를 걷어낸다([`../decisions/grpc-webclient-empirical-comparison.md`](../decisions/grpc-webclient-empirical-comparison.md)). 🔴 **아직 측정은 0건이고 채택도 미결정이다.**
 
 | gRPC RPC | REST 미러 | 비고 |
 |---|---|---|

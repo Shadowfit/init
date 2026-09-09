@@ -208,15 +208,14 @@ public interface AiAnalysisClient {
 구현부가 먼저 들어갔고, ④(문서 갱신)는 오히려 이 절이 처음이다. 이 문서는 진행된 사실을 적을
 뿐이고, **어느 프로토콜을 채택하는지는 여전히 미결정**이다 — 결정 로그는 아래에 비어 있다.
 
-브랜치 `explore/grpc-webclient-ab` (`feat/be07-pattern-analysis-skeleton` 팁 위, origin/main 미푸시,
-PR 없음). 커밋 4개:
+들어온 것 넷:
 
-| 커밋 | 내용 |
+| 무엇 | 내용 |
 |---|---|
-| `f538cd5b` | 이 문서 최초 작성 |
-| `a446807d` | `AiAnalysisClient` 인터페이스 분리 + `GrpcAiAnalysisClient` 로 전송 로직 이관, `AiCallOutcome` 으로 에러 정규화 (§8.4) |
-| `04a0ccd2` | `WebClientAiAnalysisClient` 신규 — `ai.client-type` 스위치, `X-AI-Worker` 헤더로 `ai-nginx:8000` 경유 (§8.3) |
-| `0bb5df19` | ai-server REST 미러 4개 — `POST /api/v1/internal/analysis/{extract-reference,start,reattach,stop}` (§8.1) |
+| 설계 문서 | 이 문서 |
+| 추상화 | `AiAnalysisClient` 인터페이스 분리 + `GrpcAiAnalysisClient` 로 전송 로직 이관, `AiCallOutcome` 으로 에러 정규화 (§8.4) |
+| 두 번째 구현체 | `WebClientAiAnalysisClient` — `ai.client-type` 스위치(기본 `grpc`), `X-AI-Worker` 헤더로 `ai-nginx:8000` 경유 (§8.3) |
+| AI 미러 | REST 4개 — `POST /api/v1/internal/analysis/{extract-reference,start,reattach,stop}` (§8.1) |
 
 ### 9.1 설계 대비 달라진 것
 

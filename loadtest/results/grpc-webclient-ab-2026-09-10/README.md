@@ -1,7 +1,7 @@
 # gRPC vs WebClient — Spring→AI 전송 계층 A/B (EC2, 2026-09-10)
 
 설계: [`../../../docs/decisions/grpc-webclient-empirical-comparison.md`](../../../docs/decisions/grpc-webclient-empirical-comparison.md) §9
-rig: [`../../measure_grpc_vs_webclient.sh`](../../measure_grpc_vs_webclient.sh) · 커밋 `5e75b8ea`(본 라운드) / `4475852d`(대조군)
+rig: [`../../measure_grpc_vs_webclient.sh`](../../measure_grpc_vs_webclient.sh) · 실행 커밋 `5e75b8ea`(본 라운드) / `4475852d`(대조군) — 둘 다 `explore/grpc-webclient-ab` 브랜치의 SHA 다(EC2 가 그 커밋을 받아 돌았다)
 
 ## 0. 한 줄
 
