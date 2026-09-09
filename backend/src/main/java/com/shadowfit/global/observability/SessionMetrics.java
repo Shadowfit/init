@@ -58,7 +58,12 @@ public class SessionMetrics {
 
     /**
      * AI 분석 중단(StopAnalysis) 응답의 업무 결과.
-     * tags: outcome(ok/session-missing/session-missing-redelivery/grpc-error/error/skipped-circuit-open)
+     * tags: outcome(ok/session-missing/session-missing-redelivery/error/skipped-circuit-open)
+     *
+     * <p>🔄 {@code grpc-error} 는 더 이상 나가지 않는다 — {@code AiCallOutcome} 이 프로토콜 특유
+     * 예외 타입을 호출자에 안 흘려서 {@code ExerciseAnalysisService} 가 옛 {@code grpc-error}/
+     * {@code error} 를 못 가르고 {@code error} 하나로 합쳤다. 대시보드에서 {@code grpc-error} 로
+     * 필터를 걸어둔 게 있으면 조용히 0 이 된다 (docs/decisions/observability-correlation-id.md §7-1).
      *
      * <p>{@code session-missing} 과 {@code session-missing-redelivery} 는 AI 응답이 같지만(둘 다
      * {@code success=false}) 뜻이 다르다 — 앞은 «결과 유실», 뒤는 «회수분 재송신이라 첫 송신이

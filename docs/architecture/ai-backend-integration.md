@@ -1,6 +1,6 @@
 # AI ↔ Backend 결합 현황
 
-마지막 업데이트: **2026-08-08** (이전 2026-05-23 → 2.5개월치 반영, §0 참조)
+마지막 업데이트: **2026-09-10** (§3-3 REST 미러 = 프로토콜 A/B 추가 — 이전 대규모 반영은 2026-08-08, §0 참조)
 범위: `ai-server/` (Python, FastAPI + gRPC) ↔ `backend/` (Spring Boot, Java/Kotlin)
 목적: 현재 어떻게 결합돼 있는지 사실만 정리한 스냅샷. 트레이드오프·대안 비교는 [`docs/decisions/ai-backend-coupling.md`](../decisions/ai-backend-coupling.md) 참조.
 
@@ -29,9 +29,9 @@
 
 | 차원 | 현재 방식 |
 |------|---------|
-| 통신 프로토콜 | gRPC (양방향, 동기 unary RPC) |
+| 통신 프로토콜 | gRPC (양방향, 동기 unary RPC). 🆕 Spring → AI 요청 4개에 한해 **REST 미러가 병존**하지만 기본 경로가 아니다 — `ai.client-type` 기본값이 `grpc` 이고 미러는 실측 A/B 용이다(§3-3) |
 | 스키마 공유 | `exercise.proto` 양쪽 저장소에 동일 파일 중복. (`user.proto` 는 아무도 안 써서 2026-08-12 삭제 — #133) |
-| 인증 | 내부 공유 토큰(`INTERNAL_API_TOKEN`) 기반, gRPC metadata `Authorization: Bearer …` |
+| 인증 | 내부 공유 토큰(`INTERNAL_API_TOKEN`) 기반, gRPC metadata `Authorization: Bearer …`. REST 미러도 **같은 토큰**을 HTTP `Authorization` 헤더로 요구한다(§5) |
 | 네트워크 | Docker Compose `shadowfit-net` 브리지, 컨테이너명 DNS |
 | 호출 패턴 | Spring → AI: 비동기(`@Async`, 202 Accepted) / AI → Spring: 콜백 (3회 재시도) |
 | **전달 의미론 (Spring → AI 종료 통보)** | **아웃박스 + 발행기 폴링 = «상한 있는 재시도»**(기본 10회, 초과 시 터미널 `FAILED`). 🔴 **전달 보장이 아니다** — 의도를 DB 에 보존하고 실패를 조회 가능하게 만든다. `effectively exactly-once` 는 *전달이 성공한 건에 한해*, 그리고 AI `StopAnalysis` 가 멱등하다는 전제에서만 성립 (2026-07-29) |
@@ -120,6 +120,29 @@ Docker 네트워크는 `shadowfit-net` 브리지 한 개. 외부 노출은 backe
 
 ---
 
+### 3-3. 🆕 (2026-09-09) REST 미러 — 프로토콜 A/B 를 위한 두 번째 경로
+
+`explore/grpc-webclient-ab` 브랜치에서 **Spring → AI 요청 방향 4개 RPC 에 한해** REST 경로가 하나 더 생겼다. 목적은 대체가 아니라 **실측 비교**다 — 같은 계약을 두 프로토콜로 태워 재 보고 하나를 고른 뒤 다른 하나를 걷어낸다([`../decisions/grpc-webclient-empirical-comparison.md`](../decisions/grpc-webclient-empirical-comparison.md)). 🔴 **아직 측정은 0건이고 채택도 미결정이다.**
+
+| gRPC RPC | REST 미러 | 비고 |
+|---|---|---|
+| `ExtractReferenceData` | `POST /api/v1/internal/analysis/extract-reference` | |
+| `StartAnalysis` | `POST /api/v1/internal/analysis/start` | 미지원 종목 거절이 gRPC `INVALID_ARGUMENT` → **HTTP 400** 으로 옮겨진다 |
+| `ReattachAnalysis` | `POST /api/v1/internal/analysis/reattach` | |
+| `StopAnalysis` | `POST /api/v1/internal/analysis/stop` | |
+
+**콜백 3개(AI → Spring)는 미러가 없다.** 이 방향은 Spring 이 단일 인스턴스라 «어느 프로세스로 보낼까» 문제 자체가 없어서, 프로토콜을 바꿔도 얻을 게 없다고 판단한 범위 결정이다(같은 문서 §2·§4).
+
+**계약 관점에서 알아야 할 것 4가지:**
+
+1. **라우팅 경로가 다르다.** gRPC 클라이언트는 `ai-nginx` 를 건너뛰고 AI 워커에 직결(8585-8587)하며 `session_id % 3` 채널 풀을 Spring 이 손으로 관리한다. REST 미러는 반대로 **`ai-nginx`(8000) 를 거치고**, 프론트의 `POST /pose` 가 이미 쓰는 `X-AI-Worker` 헤더 라우팅을 그대로 재사용한다 — Spring 쪽 수동 채널 풀 코드가 이 경로엔 없다.
+2. **로직은 복제되지 않았다.** FastAPI 라우터(`app/api/endpoints/internal_analysis.py`)는 기존 `ExerciseServicer` 메서드를 in-process 로 부르는 얇은 어댑터다. protobuf 메시지는 네트워크 없이 파이썬 객체로 조립된다. 즉 **판정 기준은 두 경로가 동일**하다.
+3. **인증 경계가 유지된다** — §5 참조. 이 경로는 `AI_PUBLIC_TOKEN` 이 아니라 `INTERNAL_API_TOKEN` 을 요구한다.
+4. **관측 태그에 부작용이 있다** — §9 참조. `shadowfit.ai.stop.result` 의 `grpc-error` 태그가 `error` 로 합쳐졌고(`AiCallOutcome` 이 프로토콜 특유 예외를 호출자에 안 흘리므로), 남은 `grpc-error` 태그들은 webclient 경로에서 이름이 사실과 어긋난다.
+
+Spring 쪽은 `AiAnalysisClient` 인터페이스 + 두 구현체(`GrpcAiAnalysisClient` / `WebClientAiAnalysisClient`)로 갈렸고, `@ConditionalOnProperty("ai.client-type")` 로 하나만 뜬다(기본 `grpc`). `spring-boot-starter-webflux` 가 추가됐지만 **서버는 그대로 Tomcat/MVC** 다 — WebClient 만 쓴다.
+
+---
 ## 4. 세션 라이프사이클
 
 ### 시작
@@ -178,7 +201,17 @@ AI 컨테이너가 재시작되면 in-memory `SessionState` 가 사라지는데,
 - Spring 측: `InternalAuthInterceptor`(`backend/src/main/java/com/shadowfit/global/config/InternalAuthInterceptor.java`)
 - AI 측: `AuthInterceptor`(`ai-server/app/grpc/server.py`)
 - gRPC metadata `authorization: Bearer {token}` 불일치 시 `UNAUTHENTICATED`
-- JWT(사용자 인증)와는 별개 채널. JWT는 프론트↔Spring REST에서만, 내부 토큰은 Spring↔AI gRPC에서만.
+- JWT(사용자 인증)와는 별개 채널. JWT는 프론트↔Spring REST에서만, 내부 토큰은 Spring↔AI 내부 호출에서만.
+
+🆕 **REST 미러(§3-3)도 같은 경계 안에 있다.** AI 의 HTTP 미들웨어(`ai-server/app/middleware/auth.py`)는 원래 공개 경로를 뺀 **모든** HTTP 요청에 `AI_PUBLIC_TOKEN` 을 요구하는데, 이 토큰은 **앱 번들에 실려 배포되는 값**이다(#134). 그래서 미러 경로(`/api/v1/internal/analysis` 접두사)는 미들웨어에서 갈라져 **`INTERNAL_API_TOKEN`** 을 요구한다 — gRPC `AuthInterceptor` 와 같은 값이다.
+
+🔴 **이 분기가 없으면 #134/#230 이 막은 구멍이 그대로 재발한다** — 번들에서 추출 가능한 토큰만으로 세션 시작·재부착까지 칠 수 있게 된다. `config.py:178-183` 에 두 토큰이 같으면 기동을 거부하는 가드가 이미 있는 이유도 같다. 즉 **AI 서버의 HTTP 표면은 이제 두 등급**이다:
+
+| 경로 | 요구 토큰 | 누가 부르나 |
+|---|---|---|
+| `/pose` 등 일반 | `AI_PUBLIC_TOKEN` (앱 번들에 배포됨) | 프론트 직결 |
+| `/api/v1/internal/analysis/*` | `INTERNAL_API_TOKEN` (서버 밖으로 안 나감) | Spring 만 |
+| `/health`·`/metrics`·`/docs` | 없음 (`PUBLIC_PATHS`) | — |
 
 ---
 
@@ -267,6 +300,7 @@ AI 컨테이너가 재시작되면 in-memory `SessionState` 가 사라지는데,
 | `INTERNAL_API_TOKEN` 변경 | env | env | — | — | 필수 |
 
 | gRPC 포트 변경 | yml | config.py | — | — | 필수 |
+| 🆕 `ai.client-type` 전환 (grpc↔webclient) | env | — | — | — | Spring만 — **단 AI 에 미러 라우터가 배포돼 있어야 한다**(§3-3) |
 | 타임아웃 정책 변경 | O | — | — | — | Spring만 |
 | 콜백 재시도 정책 변경 | — | O | — | — | AI만 |
 | 새 운동 종목 추가 (proto 변경 없이) | data.sql | analyzer 추가 | — | — | 권장 |
@@ -283,6 +317,8 @@ AI 컨테이너가 재시작되면 in-memory `SessionState` 가 사라지는데,
 - **AI in-memory 세션 상태** — AI 컨테이너 재시작 시 진행 중 세션 소실은 그대로다. ✅ 다만 **복구 경로가 생겼다** — `ReattachAnalysis`(§4 재부착)로 DB 값에서 되살릴 수 있다. ⚠️ **자동은 아니다** — 프론트가 재부착을 호출해야 하고, 아무도 안 부르면 결국 스케줄러가 `FAILED` 처리한다.
 - **단일 AI 인스턴스 가정** — 메모리 `SessionState`가 인스턴스 로컬이라 수평 확장 불가. (재부착은 이 문제를 **줄이지 않는다** — 상태가 여전히 인스턴스 로컬이다.)
 - **gRPC reflection / health check 표준 미적용** — 헬스체크는 AI HTTP `/health`만, gRPC 채널 상태는 별도 모니터 없음. ⚠️ 서킷브레이커가 회로를 열어도 **그 사실을 볼 지표가 ai-server 쪽엔 없다**(§7-1 — 관측 스택이 Spring 만 덮는다).
+- 🆕 **요청 경로가 두 벌이다(A/B 기간 한정).** 같은 4개 계약이 gRPC 와 REST 미러 양쪽에 있다(§3-3). 판정 로직은 공유하지만 **직렬화·인증·라우팅 코드는 두 벌**이라, 계약을 바꾸면 고칠 자리가 늘었다. 🔴 **이 상태를 영구화하면 안 된다** — 실측 결과가 나오면 한쪽을 걷어내기로 문서에 못 박혀 있다([`../decisions/grpc-webclient-empirical-comparison.md`](../decisions/grpc-webclient-empirical-comparison.md) §7). 측정은 아직 0건이다.
+- 🆕 **지표 태그 이름이 프로토콜에 묶여 있다.** `shadowfit.ai.reattach.result` 와 `shadowfit.session.transitions` 는 실패를 `grpc-error` 로 태깅하는데, `ai.client-type=webclient` 에서는 gRPC 가 아예 안 끼므로 **이름이 사실과 어긋난다.** 개명·태그 추가 둘 다 대시보드가 보는 값을 바꾸는 계약 변경이라 미결로 뒀다(같은 문서 §9.2).
 - **proto에 `exercise_type` 없음** — 스쿼트 외 운동 추가 시 proto + 양쪽 코드 변경 필요 ([[project_squat_first]] 결정으로 후순위).
 
 ---
