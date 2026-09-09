@@ -2,6 +2,7 @@
 
 작성일: 2026-07-28
 상태: **구현 완료 (1차)** — 5-1~5-5 + 커스텀 메트릭. JSON 구조화·분산추적은 의식적 제외(§6)
+정정: **2026-09-10** — §2-2·§5-1 의 `grpc-error` 서술이 프로토콜 A/B 도입으로 어긋나 정정(§7)
 관련: [`portfolio-narrative.md §3·§6`](../portfolio/portfolio-narrative.md), [`27-implementation-gaps.md §3`](../tasks/27-implementation-gaps.md), [`production-signal-checklist.md`](./production-signal-checklist.md), [`outbox-reliable-messaging.md`](./outbox-reliable-messaging.md)
 
 ---
@@ -56,7 +57,7 @@ HTTP 요청(톰캣) → @Async(워커풀) → gRPC 송신 → FastAPI(별도 프
 
 | 지표 | 태그 | 왜 이것인가 |
 |---|---|---|
-| `shadowfit.session.transitions` | status, source | 같은 FAILED라도 `timeout-scheduler` / `circuit-open` / `grpc-error` 는 운영상 완전히 다른 사건 |
+| `shadowfit.session.transitions` | status, source | 같은 FAILED라도 `timeout-scheduler` / `circuit-open` / `grpc-error` 는 운영상 완전히 다른 사건 (⚠️ `grpc-error` 라는 **이름**은 2026-09-09 이후 정확하지 않다 — §7) |
 | `shadowfit.session.optimistic.lock.conflicts` | source, outcome(retry/yield/exhausted) | **§1-③ 의 직접 해답** — 경쟁 빈도를 집계로 관측 |
 | `shadowfit.pose.batch.frames` | stage(received/stored) | 실측 다운샘플 비율(R≈5)이 운영 중 유지되는지 ([`pose-ingest-downsampling.md`](./pose-ingest-downsampling.md)) |
 
@@ -147,7 +148,7 @@ sessionId는 metadata가 아니라 메시지 payload 안에 있어 인터셉터�
 | 기록 지점 | 검증 |
 |---|---|
 | `ExerciseAnalysisService` 서킷 OPEN | FAILED/`circuit-open` 1건, **세션이 이미 종료면 0건**(조건 분기까지) |
-| `ExerciseAnalysisService` gRPC `onError` | FAILED/`grpc-error` 1건 — 목 스텁이 `onError` 를 직접 발화 |
+| `ExerciseAnalysisService` AI 호출 실패 | FAILED/`grpc-error` 1건 — ⚠️ 2026-09-08 이후 **목 gRPC 스텁의 `onError` 가 아니라** `AiAnalysisClient` 목이 `AiCallOutcome.TransientFailure` 를 돌려주는 모양으로 바뀌었다(§7). 검증 대상 태그는 그대로 |
 | `SessionService` 낙관락 충돌 | 1회 충돌 → `retry` 1건 / 3회 전패 → `retry` 2 + `exhausted` 1 후 예외 전파 |
 | `PoseDataService.savePoseDataBatch` | 7프레임 → `received` 7 / `stored` 2 (실제 저장 행수와 일치하는지) |
 
@@ -186,3 +187,30 @@ sessionId는 metadata가 아니라 메시지 payload 안에 있어 인터셉터�
 - 2026-07-28: 보강 3축(관측성·outbox·회복탄력성) 중 **관측성을 1순위로 착수·완료**. 근거: 착수 시점에 Actuator·Resilience4j·gRPC deadline은 이미 있어 회복탄력성은 실질적으로 채워져 있었고, 관측성만 🔴 빈칸이라 ROI가 가장 높았음. 범위는 correlation id 5단계 + 커스텀 메트릭 3종, 분산추적·JSON 구조화는 제외(§6).
 - 2026-07-28: PR #54 CodeRabbit 리뷰 반영. **Python 백그라운드 스레드 경계 누락을 수정**(§3-3-1) — 지적은 "재시도마다 id가 달라진다"(Minor)였으나 검증해 보니 `threading.Thread` 가 컨텍스트를 상속하지 않아 `CompleteAnalysis` 콜백 전체가 원 요청과 끊겨 있었음(더 큼). §3-6의 "cid가 다르고 sessionId가 같다 = 경쟁의 증거" 주장도 **과했음을 인정하고 "단서"로 완화** — 확정은 낙관락 충돌 지표가 한다(Java javadoc·logback 주석 동일 정정). `install_log_record_factory()` 멱등화 지적은 기동 시 1회 호출이라 미적용.
 - 2026-07-28: 보류했던 **메트릭 검증 테스트도 착수·완료**(§5-1). 1차에는 `SessionTimeoutSchedulerTest` 하나만 지표를 검증하고 나머지 기록 지점은 무검증이었는데, 관측성이 주제인 PR에서 관측 장치 자체가 무검증인 건 앞뒤가 안 맞다고 판단. 12건 추가(백엔드 총 181건).
+
+---
+
+## 7. 🔄 2026-09-10 정정 — 프로토콜 A/B 가 이 문서의 두 곳을 어긋나게 했다
+
+브랜치 `explore/grpc-webclient-ab` 에서 Spring→AI 호출이 `AiAnalysisClient` 인터페이스 뒤로 들어가고 REST 미러가 병존하게 됐다([`grpc-webclient-empirical-comparison.md`](./grpc-webclient-empirical-comparison.md) §9). 그 결과 이 문서의 서술 두 곳이 사실과 어긋났다. ⚠️ **아직 `origin/main` 에는 없다** — main 만 보면 아래 «이전» 열이 여전히 맞다.
+
+### 7-1. `shadowfit.ai.stop.result` 에서 `grpc-error` 태그가 사라졌다
+
+| | 이전 | 지금 (브랜치) |
+|---|---|---|
+| `StatusRuntimeException` | `grpc-error` | `error` |
+| 그 외 `RuntimeException` | `error` | `error` |
+
+`AiCallOutcome` 이 프로토콜 특유 예외 타입을 호출자에 안 흘리므로 `ExerciseAnalysisService` 가 둘을 못 가른다(`ExerciseAnalysisService.java:438-452` 주석). **의도한 설계의 결과이지 버그가 아니지만, 대시보드에서 `outcome=grpc-error` 로 필터를 걸어둔 게 있으면 조용히 0 이 된다.**
+
+§5-1 이 경고한 *"계수기는 조용히 실패한다"* 와 같은 종류의 사고다 — 이번엔 계측 누락이 아니라 **태그 값의 소멸**이지만, 대시보드에서 보이는 증상(«0건»)은 똑같다.
+
+### 7-2. 남은 `grpc-error` 태그는 이름이 사실과 어긋난다
+
+`shadowfit.ai.reattach.result` 와 `shadowfit.session.transitions` 는 여전히 실패를 `grpc-error` 로 태깅한다. `ai.client-type=webclient` 로 돌리면 **gRPC 가 한 줄도 안 끼는데** 태그는 `grpc-error` 다.
+
+🔴 **아직 안 정했다.** 세 안 모두 대가가 있어 [`grpc-webclient-empirical-comparison.md`](./grpc-webclient-empirical-comparison.md) §9.2 에 미결로 적어뒀다 — (가) 그대로 두기 (나) `transport-error` 개명(시계열 단절) (다) `protocol` 태그 추가(카디널리티 2배). **A/B 라운드를 돌리기 전에 정하는 게 낫다** — 안 정하고 재면 두 팔의 지표를 태그로 못 가른다.
+
+### 7-3. §5-1 표의 검증 방식 서술
+
+*"목 스텁이 `onError` 를 직접 발화"* 는 더 이상 그 테스트가 하는 일이 아니다. 지금은 `AiAnalysisClient` 목이 `AiCallOutcome.TransientFailure` 를 콜백으로 넘긴다(`SessionMetricsRecordingTest.grpcError_recordsFailedTransition`). **검증하는 태그(`FAILED`/`grpc-error`)와 «진짜 레지스트리로 확인한다» 는 원칙은 그대로다** — 바뀐 건 그 분기를 때리는 방법뿐이다.

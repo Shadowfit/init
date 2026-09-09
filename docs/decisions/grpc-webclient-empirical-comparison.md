@@ -1,7 +1,8 @@
 # gRPC vs WebClient 실측 비교 — 착수 여부
 
 작성일: 2026-09-08
-상태: **분석/추천 — 미결정** (결정 ✅ 는 사용자 confirm 후)
+최종 갱신: 2026-09-10 (§9 착수 현황 추가)
+상태: **③ 좁은 실측 — 코드 착수됨 · 측정 0건 · 채택 미결정** (결정 ✅ 는 사용자 confirm 후)
 연관: [`./grpc-vs-webclient.md`](./grpc-vs-webclient.md)(선행 분석 — 이 문서가 그 뒤를 잇는다) ·
 [`./ai-sticky-routing-probe.md`](./ai-sticky-routing-probe.md)(같은 방법론의 선례 — 정적 vs 해시 라우팅을
 같은 rig로 실측 비교) · `docs/tasks/24-semester2-plan.md`(BE-07/08, 이 작업과 시간을 다투는 이미
@@ -201,6 +202,65 @@ public interface AiAnalysisClient {
 
 ---
 
+## 9. 착수 현황 (2026-09-10 기준)
+
+⚠️ **§6 이 권한 순서(④ 먼저, ③ 은 BE-07/08 이후)와 실제 진행이 다르다.** 코드는 ③(좁은 실측)의
+구현부가 먼저 들어갔고, ④(문서 갱신)는 오히려 이 절이 처음이다. 이 문서는 진행된 사실을 적을
+뿐이고, **어느 프로토콜을 채택하는지는 여전히 미결정**이다 — 결정 로그는 아래에 비어 있다.
+
+브랜치 `explore/grpc-webclient-ab` (`feat/be07-pattern-analysis-skeleton` 팁 위, origin/main 미푸시,
+PR 없음). 커밋 4개:
+
+| 커밋 | 내용 |
+|---|---|
+| `f538cd5b` | 이 문서 최초 작성 |
+| `a446807d` | `AiAnalysisClient` 인터페이스 분리 + `GrpcAiAnalysisClient` 로 전송 로직 이관, `AiCallOutcome` 으로 에러 정규화 (§8.4) |
+| `04a0ccd2` | `WebClientAiAnalysisClient` 신규 — `ai.client-type` 스위치, `X-AI-Worker` 헤더로 `ai-nginx:8000` 경유 (§8.3) |
+| `0bb5df19` | ai-server REST 미러 4개 — `POST /api/v1/internal/analysis/{extract-reference,start,reattach,stop}` (§8.1) |
+
+### 9.1 설계 대비 달라진 것
+
+- **경로 이름이 §8.1 표와 다르다.** 실제 구현은 `/internal/reference/extract`·`/internal/sessions/start`
+  같은 모양이 아니라 `/api/v1/internal/analysis/*` 한 접두사 아래에 4개를 모았다 — 인증 분기를
+  경로 접두사 하나(`INTERNAL_TOKEN_PREFIX`)로 판정하기 위해서다(9.2). §8.1 표는 제안이었고,
+  실물은 이쪽이다.
+- **§8.2 는 (a) 로 갔다.** 새 4개 경로는 `AI_PUBLIC_TOKEN`(앱 번들 배포값)이 아니라
+  `INTERNAL_API_TOKEN` 으로 지킨다(`ai-server/app/middleware/auth.py`). #134/#230 이 세운 경계를
+  그대로 유지한 쪽이다. 🔴 다만 §8.2 는 이걸 **사용자 confirm 이 필요한 선택**으로 적어뒀는데,
+  구현이 confirm 을 거쳤다는 기록이 이 문서에 없다 — 되짚을 필요가 있으면 여기다.
+- **REST 미러는 로직을 복제하지 않는다.** 기존 `ExerciseServicer`(gRPC 서비서) 메서드를 in-process
+  로 부르는 얇은 어댑터다. `context.abort()` 는 `_FakeContext` 로 흉내낸 뒤 HTTP 400 으로 옮긴다.
+
+### 9.2 부작용 — 관측 태그가 하나 합쳐졌다
+
+`AiCallOutcome` 이 프로토콜 특유 예외 타입을 호출자에 안 흘리므로, `shadowfit.ai.stop.result` 의
+`outcome` 태그에서 `grpc-error`(옛 `StatusRuntimeException`)와 `error`(그 외)의 구분이 사라지고
+**`error` 하나로 합쳐졌다**(`ExerciseAnalysisService.java:438-452`).
+
+🔴 **아직 안 정한 것**: `shadowfit.ai.reattach.result` 와 `shadowfit.session.transitions` 는 여전히
+`grpc-error` 라는 이름의 태그를 쓴다. `ai.client-type=webclient` 로 돌리면 gRPC 가 한 줄도 안
+끼는데 태그는 `grpc-error` 라고 적힌다 — **이름이 사실과 어긋난다.** 바꾸려면 대시보드·알림이
+보는 태그 값을 건드리는 계약 변경이라, 실측 라운드를 돌리기 전에 정하는 게 낫다:
+
+| # | 안 | 대가 |
+|---|---|---|
+| (가) | 그대로 둔다 | webclient 라운드의 지표를 읽을 때 사람이 매번 "이건 HTTP 에러다" 를 번역해야 함 |
+| (나) | `transport-error` 로 개명 | 기존 시계열과 태그가 끊긴다 — 옛 데이터와 나란히 못 본다 |
+| (다) | `grpc-error` 를 유지하되 `protocol` 태그(grpc/webclient)를 하나 더 붙인다 | 카디널리티 +2배, 대신 A/B 를 지표에서 바로 가를 수 있다 |
+
+(다)가 이 실험 목적에는 가장 맞아 보이지만, 지표 태그를 늘리는 건 관측 계약 변경이라 **미결로 둔다.**
+
+### 9.3 아직 안 된 것
+
+- 🔴 **§8.5 부하테스트 rig 가 없다.** `loadtest/` 에 REST 쪽 대응 스크립트가 없고, **gRPC vs
+  WebClient 측정은 0건**이다. 지금 상태는 "A/B 스위치를 켤 준비가 끝난 것"이지 실측이 아니다.
+  이 문서 제목의 «실측 비교» 는 아직 한 글자도 근거가 없다.
+- 두 구현체의 동작 동등성은 **단위 테스트 수준**까지만 확인됐다(backend 37건 · ai-server 15건 통과,
+  2026-09-10 재실행). 컨테이너를 띄워 `ai.client-type=webclient` 로 세션을 끝까지 태워 본 적은 없다.
+- `docs/architecture/` 반영은 2026-09-10 에 했다(이 절과 같은 라운드).
+
+---
+
 ## 결정 로그
 
-(비워둠 — 사용자 confirm 대기)
+(비워둠 — 사용자 confirm 대기. §9 는 «무엇이 구현됐나»이고, «무엇을 채택하나»는 실측 후 여기 박는다.)
