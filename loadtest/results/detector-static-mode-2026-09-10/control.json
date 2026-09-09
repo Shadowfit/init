@@ -1,0 +1,382 @@
+{
+ "box": {
+  "mode": "control(A vs A)",
+  "python": "3.12.10",
+  "mediapipe": "0.10.21",
+  "platform": "Windows-10-10.0.19045-SP0",
+  "cpu_count_logical": 4,
+  "model_complexity": 1,
+  "frames_meta": {
+   "n": 30,
+   "knee_deg_min": 85.23,
+   "knee_deg_max": 124.3,
+   "detect_ok": 30,
+   "jpeg_quality": 80,
+   "note": "합성 스쿼트 1주기. 실사진 아님 — 절대 성능값을 실사용으로 인용하지 말 것"
+  },
+  "blocks": 20,
+  "block_frames": 10,
+  "warmup": 8,
+  "arm_A_static_image_mode": false,
+  "arm_B_static_image_mode": false,
+  "cpu_load_before": 53.0,
+  "cpu_load_after": 17.0
+ },
+ "rows": [
+  {
+   "block": 0,
+   "arm": "A",
+   "slot": 0,
+   "p50_ms": 40.543,
+   "mean_ms": 91.284,
+   "max_ms": 548.501
+  },
+  {
+   "block": 0,
+   "arm": "B",
+   "slot": 1,
+   "p50_ms": 36.177,
+   "mean_ms": 36.47,
+   "max_ms": 45.895
+  },
+  {
+   "block": 1,
+   "arm": "B",
+   "slot": 0,
+   "p50_ms": 29.113,
+   "mean_ms": 29.329,
+   "max_ms": 31.06
+  },
+  {
+   "block": 1,
+   "arm": "A",
+   "slot": 1,
+   "p50_ms": 28.839,
+   "mean_ms": 29.803,
+   "max_ms": 34.585
+  },
+  {
+   "block": 2,
+   "arm": "A",
+   "slot": 0,
+   "p50_ms": 35.693,
+   "mean_ms": 37.012,
+   "max_ms": 47.578
+  },
+  {
+   "block": 2,
+   "arm": "B",
+   "slot": 1,
+   "p50_ms": 37.606,
+   "mean_ms": 36.578,
+   "max_ms": 44.485
+  },
+  {
+   "block": 3,
+   "arm": "B",
+   "slot": 0,
+   "p50_ms": 38.571,
+   "mean_ms": 36.643,
+   "max_ms": 41.238
+  },
+  {
+   "block": 3,
+   "arm": "A",
+   "slot": 1,
+   "p50_ms": 29.232,
+   "mean_ms": 29.003,
+   "max_ms": 30.866
+  },
+  {
+   "block": 4,
+   "arm": "A",
+   "slot": 0,
+   "p50_ms": 28.071,
+   "mean_ms": 28.102,
+   "max_ms": 29.6
+  },
+  {
+   "block": 4,
+   "arm": "B",
+   "slot": 1,
+   "p50_ms": 29.727,
+   "mean_ms": 29.268,
+   "max_ms": 31.425
+  },
+  {
+   "block": 5,
+   "arm": "B",
+   "slot": 0,
+   "p50_ms": 28.168,
+   "mean_ms": 28.879,
+   "max_ms": 33.509
+  },
+  {
+   "block": 5,
+   "arm": "A",
+   "slot": 1,
+   "p50_ms": 31.48,
+   "mean_ms": 30.814,
+   "max_ms": 37.483
+  },
+  {
+   "block": 6,
+   "arm": "A",
+   "slot": 0,
+   "p50_ms": 31.039,
+   "mean_ms": 31.026,
+   "max_ms": 34.72
+  },
+  {
+   "block": 6,
+   "arm": "B",
+   "slot": 1,
+   "p50_ms": 31.19,
+   "mean_ms": 30.669,
+   "max_ms": 32.835
+  },
+  {
+   "block": 7,
+   "arm": "B",
+   "slot": 0,
+   "p50_ms": 29.347,
+   "mean_ms": 28.822,
+   "max_ms": 31.636
+  },
+  {
+   "block": 7,
+   "arm": "A",
+   "slot": 1,
+   "p50_ms": 28.615,
+   "mean_ms": 29.406,
+   "max_ms": 35.158
+  },
+  {
+   "block": 8,
+   "arm": "A",
+   "slot": 0,
+   "p50_ms": 31.885,
+   "mean_ms": 32.567,
+   "max_ms": 39.161
+  },
+  {
+   "block": 8,
+   "arm": "B",
+   "slot": 1,
+   "p50_ms": 34.517,
+   "mean_ms": 34.786,
+   "max_ms": 37.9
+  },
+  {
+   "block": 9,
+   "arm": "B",
+   "slot": 0,
+   "p50_ms": 36.66,
+   "mean_ms": 35.673,
+   "max_ms": 43.204
+  },
+  {
+   "block": 9,
+   "arm": "A",
+   "slot": 1,
+   "p50_ms": 34.924,
+   "mean_ms": 34.564,
+   "max_ms": 37.459
+  },
+  {
+   "block": 10,
+   "arm": "A",
+   "slot": 0,
+   "p50_ms": 53.502,
+   "mean_ms": 46.789,
+   "max_ms": 61.951
+  },
+  {
+   "block": 10,
+   "arm": "B",
+   "slot": 1,
+   "p50_ms": 54.344,
+   "mean_ms": 53.215,
+   "max_ms": 57.395
+  },
+  {
+   "block": 11,
+   "arm": "B",
+   "slot": 0,
+   "p50_ms": 50.952,
+   "mean_ms": 52.282,
+   "max_ms": 66.824
+  },
+  {
+   "block": 11,
+   "arm": "A",
+   "slot": 1,
+   "p50_ms": 55.244,
+   "mean_ms": 55.562,
+   "max_ms": 67.762
+  },
+  {
+   "block": 12,
+   "arm": "A",
+   "slot": 0,
+   "p50_ms": 48.036,
+   "mean_ms": 47.163,
+   "max_ms": 67.523
+  },
+  {
+   "block": 12,
+   "arm": "B",
+   "slot": 1,
+   "p50_ms": 40.935,
+   "mean_ms": 47.462,
+   "max_ms": 92.691
+  },
+  {
+   "block": 13,
+   "arm": "B",
+   "slot": 0,
+   "p50_ms": 35.515,
+   "mean_ms": 36.5,
+   "max_ms": 41.5
+  },
+  {
+   "block": 13,
+   "arm": "A",
+   "slot": 1,
+   "p50_ms": 52.975,
+   "mean_ms": 62.713,
+   "max_ms": 122.118
+  },
+  {
+   "block": 14,
+   "arm": "A",
+   "slot": 0,
+   "p50_ms": 36.647,
+   "mean_ms": 35.154,
+   "max_ms": 44.234
+  },
+  {
+   "block": 14,
+   "arm": "B",
+   "slot": 1,
+   "p50_ms": 29.674,
+   "mean_ms": 29.782,
+   "max_ms": 32.317
+  },
+  {
+   "block": 15,
+   "arm": "B",
+   "slot": 0,
+   "p50_ms": 48.509,
+   "mean_ms": 42.005,
+   "max_ms": 54.441
+  },
+  {
+   "block": 15,
+   "arm": "A",
+   "slot": 1,
+   "p50_ms": 42.165,
+   "mean_ms": 44.974,
+   "max_ms": 55.989
+  },
+  {
+   "block": 16,
+   "arm": "A",
+   "slot": 0,
+   "p50_ms": 37.653,
+   "mean_ms": 35.591,
+   "max_ms": 41.696
+  },
+  {
+   "block": 16,
+   "arm": "B",
+   "slot": 1,
+   "p50_ms": 30.943,
+   "mean_ms": 30.259,
+   "max_ms": 32.208
+  },
+  {
+   "block": 17,
+   "arm": "B",
+   "slot": 0,
+   "p50_ms": 30.217,
+   "mean_ms": 29.83,
+   "max_ms": 32.021
+  },
+  {
+   "block": 17,
+   "arm": "A",
+   "slot": 1,
+   "p50_ms": 29.885,
+   "mean_ms": 30.088,
+   "max_ms": 32.219
+  },
+  {
+   "block": 18,
+   "arm": "A",
+   "slot": 0,
+   "p50_ms": 31.147,
+   "mean_ms": 31.866,
+   "max_ms": 40.394
+  },
+  {
+   "block": 18,
+   "arm": "B",
+   "slot": 1,
+   "p50_ms": 30.574,
+   "mean_ms": 30.671,
+   "max_ms": 34.676
+  },
+  {
+   "block": 19,
+   "arm": "B",
+   "slot": 0,
+   "p50_ms": 33.41,
+   "mean_ms": 31.826,
+   "max_ms": 36.354
+  },
+  {
+   "block": 19,
+   "arm": "A",
+   "slot": 1,
+   "p50_ms": 30.849,
+   "mean_ms": 30.561,
+   "max_ms": 32.342
+  }
+ ],
+ "k_per_block": [
+  0.892,
+  1.01,
+  1.054,
+  1.319,
+  1.059,
+  0.895,
+  1.005,
+  1.026,
+  1.083,
+  1.05,
+  1.016,
+  0.922,
+  0.852,
+  0.67,
+  0.81,
+  1.15,
+  0.822,
+  1.011,
+  0.982,
+  1.083
+ ],
+ "summary": {
+  "k_median": 1.01,
+  "k_q1": 0.895,
+  "k_q3": 1.059,
+  "k_min": 0.67,
+  "k_max": 1.319,
+  "k_iqr": 0.164,
+  "A_p50_median_ms": 33.404,
+  "B_p50_median_ms": 33.963,
+  "A_detect_rate": 1.0,
+  "B_detect_rate": 1.0,
+  "worst_frame_ms": 548.5
+ }
+}

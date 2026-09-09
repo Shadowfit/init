@@ -1,0 +1,79 @@
+{"box": {"python": "3.12.10", "mediapipe": "0.10.21", "platform": "Windows-10-10.0.19045-SP0", "processor": "Intel64 Family 6 Model 94 Stepping 3, GenuineIntel", "cpu_count_logical": 4, "model_complexity": 1, "frames_meta": {"n": 30, "knee_deg_min": 85.23, "knee_deg_max": 124.3, "detect_ok": 30, "jpeg_quality": 80, "note": "합성 스쿼트 1주기. 실사진 아님 — 절대 성능값을 실사용으로 인용하지 말 것"}, "n_per_arm": 150, "rounds": 5, "warmup_frames": 5, "cpu_load_before": 26.0}}
+[discard] 버림판 시작
+INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+W0000 00:00:1788967966.788453   13040 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1788967966.828893    9084 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1788967966.854625    9084 landmark_projection_calculator.cc:186] Using NORM_RECT without IMAGE_DIMENSIONS is only supported for the square ROI. Provide IMAGE_DIMENSIONS or use PROJECTION_MATRIX.
+W0000 00:00:1788967978.731923    8928 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1788967978.768996    8928 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+[discard] 버림판 완료 — 이 판은 버린다
+W0000 00:00:1788967995.014339   12392 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1788967995.051183   12392 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+{"static_image_mode": false, "n": 150, "detected": 150, "detect_rate": 1.0, "mean_ms": 28.901, "p50_ms": 28.198, "p95_ms": 33.497, "max_ms": 44.96, "round": 0, "slot": 0, "arm": "A_tracking_false"}
+W0000 00:00:1788967999.700316   11004 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1788967999.746368    4244 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+{"static_image_mode": true, "n": 150, "detected": 150, "detect_rate": 1.0, "mean_ms": 61.546, "p50_ms": 59.91, "p95_ms": 86.482, "max_ms": 111.855, "round": 0, "slot": 1, "arm": "B_static_true"}
+W0000 00:00:1788968009.460578   12796 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1788968009.510497    7664 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+{"static_image_mode": true, "n": 150, "detected": 150, "detect_rate": 1.0, "mean_ms": 56.912, "p50_ms": 53.946, "p95_ms": 76.136, "max_ms": 90.134, "round": 1, "slot": 0, "arm": "B_static_true"}
+W0000 00:00:1788968018.588513    2108 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1788968018.623295    2108 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+{"static_image_mode": false, "n": 150, "detected": 150, "detect_rate": 1.0, "mean_ms": 42.805, "p50_ms": 46.042, "p95_ms": 62.746, "max_ms": 114.181, "round": 1, "slot": 1, "arm": "A_tracking_false"}
+W0000 00:00:1788968025.479796    1916 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1788968025.532271   10868 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+{"static_image_mode": false, "n": 150, "detected": 150, "detect_rate": 1.0, "mean_ms": 31.549, "p50_ms": 30.13, "p95_ms": 41.931, "max_ms": 50.383, "round": 2, "slot": 0, "arm": "A_tracking_false"}
+W0000 00:00:1788968030.648835    2924 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1788968030.685502    2924 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+{"static_image_mode": true, "n": 150, "detected": 150, "detect_rate": 1.0, "mean_ms": 111.421, "p50_ms": 58.758, "p95_ms": 94.885, "max_ms": 7106.568, "round": 2, "slot": 1, "arm": "B_static_true"}
+W0000 00:00:1788968047.924786   12124 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1788968047.978721    2604 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+{"static_image_mode": true, "n": 150, "detected": 150, "detect_rate": 1.0, "mean_ms": 117.88, "p50_ms": 75.046, "p95_ms": 97.431, "max_ms": 6557.804, "round": 3, "slot": 0, "arm": "B_static_true"}
+W0000 00:00:1788968066.268715   13440 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1788968066.319634   14644 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+{"static_image_mode": false, "n": 150, "detected": 150, "detect_rate": 1.0, "mean_ms": 43.953, "p50_ms": 43.695, "p95_ms": 61.304, "max_ms": 156.379, "round": 3, "slot": 1, "arm": "A_tracking_false"}
+W0000 00:00:1788968073.371096   16304 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1788968073.423597    5740 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+{"static_image_mode": false, "n": 150, "detected": 150, "detect_rate": 1.0, "mean_ms": 47.597, "p50_ms": 37.898, "p95_ms": 74.937, "max_ms": 316.544, "round": 4, "slot": 0, "arm": "A_tracking_false"}
+W0000 00:00:1788968080.981004     484 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1788968081.045749    2324 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+{"static_image_mode": true, "n": 150, "detected": 150, "detect_rate": 1.0, "mean_ms": 80.468, "p50_ms": 80.355, "p95_ms": 113.387, "max_ms": 142.225, "round": 4, "slot": 1, "arm": "B_static_true"}
+{
+ "summary": {
+  "A_tracking_false": {
+   "mean_ms": 38.961,
+   "round_means": [
+    28.901,
+    42.805,
+    31.549,
+    43.953,
+    47.597
+   ],
+   "spread_ms": 18.696,
+   "detect_rate": 1.0
+  },
+  "B_static_true": {
+   "mean_ms": 85.645,
+   "round_means": [
+    61.546,
+    56.912,
+    111.421,
+    117.88,
+    80.468
+   ],
+   "spread_ms": 60.968,
+   "detect_rate": 1.0
+  },
+  "k_B_over_A": 2.198,
+  "k_range": [
+   1.196,
+   4.079
+  ]
+ },
+ "checks": {
+  "전제: A 검출률 100%": true,
+  "B 검출률 100% (True 는 매 프레임 독립 탐지)": true,
+  "판 간 산포 < 팔 간 차 (팔 차가 판 노이즈보다 큰가)": false
+ }
+}
+[saved] results/detector-static-mode-2026-09-10/run.json

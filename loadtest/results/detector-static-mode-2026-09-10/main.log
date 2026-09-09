@@ -1,0 +1,44 @@
+{"box": {"mode": "main(A vs B)", "python": "3.12.10", "mediapipe": "0.10.21", "platform": "Windows-10-10.0.19045-SP0", "cpu_count_logical": 4, "model_complexity": 1, "frames_meta": {"n": 30, "knee_deg_min": 85.23, "knee_deg_max": 124.3, "detect_ok": 30, "jpeg_quality": 80, "note": "합성 스쿼트 1주기. 실사진 아님 — 절대 성능값을 실사용으로 인용하지 말 것"}, "blocks": 20, "block_frames": 10, "warmup": 8, "arm_A_static_image_mode": false, "arm_B_static_image_mode": true, "cpu_load_before": 11.0}}
+INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+W0000 00:00:1788968257.319278   12220 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1788968257.325491    4316 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1788968257.364284   12220 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1788968257.367110    4316 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1788968257.393545    4316 landmark_projection_calculator.cc:186] Using NORM_RECT without IMAGE_DIMENSIONS is only supported for the square ROI. Provide IMAGE_DIMENSIONS or use PROJECTION_MATRIX.
+block  0 A_first=True A_p50=  27.48  B_p50=  70.57  k=2.569
+block  1 A_first=False A_p50=  28.48  B_p50=  65.25  k=2.291
+block  2 A_first=True A_p50=  28.18  B_p50=  47.79  k=1.696
+block  3 A_first=False A_p50=  27.38  B_p50=  48.33  k=1.765
+block  4 A_first=True A_p50=  27.59  B_p50=  47.72  k=1.730
+block  5 A_first=False A_p50=  27.69  B_p50=  50.25  k=1.815
+block  6 A_first=True A_p50=  27.62  B_p50=  48.98  k=1.773
+block  7 A_first=False A_p50=  29.24  B_p50=  50.28  k=1.720
+block  8 A_first=True A_p50=  27.95  B_p50=  48.03  k=1.719
+block  9 A_first=False A_p50=  41.37  B_p50=  82.47  k=1.994
+block 10 A_first=True A_p50=  30.73  B_p50=  60.74  k=1.977
+block 11 A_first=False A_p50=  32.93  B_p50=  54.81  k=1.665
+block 12 A_first=True A_p50=  47.79  B_p50=  65.47  k=1.370
+block 13 A_first=False A_p50=  30.22  B_p50=  72.13  k=2.387
+block 14 A_first=True A_p50=  32.89  B_p50=  54.84  k=1.668
+block 15 A_first=False A_p50=  31.50  B_p50=  55.66  k=1.767
+block 16 A_first=True A_p50=  31.37  B_p50=  54.78  k=1.746
+block 17 A_first=False A_p50=  33.28  B_p50=  58.56  k=1.759
+block 18 A_first=True A_p50=  31.33  B_p50=  51.28  k=1.637
+block 19 A_first=False A_p50=  28.91  B_p50=  51.68  k=1.787
+{
+ "summary": {
+  "k_median": 1.762,
+  "k_q1": 1.719,
+  "k_q3": 1.977,
+  "k_min": 1.37,
+  "k_max": 2.569,
+  "k_iqr": 0.258,
+  "A_p50_median_ms": 29.731,
+  "B_p50_median_ms": 54.796,
+  "A_detect_rate": 1.0,
+  "B_detect_rate": 1.0,
+  "worst_frame_ms": 114.0
+ }
+}
+[saved] results/detector-static-mode-2026-09-10/main.json
