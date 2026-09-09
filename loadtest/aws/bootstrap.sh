@@ -36,6 +36,11 @@ DB_NAME=${DB_NAME:-shadowfit}
 #   p6-loader        — python·ghz·페이로드 (부하를 거는 박스. run_all.sh 가 여기서 돈다)
 #   ai-venv          — AI 를 **venv 로** 띄울 준비 (從 R10). 도커·MySQL·Spring 없다 —
 #                      컨테이너로 띄우면 계측 노브가 안 넘어가서다(#399)
+#   ai-ab            — AI + ai-nginx 만 띄우고 gRPC 8585·워커0 HTTP 18000 을 호스트로 편다
+#                      (gRPC vs WebClient 전송계층 A/B, measure_grpc_vs_webclient.sh 의 대상).
+#                      MySQL·Spring 을 **일부러 안 띄운다** — 이 라운드는 AI 직접 층을 재고,
+#                      같은 박스에 이웃이 살면 그 소음이 팔 사이 델타에 섞인다(從 R9 코레지던시가
+#                      이미 보여준 것). 부하기는 ROLE=p6-loader 그대로 쓴다
 #   app              — Spring 만 **bare jar** 로 기동 (풀 사이징 10~20 재실험 4대 재설계,
 #                      docs/decisions/pool-sizing-10-20-experiment-design.md §10). p6-target 은
 #                      MySQL·AI 가 같은 박스라 2026-08-09 4점 baseline(DB·App 분리·AI 없음)과
@@ -85,8 +90,8 @@ die()  { echo; echo "🔴 부트스트랩 중단 — $*" >&2; exit 1; }
 #    「왜 AI 가 아니라 MySQL 박스지」를 10분 뒤에 알게 되는 자리였다. 역할이 넷이 되면서
 #    그 확률이 올라간다.
 case "$ROLE" in
-  db|p6-target|p6-loader|ai-venv|app) ;;
-  *) die "모르는 ROLE 이다: '$ROLE' — db · p6-target · p6-loader · ai-venv · app 중 하나여야 한다" ;;
+  db|p6-target|p6-loader|ai-venv|ai-ab|app) ;;
+  *) die "모르는 ROLE 이다: '$ROLE' — db · p6-target · p6-loader · ai-venv · ai-ab · app 중 하나여야 한다" ;;
 esac
 
 # ── root SSH (다른 박스가 이 박스로 root@ 로 붙는 라운드용, #642) ──────────
@@ -268,6 +273,95 @@ EOF
   echo "  AI_PUBLIC_TOKEN=$AI_PUBLIC_TOKEN"
   echo "  INTERNAL_API_TOKEN=$INTERNAL_API_TOKEN"
   echo "  🔴 위 두 토큰을 부하기의 run_all.sh 에 그대로 넘긴다 — 다르면 401/전 요청 실패다"
+fi
+
+# ── gRPC vs WebClient A/B 대상 (ai-ab) ────────────────────────────────────
+#
+# 이 박스는 **AI 만** 산다. MySQL·Spring 을 안 띄우는 게 이 역할의 핵심이다 —
+# 재려는 것이 «Spring→AI 전송 계층의 프로토콜 차이» 인데, 같은 박스에 이웃이 살면 그
+# 소음이 팔 사이 델타에 그대로 섞인다(從 R9 코레지던시 라운드가 이미 보여준 것).
+# 델타가 작을수록 이 격리가 중요하다.
+#
+# 설계: docs/decisions/grpc-webclient-empirical-comparison.md §9.3
+if [ "$ROLE" = "ai-ab" ]; then
+  [ -n "$AI_PUBLIC_TOKEN" ]    || AI_PUBLIC_TOKEN=$(head -c 24 /dev/urandom | base64 | tr -d '/+=')
+  [ -n "$INTERNAL_API_TOKEN" ] || INTERNAL_API_TOKEN=$(head -c 24 /dev/urandom | base64 | tr -d '/+=')
+  # 🔴 두 토큰이 같으면 config.py:178-183 이 기동을 거부한다(#230). 위 생성은 서로 다른
+  #    난수라 부딪힐 일이 없지만, 밖에서 주입할 때 같은 값을 주면 여기서 막힌다.
+  [ "$AI_PUBLIC_TOKEN" != "$INTERNAL_API_TOKEN" ]     || die "AI_PUBLIC_TOKEN 과 INTERNAL_API_TOKEN 이 같다 — AI 가 기동을 거부한다(#230)"
+  # 🔴 p6-target 의 기본값(AI_MEM_LIMIT=20000m · POOL=160)을 그대로 쓰면 안 된다 —
+  #    그건 «세션을 많이 여는» 라운드의 값이고, 이 라운드는 검출기를 **한 개도 안 잡는다**
+  #    (페이로드가 핸들러 초입에서 반환한다). 여기서 큰 값을 박으면 작은 박스에서
+  #    기동만 어려워지고 측정에는 아무 영향이 없다.
+  AB_MEM_LIMIT=${AI_AB_MEM_LIMIT:-2048m}
+  # cpus 는 호스트 vCPU 를 넘으면 docker 가 거부한다. 이 역할은 AI 혼자 사는 박스라
+  # 굳이 캡을 좁힐 이유가 없으니 박스 전체를 준다 — 캡 자체가 측정 변수가 되면 안 된다.
+  AB_CPUS=$(nproc)
+  cat >> "$WORKDIR/.env" <<EOF
+AI_MEM_LIMIT=$AB_MEM_LIMIT
+AI_CPU_LIMIT=$AB_CPUS
+AI_PUBLIC_TOKEN=$AI_PUBLIC_TOKEN
+INTERNAL_API_TOKEN=$INTERNAL_API_TOKEN
+EOF
+  # POSE_DETECTOR_POOL_SIZE 는 **일부러 안 쓴다** — 안 주면 config 가 컨테이너 메모리
+  # 한도에서 유도한다(mediapipe_detector.py). 안 쓰는 자원에 숫자를 박지 않는다.
+  echo "  AI 메모리 한도 $AB_MEM_LIMIT · CPU $AB_CPUS vCPU (풀 크기는 한도에서 자동 유도)"
+
+  AB_OVERLAY="$WORKDIR/loadtest/aws/compose.ai-ab.yml"
+  [ -f "$AB_OVERLAY" ] || die "오버레이가 없다: $AB_OVERLAY (커밋 SHA 가 A/B 도입 이전이다)"
+
+  step "AI 이미지 빌드"
+  cd "$WORKDIR" || die "$WORKDIR 로 못 들어간다"
+  docker compose build shadowfit-ai || die "AI 이미지 빌드 실패"
+
+  step "AI + ai-nginx 기동 (gRPC 8585 · 워커0 HTTP 18000 개방)"
+  docker compose -f docker-compose.yml -f "$AB_OVERLAY" up -d shadowfit-ai ai-nginx     || die "compose up 실패"
+
+  echo -n "  AI 헬스체크 대기"
+  for _ in $(seq 1 36); do
+    curl -sf --max-time 3 http://localhost:8000/health >/dev/null 2>&1 && { echo " — 떴다"; break; }
+    echo -n "."; sleep 5
+  done
+  curl -sf --max-time 3 http://localhost:8000/health >/dev/null 2>&1     || die "AI 가 3분 안에 안 떴다 — 부트스트랩이 실패하면 측정을 시작하면 안 된다(#265)"
+
+  # 🔴 «떴다» 와 «세 팔이 다 닿는다» 는 다르다. 여기서 세 표면을 다 확인해 둔다 —
+  #    부하기에서 프리플라이트가 실패하면 원인이 대상인지 네트워크인지 가르기 어렵다.
+  step "세 표면 자가 점검 (대상 박스 안에서)"
+  ab_probe() { # $1=라벨 $2=포트
+    code=$(curl -s -o /dev/null -w '%{http_code}' -m 10       -X POST "http://localhost:$2/api/v1/internal/analysis/stop"       -H 'Content-Type: application/json' -H "Authorization: Bearer $INTERNAL_API_TOKEN"       -H 'X-AI-Worker: 0' -d '{"session_id": 999000001}')
+    if [ "$code" = "200" ]; then echo "  ✅ $1 (port $2)"; else echo "  🔴 $1 (port $2) — HTTP $code"; AB_BAD=1; fi
+  }
+  AB_BAD=0
+  ab_probe "rest-nginx"  8000
+  ab_probe "rest-direct" 18000
+  # gRPC 는 이 박스에 ghz 가 없다(부하기에만 깐다). 포트가 LISTEN 인지까지만 본다.
+  if ss -ltn 2>/dev/null | grep -q ':8585'; then echo "  ✅ grpc 포트 LISTEN (8585)"; else echo "  🔴 grpc 8585 가 안 열렸다"; AB_BAD=1; fi
+  [ "$AB_BAD" = 0 ] || die "표면 점검 실패 — 부하기를 띄우기 전에 여기서 고치는 게 싸다"
+
+  cat <<EOF
+
+════════════════════════════════════════════════════════════════
+ ROLE=ai-ab 준비 완료 — gRPC vs WebClient 전송계층 A/B 대상
+════════════════════════════════════════════════════════════════
+ 표면
+   grpc        : <이 박스>:8585      (워커 0 gRPC)
+   rest-nginx  : <이 박스>:8000      (ai-nginx → X-AI-Worker 라우팅)
+   rest-direct : <이 박스>:18000     (워커 0 HTTP 직결 — nginx 홉 없음)
+
+ 토큰 (부하기에 TOKEN= 로 그대로 넘길 것)
+   INTERNAL_API_TOKEN=$INTERNAL_API_TOKEN
+   AI_PUBLIC_TOKEN=$AI_PUBLIC_TOKEN
+   🔴 TOKEN 에 AI_PUBLIC_TOKEN 을 주면 401 이다 — 이 4개 경로는 내부 토큰만 받는다(#134/#230)
+
+ 부하기(ROLE=p6-loader)에서:
+   AI_HOST=<이 박스 사설 IP> TOKEN=$INTERNAL_API_TOKEN DIRECT_PORT=18000 \
+     OUT=/root/out/ab-\$(date +%Y%m%d-%H%M) \
+     bash loadtest/measure_grpc_vs_webclient.sh 2>&1 | tee /root/out/run_all.log
+
+ ⚠️ 보안그룹은 8585·18000 을 **부하기 인스턴스에만** 열 것. 이 둘은
+    INTERNAL_API_TOKEN 표면이다(compose.ai-ab.yml 주석).
+EOF
+  exit 0
 fi
 
 # ── 부하기 (p6-loader) ───────────────────────────────────────────────────
