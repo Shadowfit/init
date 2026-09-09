@@ -77,6 +77,16 @@ S3_DEST="${S3_BASE%/}/$RUN_ID"
 #        업로드는 성공) `AUTO_SHUTDOWN` 이 그 성공을 「정상 종료」로 오인해 박스를 조기에
 #        꺼버릴 수 있다 — 실측을 시작도 못 한 판이 «측정 완료» 처럼 보인다.
 #
+#   풀 사이징 재실험 10~20 (docs/decisions/pool-sizing-10-20-experiment-design.md, 2대 구성) —
+#   **부하기 박스에서**, httpread 와 같은 이유(TARGET_SSH 로 대상을 재기동·스크레이프한다):
+#     TARGET_HOST=<대상 사설 IP> \
+#     TARGET_SSH="ssh -i /root/.ssh/measure.pem -o StrictHostKeyChecking=no root@<대상 사설 IP>" \
+#     GHZ_TOKEN=<대상 .env 의 INTERNAL_API_TOKEN> GHZ_DATA=/root/batch_multi.json \
+#     PW=<대상 .env 의 MYSQL_ROOT_PASSWORD> \
+#     PHASES="poolsizing collect" nohup bash loadtest/aws/run_all.sh > /root/run_all.log 2>&1 &
+#     🔴 이 phase 는 **오늘(2026-09-04) 코드만 작성됐고 실전에서 한 번도 안 돌았다** —
+#        `measure_poolsizing_10_20.sh` 머리의 "미검증" 목록을 실행 전 반드시 볼 것.
+#
 #   P6 동거 용량 라운드 (主-P6):
 #     TARGET_HOST=10.0.0.5 AI_PUBLIC_TOKEN=... \
 #     PHASES="coresidency_preflight coresidency_rehearsal coresidency collect"
@@ -132,6 +142,7 @@ if [ -z "$OUTDIR" ]; then
       r276app)                             _r=r276-app-retry ;;
       httpwrite)                           _r=http-write-p99 ;;
       httpread)                            _r=http-read-p99-ec2 ;;
+      poolsizing)                          _r=pool-sizing-10-20 ;;
       ukbp)                                _r=uk-bufferpool ;;
       framepath*)                          _r=frame-path ;;
       q2)                                  _r=q2-partition-quiet-box ;;
@@ -335,6 +346,11 @@ CARD_A_TXN_STMTS=${CARD_A_TXN_STMTS:-1}
 CARD_A_ORDER=${CARD_A_ORDER:-"A B B A B A A B"}
 TIMEOUT_CARD_A=${TIMEOUT_CARD_A:-3600}
 
+# ── 풀 사이징 재실험 10~20 (docs/decisions/pool-sizing-10-20-experiment-design.md) ──
+# 2대(p6-target+p6-loader, DB_SSH 미설정) 또는 3대(DB·App 분리, DB_SSH 설정) — 러너는
+# 부하기에서 돈다. 버림판 1 + 3라운드×5수준. DB_HOST/DB_SSH 는 아래 TARGET_HOST 옆에서 정의.
+TIMEOUT_POOLSIZING=${TIMEOUT_POOLSIZING:-3600}
+
 # ── 동거 용량 (主 P6) ────────────────────────────────────────────────────
 #
 # 러너는 **부하기**에서 돈다(위 헤더). 아래 값은 전부 rig 의 기본값과 같게 두되, 러너에서
@@ -345,6 +361,11 @@ TARGET_REPO_DIR=${TARGET_REPO_DIR:-/root/init}
 # 대상 호스트가 없으면 **빈 값**이다 — `root@` 만 남은 명령이 도는 것을 막는다.
 TARGET_SSH=${TARGET_SSH:-${TARGET_HOST:+ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 root@$TARGET_HOST}}
 AI_PUBLIC_TOKEN=${AI_PUBLIC_TOKEN:-}
+
+# poolsizing 전용 — DB 가 App 과 다른 박스일 때(3대 구성)만 설정한다. 비어 있으면
+# measure_poolsizing_10_20.sh 가 2대(TARGET_SSH 하나로 DB·App 다 처리) 경로로 동작한다.
+DB_HOST=${DB_HOST:-}
+DB_SSH=${DB_SSH:-${DB_HOST:+ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 root@$DB_HOST}}
 
 CORES_ARMS=${CORES_ARMS:-"A B C"}            # D(관측 스택)를 넣으면 판이 33% 는다
 CORES_LEVELS=${CORES_LEVELS:-"20 40 60 80 90 100 120 160"}  # 2026-08-17 확정 — 설계 §5-3 ⑥.
@@ -411,14 +432,6 @@ FP_HTTP_PORT=${FP_HTTP_PORT:-8100}
 FP_GRPC_PORT=${FP_GRPC_PORT:-8685}
 FP_RIG=${FP_RIG:-$ROOT/loadtest/results/frame-path-overhead-2026-08-23/run_arms.py}
 FP_VENV=${FP_VENV:-$ROOT/ai-server/.venv/bin/python}
-
-# 🆕 R10-b(2대) — 비어 있으면(FP_REMOTE_TARGET="") R10-a 와 완전히 같은 로컬(동거) 경로를
-#    탄다. 러너는 **이 박스(부하기)** 에서 돌고, 서버는 대상 박스에서 SSH 로 원격 기동된다
-#    — 자리는 coresidency(P6)와 같고 P4(소스 박스가 러너) 와는 반대다.
-FP_REMOTE_TARGET=${FP_REMOTE_TARGET:-}
-FP_REMOTE_SSH=${FP_REMOTE_SSH:-${FP_REMOTE_TARGET:+ssh -o StrictHostKeyChecking=no -o ConnectTimeout=10 root@$FP_REMOTE_TARGET}}
-FP_REMOTE_ROOT=${FP_REMOTE_ROOT:-/root/init}
-FP_REMOTE_PYTHON=${FP_REMOTE_PYTHON:-}
 
 # 소요 환산(설계 §13-7): 26판 × (부하 90s + setup + 기동·정리). 판당 120초면 52분,
 # 160초면 69분. 🔴 setup(160세션 여는 시간)이 미측정이라 버림판이 처음 준다.
@@ -543,19 +556,14 @@ run_phase() {  # $1=이름 $2...=명령
   local status="OK"
   case $rc in
     0)   status="OK" ;;
-    124) status="TIMEOUT"; ANY_HARD_FAIL=1 ;;
-    *)   status="FAIL($rc)"; ANY_HARD_FAIL=1 ;;
+    124) status="TIMEOUT" ;;
+    *)   status="FAIL($rc)" ;;
   esac
   printf "%s\t%s\t%s\t%s\n" "$name" "$status" "$((t1-t0))" "$started" >> "$PHASE_LOG"
   note "→ $name : $status ($((t1-t0))초)"
   sync_s3 >/dev/null 2>&1
   return $rc
 }
-# 🔴 (#641) FINAL_OK 는 원래 sync_s3 성공 여부만 봤다 — 그러면 게이트가 FAIL 이어도(예:
-# repl_preflight) 업로드 자체는 성공해 AUTO_SHUTDOWN 이 박스를 곧바로 꺼버리고, 진단 로그가
-# 볼륨과 함께 사라졌다(2026-09-02 실측 재현). SKIP(의도된 건너뜀 — REPL_GATE_OK=0 등)은
-# 실패가 아니므로 여기 안 걸리고, run_phase() 를 통과한 FAIL/TIMEOUT 만 이 플래그를 켠다.
-ANY_HARD_FAIL=0
 
 # ── 단계 정의 ────────────────────────────────────────────────────────────
 
@@ -1414,38 +1422,6 @@ fp_gate() {
   [ -d /proc ] && note "✅ /proc — AI·부하기 CPU 를 걷는다" \
     || note "⚠️ /proc 가 없다 — CPU 축이 통째로 빈다. 「9.5 of 16」을 못 만진다"
 
-  # ⑥ R10-b — 대상이 지정됐으면 SSH·저장소·인터프리터가 실제로 닿는지 먼저 본다.
-  #    안 그러면 첫 판에서야 실패가 드러나고, 그 실패가 «환경 결함» 인지 «측정 결과» 인지
-  #    판마다 다시 헷갈린다(이 함수 전체의 존재 이유와 같다).
-  if [ -n "$FP_REMOTE_TARGET" ]; then
-    if $FP_REMOTE_SSH "echo ok" >/dev/null 2>&1; then
-      note "✅ 대상 SSH — $FP_REMOTE_TARGET"
-    else
-      note "🔴 대상($FP_REMOTE_TARGET) SSH 가 안 된다 — 키·보안그룹 22 부터 볼 것"; rc=1
-    fi
-    local rpy=${FP_REMOTE_PYTHON:-$FP_REMOTE_ROOT/ai-server/.venv/bin/python}
-    if $FP_REMOTE_SSH "test -x $rpy" >/dev/null 2>&1; then
-      note "✅ 대상 인터프리터 — $rpy"
-    else
-      note "🔴 대상에 $rpy 가 없다 — ROLE=ai-venv 부트스트랩을 안 거쳤을 것"; rc=1
-    fi
-    # R10-a 와 같은 이유로 버전을 본다 — GIL 거동 비교라 3.12 가 아니면 교락이다.
-    local rv; rv=$($FP_REMOTE_SSH "$rpy -V" 2>&1 | awk '{print $2}')
-    case "$rv" in
-      3.12.*) note "✅ 대상 python $rv" ;;
-      *) note "🔴 대상 python $rv — 3.12.x 가 아니면 GIL 비교가 교락된다"; rc=1 ;;
-    esac
-    # 부하기(이 박스)의 gRPC 클라이언트가 대상 8685 로 실제로 열리는지 — 보안그룹의
-    # «22만 열고 8685는 깜빡한» 실수가 여기서 걸린다. nc 가 없으면 건너뛴다(경고만).
-    if command -v nc >/dev/null 2>&1; then
-      if nc -z -w3 "$FP_REMOTE_TARGET" "$FP_GRPC_PORT" 2>/dev/null; then
-        note "✅ 부하기→대상 $FP_GRPC_PORT 열림"
-      else
-        note "⚠️ 부하기→대상 $FP_GRPC_PORT 가 아직 안 열려 있다 — 서버가 안 떠서 그런 것일 수도 있다(첫 boot 전엔 정상)"
-      fi
-    fi
-  fi
-
   return $rc
 }
 
@@ -1469,8 +1445,6 @@ on = [r for r in rs if r.get("frame_path") is not None]
 add(not on, "계측 ON 판이 하나도 없다 — 구간 비율·lease 가 통째로 빈다")
 add([r for r in on if (r.get("frame_path") or {}).get("error")], "계측 스냅샷 회수 실패 판이 있다")
 add([r for r in rs if (r.get("cpu") or {}).get("error")], "CPU 샘플러가 실패한 판이 있다 — 제목의 숫자를 못 만진다")
-add([r for r in rs if "cpu_remote" in r and r["cpu_remote"].get("avg_vcpu") is None],
-    "원격 CPU 평균을 못 읽은 판이 있다 — R10-b, SSH 왕복 실패로 추정(치명은 아니다, 처리량·지연은 그대로 유효)")
 print(f"  본판 {len(rs)} · 계측 ON {len(on)}")
 for m in bad:
     print("  🔴 " + m)
@@ -1484,17 +1458,8 @@ phase_framepath() {
 
   fp_gate || { note "🔴 게이트 실패 — 이 상태로 돌리면 «환경 결함» 이 «측정 결과» 로 찍힌다"; return 1; }
 
-  local remote_args=()
-  if [ -n "$FP_REMOTE_TARGET" ]; then
-    note "rig 이 대상($FP_REMOTE_TARGET)을 SSH 로 팔마다 원격 기동·종료한다 — 러너는 이 박스(부하기)"
-    note "🔴 CPU 는 판 전체 평균뿐이다(warmup 미제외) — R10-a 의 시계열 cpu 와 비교 금지"
-    remote_args=(--remote-target "$FP_REMOTE_TARGET" --remote-ssh "$FP_REMOTE_SSH"
-                 --remote-root "$FP_REMOTE_ROOT")
-    [ -n "$FP_REMOTE_PYTHON" ] && remote_args+=(--remote-python "$FP_REMOTE_PYTHON")
-  else
-    note "rig 이 서버를 팔마다 직접 띄우고 내린다 (재기동이 곧 팔 전환이다)"
-    note "🔴 부하기가 같은 박스에 산다 — 절대 처리량 인용 금지. 이 판이 답하는 것은 팔 사이의 상대 델타다"
-  fi
+  note "rig 이 서버를 팔마다 직접 띄우고 내린다 (재기동이 곧 팔 전환이다)"
+  note "🔴 부하기가 같은 박스에 산다 — 절대 처리량 인용 금지. 이 판이 답하는 것은 팔 사이의 상대 델타다"
 
   timeout --kill-after=120 "$TIMEOUT_FP" \
     "$FP_VENV" "$FP_RIG" \
@@ -1504,7 +1469,6 @@ phase_framepath() {
       --pool "$FP_POOL" --warmup "$FP_WARMUP" \
       --plan "$FP_PLAN" --discard "$FP_DISCARD" \
       --http-port "$FP_HTTP_PORT" --grpc-port "$FP_GRPC_PORT" \
-      "${remote_args[@]}" \
     > "$out/run_arms.log" 2>&1 || { tail -40 "$out/run_arms.log"; return 1; }
   tail -20 "$out/run_arms.log"
 
@@ -1798,6 +1762,54 @@ phase_httpread() {
   return 0
 }
 
+# 풀 사이징 재실험 10~20 — HikariCP maximum-pool-size 10/12/15/17/20, 라틴 방격 3라운드+버림판
+# httpwrite/httpread 와 같은 형태(부하기에서 돎, TARGET_HOST 필수) — 대신 gRPC(ghz 닫힌 루프)를 쓴다.
+phase_poolsizing() {
+  local out=$OUTDIR/poolsizing
+  mkdir -p "$out"
+
+  if [ -z "$TARGET_HOST" ]; then
+    note "🔴 TARGET_HOST 가 없다 — 이 단계의 존재 이유가 «부하기와 대상 분리» 다. 멈춘다"
+    return 1
+  fi
+  if [ -z "$TARGET_SSH" ]; then
+    note "🔴 TARGET_SSH 가 없다 — pool 재기동·actuator 스크레이프가 대상 박스 SSH 로 돈다"
+    return 1
+  fi
+  if [ -z "$GHZ_TOKEN" ]; then
+    note "🔴 GHZ_TOKEN 이 비었다(대상 .env 의 INTERNAL_API_TOKEN) — 전 요청이 401 이다"
+    return 1
+  fi
+  if [ -z "$GHZ_DATA" ] || [ ! -f "$GHZ_DATA" ]; then
+    note "🔴 GHZ_DATA 가 없다 — bootstrap.sh ROLE=p6-loader 가 만든 /root/batch_multi.json 을 줄 것"
+    return 1
+  fi
+
+  timeout $TIMEOUT_POOLSIZING env \
+      TARGET_HOST="$TARGET_HOST" TARGET_SSH="$TARGET_SSH" TARGET_REPO_DIR="$TARGET_REPO_DIR" \
+      DB_SSH="$DB_SSH" \
+      GHZ_TOKEN="$GHZ_TOKEN" GHZ_DATA="$GHZ_DATA" GHZ_BIN="$GHZ_BIN" \
+      MYSQL_CONTAINER="$CONTAINER" MYSQL_PW="$PW" OUT="$out" \
+      bash "$ROOT/loadtest/measure_poolsizing_10_20.sh" > "$out/run.log" 2>&1
+  local rc=$?
+
+  # 3대(DB_SSH 설정)는 App 이 bare jar+systemd 라 journalctl 을, MySQL 로그는 DB 박스에서 건진다.
+  # 2대(DB_SSH 미설정)는 기존대로 App 컨테이너 로그 하나면 된다.
+  if [ -n "$DB_SSH" ]; then
+    $TARGET_SSH "journalctl -u shadowfit-app --no-pager -n 2000 2>&1" > "$out/target-backend.log" 2>&1 || true
+    $DB_SSH "docker logs --tail 2000 $CONTAINER 2>&1" > "$out/db-mysql.log" 2>&1 || true
+  else
+    $TARGET_SSH "docker logs --tail 2000 shadowfit-backend 2>&1" > "$out/target-backend.log" 2>&1 || true
+  fi
+
+  if [ $rc -ne 0 ]; then
+    note "🔴 풀 사이징 라운드 rc=$rc — run.log 를 볼 것"
+    return 1
+  fi
+  note "풀 사이징 라운드 완료 — pool_sizing.tsv·pool_sizing_side.tsv 참고"
+  return 0
+}
+
 # 조건 기록. «조건 없는 수치는 인용 불가» 라 이 파일이 없으면 측정도 반쪽이다.
 phase_collect() {
   local m=$OUTDIR/MANIFEST.txt
@@ -1982,6 +1994,7 @@ for p in $PHASES; do
     ukbp)      run_phase ukbp      phase_ukbp ;;
     httpwrite) run_phase httpwrite phase_httpwrite ;;
     httpread)  run_phase httpread  phase_httpread ;;
+    poolsizing) run_phase poolsizing phase_poolsizing ;;
     q2)          run_phase q2          phase_q2 ;;
     card_a_seed) run_phase card_a_seed phase_card_a_seed ;;
     card_a)      run_phase card_a      phase_card_a ;;
@@ -2023,11 +2036,8 @@ UP_SEC=$(awk '{printf "%d", $1}' /proc/uptime 2>/dev/null || echo 0)
   echo "⚠️ 인스턴스를 끈 뒤에도 **볼륨이 남으면 요금이 계속 나간다.** 삭제까지 확인할 것"
 } >> "$OUTDIR/MANIFEST.txt"
 
-if sync_s3 && [ "$ANY_HARD_FAIL" != "1" ]; then
+if sync_s3; then
   FINAL_OK=1; note "✅ $S3_DEST"
-elif [ "$ANY_HARD_FAIL" = "1" ]; then
-  # (#641) 업로드는 됐어도 자동 종료는 보류 — 실패한 단계를 진단할 시간을 사람에게 남긴다.
-  FINAL_OK=0; note "🔴 단계 실패(FAIL/TIMEOUT)가 있어 자동 종료를 보류한다 — phases.tsv 를 볼 것"
 else
   FINAL_OK=0; note "🔴 최종 업로드 실패"
 fi
