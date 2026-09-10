@@ -104,6 +104,18 @@ say "## [1/6] 스크래치 스키마"
 Mroot -e "DROP DATABASE IF EXISTS $DB_NAME; CREATE DATABASE $DB_NAME;" \
   || die "DB 생성 실패"
 
+# 🔴 버퍼풀 크기를 명시적으로 고정한다 — 이건 편의가 아니라 **비교 조건**이다.
+#    100만 행이면 데이터 ~70MB + 인덱스 ~140MB 라 기본값(128MB)에서는 테이블이 통째로
+#    안 들어간다. 그러면 팔마다 "무엇이 캐시에 남아 있었나"가 달라져 측정이 인덱스 효과가
+#    아니라 캐시 운에 흔들린다. 넉넉히 잡아 **전 팔이 warm 조건에서 같은 무대**를 쓰게 한다.
+#    (그래서 이 라운드가 재는 것은 CPU 바운드 warm 비용이고, 디스크 I/O 는 안 잰다 — 헤더 참고)
+BP_SIZE=${BP_SIZE:-2147483648}
+Mroot -e "SET GLOBAL innodb_buffer_pool_size = $BP_SIZE;" 2>/dev/null || true
+BP_NOW=$(Mroot -e "SELECT @@innodb_buffer_pool_size;")
+say "  버퍼풀: $((BP_NOW/1024/1024)) MB (요청 $((BP_SIZE/1024/1024)) MB)"
+[ "$BP_NOW" -ge 1073741824 ] \
+  || die "버퍼풀이 $((BP_NOW/1024/1024))MB 다 — 1GB 미만이면 팔 간 캐시 조건이 안 맞는다"
+
 # 숫자 시퀀스 — 0..999,999
 M -e "
 DROP TABLE IF EXISTS _seq;
