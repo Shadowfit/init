@@ -1692,6 +1692,12 @@ phase_clientab() {
   timeout $TIMEOUT_CLIENTAB env       N="$CLIENTAB_N" BLOCKS="$CLIENTAB_BLOCKS" WARMUP="$CLIENTAB_WARMUP"       COMPOSE_DIR="$ROOT" OUT="$out"       bash "$ROOT/loadtest/measure_ai_call_latency_ab.sh" > "$out/run.log" 2>&1
   local rc=$?
 
+  # 從 R11 박스 보정값 — 이 박스가 초당 얼마나 «일» 하는지. 판정에 안 써도 무조건 남긴다
+  # (round-to-round-nonreproducibility.md §3 축0: 박스가 사라진 뒤엔 영영 못 잰다).
+  # 🔴 실패해도 라운드를 막지 않는다. 이 도커 판 명령은 aws/README.md 가 «아직 안 돌려봤다» 고
+  #    적어둔 그 줄이라, 여기서 처음 밟는다 — 안 되면 그 사실 자체가 산출물이다.
+  ( docker cp "$ROOT/loadtest/results/coresidency-2026-08-15/frames.json" shadowfit-ai:/tmp/frames.json     && docker exec -i -e SCALING_WORKERS=1 -w /app shadowfit-ai          python - /tmp/frames.json scaling          < "$ROOT/loadtest/results/ai-path-profile-2026-08-17/profile_e2e_and_scaling.py"        > "$out/calibration_scaling.txt" 2>&1 )     && note "  박스 보정값 회수 — $out/calibration_scaling.txt"     || note "  ⚠️ 박스 보정값 실패 — 도커 판 명령이 안 밟혔다(README 가 미검증으로 적어둔 줄)"
+
   # 집계는 실패해도 원자료는 남는다 — rc 와 무관하게 시도하고, 결과를 단계 로그에 올린다.
   python3 "$ROOT/loadtest/analyze_ai_call_latency_ab.py" "$out" > "$out/summary.txt" 2>&1
   grep -E "판별 불가|안 겹친다|평균 범위" "$out/summary.txt" | while read -r l; do note "  $l"; done
