@@ -1,0 +1,9 @@
+INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+W0000 00:00:1789048602.605511     543 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1789048602.633027     543 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+W0000 00:00:1789048602.649304     546 landmark_projection_calculator.cc:186] Using NORM_RECT without IMAGE_DIMENSIONS is only supported for the square ROI. Provide IMAGE_DIMENSIONS or use PROJECTION_MATRIX.
+
+③ 확장성 — 워커당 100프레임 추론(모델 로드·워밍업 제외), 물리 4코어 / 8 vCPU
+  워커     스레드 fps      배수      프로세스 fps      배수       프로세스/스레드
+--------------------------------------------------------------------

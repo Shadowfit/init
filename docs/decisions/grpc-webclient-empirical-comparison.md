@@ -358,7 +358,15 @@ fire-and-forget 이라 응답 지연이 AI 호출 비용을 거의 안 비추고
 - **제품 관점** — 이 4개 RPC 는 세션당 몇 번 안 일어난다. 호출당 0.5~1ms 는 분 단위 세션에서
   의미 있는 차이가 아니다.
 
-### 10.4 다음 라운드가 답해야 할 것 (1순위)
+#### 10.4 ~~다음 라운드가 답해야 할 것 (1순위)~~ → ✅ **2026-09-10 실행됨**
+
+> **2차 라운드 결과**: [`ai-call-latency-ab-aws-2026-09-10`](../../loadtest/results/ai-call-latency-ab-aws-2026-09-10/README.md) ·
+> 설계 [`grpc-webclient-production-client-round.md`](./grpc-webclient-production-client-round.md).
+> 프로덕션 클라이언트로 재니 **큰 요청(Reattach 97.6KB)에서 grpc 5.8~7.6ms ↔ webclient 8.6~9.1ms**,
+> **작은 요청(Stop)에서 1.8~2.7ms ↔ 3.8~4.1ms** 로 **두 자리 다 범위가 안 겹친다** — 즉 §10.2 가
+> 「판정 불가」로 남긴 자리가 이 무대에서는 닫혔고, **방향은 gRPC 우세**다. 크기는 큰 요청 +3ms ·
+> 작은 요청 +1.8ms 이고, 이 두 RPC 는 세션당 몇 번이라 **사용자 체감에서의 몫은 여전히 작다.**
+> 🔴 fire-and-forget(Start)은 블록4 이상치로 **판별 불가**이고, 채택 결정은 그대로 열려 있다.
 
 **프로덕션 클라이언트로 재기.** 10.2 가 보여준 대로 클라이언트 구현이 델타를 지배할 수 있는데,
 정작 실제로 쓰이는 Java gRPC / Spring WebClient 로는 한 번도 안 쟀다. 큰 페이로드 답이 필요하면
