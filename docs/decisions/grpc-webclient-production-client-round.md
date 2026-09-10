@@ -135,4 +135,16 @@ CPU 경합은 두 팔에 똑같이 걸리고, 팔 순서를 뒤집어 상쇄한�
 ## 8. 결정 로그
 
 - 2026-09-10: 문서 신설. §10.4를 실행 설계로 옮겼다. 무대(EC2)·계기(Micrometer 타이머)는
-  사용자 결정, 범위(블로킹 2개)는 추천안대로 잡았다. **아직 안 돌렸다.**
+  사용자 결정, 범위(블로킹 2개)는 추천안대로 잡았다.
+- 2026-09-10: **1차 라운드 기동** — `i-08faddd68cc10806a`(`c7i.2xlarge`, ap-northeast-2,
+  gp3 100GB), `ROLE=client-ab`, `REF=7f3ff610`(커밋 SHA 고정), `PHASES="clientab ridealong collect"`,
+  `N=100 × 블록 5 × 팔 2` + 버림 블록. 태그 `Project=shadowfit-measure`,
+  `--instance-initiated-shutdown-behavior terminate`.
+  - 🔴 **조건 명시 — main 으로 rebase 하지 않았다.** 이 라운드가 재는 코드는
+    `feat/grpc-webclient-ab`(base `30261769`) + 이 브랜치의 계기 커밋이다. 그 사이 main 이
+    `6130b2d1` 로 움직였고 그중 #711 은 코드 변경(참조 0 DTO 5개 삭제)이지만 AI 호출 경로와
+    무관하고, 무인 라운드 직전 rebase 는 위험만 더한다고 판단했다. 나중에 이 라운드 값을
+    다른 라운드와 비교할 때 **이 차이를 조건으로 셀 것.**
+  - 從으로 같이 회수: R1(worst-section — 지금까지 두 라운드가 전부 0행이라 «앱 트래픽이 도는
+    무대» 를 기다리고 있었다) · R3(3-way 조인) · R11 박스 보정값(도커 판 명령은
+    `aws/README.md` 가 «아직 안 돌려봤다» 고 적어둔 줄이라 여기서 처음 밟는다).
