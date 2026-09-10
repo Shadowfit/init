@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.MediaType;
@@ -39,6 +40,9 @@ import java.util.function.Consumer;
  * 스레드)에서만 불린다는 전제가 이미 깔려 있다.
  */
 @Component
+// TimedAiAnalysisClient(@Primary)가 이 빈을 감싼다 — 한정자가 있어야 래퍼가
+// 자기 자신이 아니라 이 구현체를 고른다.
+@Qualifier("aiTransport")
 @ConditionalOnProperty(name = "ai.client-type", havingValue = "webclient")
 @Slf4j
 public class WebClientAiAnalysisClient implements AiAnalysisClient {

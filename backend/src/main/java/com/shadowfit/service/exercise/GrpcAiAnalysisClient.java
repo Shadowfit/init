@@ -21,6 +21,7 @@ import io.grpc.stub.StreamObserver;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -48,6 +49,9 @@ import java.util.function.Consumer;
  * 어디로 떼어내는 게 맞는지는 아직 확인이 필요한 지점이라 손대지 않았다.
  */
 @Component
+// TimedAiAnalysisClient(@Primary)가 이 빈을 감싼다 — 한정자가 있어야 래퍼가
+// 자기 자신이 아니라 이 구현체를 고른다.
+@Qualifier("aiTransport")
 @ConditionalOnProperty(name = "ai.client-type", havingValue = "grpc", matchIfMissing = true)
 @Slf4j
 public class GrpcAiAnalysisClient implements AiAnalysisClient {
