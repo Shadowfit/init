@@ -128,6 +128,10 @@ services:
       # AI 채널 풀 크기 — shadowfit-ai 의 AI_WORKER_COUNT 와 같은 값이어야 한다(ai-channel-pool-hardening.md).
       # 소스는 여기 하나(${AI_WORKER_COUNT}) 뿐이고, 아래 shadowfit-ai 서비스도 같은 변수를 읽는다.
       AI_CHANNEL_POOL_SIZE: ${AI_WORKER_COUNT:-3}
+      # Spring→AI 요청 4개를 gRPC로 보낼지 REST(WebClient)로 보낼지 — 재빌드 없이 바꾸는
+      # 측정용 손잡이(grpc-webclient-empirical-comparison.md §9.3). 기본은 application.yml
+      # 과 같은 grpc라 이 줄이 있어도 기존 동작은 안 바뀐다.
+      AI_CLIENT_TYPE: ${AI_CLIENT_TYPE:-grpc}
       JWT_SECRET: ${JWT_SECRET:-shadowfit-prod-secret-key-change-this}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       # 데드락 재시도 상한 (#276 ②). 기본 5 는 팔당 6판 재측정으로 재확정한 값이다(2026-08-26

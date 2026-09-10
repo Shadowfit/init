@@ -1,7 +1,7 @@
 # gRPC vs WebClient 실측 비교 — 착수 여부
 
 작성일: 2026-09-08
-최종 갱신: 2026-09-10 (§9 착수 현황 + §10 1차 실측 결과)
+최종 갱신: 2026-09-10 (§9 착수 현황 + §9.4 webclient 팔 통주행 + §10 1차 실측 결과)
 상태: **③ 좁은 실측 — 1차 라운드 완료(EC2) · 채택 미결정** (결정 ✅ 는 사용자 confirm 후)
 연관: [`./grpc-vs-webclient.md`](./grpc-vs-webclient.md)(선행 분석 — 이 문서가 그 뒤를 잇는다) ·
 [`./ai-sticky-routing-probe.md`](./ai-sticky-routing-probe.md)(같은 방법론의 선례 — 정적 vs 해시 라우팅을
@@ -256,10 +256,60 @@ public interface AiAnalysisClient {
 ### 9.3 아직 안 된 것
 
 - ✅ §8.5 rig 는 만들었고 1차 라운드를 돌렸다 — §10.
-- 🔴 두 구현체의 동작 동등성은 **단위 테스트 수준**까지만 확인됐다(backend 37건 · ai-server 15건 통과,
-  2026-09-10). 컨테이너를 띄워 `ai.client-type=webclient` 로 **세션을 끝까지 태워 본 적은 없다.**
-  1차 라운드는 AI 를 직접 쳤을 뿐 Spring 의 WebClient 구현을 한 번도 실행하지 않았다.
+- ~~🔴 두 구현체의 동작 동등성은 **단위 테스트 수준**까지만 확인됐다(backend 37건 · ai-server 15건 통과,
+  2026-09-10). 컨테이너를 띄워 `ai.client-type=webclient` 로 **세션을 끝까지 태워 본 적은 없다.**~~
+  ✅ **2026-09-10 저녁, webclient 팔로 세션 한 번을 끝까지 태웠다 — §9.4.**
 - `docs/architecture/` 반영은 2026-09-10 에 했다.
+- 🔴 **여전히 안 된 것**: §10.4 가 1순위로 지목한 **프로덕션 클라이언트 지연 재측정**은 이
+  통주행과 별개다 — 여기는 팔당 1판·로컬이라 지연을 안 잰다(「돈다」와 「같은 값이 나온다」까지다).
+
+### 9.4 webclient 팔 통주행 (2026-09-10, 로컬 docker compose)
+
+**무엇을 했나**(webclient 팔): `AI_CLIENT_TYPE=webclient` 로 백엔드를 재기동하고(이 값은 이번에 compose 로
+뚫었다 — 아래), 가입→로그인→온보딩→세션 시작→프레임 유입(3fps)→세션 종료→리포트 조회를
+한 사람 몫으로 한 번 통과시켰다. 프레임 입력은 저장소 밖 스쿼트 영상(39초)이고, 드라이버는
+`ai-server/scripts/e1_walkthrough.py` 의 흐름에 **전송 페이싱만 얹은 임시 사본**이다(아래 ⚠️).
+
+**결과 — 배관**:
+
+| 확인 | 근거 |
+|---|---|
+| Spring→AI 4개 중 2개가 **REST 로 나갔다** | `ai-nginx` 액세스 로그에 `POST /api/v1/internal/analysis/start` · `.../stop` 각 200, User-Agent `ReactorNetty/1.2.18`(= Spring WebClient). gRPC 였다면 8585 직결이라 nginx 에 한 줄도 안 남는다 |
+| AI 쪽 REST 미러가 받았다 | ai-server 로그에 같은 두 경로 200 |
+| **콜백은 여전히 gRPC 다** | `pose_data` 26행이 쌓였고(SavePoseDataBatch), 세션이 `COMPLETED` 로 뒤집힌 출처가 `source="ai-callback"` |
+| 지표가 팔을 가른다 | `shadowfit_ai_stop_result_total{outcome="ok",protocol="webclient"}` · `shadowfit_session_transitions_total{protocol="webclient",source="ai-callback",status="COMPLETED"}` — §9.2 (다)안이 실제로 동작한다 |
+
+**결과 — 내용**(배관만 통과하고 값이 0 이었던 #196 을 안 반복하려고 따로 센다): rep **8회** ·
+`totalReps` 8 · `avgSyncRate` **85** · `repTrend` 8건 · `worstSection` 채워짐(3회차 79%) ·
+`outbox_events` = `STOP_ANALYSIS:SENT`. **즉 이 팔에서 사슬이 끊기는 자리는 없었다.**
+
+**대조 판 — grpc 팔도 같은 입력으로 한 번 (같은 날 이어서)**: 백엔드를 기본 팔(`grpc`)로
+재기동해 **같은 영상·같은 드라이버**로 다시 태웠다(세션 104119).
+
+| | webclient(104118) | grpc(104119) |
+|---|---|---|
+| rep 완성 프레임 번호 | 13·34·43·53·63·75·86·116 | **동일** |
+| `totalReps` / `avgSyncRate` / `repTrend` | 8 / 85 / 8건 | **8 / 85 / 8건** |
+| `pose_data` | 26행 | 26행 |
+| nginx `internal/analysis` 로그 | start·stop 각 200 | **한 줄도 없음**(8585 직결) |
+| `protocol` 태그 | `webclient` | `grpc` |
+
+즉 **전송을 바꿔도 판정 결과가 안 바뀐다**는 것까지는 이 판이 보인다(같은 입력 1판 기준).
+
+**한계 — 이 판이 답하지 않는 것**:
+- **팔당 1판이다.** 지연·처리량은 안 쟀다([[feedback_measure_design_needs_repeats]] — 팔당 1판은 효과를 못 가른다). 판정은 「돈다」와 「같은 값이 나온다」까지다.
+- `session_feedback_logs` 는 **0행**이다 — 프로토콜과 무관한 기존 결함(#193, 감지기 자체가 없다)이라 이 통주행의 실패로 세지 않는다.
+- 로컬 2코어 박스다([[project_loadtest_env_constraint]]).
+
+⚠️ **드라이버를 그대로 쓰면 안 된다 — 저장소 스크립트에 페이싱 손잡이가 없다.** 첫 시도는
+`e1_walkthrough.py` 를 그대로 썼는데 11장 중 **4장이 `RATE_LIMITED`** 로 잘렸다. 서버가
+`MIN_FRAME_INTERVAL_SEC`(330ms, `app/api/endpoints/pose.py`)로 판정 유입을 자르는데 스크립트는
+읽는 속도대로 쏘기 때문이다. 350ms 간격으로 페이싱한 사본에서는 **117장 전부 판정에 들어갔다**.
+(첫 시도는 영상도 3.4초짜리라 rep 0 이었다 — 두 원인이 겹쳐 있었다.)
+
+**부수 변경**: `docker-compose.yml` 백엔드 서비스에 `AI_CLIENT_TYPE: ${AI_CLIENT_TYPE:-grpc}` 를
+추가했다. 없으면 `application.yml` 의 `${AI_CLIENT_TYPE:grpc}` 가 컨테이너 환경에서 안 잡혀
+**webclient 팔로 띄울 방법 자체가 없다**(재빌드 없이 팔을 바꾸는 다른 손잡이들과 같은 패턴).
 
 ---
 
