@@ -23,7 +23,7 @@
 | 4 | tcpdump 패킷분석 | ✅ **§7.7 재현 완료**(2026-08-26) | — (완료) | 없음(§2-4 참고) |
 | 5 | connection 설정(HikariCP) | ✅ **실측 완료 + 명시 완료** | — (완료) | 없음(§2-5 참고) |
 | 6 | k6 부하테스트 | 🔶 검토 후 미채택 | 🟡 제한적 | 낮음 |
-| 7 | thread 수치 + netty(WebFlux) | 🔶 의존성만 존재, 미사용 | 🔴 불필요(역효과) | 낮음(정리만) |
+| 7 | thread 수치 + netty(WebFlux) | ✅ **의존성 제거 완료**(8baf8976, 2026-08-22) · 스레드 수치는 미튜닝 | 🔴 불필요(역효과) | 없음(§2-7 참고) |
 | 8 | JVM GC/ratio 튜닝 | ❌ 미설정 | 🟡 제한적(환경 제약) | 낮음(프레이밍 전환 추천) |
 
 ---
@@ -175,7 +175,7 @@
 **현재 상태**: `ExerciseAnalysisService`에 이미 비동기 패턴 존재 —
 - `sendAnalysisRequestToFastApi`에 `@Async` + gRPC `StreamObserver`(비동기 stub) 사용, `startAnalysis`는 세션 생성 후 즉시 ID 반환하고 FastAPI 전송은 뒤로 미룸("응답 속도 최적화" 주석 명시).
 - `extractReferencePoses`, `stopAnalysis`도 동일하게 `StreamObserver` 콜백 방식(비블로킹).
-- 단, `WebClientConfig`가 만든 `fastapiWebclient` 빈은 `ExerciseAnalysisService:38`에 필드로 주입만 되고 **실제 호출 코드에서 쓰이는 곳이 0건** — 죽은 의존성. 실제 Spring↔FastAPI 통신은 전부 gRPC(가 됨).
+- ~~단, `WebClientConfig`가 만든 `fastapiWebclient` 빈은 `ExerciseAnalysisService:38`에 필드로 주입만 되고 **실제 호출 코드에서 쓰이는 곳이 0건** — 죽은 의존성.~~ **✅ 제거됨(8baf8976, 2026-08-22)** — §2-7 참고. 실제 Spring↔FastAPI 통신은 전부 gRPC.
 
 ~~**남은 갭**: `load-test-strategy.md §9.2`에 이미 OPEN으로 잡혀 있던 **Resilience4j Circuit Breaker 미도입**. 동기 콜백 구조(`completeSession`)라 AI가 느려지거나 죽으면 백엔드가 그대로 영향받을 수 있음 — 서킷브레이커/타임아웃/재시도로 "AI 장애로부터 백엔드 보호"(같은 문서 §9-2)가 아직 코드로 안 옮겨짐.~~ **✅ 완료(2026-07-11)** — §2-3-3 참고.
 
@@ -333,16 +333,19 @@ FIN/RST를 먼저 보내지 않는다는 것을 캡처로 확인 — §7.7의 "�
 
 **추천**: 굳이 하려면 REST 리포트 엔드포인트 1회성 부하테스트로만, 메인 카드로는 비추천.
 
-### 2-7. thread 수치 튜닝 + tomcat 대신 netty(WebFlux) — 불필요(역효과), 정리만 추천
+### 2-7. thread 수치 튜닝 + tomcat 대신 netty(WebFlux) — 불필요(역효과), 의존성 정리는 완료
 
-**현재 상태**: `build.gradle`에 `spring-boot-starter-web`(Tomcat)**과** `spring-boot-starter-webflux`가 **둘 다** 의존성으로 존재. Spring Boot 오토컨피그는 서블릿 스택이 클래스패스에 있으면 그쪽을 우선하므로 **실제 구동 서버는 Tomcat**. WebFlux는 리액티브 `WebClient` 빈(`WebClientConfig.fastapiWebclient`)을 쓰려고 끌려온 것으로 보이는데, 정작 그 빈은 `ExerciseAnalysisService:38`에 주입만 되고 **실사용 0건**(FastAPI 통신은 전부 gRPC). Tomcat 스레드 풀 크기도 `application.yml`에 별도 설정 없이 기본값(200) 그대로 — 튜닝한 적 없음.
+**현재 상태**(2026-09-10 재확인): `build.gradle`에 `spring-boot-starter-web`(Tomcat)만 있고 **`webflux`·`reactor`·`WebClient` 는 의존성에도 소스에도 없다** — `backend/build.gradle`·`backend/src/main/java` 전수 grep 0건. 구동 서버는 Tomcat. Tomcat 스레드 풀 크기는 `application.yml`에 `server.tomcat.threads.*` 설정이 없어 기본값(200) 그대로 — 튜닝한 적 없음(같은 파일의 `server.tomcat.mbeanregistry.enabled: true`는 메트릭 노출용이라 풀 크기와 무관).
+
+~~**옛 서술(2026-08-26 이전)**: `build.gradle`에 `spring-boot-starter-web`과 `spring-boot-starter-webflux`가 둘 다 존재하고, 리액티브 `WebClient` 빈(`WebClientConfig.fastapiWebclient`)이 `ExerciseAnalysisService:38`에 주입만 되고 실사용 0건인 죽은 의존성.~~
+→ **정정**: 이 서술은 한때 사실이었고, **2026-08-22 커밋 `8baf8976`(#286 → PR #294, "Spring↔AI HTTP 죽은 배선을 걷어낸다")이 `WebClientConfig.java`·`build.gradle`의 webflux 의존성·`ExerciseAnalysisService`의 주입 필드·`application.yml`/compose의 관련 설정을 한꺼번에 제거**하면서 사실이 아니게 됐다. 아래 결정 로그 2026-08-26 항목이 "과거 한때 있다가 정리됐거나 서술이 부정확했던 것으로 보이나 원인은 미확인"으로 열어둔 자리의 답이 이 커밋이다. **WebFlux 서버 전면 전환 비추천 판정 자체는 그대로 유효** — 근거(JPA/`JdbcTemplate` 블로킹 스택)가 안 변했다.
 
 **적용 가능성 판단**:
 - **Netty(WebFlux) 전면 전환**: 비추천. DB 액세스가 JPA/`JdbcTemplate`(블로킹 JDBC)인 이상, 서버만 논블로킹으로 바꿔도 스레드가 JDBC 호출에서 결국 블로킹되어 이득이 없음(R2DBC로 갈아타지 않는 한). 오히려 "블로킹 스택 위에 리액티브를 얹는 건 안티패턴"이라고 판단해서 **안 했다**는 설명이 더 시니어 시그널.
 - **Tomcat thread 수치 튜닝**: 가능은 하지만 [[project_loadtest_env_constraint]] — 물리 2코어 로컬 박스에서 스레드 풀 크기를 바꿔가며 절대 처리량을 비교해봐야 코어 경합 노이즈에 묻힘. `pose-ingest-downsampling.md §5-1(5)`에서 HikariCP 풀 사이징도 동일하게 "박스가 진짜 천장"으로 나왔던 것과 같은 함정.
 
 **대신 제안**:
-- 미사용 `webflux`/`WebClient` 의존성을 정리(dead code 청소)하거나, 남기려면 "왜 WebFlux 서버로 안 갔는지"를 판단 근거로 문서화 — 코드 정리보다 **판단 근거를 남기는 쪽이 포폴 가치가 큼**.
+- ~~미사용 `webflux`/`WebClient` 의존성을 정리(dead code 청소)하거나,~~ **✅ 정리 완료(8baf8976)** — 남은 건 "왜 WebFlux 서버로 안 갔는지"를 판단 근거로 문서화하는 쪽이고, 그게 이 §2-7 자체다. 코드 정리보다 **판단 근거를 남기는 쪽이 포폴 가치가 큼**.
 - 스레드 풀 수치 자체는 "코어수 기반 산정 공식(예: Tomcat 권장 = I/O 대기비율 고려한 200 기본값이 이 환경엔 과함)"을 이론적으로 설명하는 정도로만, 실측 절대치 자랑은 금지.
 
 ### 2-8. JVM을 통한 성능개선 (GC, ratio 튜닝) — 제한적, 프레이밍 전환 추천
@@ -406,7 +409,7 @@ FIN/RST를 먼저 보내지 않는다는 것을 캡처로 확인 — §7.7의 "�
 - 2026-07-11: 사용자가 "이거 스프링만 하면 되는가, 쉽게 끝날 일인가"라고 재검토 요청 — 셀프 리뷰 결과 gRPC 호출에 데드라인이 없어서 AI가 죽는 게 아니라 그냥 응답 없이 멈추는(hang) 상황은 서킷브레이커가 전혀 못 잡는 갭을 발견해 정직하게 공유(§2-3-3에 갭으로 먼저 기록). 사용자가 "hang 대응(타임아웃) 먼저"로 우선순위 지정 후 착수 — `getAuthenticatedStub()`에 `withDeadlineAfter(5s)` 추가로 데드라인 초과 시 자동 `onError(DEADLINE_EXCEEDED)` 발생하도록 해서 기존 기록 로직 재사용. Docker에서 `docker pause`(TCP 유지, 응답만 없음 — `docker stop`과 다른 진짜 hang)로 재현·검증, hang 누적 시 OPEN 트립·복구까지 확인. 커밋 `0c47598`. §2-3-3 "갭" 서술을 "해결"로 갱신 — AI→Spring 반대 방향 무방비, 스킵된 세션 후속처리 없음, 설정값 미실측 등 남은 갭은 여전히 정직하게 남겨둠.
 - 2026-07-11: 사용자가 "남은 갭도 마저 정리해달라"고 요청 — §2-3-4 추가로 나머지 3개 갭 정리. (1) **해결**: 스킵/실패한 세션을 `markAsFailedIfStillInProgress`로 즉시 `FAILED` 전환하도록 추가, Docker 실측(`docker pause`)으로 OPEN-스킵 경로(gap 0초)와 데드라인 경로(gap 5초) 둘 다 확인, 커밋 `50bcf82`. (2) **의도적으로 스코프 밖으로 확정**: AI→Spring 반대 방향은 AI(Python) 코드 수정이 필요해 [[feedback_minimize_python_changes]] 방침상 이번엔 안 함 — 회피가 아니라 명시적 결정으로 기록. (3) **정직하게 미실측으로 명시**: 서킷브레이커 설정값은 업계 통상값에 가까운 보수적 기본값이지 이 프로젝트 트래픽으로 튜닝한 게 아님 — [[project_loadtest_env_constraint]] 때문에 튜닝 실측 자체가 이 환경에서 의미가 약하다는 점도 근거로 남김.
 - 2026-07-11: §2-5 connection 설정 문서화 완료. `application.properties`에 `spring.datasource.hikari.maximum-pool-size=10`을 실측 근거 주석과 함께 명시 — 코드/동작 변경 없음(HikariCP 자체 기본값도 10), "기본값에 우연히 의존"에서 "실측 후 의도적으로 10 유지"로 의도만 드러냄. Docker 재기동 후 `/actuator/metrics/hikaricp.connections.max=10.0`으로 반영 확인. 커밋 `d07d25a`. §1 표·§3 우선순위 갱신.
-- 2026-08-26: **§2-7("thread 수치 + netty(WebFlux) — 🔶 의존성만 존재, 미사용")이 낡았다.** `build.gradle` 전수 확인 결과 `webflux`·`reactor`·`WebClient` 문자열이 의존성 목록·소스코드(`backend/src/main/java`) 어디에도 없다 — "의존성만 존재"는 현재 사실과 다르다(과거 한때 있다가 정리됐거나 서술이 부정확했던 것으로 보이나 원인은 미확인). **WebFlux 서버 전면 전환 비추천 판정 자체는 그대로 유효**(JPA/JdbcTemplate 블로킹 스택은 안 변함).
+- 2026-08-26: **§2-7("thread 수치 + netty(WebFlux) — 🔶 의존성만 존재, 미사용")이 낡았다.** `build.gradle` 전수 확인 결과 `webflux`·`reactor`·`WebClient` 문자열이 의존성 목록·소스코드(`backend/src/main/java`) 어디에도 없다 — "의존성만 존재"는 현재 사실과 다르다(과거 한때 있다가 정리됐거나 서술이 부정확했던 것으로 보이나 원인은 미확인). 🟢 **2026-09-10 원인 확인 — 커밋 `8baf8976`(2026-08-22, #286 → PR #294)이 걷어낸 것이다. §2-7·§2-3 본문도 같은 날 정정.** **WebFlux 서버 전면 전환 비추천 판정 자체는 그대로 유효**(JPA/JdbcTemplate 블로킹 스택은 안 변함).
   - 새 후보 하나 발견: `report-generation-llm.md` §7이 LLM 연동 시 "발행기 20건 순차 호출, 건당 5~15초 → 최대 300초가 락 리스(60초) 초과 → 중복 발행기 회수 → 중복 LLM 비용" 갭을 이미 지적해뒀는데, 이건 **서버가 요청을 받는 쪽이 아니라 백그라운드 발행기가 외부 LLM API를 호출하는 쪽**이라 "블로킹 스택 위에 리액티브 서버는 안티패턴"이라는 기존 판단 근거가 애초에 적용되지 않는 자리다. `WebClient`(WebFlux 서버 도입 없이 HTTP 클라이언트로만 추가)로 20건을 논블로킹 동시 호출하면 락 리스 초과 문제를 구조적으로 줄일 수 있다는 것을 코드·문서 근거로 확인했다 — 단 **LLM 연동 자체가 아직 미착수**(`report-generation-llm.md` §12)라 지금 착수 대상은 아니고, 착수 시점의 도구 후보로만 남긴다. 상세는 `report-generation-llm.md` 결정 로그에 병기.
   - 새로 판단한 것은 아니고 코드·타 문서 확인만 했다([[feedback_user_decides_not_claude]] — 착수 여부·순서는 사용자 확인 대기).
 - 2026-08-26: **§2-4 tcpdump — §7.7 재현 완료.** 이 문서 §2-4가 미리 적어둔 계획(§7.7에 TCP 레벨 증거
