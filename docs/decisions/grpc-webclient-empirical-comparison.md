@@ -303,8 +303,11 @@ public interface AiAnalysisClient {
 
 ⚠️ **드라이버를 그대로 쓰면 안 된다 — 저장소 스크립트에 페이싱 손잡이가 없다.** 첫 시도는
 `e1_walkthrough.py` 를 그대로 썼는데 11장 중 **4장이 `RATE_LIMITED`** 로 잘렸다. 서버가
-`MIN_FRAME_INTERVAL_SEC`(330ms, `app/api/endpoints/pose.py`)로 판정 유입을 자르는데 스크립트는
+`MIN_FRAME_INTERVAL_SEC`(**300ms**, `ai-server/app/grpc/session_state.py:64` — 클라 규약
+`exercise.tsx intervalMs=330` 보다 한 칸 아래로 둔 값이다)로 판정 유입을 자르는데 스크립트는
 읽는 속도대로 쏘기 때문이다. 350ms 간격으로 페이싱한 사본에서는 **117장 전부 판정에 들어갔다**.
+드라이버 자체의 결함으로 [#714](https://github.com/Shadowfit/init/issues/714) 에 남겼다 —
+이 PR 에서 스크립트를 고치지는 않았다.
 (첫 시도는 영상도 3.4초짜리라 rep 0 이었다 — 두 원인이 겹쳐 있었다.)
 
 **부수 변경**: `docker-compose.yml` 백엔드 서비스에 `AI_CLIENT_TYPE: ${AI_CLIENT_TYPE:-grpc}` 를
