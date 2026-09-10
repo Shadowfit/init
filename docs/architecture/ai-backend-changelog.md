@@ -205,6 +205,10 @@
   - `ExercisesResponseDto`, `SessionUpdateResponseDto` 의 sessionId/exerciseId 타입 `Long` 으로 통일
   - `InternalExerciseController` **삭제** (-36줄) — gRPC 전환 이후 잔재
   - `PoseDataRequestDto` 삭제 (-25줄)
+    - 🔄 **2026-09-10 정정 — 이 파일은 9일 뒤 되살아났다.** `cfa626a8`(2026-05-26, "frontend-ai api 생성")
+      이 같은 경로에 `A`(added)로 다시 넣었고, 이후 참조 0인 채로 남아 있었다. 최종 삭제는
+      [#710](https://github.com/Shadowfit/init/issues/710). 이 줄만 읽으면 「그때 없어졌다」로 읽히는데,
+      **없어진 것은 4개월 뒤다.**
 **결합 영향**:
   - proto의 `session_id(int64)` 와 Spring DTO·서비스 코드 타입 정렬
   - 초기 REST 콜백 컨트롤러를 비로소 완전 제거 → 결합 표면 단일화
