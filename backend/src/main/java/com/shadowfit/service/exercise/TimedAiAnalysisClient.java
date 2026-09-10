@@ -108,7 +108,7 @@ public class TimedAiAnalysisClient implements AiAnalysisClient {
                 .publishPercentileHistogram()
                 // 이 구간은 ms 단위다(1차 라운드 실측 0.4~3ms). 범위를 안 묶으면 버킷이
                 // 초 단위까지 깔려 시계열만 늘어난다.
-                .minimumExpectedValue(java.time.Duration.ofMicros(100))
+                .minimumExpectedValue(java.time.Duration.ofNanos(100_000))   // 100µs — Duration 에 ofMicros 는 없다
                 .maximumExpectedValue(java.time.Duration.ofSeconds(5))
                 .register(registry)
                 .record(elapsed, TimeUnit.NANOSECONDS);
