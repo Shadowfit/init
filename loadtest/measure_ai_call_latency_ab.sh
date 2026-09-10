@@ -33,6 +33,12 @@ N=${N:-100}                 # 블록당 사이클 수
 BLOCKS=${BLOCKS:-5}         # 유효 블록 수(팔당). 앞에 버림 블록 1개가 더 붙는다
 WARMUP=${WARMUP:-10}        # 팔 전환 직후 버리는 사이클(JIT·풀·커넥션)
 ACCOUNTS=${ACCOUNTS:-${N}}
+# 3차 라운드 기본은 팔 셋. 2차처럼 두 팔만 돌리려면 ARMS="grpc webclient-nginx".
+ARMS=${ARMS:-"grpc webclient-nginx webclient-direct"}
+# 🔴 전 팔 워커 0 고정. 풀이 3이면 gRPC 는 session_id%3 으로 흩어지고 REST 팔은 헤더대로
+#    가는데, 그러면 프로토콜이 아니라 «병렬도» 를 재게 된다(1차 rig 이 쓴 것과 같은 장치).
+#    풀 ≤ 워커 수여야 안전하다 — 1 은 항상 안전하다.
+CHANNEL_POOL_SIZE=${CHANNEL_POOL_SIZE:-1}
 PASSWORD=${PASSWORD:-'AbLatency!2026'}
 PREP_SLEEP=${PREP_SLEEP:-1.3}   # 가입·로그인 IP당 60초 60건 상한 회피
 PREFERRED_URL=${PREFERRED_URL:-https://www.youtube.com/watch?v=q6hBSSis_60}
@@ -45,24 +51,52 @@ echo "# Spring→AI 왕복 지연 A/B — $(date -u +%FT%TZ)"
 echo "BASE=$BASE N=$N BLOCKS=$BLOCKS WARMUP=$WARMUP"
 
 # ── 팔 전환 ──────────────────────────────────────────────────────────────
+# 팔 이름 → 백엔드 환경변수. 3차 라운드(전송 비용 분해)에서 팔이 셋이 됐다 —
+# 같은 webclient 라도 nginx 를 거치느냐 워커 직결이냐가 다른 팔이다
+# (docs/decisions/grpc-webclient-transport-cost-breakdown.md §2).
+arm_client_type() {
+  case "$1" in
+    grpc) echo grpc ;;
+    webclient-nginx|webclient-direct) echo webclient ;;
+    *) echo "🔴 모르는 팔: $1" >&2; exit 1 ;;
+  esac
+}
+
+arm_nginx_host() {
+  case "$1" in
+    grpc) echo "-" ;;                       # gRPC 는 nginx 를 안 거친다(8585 직결)
+    webclient-nginx)  echo "ai-nginx" ;;
+    webclient-direct) echo "shadowfit-ai" ;; # 홉 없이 워커 0 직결
+  esac
+}
+
 switch_arm() {
   local arm=$1
-  echo "## 팔 전환 → $arm ($(date -u +%T))"
+  local ct host
+  ct=$(arm_client_type "$arm")
+  host=$(arm_nginx_host "$arm")
+  echo "## 팔 전환 → $arm (client-type=$ct nginx-host=$host) ($(date -u +%T))"
   # 🔴 출력을 버리지 않는다. 예전엔 >/dev/null 2>&1 이라 compose 가 실패해도 조용했고,
   #    그러면 «옛 팔의 컨테이너가 그대로 살아 있는데 새 팔이라고 믿는» 상태가 된다
-  #    (로컬 스모크에서 실제로 났다 — 프로젝트 이름이 달라 컨테이너 이름이 충돌했다).
-  ( cd "$COMPOSE_DIR" && AI_CLIENT_TYPE="$arm" docker compose up -d --force-recreate shadowfit-backend )       >> "$OUT/compose.log" 2>&1
+  #    (2차 로컬 스모크에서 실제로 났다).
+  ( cd "$COMPOSE_DIR" && AI_CLIENT_TYPE="$ct" AI_NGINX_HOST="${host}"       AI_CHANNEL_POOL_SIZE="$CHANNEL_POOL_SIZE"       docker compose up -d --force-recreate shadowfit-backend ) >> "$OUT/compose.log" 2>&1
   local up_rc=$?
   [ "$up_rc" -eq 0 ] || { echo "🔴 compose up 실패(rc=$up_rc) — $OUT/compose.log 를 볼 것"; exit 1; }
   # 헬스가 UP 이 될 때까지. curl 자체 재시도라 sleep 루프를 안 쓴다.
   curl -s -m 300 --retry 100 --retry-delay 3 --retry-all-errors -o /dev/null "$ACTUATOR/actuator/health" || true
-  local got
-  got=$(docker exec shadowfit-backend printenv AI_CLIENT_TYPE 2>/dev/null | tr -d '\r')
-  if [ "$got" != "$arm" ]; then
-    echo "🔴 팔이 안 바뀌었다(got=$got, want=$arm) — 중단"; exit 1
+
+  # 🔴 게이트 둘. 프로퍼티만 보면 조립 실패를 못 잡고, 팔 B·C 는 client-type 이 같아서
+  #    base-url 까지 봐야 «홉을 거치는 팔» 과 «직결 팔» 이 갈린다.
+  local got_ct got_host got_pool
+  got_ct=$(docker exec shadowfit-backend printenv AI_CLIENT_TYPE 2>/dev/null | tr -d '')
+  got_host=$(docker exec shadowfit-backend printenv AI_NGINX_HOST 2>/dev/null | tr -d '')
+  got_pool=$(docker exec shadowfit-backend printenv AI_CHANNEL_POOL_SIZE 2>/dev/null | tr -d '')
+  [ "$got_ct" = "$ct" ] || { echo "🔴 client-type 이 안 바뀌었다(got=$got_ct want=$ct) — 중단"; exit 1; }
+  if [ "$ct" = "webclient" ] && [ "$got_host" != "$host" ]; then
+    echo "🔴 nginx-host 가 안 바뀌었다(got=$got_host want=$host) — B·C 가 구분이 안 된다, 중단"; exit 1
   fi
-  # 🔴 «어느 구현체가 실제로 떴나» 를 지표로 확인한다. 프로퍼티만 보면 조립 실패를 못 잡는다.
-  echo "   AI_CLIENT_TYPE=$got"
+  [ "$got_pool" = "$CHANNEL_POOL_SIZE" ] || { echo "🔴 채널 풀이 안 바뀌었다(got=$got_pool want=$CHANNEL_POOL_SIZE) — 중단"; exit 1; }
+  echo "   AI_CLIENT_TYPE=$got_ct · AI_NGINX_HOST=$got_host · POOL=$got_pool"
 }
 
 # ── 계정 준비 (측정 대상 아님 — 레이트리밋 아래로 페이싱) ────────────────
@@ -147,15 +181,27 @@ drain() {
 
 # ── 라운드 ───────────────────────────────────────────────────────────────
 # 버림 블록: 팔마다 한 번씩 돌리고 기록에 안 넣는다.
-for arm in grpc webclient; do
+for arm in $ARMS; do
   switch_arm "$arm"
   run_block "$arm" "discard" "$WARMUP"
   drain "discard/$arm" || true
 done
 
+# 라틴 방격 — 팔이 셋이면 순서 반전만으로는 부족하다. 블록마다 한 칸씩 회전시킨다
+# (A B C · B C A · C A B · …). 팔과 «판 순서» 가 같은 축에 겹치면 원리적으로 분리가 안 된다
+# ([[feedback_measure_design_needs_repeats]]).
+rotate() {  # $1=회전 수, 나머지=팔 목록
+  local k=$1; shift
+  local -a a=("$@")
+  local n=${#a[@]} i out=""
+  for ((i=0;i<n;i++)); do out="$out ${a[$(( (i + k) % n ))]}"; done
+  echo "$out"
+}
+
+read -r -a ARM_ARRAY <<< "$ARMS"
 for b in $(seq 1 "$BLOCKS"); do
-  # 순서 반전 — 홀수 블록은 grpc 먼저, 짝수 블록은 webclient 먼저.
-  if [ $(( b % 2 )) -eq 1 ]; then order="grpc webclient"; else order="webclient grpc"; fi
+  order=$(rotate $(( (b - 1) % ${#ARM_ARRAY[@]} )) "${ARM_ARRAY[@]}")
+  echo "## 블록 $b 순서: $order"
   for arm in $order; do
     switch_arm "$arm"
     run_block "$arm" "warmup" "$WARMUP"
@@ -168,6 +214,10 @@ for b in $(seq 1 "$BLOCKS"); do
     echo "   ✅ 블록 $b/$BLOCKS ($arm) 회수 완료"
   done
 done
+
+# nginx 액세스 로그 회수 — 커넥션 재사용률($connection 별 요청 수)과 전선 위 실제 요청
+# 바이트($request_length)가 여기 있다. 팔 C(직결)는 nginx 를 안 거치므로 그 팔의 줄은 없다.
+docker logs shadowfit-ai-nginx > "$OUT/nginx-access.log" 2>&1 || echo "   ⚠️ nginx 로그 회수 실패"
 
 echo "## 완료 $(date -u +%FT%TZ) — 스크레이프 $(ls "$OUT/scrape" | wc -l) 개"
 echo "   집계: python loadtest/analyze_ai_call_latency_ab.py $OUT"

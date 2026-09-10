@@ -127,7 +127,14 @@ services:
       AI_SERVER_GRPC_PORT: 8585
       # AI 채널 풀 크기 — shadowfit-ai 의 AI_WORKER_COUNT 와 같은 값이어야 한다(ai-channel-pool-hardening.md).
       # 소스는 여기 하나(${AI_WORKER_COUNT}) 뿐이고, 아래 shadowfit-ai 서비스도 같은 변수를 읽는다.
-      AI_CHANNEL_POOL_SIZE: ${AI_WORKER_COUNT:-3}
+      # 🔴 기본은 AI_WORKER_COUNT 와 같다(ai-channel-pool-hardening.md 의 불변식 —
+      # 풀이 워커 수보다 크면 없는 워커로 라우팅한다). 측정용으로 **줄이는** 것만 허용한다:
+      # 전송 비용 분해 라운드가 전 팔을 워커 0 으로 고정하려고 1 을 준다.
+      AI_CHANNEL_POOL_SIZE: ${AI_CHANNEL_POOL_SIZE:-${AI_WORKER_COUNT:-3}}
+      # WebClient 팔의 대상. 기본은 ai-nginx(검증된 라우팅 재사용). 측정에서 홉을 빼려면
+      # shadowfit-ai 를 직접 준다 — 그 뺄셈이 「홉 비용」이다.
+      AI_NGINX_HOST: ${AI_NGINX_HOST:-ai-nginx}
+      AI_NGINX_PORT: ${AI_NGINX_PORT:-8000}
       # Spring→AI 요청 4개를 gRPC로 보낼지 REST(WebClient)로 보낼지 — 재빌드 없이 바꾸는
       # 측정용 손잡이(grpc-webclient-empirical-comparison.md §9.3). 기본은 application.yml
       # 과 같은 grpc라 이 줄이 있어도 기존 동작은 안 바뀐다.

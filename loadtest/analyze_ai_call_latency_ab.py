@@ -79,9 +79,12 @@ def main(root):
         print(f"🔴 {scrapes} 없음"); return 1
 
     # 파일명 규약: b{블록}_{팔}_{before|after}.txt
+    # 🔴 팔은 «파일명» 에서 읽는다. 3차 라운드의 팔 B(webclient-nginx)·C(webclient-direct)는
+    #    protocol 태그가 둘 다 "webclient" 라 지표만으로는 구분이 안 된다 — 두 팔이 한 줄로
+    #    합쳐지면 뺄셈 자체가 성립하지 않는다.
     blocks = defaultdict(dict)
     for f in scrapes.glob("*.txt"):
-        m = re.match(r"b(\d+)_(\w+)_(before|after)$", f.stem)
+        m = re.match(r"b(\d+)_([\w.-]+)_(before|after)$", f.stem)
         if m:
             blocks[(int(m.group(1)), m.group(2))][m.group(3)] = f
 
@@ -94,12 +97,18 @@ def main(root):
                 # 실패는 델타에서 빼되 있었다는 사실은 남긴다 — 조용히 버리지 않는다.
                 print(f"⚠️  블록 {block}/{arm} {rpc} outcome={outcome} {int(d['count'])}건 (집계 제외)")
                 continue
-            rows[(rpc, protocol)].append((
+            if protocol != "?" and protocol not in arm:
+                # 파일명의 팔과 지표의 protocol 태그가 어긋나면 팔 전환이 샌 것이다.
+                print(f"🔴 블록 {block} 팔 {arm} 인데 지표 protocol={protocol} — 팔 귀속 의심")
+            rows[(rpc, arm)].append((
                 block, int(d["count"]), d["sum"] / d["count"] * 1000,
                 (quantile(d["buckets"], d["count"], 0.50) or 0) * 1000,
                 (quantile(d["buckets"], d["count"], 0.95) or 0) * 1000,
                 (quantile(d["buckets"], d["count"], 0.99) or 0) * 1000,
             ))
+
+    def mean_by_block(rpc, arm):
+        return {b: mean for b, _, mean, *_ in rows.get((rpc, arm), [])}
 
     for rpc in sorted({r for r, _ in rows}):
         print(f"\n## {rpc}")
@@ -128,6 +137,34 @@ def main(root):
                 faster, slower = (a, b) if a_hi < b_lo else (b, a)
                 print(f"   ✅ 범위가 안 겹친다 — 이 무대·이 판 수에서 {faster} 가 {slower} 보다 빠르다.")
                 print("      절대 크기는 이 동거 무대의 값이지 배포 구성의 값이 아니다.")
+
+        # ── 3차 라운드 뺄셈 — 고정비가 홉인지 클라이언트 쪽인지 (transport-cost-breakdown §2)
+        arms = {a for r, a in rows if r == rpc}
+        if {"grpc", "webclient-nginx", "webclient-direct"} <= arms:
+            A, B, C = mean_by_block(rpc, "grpc"), mean_by_block(rpc, "webclient-nginx"), mean_by_block(rpc, "webclient-direct")
+            common = sorted(set(A) & set(B) & set(C))
+            if common:
+                print(f"\n   분해 (블록별, ms) — 세 팔이 다 있는 블록 {len(common)}개")
+                print(f"   {'블록':>4} {'B−C(홉)':>10} {'C−A(잔여)':>12} {'B−A(합계)':>12}")
+                hops, rests = [], []
+                for b in common:
+                    hop, rest = B[b] - C[b], C[b] - A[b]
+                    hops.append(hop); rests.append(rest)
+                    print(f"   {b:>4} {hop:>10.3f} {rest:>12.3f} {B[b]-A[b]:>12.3f}")
+                hop_lo, hop_hi = min(hops), max(hops)
+                rest_lo, rest_hi = min(rests), max(rests)
+                print(f"   범위: 홉 [{hop_lo:.3f}, {hop_hi:.3f}] · 잔여 [{rest_lo:.3f}, {rest_hi:.3f}]")
+                # 🔴 «어느 쪽이 주범인가» 는 두 범위가 안 겹칠 때만 말한다. 그리고 블록이
+                #    1개면 두 범위가 «점» 이라 겹칠 수가 없으므로 판정 자체를 안 한다
+                #    (평균 비교 쪽에 이미 같은 가드가 있다).
+                if len(common) < 2:
+                    print("   🟡 세 팔이 다 있는 블록이 %d개뿐이라 분해를 판정하지 않는다." % len(common))
+                elif hop_lo > rest_hi:
+                    print("   ➡ 홉이 잔여보다 크고 범위가 안 겹친다 — 기제는 nginx 홉 쪽이다.")
+                elif rest_lo > hop_hi:
+                    print("   ➡ 잔여가 홉보다 크고 범위가 안 겹친다 — 기제는 클라이언트 쪽(브리지·커넥션)이다.")
+                else:
+                    print("   🟡 두 몫의 범위가 겹친다 — 이 무대에서는 주범을 못 가른다.")
     return 0
 
 
