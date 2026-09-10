@@ -1,0 +1,129 @@
+# Spring→AI 왕복 지연 A/B — 2026-09-10T14:53:00Z
+BASE=http://localhost:8080 N=100 BLOCKS=5 WARMUP=10
+## 계정 준비 100 개 (간격 1.3s)
+  ✅ 계정 100 개
+## 팔 전환 → grpc (client-type=grpc nginx-host=-) (14:55:28)
+   AI_CLIENT_TYPE=grpc · AI_NGINX_HOST=- · POOL=1
+   블록 discard(grpc) 사이클 10 완료 14:55:41
+   배수 완료(discard/grpc) — stop 누적 10
+## 팔 전환 → webclient-nginx (client-type=webclient nginx-host=ai-nginx) (14:56:01)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · POOL=1
+   블록 discard(webclient-nginx) 사이클 10 완료 14:56:15
+   배수 완료(discard/webclient-nginx) — stop 누적 10
+## 팔 전환 → webclient-direct (client-type=webclient nginx-host=shadowfit-ai) (14:56:35)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=shadowfit-ai · POOL=1
+   블록 discard(webclient-direct) 사이클 10 완료 14:56:50
+   배수 완료(discard/webclient-direct) — stop 누적 10
+## 블록 1 순서:  grpc webclient-nginx webclient-direct
+## 팔 전환 → grpc (client-type=grpc nginx-host=-) (14:57:10)
+   AI_CLIENT_TYPE=grpc · AI_NGINX_HOST=- · POOL=1
+   블록 warmup(grpc) 사이클 10 완료 14:57:25
+   배수 완료(warmup b1/grpc) — stop 누적 10
+   블록 b1(grpc) 사이클 100 완료 14:57:49
+   배수 완료(b1/grpc) — stop 누적 110
+   ✅ 블록 1/5 (grpc) 회수 완료
+## 팔 전환 → webclient-nginx (client-type=webclient nginx-host=ai-nginx) (14:58:05)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · POOL=1
+   블록 warmup(webclient-nginx) 사이클 10 완료 14:58:18
+   배수 완료(warmup b1/webclient-nginx) — stop 누적 10
+   블록 b1(webclient-nginx) 사이클 100 완료 14:58:43
+   배수 완료(b1/webclient-nginx) — stop 누적 110
+   ✅ 블록 1/5 (webclient-nginx) 회수 완료
+## 팔 전환 → webclient-direct (client-type=webclient nginx-host=shadowfit-ai) (14:58:58)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=shadowfit-ai · POOL=1
+   블록 warmup(webclient-direct) 사이클 10 완료 14:59:13
+   배수 완료(warmup b1/webclient-direct) — stop 누적 10
+   블록 b1(webclient-direct) 사이클 100 완료 14:59:38
+   배수 완료(b1/webclient-direct) — stop 누적 110
+   ✅ 블록 1/5 (webclient-direct) 회수 완료
+## 블록 2 순서:  webclient-nginx webclient-direct grpc
+## 팔 전환 → webclient-nginx (client-type=webclient nginx-host=ai-nginx) (14:59:53)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · POOL=1
+   블록 warmup(webclient-nginx) 사이클 10 완료 15:00:08
+   배수 완료(warmup b2/webclient-nginx) — stop 누적 10
+   블록 b2(webclient-nginx) 사이클 100 완료 15:00:34
+   배수 완료(b2/webclient-nginx) — stop 누적 110
+   ✅ 블록 2/5 (webclient-nginx) 회수 완료
+## 팔 전환 → webclient-direct (client-type=webclient nginx-host=shadowfit-ai) (15:00:49)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=shadowfit-ai · POOL=1
+   블록 warmup(webclient-direct) 사이클 10 완료 15:01:04
+   배수 완료(warmup b2/webclient-direct) — stop 누적 10
+   블록 b2(webclient-direct) 사이클 100 완료 15:01:29
+   배수 완료(b2/webclient-direct) — stop 누적 110
+   ✅ 블록 2/5 (webclient-direct) 회수 완료
+## 팔 전환 → grpc (client-type=grpc nginx-host=-) (15:01:44)
+   AI_CLIENT_TYPE=grpc · AI_NGINX_HOST=- · POOL=1
+   블록 warmup(grpc) 사이클 10 완료 15:01:59
+   배수 완료(warmup b2/grpc) — stop 누적 10
+   블록 b2(grpc) 사이클 100 완료 15:02:24
+   배수 완료(b2/grpc) — stop 누적 110
+   ✅ 블록 2/5 (grpc) 회수 완료
+## 블록 3 순서:  webclient-direct grpc webclient-nginx
+## 팔 전환 → webclient-direct (client-type=webclient nginx-host=shadowfit-ai) (15:02:39)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=shadowfit-ai · POOL=1
+   블록 warmup(webclient-direct) 사이클 10 완료 15:02:52
+   배수 완료(warmup b3/webclient-direct) — stop 누적 10
+   블록 b3(webclient-direct) 사이클 100 완료 15:03:18
+   배수 완료(b3/webclient-direct) — stop 누적 110
+   ✅ 블록 3/5 (webclient-direct) 회수 완료
+## 팔 전환 → grpc (client-type=grpc nginx-host=-) (15:03:33)
+   AI_CLIENT_TYPE=grpc · AI_NGINX_HOST=- · POOL=1
+   블록 warmup(grpc) 사이클 10 완료 15:03:47
+   배수 완료(warmup b3/grpc) — stop 누적 10
+   블록 b3(grpc) 사이클 100 완료 15:04:12
+   배수 완료(b3/grpc) — stop 누적 110
+   ✅ 블록 3/5 (grpc) 회수 완료
+## 팔 전환 → webclient-nginx (client-type=webclient nginx-host=ai-nginx) (15:04:27)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · POOL=1
+   블록 warmup(webclient-nginx) 사이클 10 완료 15:04:41
+   배수 완료(warmup b3/webclient-nginx) — stop 누적 10
+   블록 b3(webclient-nginx) 사이클 100 완료 15:05:06
+   배수 완료(b3/webclient-nginx) — stop 누적 110
+   ✅ 블록 3/5 (webclient-nginx) 회수 완료
+## 블록 4 순서:  grpc webclient-nginx webclient-direct
+## 팔 전환 → grpc (client-type=grpc nginx-host=-) (15:05:21)
+   AI_CLIENT_TYPE=grpc · AI_NGINX_HOST=- · POOL=1
+   블록 warmup(grpc) 사이클 10 완료 15:05:36
+   배수 완료(warmup b4/grpc) — stop 누적 10
+   블록 b4(grpc) 사이클 100 완료 15:06:01
+   배수 완료(b4/grpc) — stop 누적 110
+   ✅ 블록 4/5 (grpc) 회수 완료
+## 팔 전환 → webclient-nginx (client-type=webclient nginx-host=ai-nginx) (15:06:16)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · POOL=1
+   블록 warmup(webclient-nginx) 사이클 10 완료 15:06:29
+   배수 완료(warmup b4/webclient-nginx) — stop 누적 10
+   블록 b4(webclient-nginx) 사이클 100 완료 15:06:55
+   배수 완료(b4/webclient-nginx) — stop 누적 110
+   ✅ 블록 4/5 (webclient-nginx) 회수 완료
+## 팔 전환 → webclient-direct (client-type=webclient nginx-host=shadowfit-ai) (15:07:10)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=shadowfit-ai · POOL=1
+   블록 warmup(webclient-direct) 사이클 10 완료 15:07:25
+   배수 완료(warmup b4/webclient-direct) — stop 누적 10
+   블록 b4(webclient-direct) 사이클 100 완료 15:07:50
+   배수 완료(b4/webclient-direct) — stop 누적 110
+   ✅ 블록 4/5 (webclient-direct) 회수 완료
+## 블록 5 순서:  webclient-nginx webclient-direct grpc
+## 팔 전환 → webclient-nginx (client-type=webclient nginx-host=ai-nginx) (15:08:05)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · POOL=1
+   블록 warmup(webclient-nginx) 사이클 10 완료 15:08:20
+   배수 완료(warmup b5/webclient-nginx) — stop 누적 10
+   블록 b5(webclient-nginx) 사이클 100 완료 15:08:46
+   배수 완료(b5/webclient-nginx) — stop 누적 110
+   ✅ 블록 5/5 (webclient-nginx) 회수 완료
+## 팔 전환 → webclient-direct (client-type=webclient nginx-host=shadowfit-ai) (15:09:01)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=shadowfit-ai · POOL=1
+   블록 warmup(webclient-direct) 사이클 10 완료 15:09:16
+   배수 완료(warmup b5/webclient-direct) — stop 누적 10
+   블록 b5(webclient-direct) 사이클 100 완료 15:09:41
+   배수 완료(b5/webclient-direct) — stop 누적 110
+   ✅ 블록 5/5 (webclient-direct) 회수 완료
+## 팔 전환 → grpc (client-type=grpc nginx-host=-) (15:09:56)
+   AI_CLIENT_TYPE=grpc · AI_NGINX_HOST=- · POOL=1
+   블록 warmup(grpc) 사이클 10 완료 15:10:11
+   배수 완료(warmup b5/grpc) — stop 누적 10
+   블록 b5(grpc) 사이클 100 완료 15:10:36
+   배수 완료(b5/grpc) — stop 누적 110
+   ✅ 블록 5/5 (grpc) 회수 완료
+## 완료 2026-09-10T15:10:51Z — 스크레이프 30 개
+   집계: python loadtest/analyze_ai_call_latency_ab.py /root/init/loadtest/results/ai-call-latency-ab-aws-b-2026-09-10/clientab
+   집계: python loadtest/analyze_ai_call_latency_ab.py /root/init/loadtest/results/ai-call-latency-ab-aws-b-2026-09-10/clientab
