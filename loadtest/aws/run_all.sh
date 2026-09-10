@@ -136,6 +136,7 @@ if [ -z "$OUTDIR" ]; then
       framepath*)                          _r=frame-path ;;
       q2)                                  _r=q2-partition-quiet-box ;;
       card_a_seed|card_a)                  _r=card-a-write-cost ;;
+      clientab)                            _r=ai-call-latency-ab ;;
       *)                                   continue ;;   # preflight·ridealong·collect 는 라운드를 안 정한다
     esac
     case " $_rounds " in *" $_r "*) ;; *) _rounds="${_rounds:+$_rounds }$_r" ;; esac
@@ -456,6 +457,13 @@ REPL_REHEARSAL_SESSIONS=${REPL_REHEARSAL_SESSIONS:-134}   # 경로 점검용 축
 # 게이트: 시딩 + XtraBackup 사본 전송 + 따라잡기 + G1~G3. 본 측정: 10판 × (DUR + 따라잡기).
 TIMEOUT_REPL_GATE=${TIMEOUT_REPL_GATE:-10800}  # 3시간
 TIMEOUT_REPL=${TIMEOUT_REPL:-14400}            # 4시간
+
+# ── 프로덕션 클라이언트 지연 A/B (clientab) ──────────────────────────────
+# 팔 전환마다 백엔드 재기동(~2분)이 끼므로 블록 수 × 2팔 × (재기동+워밍업+본판)으로 잡는다.
+TIMEOUT_CLIENTAB=${TIMEOUT_CLIENTAB:-14400}     # 4시간
+CLIENTAB_N=${CLIENTAB_N:-100}                   # 블록당 사이클
+CLIENTAB_BLOCKS=${CLIENTAB_BLOCKS:-5}           # 유효 블록(팔당). 앞에 버림 블록이 하나 더 붙는다
+CLIENTAB_WARMUP=${CLIENTAB_WARMUP:-10}
 
 # 🔴 이름을 **여기서 한 번** 정하고 rig 에 물려준다 (#374).
 #    게이트(위 repl_preflight)와 rig(`repl2_rig.sh:60`)가 각각 이름을 들고 있으면,
@@ -1672,6 +1680,30 @@ phase_card_a() {
 }
 
 # 從 R12 잔여 — Q2(구멍이 DROP PARTITION 을 바꾸는가) +13%(p=0.092)를 가른다
+# 프로덕션 클라이언트(grpc-java vs Spring WebClient)로 Spring→AI 왕복 지연을 잰다.
+# 설계: docs/decisions/grpc-webclient-production-client-round.md
+#
+# 🔴 이 단계는 **대상 박스에서** 돈다(ROLE=client-ab). 재는 구간이 Spring→AI 라 부하기가
+#    없다 — 드라이버는 그 구간을 촉발할 뿐이고 드라이버↔Spring 은 측정 밖이다.
+phase_clientab() {
+  local out=$OUTDIR/clientab
+  mkdir -p "$out"
+
+  timeout $TIMEOUT_CLIENTAB env       N="$CLIENTAB_N" BLOCKS="$CLIENTAB_BLOCKS" WARMUP="$CLIENTAB_WARMUP"       COMPOSE_DIR="$ROOT" OUT="$out"       bash "$ROOT/loadtest/measure_ai_call_latency_ab.sh" > "$out/run.log" 2>&1
+  local rc=$?
+
+  # 집계는 실패해도 원자료는 남는다 — rc 와 무관하게 시도하고, 결과를 단계 로그에 올린다.
+  python3 "$ROOT/loadtest/analyze_ai_call_latency_ab.py" "$out" > "$out/summary.txt" 2>&1
+  grep -E "판별 불가|안 겹친다|평균 범위" "$out/summary.txt" | while read -r l; do note "  $l"; done
+
+  if [ $rc -ne 0 ]; then
+    note "🔴 clientab rc=$rc — run.log 를 볼 것 (스크레이프 $(ls "$out/scrape" 2>/dev/null | wc -l) 개)"
+    return 1
+  fi
+  note "clientab 완료 — 팔 2 × 블록 ${CLIENTAB_BLOCKS} × ${CLIENTAB_N} 사이클 — $out/summary.txt"
+  return 0
+}
+
 phase_q2() {
   local out=$OUTDIR/q2
   mkdir -p "$out"

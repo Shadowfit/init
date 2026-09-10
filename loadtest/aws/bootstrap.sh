@@ -80,8 +80,8 @@ die()  { echo; echo "🔴 부트스트랩 중단 — $*" >&2; exit 1; }
 #    「왜 AI 가 아니라 MySQL 박스지」를 10분 뒤에 알게 되는 자리였다. 역할이 넷이 되면서
 #    그 확률이 올라간다.
 case "$ROLE" in
-  db|p6-target|p6-loader|ai-venv|ai-ab) ;;
-  *) die "모르는 ROLE 이다: '$ROLE' — db · p6-target · p6-loader · ai-venv · ai-ab 중 하나여야 한다" ;;
+  db|p6-target|p6-loader|ai-venv|ai-ab|client-ab) ;;
+  *) die "모르는 ROLE 이다: '$ROLE' — db · p6-target · p6-loader · ai-venv · ai-ab · client-ab 중 하나여야 한다" ;;
 esac
 
 # ── root SSH (다른 박스가 이 박스로 root@ 로 붙는 라운드용, #642) ──────────
@@ -264,6 +264,28 @@ EOF
   echo "  AI_PUBLIC_TOKEN=$AI_PUBLIC_TOKEN"
   echo "  INTERNAL_API_TOKEN=$INTERNAL_API_TOKEN"
   echo "  🔴 위 두 토큰을 부하기의 run_all.sh 에 그대로 넘긴다 — 다르면 401/전 요청 실패다"
+fi
+
+# ── 프로덕션 클라이언트 지연 A/B 대상 (client-ab) ─────────────────────────
+#
+# ai-ab 와 형제지만 **정반대로** 세운다. ai-ab 는 AI 만 살려서 «전송 계층» 을 격리했고,
+# 여기는 **Spring 이 반드시 있어야 한다** — 재려는 클라이언트가 Spring 안에 있기 때문이다
+# (grpc-webclient-production-client-round.md §3).
+#
+# 🔴 CPU 캡을 안 건다. p6-target 은 4:2:2 로 나누지만 그건 «동거 용량» 라운드의 처방이고,
+#    여기서 캡을 걸면 팔 사이 델타에 캡이라는 변수를 하나 더 얹는 셈이다. 이 박스는
+#    한 번에 한 팔만 돌고 드라이버도 c=1 이라 굳이 좁힐 이유가 없다.
+if [ "$ROLE" = "client-ab" ]; then
+  [ -n "$AI_PUBLIC_TOKEN" ]    || AI_PUBLIC_TOKEN=$(head -c 24 /dev/urandom | base64 | tr -d '/+=')
+  [ -n "$INTERNAL_API_TOKEN" ] || INTERNAL_API_TOKEN=$(head -c 24 /dev/urandom | base64 | tr -d '/+=')
+  # 두 토큰이 같으면 AI 가 기동을 거부한다(#230).
+  [ "$AI_PUBLIC_TOKEN" != "$INTERNAL_API_TOKEN" ] || die "AI_PUBLIC_TOKEN 과 INTERNAL_API_TOKEN 이 같다 (#230)"
+  cat >> "$WORKDIR/.env" <<EOF
+AI_PUBLIC_TOKEN=$AI_PUBLIC_TOKEN
+INTERNAL_API_TOKEN=$INTERNAL_API_TOKEN
+EOF
+  echo "  AI_PUBLIC_TOKEN=$AI_PUBLIC_TOKEN"
+  echo "  INTERNAL_API_TOKEN=$INTERNAL_API_TOKEN"
 fi
 
 # ── gRPC vs WebClient A/B 대상 (ai-ab) ────────────────────────────────────
@@ -820,6 +842,43 @@ if [ "$ROLE" = "p6-target" ]; then
   step "관측 스택 이미지 선당김 (從 R9 — ARMS 에 D 를 넣을 때 대비)"
   docker compose --profile obs pull \
     || echo "  ⚠️ 관측 스택 이미지 pull 실패 — 팔 D 를 쓰려면 run_all.sh 단계 중 다시 당겨야 한다"
+fi
+
+if [ "$ROLE" = "client-ab" ]; then
+  step "Spring·AI 빌드 (10~25분)"
+  cd "$WORKDIR" || die "$WORKDIR 로 못 들어간다"
+  docker compose build shadowfit-backend shadowfit-ai || die "이미지 빌드 실패"
+
+  step "스택 기동 — mysql · backend · ai · ai-nginx"
+  docker compose up -d mysql shadowfit-backend shadowfit-ai ai-nginx || die "compose up 실패"
+
+  echo -n "  백엔드 헬스체크 대기"
+  for _ in $(seq 1 60); do
+    curl -sf --max-time 3 http://localhost:9090/actuator/health >/dev/null 2>&1 && { echo " — 떴다"; break; }
+    echo -n "."; sleep 5
+  done
+  curl -sf --max-time 3 http://localhost:9090/actuator/health >/dev/null 2>&1     || die "백엔드가 5분 안에 안 떴다 — 부트스트랩이 실패하면 측정을 시작하면 안 된다(#265)"
+
+  echo -n "  AI 헬스체크 대기"
+  for _ in $(seq 1 36); do
+    curl -sf --max-time 3 http://localhost:8000/health >/dev/null 2>&1 && { echo " — 떴다"; break; }
+    echo -n "."; sleep 5
+  done
+  curl -sf --max-time 3 http://localhost:8000/health >/dev/null 2>&1     || die "AI 가 3분 안에 안 떴다 (#265)"
+
+  # 🔴 계기가 실제로 붙었는지 여기서 본다. 라운드를 다 돌린 뒤 «지표가 비어 있다» 를
+  #    발견하는 것이 이 라운드의 가장 비싼 실패 모드다(TimedAiAnalysisClient 주석 참고).
+  if curl -sf --max-time 5 http://localhost:9090/actuator/prometheus | grep -q 'shadowfit_ai_call_seconds'; then
+    echo "  계기 확인 — shadowfit_ai_call_seconds 노출됨"
+  else
+    echo "  ⚠️ shadowfit.ai.call 지표가 아직 안 보인다 — 호출이 한 번도 없으면 정상이다(첫 사이클 뒤 다시 본다)"
+  fi
+
+  # 기준 좌표(V4 시드)가 있어야 재부착 요청에 reference_poses 가 실린다 — 이 라운드의
+  # «큰 요청» 축이 거기서 나온다. 0행이면 축 하나가 조용히 사라지므로 여기서 막는다.
+  REFN=$(docker exec -i -e MYSQL_PWD="$PW" shadowfit-mysql mysql -uroot "$DB_NAME" -N            -e "SELECT COUNT(*) FROM exercise_references;" 2>/dev/null | tr -d '[:space:]')
+  [ "${REFN:-0}" -gt 0 ] || die "exercise_references 가 0행이다 — 재부착 페이로드가 비어 큰 요청 축이 사라진다"
+  echo "  exercise_references ${REFN}행"
 fi
 
 # ── 요약 ─────────────────────────────────────────────────────────────────
