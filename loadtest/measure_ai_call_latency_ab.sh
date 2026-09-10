@@ -112,11 +112,36 @@ run_block() {
 
 scrape() { curl -s -m 30 "$ACTUATOR/actuator/prometheus" | grep -E '^shadowfit_ai_call_seconds' > "$OUT/scrape/$1.txt"; }
 
+# 🔴 stop 은 **아웃박스 발행기가 비동기로** 보낸다. 사이클이 끝난 «순간» 에는 아직 안 나간
+#    stop 이 남아 있고, 그대로 팔을 바꾸면 그것들이 **다음 팔의 백엔드에서** 나가 다른 팔로
+#    집계된다(protocol 태그는 «보낸 백엔드» 를 따른다). 고정 sleep 으로는 그걸 보장 못 한다.
+#    그래서 «stop 카운트가 더 안 늘 때까지» 기다린다.
+stop_count() {
+  curl -s -m 30 "$ACTUATOR/actuator/prometheus"     | awk '/^shadowfit_ai_call_seconds_count\{/ && /rpc="stop"/ { s += $2 } END { printf "%d", s+0 }'
+}
+
+drain() {
+  local label=$1 prev=-1 now stable=0 i=0
+  while [ "$i" -lt 60 ]; do            # 최대 5분(5초 × 60)
+    now=$(stop_count)
+    if [ "$now" = "$prev" ]; then
+      stable=$((stable+1))
+      [ "$stable" -ge 2 ] && { echo "   배수 완료($label) — stop 누적 $now"; return 0; }
+    else
+      stable=0
+    fi
+    prev=$now; i=$((i+1)); sleep 5
+  done
+  echo "   ⚠️ 배수 미완($label) — stop 누적이 5분간 안 멎었다. 이 블록은 팔 귀속이 의심스럽다"
+  return 1
+}
+
 # ── 라운드 ───────────────────────────────────────────────────────────────
 # 버림 블록: 팔마다 한 번씩 돌리고 기록에 안 넣는다.
 for arm in grpc webclient; do
   switch_arm "$arm"
   run_block "$arm" "discard" "$WARMUP"
+  drain "discard/$arm" || true
 done
 
 for b in $(seq 1 "$BLOCKS"); do
@@ -125,11 +150,11 @@ for b in $(seq 1 "$BLOCKS"); do
   for arm in $order; do
     switch_arm "$arm"
     run_block "$arm" "warmup" "$WARMUP"
+    # 워밍업의 stop 도 배수하고 나서 기준선을 찍는다 — 안 그러면 워밍업 잔여가 본 블록에 섞인다.
+    drain "warmup b$b/$arm" || true
     scrape "b${b}_${arm}_before"
     run_block "$arm" "b$b" "$N"
-    # 아웃박스 발행기가 StopAnalysis 를 비동기로 보내므로 잠깐 배수한다.
-    curl -s -m 30 -o /dev/null "$ACTUATOR/actuator/health"
-    sleep 10
+    drain "b$b/$arm" || true
     scrape "b${b}_${arm}_after"
     echo "   ✅ 블록 $b/$BLOCKS ($arm) 회수 완료"
   done
