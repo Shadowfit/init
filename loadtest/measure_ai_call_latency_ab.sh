@@ -48,7 +48,12 @@ echo "BASE=$BASE N=$N BLOCKS=$BLOCKS WARMUP=$WARMUP"
 switch_arm() {
   local arm=$1
   echo "## 팔 전환 → $arm ($(date -u +%T))"
-  ( cd "$COMPOSE_DIR" && AI_CLIENT_TYPE="$arm" docker compose up -d --force-recreate shadowfit-backend >/dev/null 2>&1 )
+  # 🔴 출력을 버리지 않는다. 예전엔 >/dev/null 2>&1 이라 compose 가 실패해도 조용했고,
+  #    그러면 «옛 팔의 컨테이너가 그대로 살아 있는데 새 팔이라고 믿는» 상태가 된다
+  #    (로컬 스모크에서 실제로 났다 — 프로젝트 이름이 달라 컨테이너 이름이 충돌했다).
+  ( cd "$COMPOSE_DIR" && AI_CLIENT_TYPE="$arm" docker compose up -d --force-recreate shadowfit-backend )       >> "$OUT/compose.log" 2>&1
+  local up_rc=$?
+  [ "$up_rc" -eq 0 ] || { echo "🔴 compose up 실패(rc=$up_rc) — $OUT/compose.log 를 볼 것"; exit 1; }
   # 헬스가 UP 이 될 때까지. curl 자체 재시도라 sleep 루프를 안 쓴다.
   curl -s -m 300 --retry 100 --retry-delay 3 --retry-all-errors -o /dev/null "$ACTUATOR/actuator/health" || true
   local got
@@ -66,9 +71,13 @@ if [ ! -s "$TOKENS" ]; then
   : > "$TOKENS"; : > "$EMAILS"
   echo "## 계정 준비 $ACCOUNTS 개 (간격 ${PREP_SLEEP}s)"
   for i in $(seq 1 "$ACCOUNTS"); do
-    email="ablat${i}_$(date +%s)@test.local"
+    # 🔴 username 도 유니크다("이미 사용 중인 닉네임입니다" 400). 이메일에만 타임스탬프를 넣으면
+    #    같은 DB 에서 두 번째 실행부터 전 계정이 조용히 실패한다 — 새 DB 에서는 첫 판만
+    #    통과해서 안 보이는 잠복 결함이라 로컬 스모크에서야 걸렸다.
+    stamp=$(date +%s%N)
+    email="ablat${i}_${stamp}@test.local"
     curl -s -o /dev/null -m 30 -X POST "$BASE/member/signup" -H 'Content-Type: application/json' \
-      -d "{\"username\":\"ablat$i\",\"email\":\"$email\",\"password\":\"$PASSWORD\",\"sex\":\"MALE\",\"role\":\"USER\"}"
+      -d "{\"username\":\"ablat${i}_${stamp}\",\"email\":\"$email\",\"password\":\"$PASSWORD\",\"sex\":\"MALE\",\"role\":\"USER\"}"
     tok=$(curl -s -m 30 -X POST "$BASE/member/login" -H 'Content-Type: application/json' \
       -d "{\"email\":\"$email\",\"password\":\"$PASSWORD\"}" | sed -n 's/.*"accessToken":"\([^"]*\)".*/\1/p')
     [ -n "$tok" ] || { echo "  🔴 $email 로그인 실패 — 건너뜀"; sleep "$PREP_SLEEP"; continue; }

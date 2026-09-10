@@ -2021,6 +2021,7 @@ for p in $PHASES; do
     httpwrite) run_phase httpwrite phase_httpwrite ;;
     httpread)  run_phase httpread  phase_httpread ;;
     q2)          run_phase q2          phase_q2 ;;
+    clientab)    run_phase clientab    phase_clientab ;;
     card_a_seed) run_phase card_a_seed phase_card_a_seed ;;
     card_a)      run_phase card_a      phase_card_a ;;
     ridealong) run_phase ridealong phase_ridealong ;;

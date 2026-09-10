@@ -109,10 +109,16 @@ def main(root):
             vals = sorted(rows[(rpc, protocol)])
             for b, n, mean, p50, p95, p99 in vals:
                 print(f"{protocol:<10} {b:>4} {n:>6} {mean:>8.3f} {p50:>8.3f} {p95:>8.3f} {p99:>8.3f}")
-            span[protocol] = (min(v[2] for v in vals), max(v[2] for v in vals))
+            span[protocol] = (min(v[2] for v in vals), max(v[2] for v in vals), len(vals))
 
-        if len(span) == 2:
-            (a, (a_lo, a_hi)), (b, (b_lo, b_hi)) = sorted(span.items())
+        # 🔴 블록이 1개면 «범위» 가 점이라 겹칠 수가 없다 — 그대로 두면 판정이 항상
+        #    「효과 있음」으로 나온다. 반복이 없으면 판정 자체를 안 한다
+        #    ([[feedback_measure_design_needs_repeats]]).
+        if len(span) == 2 and min(v[2] for v in span.values()) < 2:
+            n_blocks = min(v[2] for v in span.values())
+            print("\n   🟡 팔당 블록이 %d개뿐이라 판정하지 않는다 — 범위가 점이면 «안 겹친다» 는 항상 참이다." % n_blocks)
+        elif len(span) == 2:
+            (a, (a_lo, a_hi, _)), (b, (b_lo, b_hi, _)) = sorted(span.items())
             overlap = not (a_hi < b_lo or b_hi < a_lo)
             print(f"\n   {a} 평균 범위 [{a_lo:.3f}, {a_hi:.3f}] ms · {b} [{b_lo:.3f}, {b_hi:.3f}] ms")
             if overlap:
