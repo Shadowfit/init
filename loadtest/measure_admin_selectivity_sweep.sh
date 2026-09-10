@@ -71,6 +71,19 @@ PW=${PW:-1234}
 DB_NAME=${DB_NAME:-admin_sweep}
 CONTAINER=${CONTAINER:-shadowfit-mysql}
 
+# 무대 — 관리자 화면 둘이 성질이 다르다. 같은 격자·같은 위생으로 각각 잰다.
+#
+#   sessions (B 화면) : 필터가 status 등치라 (status, start_time) 로 «구획 seek» 이 가능하다
+#   members  (A 화면) : 인덱스가 created_at 하나뿐이고 나머지 필터(페르소나·레벨·온보딩·검색어)는
+#                       전부 인덱스 밖이다. 그래서 목록 조회는 구조적으로 «최신순으로 훑으며
+#                       거르다가 20건 채우면 멈추기» 가 되고, 비용이 **필터 선택도에 반비례**한다.
+#                       B 화면에서 관찰된 그 메커니즘이 여기서는 «기본 계획» 이라는 뜻이다.
+TARGET=${TARGET:-sessions}
+case "$TARGET" in
+  sessions|members) : ;;
+  *) echo "🔴 모르는 TARGET: '$TARGET' — sessions · members 중 하나여야 한다" >&2; exit 1 ;;
+esac
+
 USERS=${USERS:-200000}
 SESSIONS=${SESSIONS:-1000000}
 
@@ -143,7 +156,12 @@ CREATE TABLE users_scale (
   id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
   username VARCHAR(50) NOT NULL,
   email VARCHAR(100) NOT NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  selected_persona ENUM('BEGINNER','ADVANCED','DIET','REHAB') NOT NULL DEFAULT 'BEGINNER',
+  workout_level VARCHAR(20),
+  onboarding_completed BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_users_username (username),
+  UNIQUE KEY uk_users_email (email)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE sessions_scale (
@@ -174,15 +192,29 @@ CREATE TABLE sessions_scale (
 #
 #    그래서 셋 다 **소금이 다른 MD5** 로 뽑는다.
 # ═════════════════════════════════════════════════════════════════════════════
-say "## [2/6] 시딩 — 회원 ${USERS}"
+say "## [2/6] 시딩 — 회원 ${USERS} (페르소나도 치우친 분포 70/20/8/2)"
+# 페르소나·가입일·이름은 소금이 다른 MD5 로 뽑아 서로 독립이다(세션 쪽과 같은 이유).
 M -e "
-INSERT INTO users_scale (id, username, email, created_at)
+INSERT INTO users_scale (id, username, email, selected_persona, workout_level, onboarding_completed, created_at)
 SELECT n+1,
        CONCAT(ELT(1+(CONV(SUBSTR(MD5(CONCAT('u',n)),1,4),16,10)%5),'kim','lee','park','choi','jung'), n),
        CONCAT('u', n, '@test.local'),
+       CASE
+         WHEN (CONV(SUBSTR(MD5(CONCAT('p',n)),1,8),16,10) % 1000) < 700 THEN 'BEGINNER'
+         WHEN (CONV(SUBSTR(MD5(CONCAT('p',n)),1,8),16,10) % 1000) < 900 THEN 'ADVANCED'
+         WHEN (CONV(SUBSTR(MD5(CONCAT('p',n)),1,8),16,10) % 1000) < 980 THEN 'DIET'
+         ELSE 'REHAB'
+       END,
+       ELT(1+(CONV(SUBSTR(MD5(CONCAT('w',n)),1,4),16,10)%3),'BEGINNER','INTERMEDIATE','ADVANCED'),
+       (CONV(SUBSTR(MD5(CONCAT('o',n)),1,4),16,10) % 2) = 0,
        NOW() - INTERVAL (CONV(SUBSTR(MD5(CONCAT('uc',n)),1,8),16,10) % 525600) MINUTE
 FROM _seq WHERE n < $USERS;" || die "회원 시딩 실패"
 
+if [ "$TARGET" = "members" ]; then
+  say "  TARGET=members — 세션 시딩은 건너뛴다(측정 대상이 users 다)"
+fi
+
+if [ "$TARGET" = "sessions" ]; then
 say "## [2/6] 시딩 — 세션 ${SESSIONS} (치우친 상태 분포 70/20/8/2)"
 # 상태는 0..999 를 잘라 매핑한다 — 70.0% / 20.0% / 8.0% / 2.0%
 M -e "
@@ -199,6 +231,7 @@ SELECT
     ELSE 'FAILED'
   END
 FROM _seq WHERE n < $SESSIONS;" || die "세션 시딩 실패"
+fi
 
 # ═════════════════════════════════════════════════════════════════════════════
 # [3/6] 시딩 자기검증 7종 — 하나라도 틀리면 측정을 시작하지 않는다
@@ -211,6 +244,7 @@ say "## [3/6] 시딩 자기검증 7종"
 
 g(){ printf '  %-52s %s\n' "$1" "$2" | tee -a "$LOG"; }
 
+if [ "$TARGET" = "sessions" ]; then
 # ① 행 수가 정확한가
 N_U=$(M -e "SELECT COUNT(*) FROM users_scale;")
 N_S=$(M -e "SELECT COUNT(*) FROM sessions_scale;")
@@ -308,15 +342,112 @@ SPAN=$(M -e "SELECT ROUND(DATEDIFF(MAX(start_time), MIN(start_time))) FROM sessi
 [ "$SPAN" -ge 360 ] || die "⑦  세션이 ${SPAN}일에만 퍼져 있다 — 365일이어야 한다"
 g "⑦ 기간 분포" "${SPAN}일 (≥360) ✅"
 
+else
+# ══ TARGET=members 의 게이트 ══
+#   세션판과 같은 성질을 users 에서 확인한다. 차이는 «묶는 열» 뿐이다 —
+#   세션은 member_id 로 묶었고 여기는 그런 열이 없어 id 버킷을 쓴다.
+
+# ① 행 수
+N_U=$(M -e "SELECT COUNT(*) FROM users_scale;")
+[ "$N_U" = "$USERS" ] || die "①  회원 행수 불일치: $N_U != $USERS"
+g "① 행 수" "회원 $N_U ✅"
+
+# ② 페르소나 분포 — 5σ 게이트(이항 표집오차에서 유도)
+M -e "SELECT selected_persona, ROUND(COUNT(*)*100/$USERS,3) FROM users_scale
+      GROUP BY selected_persona ORDER BY 2 DESC;" \
+  | while IFS=$'\t' read -r p pct; do g "   └ $p" "${pct}%"; done
+BAD=$(M -e "
+SELECT COUNT(*) FROM (
+  SELECT selected_persona,
+         COUNT(*)*100/$USERS AS p,
+         CASE selected_persona WHEN 'BEGINNER' THEN 0.70 WHEN 'ADVANCED' THEN 0.20
+                               WHEN 'DIET' THEN 0.08 ELSE 0.02 END AS p0
+  FROM users_scale GROUP BY selected_persona
+) t
+WHERE ABS(p - p0*100) > 5 * 100 * SQRT(p0*(1-p0)/$USERS);")
+[ "$BAD" = "0" ] || die "②  페르소나 분포가 5σ 밖이다 (N=$USERS)"
+TOL=$(M -e "SELECT ROUND(5*100*SQRT(0.2*0.8/$USERS),3);")
+g "② 페르소나 분포" "목표 70/20/8/2 · 5σ 게이트 ±${TOL}%p 이내 ✅"
+
+# ③ 페르소나 ⟂ id — 시딩 순서가 페르소나를 결정하면 안 된다
+PVIOL=$(M -e "
+SELECT COUNT(*) FROM (
+  SELECT id % 10 AS b, SUM(selected_persona='BEGINNER')*1.0/COUNT(*) AS r, COUNT(*) AS n
+  FROM users_scale GROUP BY id % 10
+) t
+WHERE ABS(t.r - 0.70) > 5 * SQRT(0.70*0.30/t.n);")
+[ "$PVIOL" = "0" ] || die "③  id 버킷별 페르소나 비율이 5σ 밖이다 ($PVIOL 개) — 페르소나가 id 에 종속"
+g "③ 페르소나 ⟂ id" "id 버킷 10개 전부 5σ 이내 ✅"
+
+# ④ 페르소나 ⟂ created_at — 갈리면 기간 필터가 페르소나를 대신 고른다
+VIOL=$(M -e "
+SELECT COUNT(*) FROM (
+  SELECT selected_persona, AVG(UNIX_TIMESTAMP(created_at))/86400 AS a, COUNT(*) AS n
+  FROM users_scale GROUP BY selected_persona
+) t
+CROSS JOIN (
+  SELECT AVG(UNIX_TIMESTAMP(created_at))/86400 AS ga,
+         STDDEV_POP(UNIX_TIMESTAMP(created_at))/86400 AS gsd FROM users_scale
+) k
+WHERE ABS(t.a - k.ga) > 5 * k.gsd / SQRT(t.n);")
+[ "$VIOL" = "0" ] || die "④  페르소나별 평균 가입일이 5σ 밖이다 ($VIOL 개)"
+SPREAD=$(M -e "
+SELECT ROUND(MAX(a)-MIN(a),2) FROM (
+  SELECT selected_persona, AVG(UNIX_TIMESTAMP(created_at))/86400 a FROM users_scale
+  GROUP BY selected_persona) t;")
+g "④ 페르소나 ⟂ created_at" "페르소나별 평균 가입일 최대편차 ${SPREAD}일 · 5σ 통과 ✅"
+
+# ⑤ id ⟂ created_at — 시딩 순서가 가입일 순서면 «최신 20건» 이 항상 같은 구간이 된다
+MVIOL=$(M -e "
+SELECT COUNT(*) FROM (
+  SELECT id % 10 AS b, AVG(UNIX_TIMESTAMP(created_at))/86400 AS a, COUNT(*) AS n
+  FROM users_scale GROUP BY id % 10
+) t
+CROSS JOIN (
+  SELECT AVG(UNIX_TIMESTAMP(created_at))/86400 AS ga,
+         STDDEV_POP(UNIX_TIMESTAMP(created_at))/86400 AS gsd FROM users_scale
+) k
+WHERE ABS(t.a - k.ga) > 5 * k.gsd / SQRT(t.n);")
+[ "$MVIOL" = "0" ] || die "⑤  id 버킷별 평균 가입일이 5σ 밖이다 ($MVIOL 개)"
+g "⑤ id ⟂ created_at" "id 버킷별 평균 가입일 5σ 이내 ✅"
+
+# ⑥ 가입일이 한 점에 뭉치지 않았는가 — distinct 가 적으면 «최신순» 이 사실상 무작위가 된다
+DC=$(M -e "SELECT COUNT(DISTINCT created_at) FROM users_scale;")
+awk -v d="$DC" -v n="$USERS" 'BEGIN{ if (d+0 < n*0.5) exit 1 }' \
+  || die "⑥  distinct created_at 이 $DC 뿐이다 (행 $USERS) — 동률이 많아 정렬이 불안정하다"
+g "⑥ 가입일 동률" "distinct created_at $DC / $USERS ✅"
+
+# ⑦ 기간
+SPAN=$(M -e "SELECT ROUND(DATEDIFF(MAX(created_at), MIN(created_at))) FROM users_scale;")
+[ "$SPAN" -ge 360 ] || die "⑦  회원이 ${SPAN}일에만 퍼져 있다 — 365일이어야 한다"
+g "⑦ 기간 분포" "${SPAN}일 (≥360) ✅"
+fi
+
 say "  → 7종 전부 통과. 측정을 시작한다."
 
 # ═════════════════════════════════════════════════════════════════════════════
 # [4/6] 팔 정의
 # ═════════════════════════════════════════════════════════════════════════════
-IDX_MEMBER="INDEX idx_session_member_status_start (member_id, status, start_time),
-            INDEX idx_session_member_exercise_status_start (member_id, exercise_id, status, start_time)"
+apply_arm_members(){
+  local arm="$1"
+  # 실 스키마의 users 는 보조 인덱스가 idx_users_created_at 하나뿐이다(V1__baseline.sql:24).
+  # username·email UNIQUE 는 실제로도 있으므로 팔과 무관하게 항상 둔다.
+  for ix in idx_users_created_at idx_users_persona_created; do
+    M -e "ALTER TABLE users_scale DROP INDEX $ix;" 2>/dev/null || true
+  done
+  case "$arm" in
+    A0) : ;;                                                     # 보조 인덱스 없음 — §4 의 "users 는 아예 없다"
+    B)  M -e "ALTER TABLE users_scale ADD INDEX idx_users_created_at (created_at);" \
+          || die "B 인덱스 실패" ;;
+    C)  M -e "ALTER TABLE users_scale
+                ADD INDEX idx_users_created_at (created_at),
+                ADD INDEX idx_users_persona_created (selected_persona, created_at);" \
+          || die "C 인덱스 실패" ;;
+  esac
+  M -e "ANALYZE TABLE users_scale;" >/dev/null
+}
 
-apply_arm(){
+apply_arm_sessions(){
   local arm="$1"
   # 매번 전부 지우고 필요한 것만 만든다 — 팔 간 잔여 인덱스로 오염되는 것을 막는다
   for ix in idx_session_member_status_start idx_session_member_exercise_status_start \
@@ -339,30 +470,65 @@ apply_arm(){
   M -e "ANALYZE TABLE sessions_scale;" >/dev/null
 }
 
+apply_arm(){ if [ "$TARGET" = "members" ]; then apply_arm_members "$1"; else apply_arm_sessions "$1"; fi; }
+
 # 셀: 선택도 4 × 기간폭 4
 # 격자를 환경변수로 뺀 이유 — 로컬(Windows/Docker Desktop)은 `docker exec` 한 번이 ~3초라
 # 전 격자 스모크가 비현실적이다. 축소 격자로 배선을 먼저 검증하고, 본 라운드에서는 기본값을 쓴다.
-STATUSES=${STATUSES:-"FAILED CANCELLED IN_PROGRESS COMPLETED"}   # 2% · 8% · 20% · 70%
-WINDOWS=${WINDOWS:-"1 7 30 0"}                                   # 일 단위, 0 = 전체 기간
+# STATUSES 는 «필터 값 축» 이다 — 세션이면 status, 회원이면 selected_persona. 둘 다 70/20/8/2 로 깔린다.
+if [ "$TARGET" = "members" ]; then
+  STATUSES=${STATUSES:-"REHAB DIET ADVANCED BEGINNER"}             # 2% · 8% · 20% · 70%
+  AXIS_LABEL="persona"
+  ARMS_ALL="A0 B C"
+  ARM_HEAD1="A0(인덱스없음)"; ARM_HEAD2="B(현행 created_at)"; ARM_HEAD3="C(+페르소나복합)"
+  RATIO_NUM=B; RATIO_DEN=C; RATIO_HEAD="B/C"
+else
+  STATUSES=${STATUSES:-"FAILED CANCELLED IN_PROGRESS COMPLETED"}   # 2% · 8% · 20% · 70%
+  AXIS_LABEL="status"
+  ARMS_ALL="A0 A1 B"
+  ARM_HEAD1="A0(역사before)"; ARM_HEAD2="A1(오늘반사실)"; ARM_HEAD3="B(현행)"
+  RATIO_NUM=A1; RATIO_DEN=B; RATIO_HEAD="A1/B"
+fi
+WINDOWS=${WINDOWS:-"1 7 30 0"}                                     # 일 단위, 0 = 전체 기간
 
-build_q(){   # $1=status $2=window  → 목록 쿼리
+build_q(){   # $1=필터값 $2=기간  → 목록 쿼리
   local st="$1" w="$2"
-  if [ "$w" = "0" ]; then
-    echo "SELECT id, member_id, start_time, status FROM sessions_scale
-          WHERE status='$st' ORDER BY start_time DESC LIMIT 20"
+  if [ "$TARGET" = "members" ]; then
+    if [ "$w" = "0" ]; then
+      echo "SELECT id, username, email, selected_persona, created_at FROM users_scale
+            WHERE selected_persona='$st' ORDER BY created_at DESC LIMIT 20"
+    else
+      echo "SELECT id, username, email, selected_persona, created_at FROM users_scale
+            WHERE selected_persona='$st' AND created_at >= NOW() - INTERVAL $w DAY
+            ORDER BY created_at DESC LIMIT 20"
+    fi
   else
-    echo "SELECT id, member_id, start_time, status FROM sessions_scale
-          WHERE status='$st' AND start_time >= NOW() - INTERVAL $w DAY
-          ORDER BY start_time DESC LIMIT 20"
+    if [ "$w" = "0" ]; then
+      echo "SELECT id, member_id, start_time, status FROM sessions_scale
+            WHERE status='$st' ORDER BY start_time DESC LIMIT 20"
+    else
+      echo "SELECT id, member_id, start_time, status FROM sessions_scale
+            WHERE status='$st' AND start_time >= NOW() - INTERVAL $w DAY
+            ORDER BY start_time DESC LIMIT 20"
+    fi
   fi
 }
 build_c(){   # 총건수 쿼리 — §4-3 이 "남은 진짜 비용은 여기"라고 지목한 자리
   local st="$1" w="$2"
-  if [ "$w" = "0" ]; then
-    echo "SELECT COUNT(*) FROM sessions_scale WHERE status='$st'"
+  if [ "$TARGET" = "members" ]; then
+    if [ "$w" = "0" ]; then
+      echo "SELECT COUNT(*) FROM users_scale WHERE selected_persona='$st'"
+    else
+      echo "SELECT COUNT(*) FROM users_scale
+            WHERE selected_persona='$st' AND created_at >= NOW() - INTERVAL $w DAY"
+    fi
   else
-    echo "SELECT COUNT(*) FROM sessions_scale
-          WHERE status='$st' AND start_time >= NOW() - INTERVAL $w DAY"
+    if [ "$w" = "0" ]; then
+      echo "SELECT COUNT(*) FROM sessions_scale WHERE status='$st'"
+    else
+      echo "SELECT COUNT(*) FROM sessions_scale
+            WHERE status='$st' AND start_time >= NOW() - INTERVAL $w DAY"
+    fi
   fi
 }
 
@@ -415,7 +581,11 @@ say ""
 say "## [5/6] 측정 — 버림 1블록 + 본 ${BLOCKS}블록"
 printf 'block\tarm\tstatus\twindow_d\tkind\trep\tms\n' > "$RAW"
 
-ORDERS=("A0 A1 B" "B A1 A0" "A1 B A0" "A0 B A1" "B A0 A1" "A1 A0 B")
+if [ "$TARGET" = "members" ]; then
+  ORDERS=("A0 B C" "C B A0" "B C A0" "A0 C B" "C A0 B" "B A0 C")
+else
+  ORDERS=("A0 A1 B" "B A1 A0" "A1 B A0" "A0 B A1" "B A0 A1" "A1 A0 B")
+fi
 
 for b in $(seq 0 "$BLOCKS"); do
   ord=${ORDERS[$(( (b - 1 + ${#ORDERS[@]}) % ${#ORDERS[@]} ))]}
@@ -469,28 +639,34 @@ say ""
 SUMMARY="$OUTDIR/summary.txt"
 {
   echo "선택도 실측 비율:"
-  M -e "SELECT status, ROUND(COUNT(*)*100/$SESSIONS,2) FROM sessions_scale GROUP BY status ORDER BY 2;" \
-    | awk -F'\t' '{printf "  %-12s %s%%\n", $1, $2}'
+  if [ "$TARGET" = "members" ]; then
+    M -e "SELECT selected_persona, ROUND(COUNT(*)*100/$USERS,2) FROM users_scale
+          GROUP BY selected_persona ORDER BY 2;" \
+      | awk -F'\t' '{printf "  %-12s %s%%\n", $1, $2}'
+  else
+    M -e "SELECT status, ROUND(COUNT(*)*100/$SESSIONS,2) FROM sessions_scale GROUP BY status ORDER BY 2;" \
+      | awk -F'\t' '{printf "  %-12s %s%%\n", $1, $2}'
+  fi
   echo
   for kind in list count; do
     echo "════ $kind 쿼리 ════"
     for w in $WINDOWS; do
       wl=$w; [ "$w" = "0" ] && wl="전체"
       echo "  기간 ${wl}:"
-      printf "    %-12s %14s %14s %14s   %s\n" "status" "A0(역사before)" "A1(오늘반사실)" "B(현행)" "A1/B"
+      printf "    %-12s %18s %18s %18s   %s\n" "$AXIS_LABEL" "$ARM_HEAD1" "$ARM_HEAD2" "$ARM_HEAD3" "$RATIO_HEAD"
       for st in $STATUSES; do
         line="    $(printf '%-12s' "$st")"
         declare -A med=()
-        for arm in A0 A1 B; do
+        for arm in $ARMS_ALL; do
           v=$(awk -F'\t' -v a="$arm" -v s="$st" -v w="$w" -v k="$kind" \
               '$2==a && $3==s && $4==w && $5==k {print $7}' "$RAW" | sort -g \
               | awk '{v[NR]=$1} END{ if(NR==0){print "-"} else {print (NR%2)? v[(NR+1)/2] : (v[NR/2]+v[NR/2+1])/2} }')
           mn=$(awk -F'\t' -v a="$arm" -v s="$st" -v w="$w" -v k="$kind" \
               '$2==a && $3==s && $4==w && $5==k {print $7}' "$RAW" | sort -g | head -1)
           med[$arm]=$v
-          line="$line $(printf '%14s' "${v}(${mn:-–})")"
+          line="$line $(printf '%18s' "${v}(${mn:-–})")"
         done
-        ratio=$(awk -v a="${med[A1]}" -v b="${med[B]}" \
+        ratio=$(awk -v a="${med[$RATIO_NUM]}" -v b="${med[$RATIO_DEN]}" \
                 'BEGIN{ if (a=="-"||b=="-"||b+0==0) print "–"; else printf "%.2fx", a/b }')
         line="$line   $(printf '%6s' "$ratio")"
         echo "$line"
