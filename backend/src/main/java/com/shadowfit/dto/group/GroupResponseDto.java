@@ -22,6 +22,12 @@ public class GroupResponseDto {
     @Schema(description = "그룹 이름", requiredMode = Schema.RequiredMode.REQUIRED)
     private String name;
 
+    @Schema(description = "모임 소개 한 줄 (선택)")
+    private String description;
+
+    @Schema(description = "코드 참여용 초대 코드 (8자리). 멤버가 공유한다", requiredMode = Schema.RequiredMode.REQUIRED)
+    private String inviteCode;
+
     @Schema(description = "생성자 회원 id", requiredMode = Schema.RequiredMode.REQUIRED)
     private Long createdById;
 
@@ -33,6 +39,8 @@ public class GroupResponseDto {
         return GroupResponseDto.builder()
                 .id(group.getId())
                 .name(group.getName())
+                .description(group.getDescription())
+                .inviteCode(group.getInviteCode())
                 .createdById(group.getCreatedBy().getId())
                 .createdAt(group.getCreatedAt())
                 .build();

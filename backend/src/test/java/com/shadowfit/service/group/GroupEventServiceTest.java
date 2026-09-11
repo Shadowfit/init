@@ -59,7 +59,7 @@ class GroupEventServiceTest {
         MockitoAnnotations.openMocks(this);
         Member creator = Member.builder().id(99L).email("creator@test.com").username("creator")
                 .password("encoded-password").role(UserRole.USER).build();
-        group = Group.builder().id(GROUP_ID).name("그룹").createdBy(creator).build();
+        group = Group.builder().id(GROUP_ID).name("그룹").inviteCode("TESTCD01").createdBy(creator).build();
         sender = Member.builder().id(SENDER_ID).email("sender@test.com").username("sender")
                 .password("encoded-password").role(UserRole.USER).build();
     }

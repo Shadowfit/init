@@ -32,7 +32,7 @@ class GroupInvitationRepositoryTest {
     void setUp() {
         inviter = memberRepository.saveAndFlush(newMember("inviter@test.com", "inviter"));
         invitee = memberRepository.saveAndFlush(newMember("invitee@test.com", "invitee"));
-        group = groupRepository.saveAndFlush(Group.builder().name("그룹").createdBy(inviter).build());
+        group = groupRepository.saveAndFlush(Group.builder().name("그룹").inviteCode("TESTCD01").createdBy(inviter).build());
     }
 
     @Test
@@ -61,7 +61,7 @@ class GroupInvitationRepositoryTest {
         GroupInvitation pending = groupInvitationRepository.saveAndFlush(newInvitation());
 
         Member otherInviter = memberRepository.saveAndFlush(newMember("other-inviter@test.com", "other-inviter"));
-        Group otherGroup = groupRepository.saveAndFlush(Group.builder().name("그룹2").createdBy(otherInviter).build());
+        Group otherGroup = groupRepository.saveAndFlush(Group.builder().name("그룹2").inviteCode("TESTCD02").createdBy(otherInviter).build());
         GroupInvitation declined = groupInvitationRepository.saveAndFlush(GroupInvitation.builder()
                 .group(otherGroup).inviter(otherInviter).invitee(invitee).build());
         declined.decline();

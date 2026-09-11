@@ -18,4 +18,7 @@ public interface GroupRepository extends JpaRepository<Group, Long> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select g from Group g where g.id = :id")
     Optional<Group> findByIdForUpdate(@Param("id") Long id);
+
+    // 초대 코드 발급 전 존재 확인 — 최종 방어선은 uk_workout_groups_invite_code (GroupService 참고).
+    boolean existsByInviteCode(String inviteCode);
 }

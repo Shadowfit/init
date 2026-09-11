@@ -66,7 +66,7 @@ class GroupInvitationControllerIntegrationTest {
     void setUp() {
         owner = memberRepository.saveAndFlush(newMember("owner@test.com", "owner"));
         invitee = memberRepository.saveAndFlush(newMember("invitee@test.com", "invitee"));
-        group = groupRepository.saveAndFlush(Group.builder().name("그룹").createdBy(owner).build());
+        group = groupRepository.saveAndFlush(Group.builder().name("그룹").inviteCode("TESTCD01").createdBy(owner).build());
         groupMemberRepository.saveAndFlush(GroupMember.builder()
                 .group(group).member(owner).role(GroupRole.OWNER).status(GroupMemberStatus.ACTIVE).build());
         ownerToken = tokenFor(owner);

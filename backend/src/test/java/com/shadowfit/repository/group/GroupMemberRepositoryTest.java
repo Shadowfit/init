@@ -42,7 +42,7 @@ class GroupMemberRepositoryTest {
         leftMember = memberRepository.saveAndFlush(newMember("left@test.com", "left"));
         stranger = memberRepository.saveAndFlush(newMember("stranger@test.com", "stranger"));
 
-        group = groupRepository.saveAndFlush(Group.builder().name("그룹").createdBy(creator).build());
+        group = groupRepository.saveAndFlush(Group.builder().name("그룹").inviteCode("TESTCD01").createdBy(creator).build());
 
         groupMemberRepository.saveAndFlush(newGroupMember(activeMember, GroupMemberStatus.ACTIVE));
         groupMemberRepository.saveAndFlush(newGroupMember(leftMember, GroupMemberStatus.LEFT));

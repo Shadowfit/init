@@ -64,7 +64,7 @@ class GroupInvitationServiceTest {
 
         inviter = newMember(INVITER_ID, "inviter");
         invitee = newMember(INVITEE_ID, "invitee");
-        group = Group.builder().id(GROUP_ID).name("그룹").createdBy(inviter).build();
+        group = Group.builder().id(GROUP_ID).name("그룹").inviteCode("TESTCD01").createdBy(inviter).build();
     }
 
     @Test

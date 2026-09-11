@@ -4,6 +4,7 @@ import com.shadowfit.dto.group.CreateGroupRequestDto;
 import com.shadowfit.dto.group.GroupDetailResponseDto;
 import com.shadowfit.dto.group.GroupEventResponseDto;
 import com.shadowfit.dto.group.GroupResponseDto;
+import com.shadowfit.dto.group.InviteCodeResponseDto;
 import com.shadowfit.global.security.auth.CustomUserDetails;
 import com.shadowfit.repository.group.GroupEventRepository;
 import com.shadowfit.service.group.GroupService;
@@ -51,6 +52,16 @@ public class GroupController {
             @AuthenticationPrincipal CustomUserDetails userDetails
     ) {
         return ResponseEntity.ok(groupService.getGroupDetail(groupId, userDetails.getMember().getId()));
+    }
+
+    @Operation(summary = "초대 코드 재발급",
+            description = "코드 유출 시 그룹장이 새 코드로 갈아끼운다. 이전 코드는 즉시 무효. OWNER 가 아니면 403.")
+    @PostMapping("/{groupId}/invite-code")
+    public ResponseEntity<InviteCodeResponseDto> regenerateInviteCode(
+            @PathVariable Long groupId,
+            @AuthenticationPrincipal CustomUserDetails userDetails
+    ) {
+        return ResponseEntity.ok(groupService.regenerateInviteCode(groupId, userDetails.getMember().getId()));
     }
 
     @Operation(summary = "그룹 탈퇴")
