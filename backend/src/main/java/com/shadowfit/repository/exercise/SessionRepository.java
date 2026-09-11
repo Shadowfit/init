@@ -355,6 +355,20 @@ public interface SessionRepository extends JpaRepository<Session,Long> {
                                              @Param("end") LocalDateTime end);
 
     /**
+     * 모임 출석 캘린더용 — 기간 안 날짜별로 «COMPLETED 세션이 있는 회원 수». 회원마다 인덱스 구간을
+     * seek 하고(IN), 날짜 그룹핑은 그렇게 걸러진 행 위에서만 돈다 — 그룹핑 표현식이 인덱스를 못 타는
+     * 건 여기선 상관없다(필터가 인덱스, 그룹핑은 결과 위. social-cheer-and-group-feed.md §3-E).
+     * 읽는 행 ≤ 인원 × 기간 안 완료 세션수. 행: [java.sql.Date, Long].
+     */
+    @Query("SELECT CAST(s.startTime AS date), COUNT(DISTINCT s.member.id) FROM Session s "
+         + "WHERE s.member.id IN :memberIds AND s.status = :status AND s.startTime BETWEEN :start AND :end "
+         + "GROUP BY CAST(s.startTime AS date)")
+    List<Object[]> countDistinctMembersByDay(@Param("memberIds") Collection<Long> memberIds,
+                                             @Param("status") Status status,
+                                             @Param("start") LocalDateTime start,
+                                             @Param("end") LocalDateTime end);
+
+    /**
      * 연속 출석 계산용 — {@code before} 이전의 세션 시작 시각을 최신순으로 한 페이지. 엔티티가
      * 아니라 시각만 싣는 이유는 {@code findDistinctActiveDates} 와 같고, DISTINCT 를 안 거는 이유는
      * 표현식 DISTINCT 가 임시 테이블을 만들어 LIMIT 의 조기 종료를 잃기 때문이다 — 같은 날의

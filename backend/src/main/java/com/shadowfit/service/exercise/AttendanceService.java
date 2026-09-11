@@ -10,7 +10,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -60,6 +62,22 @@ public class AttendanceService {
         }
         return sessionRepository.findMemberIdsWithStatusBetween(
                 memberIds, Status.COMPLETED, date.atStartOfDay(), date.atTime(23, 59, 59));
+    }
+
+    /**
+     * 기간 안 날짜별 출석 인원 — 여러 회원 중 그날 COMPLETED 세션이 있는 사람 수. 출석 0 인 날은 키가
+     * 없다(호출자가 채운다). 빈 입력이면 빈 맵.
+     */
+    public Map<LocalDate, Integer> attendeeCountsByDay(Collection<Long> memberIds, LocalDate from, LocalDate to) {
+        if (memberIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<LocalDate, Integer> counts = new HashMap<>();
+        for (Object[] row : sessionRepository.countDistinctMembersByDay(
+                memberIds, Status.COMPLETED, from.atStartOfDay(), to.atTime(23, 59, 59))) {
+            counts.put(((java.sql.Date) row[0]).toLocalDate(), ((Number) row[1]).intValue());
+        }
+        return counts;
     }
 
     /**
