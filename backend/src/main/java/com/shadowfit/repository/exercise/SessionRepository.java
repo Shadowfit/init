@@ -3,6 +3,7 @@ package com.shadowfit.repository.exercise;
 import com.shadowfit.model.exercise.Session;
 import com.shadowfit.model.exercise.Status;
 import org.springframework.data.domain.Limit;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -333,4 +334,25 @@ public interface SessionRepository extends JpaRepository<Session,Long> {
      */
     List<Session> findByMemberIdAndExerciseIdAndStatusOrderByStartTimeDesc(
             Long memberId, Long exerciseId, Status status, Limit limit);
+
+    // ─── 출석 (AttendanceService, social-cheer-and-group-feed.md §3-B) ──────────────
+
+    /** 그날 해당 status 세션이 있나 — «오늘 했나» 판정. (member_id, status, start_time) 등치·등치·범위. */
+    boolean existsByMemberIdAndStatusAndStartTimeBetween(Long memberId, Status status,
+                                                         LocalDateTime start, LocalDateTime end);
+
+    /**
+     * 연속 출석 계산용 — {@code before} 이전의 세션 시작 시각을 최신순으로 한 페이지. 엔티티가
+     * 아니라 시각만 싣는 이유는 {@code findDistinctActiveDates} 와 같고, DISTINCT 를 안 거는 이유는
+     * 표현식 DISTINCT 가 임시 테이블을 만들어 LIMIT 의 조기 종료를 잃기 때문이다 — 같은 날의
+     * 중복은 호출부가 날짜 비교로 건너뛴다. 위 {@code ...OrderByStartTimeDesc(Limit)} 와 같은
+     * 인덱스 역방향 걷기라 계정 크기와 무관한 비용(recommendation-algorithm.md §10 실측).
+     */
+    @Query("SELECT s.startTime FROM Session s "
+         + "WHERE s.member.id = :memberId AND s.status = :status AND s.startTime < :before "
+         + "ORDER BY s.startTime DESC")
+    List<LocalDateTime> findCompletedStartTimesBefore(@Param("memberId") Long memberId,
+                                                      @Param("status") Status status,
+                                                      @Param("before") LocalDateTime before,
+                                                      Pageable page);
 }

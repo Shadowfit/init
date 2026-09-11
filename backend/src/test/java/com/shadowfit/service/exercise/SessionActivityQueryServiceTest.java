@@ -109,9 +109,9 @@ class SessionActivityQueryServiceTest {
     }
 
     @Test
-    @DisplayName("getCalendarMain — 연속일수는 COMPLETED가 아닌 세션도 센다 (#541 인덱스 수정이 " +
-            "status IN 절에 전체 상태값을 태우지만, 그건 계획 최적화일 뿐 필터링 의미가 바뀌면 안 된다)")
-    void getCalendarMain_consecutiveDaysCountsAllStatuses() {
+    @DisplayName("getCalendarMain — 연속일수는 COMPLETED 세션만 센다 (출석 정의 통일, " +
+            "social-cheer-and-group-feed.md §3-B 2026-09-11 — 예전엔 FAILED·IN_PROGRESS 도 세서 3이 나왔다)")
+    void getCalendarMain_consecutiveDaysCountsCompletedOnly() {
         LocalDate today = LocalDate.now();
         completedSessionOn(today, 80.0, 100.0, 20);
         sessionOn(today.minusDays(1), Status.FAILED);
@@ -120,7 +120,7 @@ class SessionActivityQueryServiceTest {
         CalendarMainResponseDto result = sessionActivityQueryService.getCalendarMain(
                 member.getId(), today.getYear(), today.getMonthValue());
 
-        assertThat(result.getConsecutiveDays()).isEqualTo(3);
+        assertThat(result.getConsecutiveDays()).isEqualTo(1);
     }
 
     @Test
