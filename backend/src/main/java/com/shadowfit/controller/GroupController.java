@@ -1,6 +1,7 @@
 package com.shadowfit.controller;
 
 import com.shadowfit.dto.group.CreateGroupRequestDto;
+import com.shadowfit.dto.group.GroupAttendanceCalendarDto;
 import com.shadowfit.dto.group.GroupDetailResponseDto;
 import com.shadowfit.dto.group.GroupEventResponseDto;
 import com.shadowfit.dto.group.GroupResponseDto;
@@ -9,6 +10,7 @@ import com.shadowfit.dto.group.JoinGroupRequestDto;
 import com.shadowfit.dto.group.MemberAttendanceStatusDto;
 import com.shadowfit.global.security.auth.CustomUserDetails;
 import com.shadowfit.repository.group.GroupEventRepository;
+import com.shadowfit.service.group.GroupAttendanceCalendarService;
 import com.shadowfit.service.group.GroupService;
 import com.shadowfit.service.group.MemberAttendanceStatusService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -31,6 +33,7 @@ public class GroupController {
     private final GroupService groupService;
     private final GroupEventRepository groupEventRepository;
     private final MemberAttendanceStatusService memberAttendanceStatusService;
+    private final GroupAttendanceCalendarService groupAttendanceCalendarService;
 
     @Operation(summary = "그룹 생성", description = "생성자가 OWNER로 자동 가입된다.")
     @PostMapping
@@ -81,6 +84,20 @@ public class GroupController {
     ) {
         return ResponseEntity.ok(memberAttendanceStatusService.groupMemberStatuses(
                 groupId, userDetails.getMember().getId(), LocalDate.now()));
+    }
+
+    @Operation(summary = "모임 출석 캘린더",
+            description = "그 달의 모든 날에 대해 «COMPLETED 세션이 있는 현재 ACTIVE 멤버 수»와 분모(현재 ACTIVE 멤버 수). "
+                    + "칸 농도 매핑은 프론트. 그룹 멤버가 아니면 403, month 가 1~12 밖이면 400.")
+    @GetMapping("/{groupId}/attendance")
+    public ResponseEntity<GroupAttendanceCalendarDto> getAttendanceCalendar(
+            @PathVariable Long groupId,
+            @RequestParam int year,
+            @RequestParam int month,
+            @AuthenticationPrincipal CustomUserDetails userDetails
+    ) {
+        return ResponseEntity.ok(groupAttendanceCalendarService.monthlyCalendar(
+                groupId, userDetails.getMember().getId(), year, month));
     }
 
     @Operation(summary = "초대 코드 재발급",
