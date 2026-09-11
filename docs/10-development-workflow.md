@@ -99,7 +99,7 @@ eas build --profile development --platform android
 >
 > ⚠️ `refactor/`·`hotfix/` 는 규칙에는 있지만 **실제 이력에 거의 없다.**
 >
-> 📌 **PR 은 필수 경로다.** main 에 직접 푸시하지 않고, CI(`backend-test.yml`·`ai-server-test.yml`·`proto-sync-check.yml`)가 통과해야 머지된다([`18-testing-guide.md`](./18-testing-guide.md) §7). CodeRabbit 리뷰도 붙는다 — 이 저장소는 리뷰에서 잡힌 결함이 여러 건 있어서 **PR 을 형식이 아니라 게이트로 쓴다.**
+> 📌 **PR 은 필수 경로다.** main 에 직접 푸시하지 않고, CI(`backend-test.yml`·`ai-server-test.yml`)가 통과해야 머지된다([`18-testing-guide.md`](./18-testing-guide.md) §7). CodeRabbit 리뷰도 붙는다 — 이 저장소는 리뷰에서 잡힌 결함이 여러 건 있어서 **PR 을 형식이 아니라 게이트로 쓴다.**
 >
 > 🔴 **머지 후 브랜치를 지운다.** 삭제 이력과 복원용 해시는 [`handoff/branch-cleanup-2026-08-06.md`](./handoff/branch-cleanup-2026-08-06.md) 에 남긴다.
 

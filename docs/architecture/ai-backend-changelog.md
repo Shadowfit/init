@@ -321,7 +321,7 @@
 | REST 통신 (WebClient) | 660e294, 0d89668 | gRPC 도입 후 8ac8248에서 잔재 제거 |
 | Spring gRPC 클라이언트 | d6cfc2e, 6ce9a43 | 48bb0fc에서 첫 비즈니스 RPC, 7d51cf6에서 수동 설정 제거 |
 | Spring gRPC 서버 (콜백 수신) | 953bad6 | f172933, ea1c636 등에서 RPC 추가 |
-| proto 양쪽 동기 | 48bb0fc / 6ac0390 | 953bad6, 4eb153b, ea1c636, c52f677, f172933, 8ac8248 (계속 손이 감) |
+| proto 양쪽 동기 | 48bb0fc / 6ac0390 | 953bad6, 4eb153b, ea1c636, c52f677, f172933, 8ac8248 (계속 손이 감) → **2026-09-11 단일화**: 루트 `proto/` 한 벌, 두 이미지 빌드 컨텍스트를 루트로 올림, `proto-sync-check.yml` 삭제, 남은 검사는 «커밋된 pb2 = 원본 재생성» (`ai-server-test.yml`) |
 | AI gRPC 서버 (실제) | e8e1b65 / 1a50c14 | 4a0f456 통합 정리, c7657f1 thread-safety |
 | AI 콜백 client | e8e1b65 / 1a50c14 | c7657f1 재시도 도입 |
 | 내부 토큰 인증 | c52f677 (Spring) + e8e1b65/1a50c14 (AI) | — |

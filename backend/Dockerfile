@@ -1,7 +1,10 @@
 # 빌드 스테이지
 FROM gradle:jdk21 AS builder
 WORKDIR /app
-COPY . .
+# 빌드 컨텍스트는 저장소 루트다(compose: context: . / dockerfile: backend/Dockerfile) —
+# build.gradle 이 ../proto 를 읽어야 해서. backend/ 는 /app 에, proto/ 는 그 옆에 둔다.
+COPY backend/ .
+COPY proto/ ../proto/
 RUN chmod +x ./gradlew
 RUN ./gradlew bootJar -x test --no-daemon
 

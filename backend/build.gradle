@@ -145,6 +145,12 @@ protobuf {
 
 sourceSets {
 	main {
+		// gRPC 계약은 저장소 루트 proto/ 한 벌이다 — ai-server 도 같은 파일에서 생성한다.
+		// 예전엔 backend/src/main/proto 와 ai-server/app/proto 에 사본이 있어 손으로 맞춰야 했다.
+		// Docker 빌드는 컨텍스트가 저장소 루트라(compose·CD) 이 상대경로가 그대로 성립한다.
+		proto {
+			srcDirs = ['../proto']
+		}
 		java {
 			// 하드코딩된 문자열 대신, generateProto 태스크가 만든 결과물 경로를 직접 참조합니다.
 			srcDirs 'src/main/java'

@@ -3,7 +3,7 @@ name: AI server tests
 # ai-server 테스트 스위트를 PR마다 자동 실행한다.
 #
 # 이 워크플로가 없던 동안 ai-server 변경은 자동 검증이 0이었다 — backend-test.yml 은
-# paths 필터가 backend/** 라 걸리지 않고, proto-sync-check.yml 은 proto 파일 diff 만 본다.
+# paths 필터가 backend/** 라 걸리지 않았다(proto-sync-check.yml 이 있던 시절엔 그것도 proto diff 만 봤다).
 # 그래서 ai-server 만 고친 PR 은 체크 자체가 뜨지 않았다 (이슈 #96).
 #
 # 테스트는 외부 DB·시크릿 없이 러너 단독으로 완결된다 (backend-test.yml 이 H2 로 그런 것과
@@ -18,11 +18,13 @@ on:
   pull_request:
     paths:
       - 'ai-server/**'
+      - 'proto/**'
       - '.github/workflows/ai-server-test.yml'
   push:
     branches: [main]
     paths:
       - 'ai-server/**'
+      - 'proto/**'
       - '.github/workflows/ai-server-test.yml'
 
 # 같은 브랜치에 연속 푸시하면 이전 실행은 취소 — 러너 시간 낭비 방지
@@ -69,6 +71,19 @@ jobs:
       #    실패가 아니라 **침묵**이라 안 보였다. pytest 는 두 형태를 모두 걷으므로 테스트를
       #    한 판도 고쳐 쓰지 않고 살아난다. 의존성은 requirements-dev.txt 로 갈라 **운영
       #    이미지에는 안 들어간다**(Dockerfile 은 requirements.txt 만 설치한다).
+      # 커밋된 exercise_pb2*.py 가 proto/exercise.proto 에서 재생성한 것과 같은지 본다.
+      # 계약 원본은 루트 proto/ 한 벌이고, 이미지는 거기서 다시 생성하지만 로컬 실행·pytest 는
+      # 커밋본을 import 한다 — 원본만 고치고 재생성을 빠뜨리면 «테스트는 옛 계약, 이미지는 새 계약»
+      # 이 된다. 예전 proto-sync-check.yml(두 .proto 의 diff)이 하던 역할을 이 검사가 잇는다.
+      # 생성 결과가 grpcio-tools 버전에 묶이므로 requirements.txt 가 그 버전을 고정한다.
+      - name: Check committed gRPC stubs match proto/
+        working-directory: ai-server
+        run: |
+          ./scripts/gen_proto.sh
+          if ! git diff --exit-code -- exercise_pb2.py exercise_pb2_grpc.py; then
+            echo "::error::ai-server/exercise_pb2*.py 가 proto/exercise.proto 와 다릅니다 — cd ai-server && ./scripts/gen_proto.sh 로 재생성해서 커밋하세요."
+            exit 1
+          fi
       - name: Run ai-server test suite
         working-directory: ai-server
         run: |

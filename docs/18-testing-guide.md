@@ -220,7 +220,7 @@ class XxxIntegrationTest {
 |---|---|
 | `backend-test.yml` | Spring 테스트. `workflow_call` 로 CD 가 재사용한다 |
 | `ai-server-test.yml` | ai-server(pytest) 테스트. 〃 |
-| **`proto-sync-check.yml`** | 🔴 **`backend/src/main/proto/` ↔ `ai-server/app/proto/` 동기 검사.** 이 저장소의 오래된 약점(proto 수동 동기)을 자동화로 막은 자리 |
+| ~~`proto-sync-check.yml`~~ | **2026-09-11 삭제** — 계약이 루트 `proto/` 한 벌이 되면서 갈릴 사본 자체가 없어졌다. 남은 검사(커밋된 `exercise_pb2*.py` 가 원본과 같은가)는 `ai-server-test.yml` 안의 한 step 이다 |
 | `cd-backend.yml` · `cd-ai-server.yml` | 테스트 통과한 커밋만 이미지로 → GHCR 푸시. **배포 job 은 미구현**(대상 호스트 없음) |
 | `dependency-submission.yml` · `split-modules.yml` | 의존성 그래프 · 모듈 분리 |
 
