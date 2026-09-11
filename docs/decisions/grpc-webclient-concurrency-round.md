@@ -1,6 +1,6 @@
 # 설계: 동시성 축 — 클라이언트 쪽 고정비는 동시 호출에서 어떻게 커지나 (4차 라운드)
 
-상태: ✅ **rig 완성·로컬 스모크 통과 (2026-09-11) — EC2 기동은 사용자 결정 대기.** §7 미결 6개 + §9-1 의 설계 구멍 셋 전부 사용자 확정. 사용자가 [`grpc-webclient-empirical-comparison.md` §11-4](./grpc-webclient-empirical-comparison.md#11-4-남은-선택지) 의 **ㄴ(동시성 축 먼저 → 결정)** 을 골랐다(2026-09-11).
+상태: 🚀 **EC2 라운드 실행 중 (2026-09-11 13:48Z 기동, `i-039692b1d2f3b7226`).** §7 미결 6개 + §9-1 의 설계 구멍 셋 전부 사용자 확정. 사용자가 [`grpc-webclient-empirical-comparison.md` §11-4](./grpc-webclient-empirical-comparison.md#11-4-남은-선택지) 의 **ㄴ(동시성 축 먼저 → 결정)** 을 골랐다(2026-09-11).
 작성: 2026-09-11
 배경: 3차 라운드([`grpc-webclient-transport-cost-breakdown.md`](./grpc-webclient-transport-cost-breakdown.md))가 「기제는 홉이 아니라 **클라이언트 쪽**」까지 좁혔고, 동시성 축은 세 라운드 내내 미측정이었다.
 연관: [`grpc-webclient-production-client-round.md`](./grpc-webclient-production-client-round.md)(2차 — 계기·rig 의 원형) ·
@@ -319,4 +319,9 @@ rig 이 끝까지 도는 것만 확인했다.
 - 2026-09-11: 스모크가 드러낸 **설계 구멍 셋**(§9-1 5·6·7 — 검출기 풀 상한 · JWT 수명 · 사이클 안 AI 호출
   비율)을 **사용자 확정으로 전부 제안대로** 닫았다: AI 메모리 6000m(§5-3 ④) · JWT 14400s(⑤) ·
   드라이버를 «VU 당 세션 1개 + 재부착 N 회» 로(§5-1). 지표 3·4 의 분모가 사이클 → 재부착 건수로
-  바뀌었다. **EC2 라운드 기동은 아직 — 사용자 결정.**
+  바뀌었다.
+- 2026-09-11: **EC2 라운드 기동**(사용자 결정) — `i-039692b1d2f3b7226`(`c7i.2xlarge`, ap-northeast-2c, gp3 100GB,
+  AL2023 `ami-071eb8c676c4c4bf5`), `ROLE=client-ab`, `REF=0276728d`(커밋 SHA 고정, 브랜치
+  `test/webclient-full-journey` 를 원격에 올린 뒤), `PHASES="clientconc ridealong collect"`,
+  N=100 × 블록 5 × c {1,4,8,16,32} × 팔 2. `--instance-initiated-shutdown-behavior terminate`,
+  태그 `Project=shadowfit-measure`, 5시간 상한 감시견. 🔴 **main 으로 rebase 하지 않았다**(2차 §8 과 같은 조건).
