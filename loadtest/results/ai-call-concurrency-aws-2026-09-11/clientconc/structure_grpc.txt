@@ -1,0 +1,48 @@
+# 구조 확인 게이트 (grpc) 2026-09-11T13:55:21Z
+## JVM 이 보는 코어 수 (system_cpu_count — /actuator/metrics 는 401 이라 prometheus 에서 읽는다)
+system_cpu_count 4.0
+## 백엔드 스레드 이름별 개수 (/proc/*/task/*/comm — 15자 절단)
+     33 http-nio-8080-e
+     10 http-nio-9090-e
+      5 shadowfit-sched
+      5 grpc-default-ex
+      4 grpc-default-wo
+      4 Catalina-utilit
+      2 java
+      2 cat
+      1 task-8
+      1 task-7
+      1 task-6
+      1 task-5
+      1 task-4
+      1 task-3
+      1 task-2
+      1 task-1
+      1 sort
+      1 sh
+      1 mysql-cj-abando
+      1 http-nio-9090-P
+      1 http-nio-9090-A
+      1 http-nio-8080-P
+      1 http-nio-8080-A
+      1 grpc-server-con
+      1 grpc-default-bo
+      1 container-1
+      1 container-0
+      1 VM Thread
+      1 VM Periodic Tas
+      1 Signal Dispatch
+      1 Service Thread
+      1 Reference Handl
+      1 Notification Th
+      1 Monitor Deflati
+      1 HikariPool-1:ho
+      1 GC Thread#3
+      1 GC Thread#2
+      1 GC Thread#1
+      1 GC Thread#0
+      1 G1 Service
+## 기대(§2): reactor-http-epoll|nio = max(cores,4) · grpc-default-worker-ELG = cores×2(🟡 확인 대상)
+## 🔴 comm 은 15자 절단이다 — reactor-http-epoll-N 은 «reactor-http-ep», grpc-default-worker-ELG-N 은 «grpc-default-wo» 로 보인다
+## AI 컨테이너: GRPC_MAX_WORKERS=40 AI_WORKER_COUNT=3
+## 백엔드: AI_CHANNEL_POOL_SIZE=3 OUTBOX_PUBLISHER_BATCH_SIZE=200

@@ -1,6 +1,6 @@
 # 설계: 동시성 축 — 클라이언트 쪽 고정비는 동시 호출에서 어떻게 커지나 (4차 라운드)
 
-상태: 🚀 **EC2 라운드 실행 중 (2026-09-11 13:48Z 기동, `i-039692b1d2f3b7226`).** §7 미결 6개 + §9-1 의 설계 구멍 셋 전부 사용자 확정. 사용자가 [`grpc-webclient-empirical-comparison.md` §11-4](./grpc-webclient-empirical-comparison.md#11-4-남은-선택지) 의 **ㄴ(동시성 축 먼저 → 결정)** 을 골랐다(2026-09-11).
+상태: ✅ **실행 완료 (2026-09-11)** — 결과: [`ai-call-concurrency-aws-2026-09-11`](../../loadtest/results/ai-call-concurrency-aws-2026-09-11/README.md). **답: 델타는 c 와 함께 커지지만 기울기의 기제는 Spring 클라이언트가 아니라 AI 쪽(REST 미러 호출당 +1~3 cpu-ms 가 포화 구간에서 큐로 증폭)이다. Spring CPU 대가는 검출 안 됨(판별 불가).** 채택 결정은 여전히 미결. §7 미결 6개 + §9-1 의 설계 구멍 셋 전부 사용자 확정. 사용자가 [`grpc-webclient-empirical-comparison.md` §11-4](./grpc-webclient-empirical-comparison.md#11-4-남은-선택지) 의 **ㄴ(동시성 축 먼저 → 결정)** 을 골랐다(2026-09-11).
 작성: 2026-09-11
 배경: 3차 라운드([`grpc-webclient-transport-cost-breakdown.md`](./grpc-webclient-transport-cost-breakdown.md))가 「기제는 홉이 아니라 **클라이언트 쪽**」까지 좁혔고, 동시성 축은 세 라운드 내내 미측정이었다.
 연관: [`grpc-webclient-production-client-round.md`](./grpc-webclient-production-client-round.md)(2차 — 계기·rig 의 원형) ·
@@ -325,3 +325,17 @@ rig 이 끝까지 도는 것만 확인했다.
   `test/webclient-full-journey` 를 원격에 올린 뒤), `PHASES="clientconc ridealong collect"`,
   N=100 × 블록 5 × c {1,4,8,16,32} × 팔 2. `--instance-initiated-shutdown-behavior terminate`,
   태그 `Project=shadowfit-measure`, 5시간 상한 감시견. 🔴 **main 으로 rebase 하지 않았다**(2차 §8 과 같은 조건).
+- 2026-09-11: **실행 완료.** 본 측정 1,554초, 칸 50 중 49 유효(b2/grpc/c32 는 AI 컨테이너 재시작으로 제외). §6 의 규칙으로:
+  - **규칙 1**: Reattach 평균·p50 은 5수준 전부 안 겹침(grpc 우세). c=1 델타 **1.2~3.9ms**(2차 닻과 같은 자리).
+  - **규칙 2**: c≥8 부터 델타가 c=1 범위를 벗어나 **커진다**(c=32 9.7~29.0ms). 그러나 **c=4(이벤트루프 문턱)에서는 안 변하고**,
+    커지기 시작하는 자리는 **AI 가 3코어에 붙는 포화 지점**(c=8)이다.
+  - **기제**: AI 컨테이너 CPU/재부착이 webclient 팔에서 **+1~3 cpu-ms, 5수준 전부 안 겹침, c 와 무관** — 호출당 고정 서버 비용이
+    포화 구간에서 큐로 증폭된 것. 포화 처리량 webclient **−15%**(275~283 vs 234~241 재부착/초). nginx 는 호출당 0.5~0.7 cpu-ms.
+  - **Spring backend CPU/재부착은 판별 불가** — 칸이 1~14초(c7i 가 예상보다 빨라)라 cgroup 차분이 JIT·GC 에 묻혔다. §3 의
+    「포화에도 살아남는 지표」가 **칸이 짧으면 안 살아남는다** — 다시 재려면 N≥1,000.
+  - 🔴 **3차 정정**: 3차의 「잔여 = 클라이언트 쪽」에는 AI 쪽 경로 차이(REST 미러 ↔ gRPC 서비서)가 들어 있었다. 이번 c=1 의
+    AI CPU 델타 0.1~1.9ms 가 그 몫이다. «클라이언트 + 서버 처리 경로» 로 고쳐 읽는다.
+  - Start 콜백 지연은 c=16 부터 급증(webclient 317~365 vs 96~171ms) — HTTP/1.1 풀 16 과 자리가 맞지만 계기 없이 가설.
+  - **§6 의 결론 문장 셋 중 어느 것도 그대로는 안 맞는다** — 정직한 문장은 결과 README §7-2.
+  - 남은 것: 재시작 원인(OOM 추정, docker events 미수집) · nginx 본문 디스크 버퍼링(31,388건) · AI 쪽 1~3ms 의 내부 분해.
+    **채택은 미결** — empirical-comparison §11-4 로 돌아간다.

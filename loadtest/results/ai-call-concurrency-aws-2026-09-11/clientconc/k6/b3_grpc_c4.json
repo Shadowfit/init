@@ -1,0 +1,19 @@
+{
+  "vus": 4,
+  "iters_per_vu": 100,
+  "cell_seq": 38,
+  "rotation": 2,
+  "iterations": 400,
+  "reattach_ok": 400,
+  "start_fail": 0,
+  "start_409": 0,
+  "reattach_bad": 0,
+  "end_bad": 0,
+  "http_req_failed_rate": 0,
+  "t_reattach_ms": {
+    "avg": 12.905,
+    "p50": 12,
+    "p95": 20
+  },
+  "test_run_duration_ms": 1474.856745
+}

@@ -1,0 +1,236 @@
+# Spring→AI 동시성 축 — 2026-09-11T13:52:58Z
+BASE=http://localhost:8080 N=100 BLOCKS=5 WARMUP=10 LEVELS=[1 4 8 16 32] ARMS=[grpc webclient] POOL=3
+## AI 재기동(오버레이 적용: GRPC_MAX_WORKERS=40 · mem_limit=6000m) (13:52:58)
+## 팔 전환 → grpc (client-type=grpc nginx-host=-) (13:53:13)
+   AI_CLIENT_TYPE=grpc · AI_NGINX_HOST=- · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 32 여야 한다)
+## 계정 준비 64 개 (간격 1.3s)
+  ✅ 계정 64 개
+   버림 grpc c=1
+   버림 grpc c=4
+   버림 grpc c=8
+   버림 grpc c=16
+   버림 grpc c=32
+   배수 완료(discard/grpc) — stop 누적 60
+## 구조 게이트 회수 — /root/init/loadtest/results/ai-call-concurrency-aws-2026-09-11/clientconc/structure_grpc.txt
+   [grpc] reactor-http-* 이벤트루프 0 개 · grpc-default-worker-ELG 4 개 · JVM cores 4.0 (c 수준 [1 4 8 16 32] 이 이 문턱을 끼우는지 볼 것)
+## 팔 전환 → webclient (client-type=webclient nginx-host=ai-nginx) (13:55:21)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 32 여야 한다)
+   버림 webclient c=1
+   버림 webclient c=4
+   버림 webclient c=8
+   버림 webclient c=16
+   버림 webclient c=32
+   배수 완료(discard/webclient) — stop 누적 48
+## 구조 게이트 회수 — /root/init/loadtest/results/ai-call-concurrency-aws-2026-09-11/clientconc/structure_webclient.txt
+   [webclient] reactor-http-* 이벤트루프 4 개 · grpc-default-worker-ELG 3 개 · JVM cores 4.0 (c 수준 [1 4 8 16 32] 이 이 문턱을 끼우는지 볼 것)
+## 블록 1 팔 순서:  grpc webclient
+## 팔 전환 → grpc (client-type=grpc nginx-host=-) (13:55:58)
+   AI_CLIENT_TYPE=grpc · AI_NGINX_HOST=- · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 32 여야 한다)
+   배수 완료(warmup b1/grpc) — stop 누적 1
+## 블록 1 grpc c 순서:  1 4 8 16 32
+     k6| k6 재부착 100/100 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b1_grpc_c1) — stop 누적 2
+   ✅ 칸 b1_grpc_c1 회수 — 벽시계 1.548s · k6 rc=0
+     k6| k6 재부착 400/400 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b1_grpc_c4) — stop 누적 6
+   ✅ 칸 b1_grpc_c4 회수 — 벽시계 1.893s · k6 rc=0
+     k6| k6 재부착 800/800 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b1_grpc_c8) — stop 누적 14
+   ✅ 칸 b1_grpc_c8 회수 — 벽시계 2.934s · k6 rc=0
+     k6| k6 재부착 1600/1600 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b1_grpc_c16) — stop 누적 30
+   ✅ 칸 b1_grpc_c16 회수 — 벽시계 5.900s · k6 rc=0
+     k6| k6 재부착 3200/3200 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b1_grpc_c32) — stop 누적 62
+   ✅ 칸 b1_grpc_c32 회수 — 벽시계 11.312s · k6 rc=0
+## 팔 전환 → webclient (client-type=webclient nginx-host=ai-nginx) (13:58:13)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 32 여야 한다)
+   배수 완료(warmup b1/webclient) — stop 누적 1
+## 블록 1 webclient c 순서:  4 8 16 32 1
+     k6| k6 재부착 400/400 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b1_webclient_c4) — stop 누적 5
+   ✅ 칸 b1_webclient_c4 회수 — 벽시계 2.698s · k6 rc=0
+     k6| k6 재부착 800/800 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b1_webclient_c8) — stop 누적 13
+   ✅ 칸 b1_webclient_c8 회수 — 벽시계 3.656s · k6 rc=0
+     k6| k6 재부착 1600/1600 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b1_webclient_c16) — stop 누적 29
+   ✅ 칸 b1_webclient_c16 회수 — 벽시계 7.178s · k6 rc=0
+     k6| k6 재부착 3200/3200 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b1_webclient_c32) — stop 누적 61
+   ✅ 칸 b1_webclient_c32 회수 — 벽시계 13.439s · k6 rc=0
+     k6| k6 재부착 100/100 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b1_webclient_c1) — stop 누적 62
+   ✅ 칸 b1_webclient_c1 회수 — 벽시계 1.048s · k6 rc=0
+## 블록 2 팔 순서:  webclient grpc
+## 팔 전환 → webclient (client-type=webclient nginx-host=ai-nginx) (14:00:32)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 32 여야 한다)
+   배수 완료(warmup b2/webclient) — stop 누적 1
+## 블록 2 webclient c 순서:  8 16 32 1 4
+     k6| k6 재부착 800/800 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b2_webclient_c8) — stop 누적 9
+   ✅ 칸 b2_webclient_c8 회수 — 벽시계 4.209s · k6 rc=0
+     k6| k6 재부착 1600/1600 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b2_webclient_c16) — stop 누적 25
+   ✅ 칸 b2_webclient_c16 회수 — 벽시계 7.242s · k6 rc=0
+     k6| k6 재부착 3200/3200 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b2_webclient_c32) — stop 누적 57
+   ✅ 칸 b2_webclient_c32 회수 — 벽시계 13.675s · k6 rc=0
+     k6| k6 재부착 100/100 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b2_webclient_c1) — stop 누적 58
+   ✅ 칸 b2_webclient_c1 회수 — 벽시계 1.066s · k6 rc=0
+     k6| k6 재부착 400/400 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b2_webclient_c4) — stop 누적 62
+   ✅ 칸 b2_webclient_c4 회수 — 벽시계 1.704s · k6 rc=0
+## 팔 전환 → grpc (client-type=grpc nginx-host=-) (14:02:56)
+   AI_CLIENT_TYPE=grpc · AI_NGINX_HOST=- · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 32 여야 한다)
+   배수 완료(warmup b2/grpc) — stop 누적 1
+## 블록 2 grpc c 순서:  16 32 1 4 8
+     k6| k6 재부착 1600/1600 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b2_grpc_c16) — stop 누적 17
+   ✅ 칸 b2_grpc_c16 회수 — 벽시계 6.495s · k6 rc=0
+     k6| k6 재부착 119/3200 · start_fail 0(409: 0) · reattach_bad 3081 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b2_grpc_c32) — stop 누적 49
+   ✅ 칸 b2_grpc_c32 회수 — 벽시계 5.483s · k6 rc=0
+     k6| k6 재부착 100/100 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b2_grpc_c1) — stop 누적 50
+   ✅ 칸 b2_grpc_c1 회수 — 벽시계 0.891s · k6 rc=0
+     k6| k6 재부착 400/400 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b2_grpc_c4) — stop 누적 54
+   ✅ 칸 b2_grpc_c4 회수 — 벽시계 1.502s · k6 rc=0
+     k6| k6 재부착 800/800 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b2_grpc_c8) — stop 누적 62
+   ✅ 칸 b2_grpc_c8 회수 — 벽시계 2.685s · k6 rc=0
+## 블록 3 팔 순서:  grpc webclient
+## 팔 전환 → grpc (client-type=grpc nginx-host=-) (14:05:10)
+   AI_CLIENT_TYPE=grpc · AI_NGINX_HOST=- · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 32 여야 한다)
+   배수 완료(warmup b3/grpc) — stop 누적 1
+## 블록 3 grpc c 순서:  32 1 4 8 16
+     k6| k6 재부착 3200/3200 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b3_grpc_c32) — stop 누적 33
+   ✅ 칸 b3_grpc_c32 회수 — 벽시계 11.492s · k6 rc=0
+     k6| k6 재부착 100/100 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b3_grpc_c1) — stop 누적 34
+   ✅ 칸 b3_grpc_c1 회수 — 벽시계 0.950s · k6 rc=0
+     k6| k6 재부착 400/400 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b3_grpc_c4) — stop 누적 38
+   ✅ 칸 b3_grpc_c4 회수 — 벽시계 1.500s · k6 rc=0
+     k6| k6 재부착 800/800 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b3_grpc_c8) — stop 누적 46
+   ✅ 칸 b3_grpc_c8 회수 — 벽시계 2.706s · k6 rc=0
+     k6| k6 재부착 1600/1600 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b3_grpc_c16) — stop 누적 62
+   ✅ 칸 b3_grpc_c16 회수 — 벽시계 5.750s · k6 rc=0
+## 팔 전환 → webclient (client-type=webclient nginx-host=ai-nginx) (14:07:26)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 32 여야 한다)
+   배수 완료(warmup b3/webclient) — stop 누적 1
+## 블록 3 webclient c 순서:  1 4 8 16 32
+     k6| k6 재부착 100/100 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b3_webclient_c1) — stop 누적 2
+   ✅ 칸 b3_webclient_c1 회수 — 벽시계 1.907s · k6 rc=0
+     k6| k6 재부착 400/400 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b3_webclient_c4) — stop 누적 6
+   ✅ 칸 b3_webclient_c4 회수 — 벽시계 2.508s · k6 rc=0
+     k6| k6 재부착 800/800 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b3_webclient_c8) — stop 누적 14
+   ✅ 칸 b3_webclient_c8 회수 — 벽시계 3.477s · k6 rc=0
+     k6| k6 재부착 1600/1600 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b3_webclient_c16) — stop 누적 30
+   ✅ 칸 b3_webclient_c16 회수 — 벽시계 7.063s · k6 rc=0
+     k6| k6 재부착 3200/3200 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b3_webclient_c32) — stop 누적 62
+   ✅ 칸 b3_webclient_c32 회수 — 벽시계 13.360s · k6 rc=0
+## 블록 4 팔 순서:  webclient grpc
+## 팔 전환 → webclient (client-type=webclient nginx-host=ai-nginx) (14:09:45)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 32 여야 한다)
+   배수 완료(warmup b4/webclient) — stop 누적 1
+## 블록 4 webclient c 순서:  4 8 16 32 1
+     k6| k6 재부착 400/400 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b4_webclient_c4) — stop 누적 5
+   ✅ 칸 b4_webclient_c4 회수 — 벽시계 2.861s · k6 rc=0
+     k6| k6 재부착 800/800 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b4_webclient_c8) — stop 누적 13
+   ✅ 칸 b4_webclient_c8 회수 — 벽시계 3.639s · k6 rc=0
+     k6| k6 재부착 1600/1600 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b4_webclient_c16) — stop 누적 29
+   ✅ 칸 b4_webclient_c16 회수 — 벽시계 7.151s · k6 rc=0
+     k6| k6 재부착 3200/3200 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b4_webclient_c32) — stop 누적 61
+   ✅ 칸 b4_webclient_c32 회수 — 벽시계 13.303s · k6 rc=0
+     k6| k6 재부착 100/100 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b4_webclient_c1) — stop 누적 62
+   ✅ 칸 b4_webclient_c1 회수 — 벽시계 1.030s · k6 rc=0
+## 팔 전환 → grpc (client-type=grpc nginx-host=-) (14:12:05)
+   AI_CLIENT_TYPE=grpc · AI_NGINX_HOST=- · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 32 여야 한다)
+   배수 완료(warmup b4/grpc) — stop 누적 1
+## 블록 4 grpc c 순서:  8 16 32 1 4
+     k6| k6 재부착 800/800 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b4_grpc_c8) — stop 누적 9
+   ✅ 칸 b4_grpc_c8 회수 — 벽시계 3.734s · k6 rc=0
+     k6| k6 재부착 1600/1600 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b4_grpc_c16) — stop 누적 25
+   ✅ 칸 b4_grpc_c16 회수 — 벽시계 5.989s · k6 rc=0
+     k6| k6 재부착 3200/3200 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b4_grpc_c32) — stop 누적 57
+   ✅ 칸 b4_grpc_c32 회수 — 벽시계 11.397s · k6 rc=0
+     k6| k6 재부착 100/100 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b4_grpc_c1) — stop 누적 58
+   ✅ 칸 b4_grpc_c1 회수 — 벽시계 0.778s · k6 rc=0
+     k6| k6 재부착 400/400 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b4_grpc_c4) — stop 누적 62
+   ✅ 칸 b4_grpc_c4 회수 — 벽시계 1.366s · k6 rc=0
+## 블록 5 팔 순서:  grpc webclient
+## 팔 전환 → grpc (client-type=grpc nginx-host=-) (14:14:20)
+   AI_CLIENT_TYPE=grpc · AI_NGINX_HOST=- · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 32 여야 한다)
+   배수 완료(warmup b5/grpc) — stop 누적 1
+## 블록 5 grpc c 순서:  16 32 1 4 8
+     k6| k6 재부착 1600/1600 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b5_grpc_c16) — stop 누적 17
+   ✅ 칸 b5_grpc_c16 회수 — 벽시계 6.503s · k6 rc=0
+     k6| k6 재부착 3200/3200 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b5_grpc_c32) — stop 누적 49
+   ✅ 칸 b5_grpc_c32 회수 — 벽시계 11.623s · k6 rc=0
+     k6| k6 재부착 100/100 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b5_grpc_c1) — stop 누적 50
+   ✅ 칸 b5_grpc_c1 회수 — 벽시계 0.846s · k6 rc=0
+     k6| k6 재부착 400/400 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b5_grpc_c4) — stop 누적 54
+   ✅ 칸 b5_grpc_c4 회수 — 벽시계 1.403s · k6 rc=0
+     k6| k6 재부착 800/800 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b5_grpc_c8) — stop 누적 62
+   ✅ 칸 b5_grpc_c8 회수 — 벽시계 2.643s · k6 rc=0
+## 팔 전환 → webclient (client-type=webclient nginx-host=ai-nginx) (14:16:34)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 32 여야 한다)
+   배수 완료(warmup b5/webclient) — stop 누적 1
+## 블록 5 webclient c 순서:  32 1 4 8 16
+     k6| k6 재부착 3200/3200 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b5_webclient_c32) — stop 누적 33
+   ✅ 칸 b5_webclient_c32 회수 — 벽시계 13.703s · k6 rc=0
+     k6| k6 재부착 100/100 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b5_webclient_c1) — stop 누적 34
+   ✅ 칸 b5_webclient_c1 회수 — 벽시계 1.204s · k6 rc=0
+     k6| k6 재부착 400/400 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b5_webclient_c4) — stop 누적 38
+   ✅ 칸 b5_webclient_c4 회수 — 벽시계 1.982s · k6 rc=0
+     k6| k6 재부착 800/800 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b5_webclient_c8) — stop 누적 46
+   ✅ 칸 b5_webclient_c8 회수 — 벽시계 3.255s · k6 rc=0
+     k6| k6 재부착 1600/1600 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b5_webclient_c16) — stop 누적 62
+   ✅ 칸 b5_webclient_c16 회수 — 벽시계 6.988s · k6 rc=0
+## 완료 2026-09-11T14:18:52Z — 칸 50 개 · 스크레이프 100 개
+   집계: python loadtest/analyze_ai_call_concurrency.py /root/init/loadtest/results/ai-call-concurrency-aws-2026-09-11/clientconc
+## 완료 2026-09-11T14:18:52Z — 칸 50 개 · 스크레이프 100 개
+   집계: python loadtest/analyze_ai_call_concurrency.py /root/init/loadtest/results/ai-call-concurrency-aws-2026-09-11/clientconc
