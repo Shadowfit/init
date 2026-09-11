@@ -44,7 +44,9 @@ public class Group {
      * 발급은 {@code InviteCodeGenerator}, 유일성은 {@code uk_workout_groups_invite_code} 가
      * 최종 방어선. 유출 시 {@link #regenerateInviteCode(String)} 로 OWNER 가 갈아끼운다.
      */
-    @Column(name = "invite_code", nullable = false, unique = true, length = 8)
+    // V15 는 CHAR(8) — 길이 고정 코드라 CHAR 이 맞고, race 프로파일의 ddl-auto: validate 가 CHAR↔VARCHAR 을
+    // 동치로 안 봐서 선언을 맞춘다 (#722 CI 에서 잡힘 — #720 머지 직후).
+    @Column(name = "invite_code", nullable = false, unique = true, columnDefinition = "CHAR(8)")
     private String inviteCode;
 
     @ManyToOne(fetch = FetchType.LAZY)

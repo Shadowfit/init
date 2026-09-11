@@ -70,7 +70,8 @@ Windows PowerShell:
 > 측정 장치(`explain.capture`·`sweep.load`·`BatchUpdateReturnValueProbe`)는 시딩된 외부 DB 를 보므로 그대로 게이트 뒤에 남는다.
 >
 > **validate 를 처음 켠 날 잡힌 것** (전부 이 커밋에서 해소): 죽은 `Authority` 엔티티(참조 0·테이블 없음 → 삭제),
-> `Double`↔`DECIMAL` 4컬럼·`PoseData.joint_coordinates` TEXT↔JSON(→ `columnDefinition` 으로 엔티티가 DB 를 따라감).
+> `Double`↔`DECIMAL` 4컬럼·`PoseData.joint_coordinates` TEXT↔JSON(→ `columnDefinition` 으로 엔티티가 DB 를 따라감),
+> 그리고 PR 이 열린 사이 머지된 #720 의 `workout_groups.invite_code` CHAR(8)↔`length = 8`(VARCHAR) — **CI 의 머지 ref 에서 잡혔다**.
 > 그리고 race 테스트 3개가 V10 이 시드한 `LOWER` 카테고리를 다시 INSERT 하다 죽고 있었다 — V10(08-25) 이후 한 번도 안 돈 상태.
 
 ### 2.2 build.gradle 의존성
