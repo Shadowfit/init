@@ -1,5 +1,6 @@
 package com.shadowfit.service.exercise;
 
+import com.shadowfit.support.MySqlContainerSupport;
 import com.shadowfit.grpc.PoseDataRequest;
 import com.shadowfit.model.exercise.Exercise;
 import com.shadowfit.model.exercise.Category;
@@ -13,7 +14,6 @@ import com.shadowfit.repository.member.MemberRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -58,20 +58,13 @@ import static org.mockito.Mockito.doAnswer;
  * 이라 Hibernate 가 {@code PoseData} 엔티티의 {@code @ManyToOne @JoinColumn(session_id)} 에서
  * FK 를 만들어버린다. 프로덕션에는 없는 FK 다. 그러면 ②가 참조무결성 위반으로 <b>터져서</b>
  * 고아가 안 생긴다 — 재현이 안 되는 게 아니라 결과가 반대로 나온다. "FK 가 없다"는 전제 위에
- *   for f in backend/src/main/resources/db/migration/V*.sql; do
- *     docker exec -i shadowfit-race-mysql mysql -uroot -pracetest shadowfit &lt; "$f"; done
- *   (V1 하나만 적재하면 안 된다 — 마이그레이션이 V8 까지 왔다. #342)
- * 그래서 {@code application-race.yml}(3307 일회용 컨테이너)을 쓴다.
+ * 세워진 결함은 원리상 H2 로 검증할 수 없다. 그래서 {@code application-race.yml}(실 MySQL,
+ * Flyway 가 운영과 같은 스키마를 만든다)을 쓴다.
  *
- * <p><b>실행법</b> — 시스템 프로퍼티가 없으면 통째로 건너뛰므로 CI 는 영향받지 않는다:
+ * <p><b>실행법</b> — {@link MySqlContainerSupport} 가 mysql:8.0 컨테이너를 띄우고 Flyway 가
+ * 스키마를 만든다. Docker 가 없으면 «건너뜀» 으로 보고된다(CI 러너에는 있다):
  * <pre>
- *   docker run -d --name shadowfit-race-mysql -e MYSQL_ROOT_PASSWORD=racetest \
- *     -e MYSQL_DATABASE=shadowfit -p 3307:3306 mysql:8.0 \
- *     --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
- *   for f in backend/src/main/resources/db/migration/V*.sql; do
- *     docker exec -i shadowfit-race-mysql mysql -uroot -pracetest shadowfit &lt; "$f"; done
- *   (V1 하나만 적재하면 안 된다 — 마이그레이션이 V8 까지 왔다. #342)
- *   ./gradlew :backend:test --tests '*PoseDataOrphanRaceTest' -Drace.mysql=true
+ *   ./gradlew :backend:test --tests '*PoseDataOrphanRaceTest'
  * </pre>
  *
  * <p><b>레이스를 타이밍에 맡기지 않는 이유.</b> ①과 ② 사이는 다운샘플 계산뿐이라 실제 창은
@@ -82,10 +75,8 @@ import static org.mockito.Mockito.doAnswer;
  */
 @SpringBootTest
 @ActiveProfiles("race")
-@EnabledIfSystemProperty(named = "race.mysql", matches = "true",
-        disabledReason = "실제 MySQL(3307)이 필요 — 클래스 주석의 docker 명령 참고")
 @DisplayName("pose_data 고아 행 레이스")
-class PoseDataOrphanRaceTest {
+class PoseDataOrphanRaceTest extends MySqlContainerSupport {
 
     private static final int FRAME_COUNT = 10; // DOWNSAMPLE_WINDOW=5 → 2행 저장
 
@@ -214,7 +205,10 @@ class PoseDataOrphanRaceTest {
                 .role(UserRole.USER).build());
         memberId = member.getId();
 
-        Category category = categoryRepository.save(Category.builder().name("LOWER").build());
+        // V10 이 LOWER 를 시드하므로 있으면 쓰고 없으면 만든다 — Flyway 스키마 위에서 도는 지금은
+        // 항상 «있다» 쪽이다(예전 수동 절차 시절에 쓰인 무조건 save 는 UNIQUE 위반으로 죽는다).
+        Category category = categoryRepository.findByName("LOWER")
+                .orElseGet(() -> categoryRepository.save(Category.builder().name("LOWER").build()));
         Exercise exercise = exercisesRepository.saveAndFlush(Exercise.builder()
                 .name("스쿼트").category(category).expectedDurationMinutes(15)
                 .syncThresholdBeginner(new BigDecimal("60.00"))

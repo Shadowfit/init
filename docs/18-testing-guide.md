@@ -19,7 +19,10 @@ Windows PowerShell:
 .\gradlew.bat build
 ```
 
-**Docker 컨테이너 불필요** — 테스트는 H2 인메모리 DB 로 동작 (2026-05-09 정비, 커밋 c7657f1 인접 작업).
+**기본 스위트는 Docker 불필요** — H2 인메모리 DB 로 동작 (2026-05-09 정비, 커밋 c7657f1 인접 작업).
+**실 MySQL 이 필요한 테스트는 Docker 가 있으면 자동으로 돈다** (2026-09-11, §2.4) — `MySqlContainerSupport` 를
+상속한 클래스들이 Testcontainers 로 `mysql:8.0` 을 띄운다. Docker 가 없으면 그 클래스들만 «건너뜀» 으로 보고되고
+나머지는 그대로 초록불이다.
 
 ---
 
@@ -38,6 +41,38 @@ Windows PowerShell:
 | `INTERNAL_API_TOKEN` | env 필수 | `test-internal-token` |
 
 > H2 `MODE=MySQL` 옵션으로 MySQL 전용 syntax 대부분 호환. ENUM 도 자동 처리.
+>
+> ⚠️ **이 구조의 한계** — 테스트는 언제나 «엔티티에서 만든» 스키마를 보므로 **마이그레이션이 엔티티와 어긋나도
+> 초록불이 뜬다.** `JSON_TABLE`·파티션 표의 FK 부재·벤더 제약명처럼 H2 가 흉내 못 내는 것도 있다. 그 틈은 §2.4 의
+> `race` 프로파일이 맡는다.
+
+### 2.4 실 MySQL 프로파일 `race` — Testcontainers (2026-09-11)
+
+`src/test/resources/application-race.yml` + `com.shadowfit.support.MySqlContainerSupport`.
+
+| 항목 | 기본 프로파일 | `race` |
+|---|---|---|
+| DB | H2 인메모리 | **Testcontainers `mysql:8.0`** — 문자셋·콜레이션·URL 파라미터를 `docker-compose.yml`·운영 URL 과 맞춤 |
+| 스키마 | 엔티티에서 `create-drop` | **Flyway 가 V1 부터 전부 적용** — 마이그레이션이 곧 픽스처 |
+| `ddl-auto` | `create-drop` | **`validate`** — 엔티티 매핑이 그 스키마와 안 맞으면 컨텍스트 기동 실패 |
+| 컨테이너 수명 | — | JVM 당 1개(정적 초기화), Ryuk 이 회수. Spring 컨텍스트도 캐시돼 상속 클래스들이 공유 |
+| 데이터 정리 | `@Transactional` 롤백 | 각 테스트가 `@AfterEach` 에서 직접 DELETE (스레드 경계·공유 컨텍스트 때문) |
+| Docker 없을 때 | — | `@Testcontainers(disabledWithoutDocker = true)` → **건너뜀**. 강제로 끄려면 `-Dmysql.container=false` |
+
+쓰는 클래스: `FlywayMigrationValidationTest`(마이그레이션↔엔티티 정합 — 이 프로파일이 존재하는 첫 번째 이유),
+`PoseDataOrphanRaceTest`(FK 없는 파티션 표), `SignupUsernameRaceTest`(벤더 제약명), `WeeklySummaryBLayerRaceTest`(`JSON_TABLE`).
+`PoseDataOrphanWindowTest` 는 같은 프로파일이지만 **측정 장치**라 `-Dmeasure.orphan.window=true` 로만 돈다(4분+, 2026-09-11 에는
+30스레드 구간이 InnoDB 데드락으로 끝났다 — 미검증, 박스가 다른 컨테이너와 동거 중이었다). 새 테스트가 «H2 로는 원리상 안 된다» 면 `MySqlContainerSupport` 를
+상속하고 `@ActiveProfiles("race")` 를 붙인다 — 그 외에는 기본 프로파일에 둔다(컨테이너 기동 비용).
+
+> **이력**: 2026-09-11 이전에는 3307 에 컨테이너를 손으로 띄우고 `V*.sql` 을 순서대로 부어 넣은 뒤
+> `-Drace.mysql=true` 로 열어야 했다. 절차가 한 번 낡았고(#342), CI 는 이 프로파일을 한 번도 돌린 적이 없었다.
+> 측정 장치(`explain.capture`·`sweep.load`·`BatchUpdateReturnValueProbe`)는 시딩된 외부 DB 를 보므로 그대로 게이트 뒤에 남는다.
+>
+> **validate 를 처음 켠 날 잡힌 것** (전부 이 커밋에서 해소): 죽은 `Authority` 엔티티(참조 0·테이블 없음 → 삭제),
+> `Double`↔`DECIMAL` 4컬럼·`PoseData.joint_coordinates` TEXT↔JSON(→ `columnDefinition` 으로 엔티티가 DB 를 따라감),
+> 그리고 PR 이 열린 사이 머지된 #720 의 `workout_groups.invite_code` CHAR(8)↔`length = 8`(VARCHAR) — **CI 의 머지 ref 에서 잡혔다**.
+> 그리고 race 테스트 3개가 V10 이 시드한 `LOWER` 카테고리를 다시 INSERT 하다 죽고 있었다 — V10(08-25) 이후 한 번도 안 돈 상태.
 
 ### 2.2 build.gradle 의존성
 
@@ -107,7 +142,8 @@ Spring 컨텍스트 정상 로드 확인. `@SpringBootTest` 사용 → 테스트
 | 통합 테스트 (`@SpringBootTest`) | `ShadowfitApplicationTests` 만 | controller·gRPC 클라이언트별 추가 검토 |
 | Repository 테스트 (`@DataJpaTest`) | 없음 | 복잡한 JPQL 쿼리 (`SessionRepository.findByStatus` FETCH JOIN 등) 검증 시 |
 | gRPC 통합 테스트 | 없음 | `InProcessChannel` 활용, [`decisions/ai-backend-coupling.md`](./decisions/ai-backend-coupling.md) 분기 A 진척 후 |
-| E2E 테스트 | 없음 | Docker Compose + Testcontainers 검토 대상 |
+| 실 MySQL 테스트 (`race` 프로파일) | `FlywayMigrationValidationTest` 외 4개 — Testcontainers, §2.4 | H2 가 원리상 못 보는 것만 여기로 |
+| E2E 테스트 | 없음 | Docker Compose 검토 대상 |
 
 ---
 
@@ -170,6 +206,7 @@ class XxxIntegrationTest {
 
 ### 6.4 H2 와 MySQL 의 ENUM 차이
 - `MODE=MySQL` 로 대부분 호환되지만 일부 JSON 함수는 미지원. JSON 컬럼은 `String` 으로 저장하면 무난.
+- `JSON_TABLE` 처럼 아예 없는 것은 `race` 프로파일(§2.4)로 간다.
 
 ---
 

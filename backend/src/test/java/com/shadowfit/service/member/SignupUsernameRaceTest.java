@@ -1,5 +1,6 @@
 package com.shadowfit.service.member;
 
+import com.shadowfit.support.MySqlContainerSupport;
 import com.shadowfit.dto.login.MemberRequestDto;
 import com.shadowfit.global.error.BusinessException;
 import com.shadowfit.global.error.ErrorCode;
@@ -10,7 +11,6 @@ import com.shadowfit.repository.member.MemberRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -43,22 +43,16 @@ import static org.mockito.Mockito.doReturn;
  * 사전검사가 통과한 직후 남이 끼어든 상태와 DB 가 보는 것이 정확히 같다. 창의 폭을 넓힐 뿐
  * 순서는 실제로 일어날 수 있는 그대로다.
  *
- * <p><b>실행법</b> — 시스템 프로퍼티가 없으면 통째로 건너뛰므로 CI 는 영향받지 않는다:
+ * <p><b>실행법</b> — {@link MySqlContainerSupport} 가 mysql:8.0 컨테이너를 띄우고 Flyway 가
+ * 스키마를 만든다. Docker 가 없으면 «건너뜀» 으로 보고된다(CI 러너에는 있다):
  * <pre>
- *   docker run -d --name shadowfit-race-mysql -e MYSQL_ROOT_PASSWORD=racetest \
- *     -e MYSQL_DATABASE=shadowfit -p 3307:3306 mysql:8.0 \
- *     --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
- *   docker exec -i shadowfit-race-mysql mysql -uroot -pracetest shadowfit \
- *     &lt; backend/src/main/resources/db/migration/V1__baseline.sql
- *   ./gradlew :backend:test --tests '*SignupUsernameRaceTest' -Drace.mysql=true
+ *   ./gradlew :backend:test --tests '*SignupUsernameRaceTest'
  * </pre>
  */
 @SpringBootTest
 @ActiveProfiles("race")
-@EnabledIfSystemProperty(named = "race.mysql", matches = "true",
-        disabledReason = "실제 MySQL(3307)이 필요 — 클래스 주석의 docker 명령 참고")
 @DisplayName("#195 가입 경합 — UNIQUE 위반이 4xx 로 옮겨지는가")
-class SignupUsernameRaceTest {
+class SignupUsernameRaceTest extends MySqlContainerSupport {
 
     private static final String TAKEN_USERNAME = "race195user";
 
