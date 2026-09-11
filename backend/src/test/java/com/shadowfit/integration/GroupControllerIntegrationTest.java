@@ -2,15 +2,19 @@ package com.shadowfit.integration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shadowfit.dto.group.CreateGroupRequestDto;
+import com.shadowfit.dto.group.JoinGroupRequestDto;
 import com.shadowfit.dto.login.CustomUserInfoDto;
 import com.shadowfit.global.error.ErrorCode;
 import com.shadowfit.global.security.jwt.JwtUtil;
 import com.shadowfit.model.group.Group;
+import com.shadowfit.model.group.GroupInvitation;
 import com.shadowfit.model.group.GroupMember;
 import com.shadowfit.model.group.GroupMemberStatus;
 import com.shadowfit.model.group.GroupRole;
+import com.shadowfit.model.group.InvitationStatus;
 import com.shadowfit.model.member.Member;
 import com.shadowfit.model.member.UserRole;
+import com.shadowfit.repository.group.GroupInvitationRepository;
 import com.shadowfit.repository.group.GroupMemberRepository;
 import com.shadowfit.repository.group.GroupRepository;
 import com.shadowfit.repository.member.MemberRepository;
@@ -50,6 +54,7 @@ class GroupControllerIntegrationTest {
     @Autowired private MemberRepository memberRepository;
     @Autowired private GroupRepository groupRepository;
     @Autowired private GroupMemberRepository groupMemberRepository;
+    @Autowired private GroupInvitationRepository groupInvitationRepository;
     @Autowired private PasswordEncoder passwordEncoder;
 
     private Member owner;
@@ -223,6 +228,100 @@ class GroupControllerIntegrationTest {
 
         // 실패한 요청은 코드를 건드리지 않는다.
         assertThat(groupRepository.existsByInviteCode("TESTCD01")).isTrue();
+    }
+
+    @Test
+    @DisplayName("코드 참여 — 201, 승인 없이 바로 ACTIVE·MEMBER, MEMBER_JOINED 가 그룹 이벤트에 남는다")
+    void joinByInviteCode_joinsImmediately() throws Exception {
+        Group group = createGroupWithOwner();
+
+        mockMvc.perform(post("/groups/join")
+                        .header("Authorization", "Bearer " + outsiderToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new JoinGroupRequestDto("TESTCD01"))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(group.getId()))
+                .andExpect(jsonPath("$.inviteCode").value("TESTCD01"));
+
+        GroupMember membership = groupMemberRepository.findByGroupIdAndMemberId(group.getId(), outsider.getId()).orElseThrow();
+        assertThat(membership.getStatus()).isEqualTo(GroupMemberStatus.ACTIVE);
+        assertThat(membership.getRole()).isEqualTo(GroupRole.MEMBER);
+
+        mockMvc.perform(get("/groups/" + group.getId() + "/events")
+                        .header("Authorization", "Bearer " + outsiderToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].type").value("MEMBER_JOINED"));
+    }
+
+    @Test
+    @DisplayName("코드 참여 — 소문자·공백으로 쳐도 들어간다")
+    void joinByInviteCode_normalizesInput() throws Exception {
+        Group group = createGroupWithOwner();
+
+        mockMvc.perform(post("/groups/join")
+                        .header("Authorization", "Bearer " + outsiderToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new JoinGroupRequestDto(" testcd01 "))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(group.getId()));
+    }
+
+    @Test
+    @DisplayName("코드 참여 — 없는 코드는 404 INVALID_INVITE_CODE, 이미 멤버면 409 ALREADY_GROUP_MEMBER")
+    void joinByInviteCode_unknownOrAlreadyMember() throws Exception {
+        createGroupWithOwner();
+
+        mockMvc.perform(post("/groups/join")
+                        .header("Authorization", "Bearer " + outsiderToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new JoinGroupRequestDto("ZZZZZZZZ"))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value(ErrorCode.INVALID_INVITE_CODE.getMessage()));
+
+        // OWNER 는 이미 ACTIVE 다 — 더블탭 두 번째 요청이 보는 것과 같은 결말.
+        mockMvc.perform(post("/groups/join")
+                        .header("Authorization", "Bearer " + ownerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new JoinGroupRequestDto("TESTCD01"))))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value(ErrorCode.ALREADY_GROUP_MEMBER.getMessage()));
+    }
+
+    @Test
+    @DisplayName("코드 참여 — 탈퇴(LEFT)했던 사람은 새 행 없이 되살아난다 (UNIQUE 재삽입 500 회귀 방지)")
+    void joinByInviteCode_leftMemberRejoins() throws Exception {
+        Group group = createGroupWithOwner();
+        GroupMember left = groupMemberRepository.saveAndFlush(GroupMember.builder()
+                .group(group).member(outsider).role(GroupRole.MEMBER).status(GroupMemberStatus.LEFT).build());
+
+        mockMvc.perform(post("/groups/join")
+                        .header("Authorization", "Bearer " + outsiderToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new JoinGroupRequestDto("TESTCD01"))))
+                .andExpect(status().isCreated());
+
+        groupMemberRepository.flush();
+        GroupMember revived = groupMemberRepository.findByGroupIdAndMemberId(group.getId(), outsider.getId()).orElseThrow();
+        assertThat(revived.getId()).isEqualTo(left.getId());
+        assertThat(revived.getStatus()).isEqualTo(GroupMemberStatus.ACTIVE);
+    }
+
+    @Test
+    @DisplayName("코드 참여 — 같은 그룹의 PENDING 초대가 있으면 ACCEPTED 로 닫힌다")
+    void joinByInviteCode_closesPendingInvitation() throws Exception {
+        Group group = createGroupWithOwner();
+        GroupInvitation pending = groupInvitationRepository.saveAndFlush(GroupInvitation.builder()
+                .group(group).inviter(owner).invitee(outsider).build());
+
+        mockMvc.perform(post("/groups/join")
+                        .header("Authorization", "Bearer " + outsiderToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new JoinGroupRequestDto("TESTCD01"))))
+                .andExpect(status().isCreated());
+
+        groupInvitationRepository.flush();
+        assertThat(groupInvitationRepository.findById(pending.getId()).orElseThrow().getStatus())
+                .isEqualTo(InvitationStatus.ACCEPTED);
     }
 
     private Group createGroupWithOwner() {
