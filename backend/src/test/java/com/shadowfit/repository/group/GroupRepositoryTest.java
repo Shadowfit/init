@@ -39,7 +39,7 @@ class GroupRepositoryTest {
     @Test
     @DisplayName("findByIdForUpdate — 존재하는 그룹을 반환한다")
     void findByIdForUpdate_returnsGroup() {
-        Group group = groupRepository.saveAndFlush(Group.builder().name("그룹1").createdBy(creator).build());
+        Group group = groupRepository.saveAndFlush(Group.builder().name("그룹1").inviteCode("TESTCD01").createdBy(creator).build());
 
         assertThat(groupRepository.findByIdForUpdate(group.getId()))
                 .isPresent()
@@ -57,7 +57,7 @@ class GroupRepositoryTest {
     @Test
     @DisplayName("Group 생성 시 nextSeq 초기값은 0")
     void newGroup_nextSeqStartsAtZero() {
-        Group group = groupRepository.saveAndFlush(Group.builder().name("그룹2").createdBy(creator).build());
+        Group group = groupRepository.saveAndFlush(Group.builder().name("그룹2").inviteCode("TESTCD02").createdBy(creator).build());
 
         assertThat(group.getNextSeq()).isZero();
     }
@@ -65,7 +65,7 @@ class GroupRepositoryTest {
     @Test
     @DisplayName("allocateNextSeq — 호출할 때마다 1씩 증가한 값을 반환한다")
     void allocateNextSeq_incrementsSequentially() {
-        Group group = groupRepository.saveAndFlush(Group.builder().name("그룹3").createdBy(creator).build());
+        Group group = groupRepository.saveAndFlush(Group.builder().name("그룹3").inviteCode("TESTCD03").createdBy(creator).build());
 
         assertThat(group.allocateNextSeq()).isEqualTo(1L);
         assertThat(group.allocateNextSeq()).isEqualTo(2L);

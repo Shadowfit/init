@@ -3,6 +3,7 @@ package com.shadowfit.service.group;
 import com.shadowfit.dto.group.CreateGroupRequestDto;
 import com.shadowfit.dto.group.GroupDetailResponseDto;
 import com.shadowfit.dto.group.GroupResponseDto;
+import com.shadowfit.dto.group.InviteCodeResponseDto;
 import com.shadowfit.global.error.BusinessException;
 import com.shadowfit.global.error.ErrorCode;
 import com.shadowfit.model.group.Group;
@@ -28,6 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -40,6 +42,7 @@ class GroupServiceTest {
     @Mock private GroupRepository groupRepository;
     @Mock private GroupMemberRepository groupMemberRepository;
     @Mock private MemberRepository memberRepository;
+    @Mock private InviteCodeGenerator inviteCodeGenerator;
 
     private GroupService groupService;
     private Member creator;
@@ -47,8 +50,11 @@ class GroupServiceTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        groupService = new GroupService(groupRepository, groupMemberRepository, memberRepository);
+        groupService = new GroupService(groupRepository, groupMemberRepository, memberRepository, inviteCodeGenerator);
         creator = newMember(MEMBER_ID, "creator");
+        // 기본: 첫 번째로 뽑은 코드가 곧 통과한다. 충돌 시나리오는 개별 테스트에서 덮어쓴다.
+        when(inviteCodeGenerator.generate()).thenReturn("FRESHCD1");
+        when(groupRepository.existsByInviteCode(any())).thenReturn(false);
     }
 
     @Test
@@ -62,6 +68,7 @@ class GroupServiceTest {
 
         assertThat(response.getName()).isEqualTo("그룹1");
         assertThat(response.getCreatedById()).isEqualTo(MEMBER_ID);
+        assertThat(response.getInviteCode()).isEqualTo("FRESHCD1");
 
         ArgumentCaptor<GroupMember> captor = ArgumentCaptor.forClass(GroupMember.class);
         verify(groupMemberRepository).save(captor.capture());
@@ -181,8 +188,85 @@ class GroupServiceTest {
                 .isEqualTo(ErrorCode.NOT_GROUP_MEMBER);
     }
 
+    @Test
+    @DisplayName("createGroup — description 을 받아 저장하고 응답에 싣는다")
+    void createGroup_carriesDescription() {
+        when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(creator));
+        when(groupRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(groupMemberRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        GroupResponseDto response = groupService.createGroup(MEMBER_ID,
+                new CreateGroupRequestDto("그룹1", "우리 진짜 거북목 되지 말자"));
+
+        assertThat(response.getDescription()).isEqualTo("우리 진짜 거북목 되지 말자");
+    }
+
+    @Test
+    @DisplayName("createGroup — 뽑은 코드가 이미 쓰이면 다시 뽑는다 (존재 확인이 UNIQUE 앞의 첫 방어)")
+    void createGroup_regeneratesWhenCodeAlreadyUsed() {
+        when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(creator));
+        when(groupRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(groupMemberRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(inviteCodeGenerator.generate()).thenReturn("TAKENCD1", "FRESHCD2");
+        when(groupRepository.existsByInviteCode("TAKENCD1")).thenReturn(true);
+        when(groupRepository.existsByInviteCode("FRESHCD2")).thenReturn(false);
+
+        GroupResponseDto response = groupService.createGroup(MEMBER_ID, new CreateGroupRequestDto("그룹1"));
+
+        assertThat(response.getInviteCode()).isEqualTo("FRESHCD2");
+        verify(inviteCodeGenerator, times(2)).generate();
+    }
+
+    @Test
+    @DisplayName("regenerateInviteCode — OWNER 면 새 코드로 바뀌고 이전 코드는 사라진다")
+    void regenerateInviteCode_ownerGetsNewCode() {
+        Group group = newGroup(creator);
+        when(groupRepository.findById(GROUP_ID)).thenReturn(Optional.of(group));
+        when(groupMemberRepository.findByGroupIdAndMemberId(GROUP_ID, MEMBER_ID))
+                .thenReturn(Optional.of(newMembership(group, creator, GroupRole.OWNER, GroupMemberStatus.ACTIVE)));
+        when(inviteCodeGenerator.generate()).thenReturn("NEWCODE1");
+
+        InviteCodeResponseDto response = groupService.regenerateInviteCode(GROUP_ID, MEMBER_ID);
+
+        assertThat(response.getInviteCode()).isEqualTo("NEWCODE1");
+        assertThat(group.getInviteCode()).isEqualTo("NEWCODE1").isNotEqualTo("TESTCD01");
+    }
+
+    @Test
+    @DisplayName("regenerateInviteCode — ACTIVE 멤버지만 OWNER 가 아니면 NOT_GROUP_OWNER")
+    void regenerateInviteCode_memberButNotOwner_throws() {
+        Group group = newGroup(creator);
+        Member plain = newMember(20L, "plain");
+        when(groupRepository.findById(GROUP_ID)).thenReturn(Optional.of(group));
+        when(groupMemberRepository.findByGroupIdAndMemberId(GROUP_ID, 20L))
+                .thenReturn(Optional.of(newMembership(group, plain, GroupRole.MEMBER, GroupMemberStatus.ACTIVE)));
+
+        assertThatThrownBy(() -> groupService.regenerateInviteCode(GROUP_ID, 20L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.NOT_GROUP_OWNER);
+        assertThat(group.getInviteCode()).isEqualTo("TESTCD01");
+    }
+
+    @Test
+    @DisplayName("regenerateInviteCode — 멤버가 아니면(또는 LEFT) NOT_GROUP_MEMBER")
+    void regenerateInviteCode_notMember_throws() {
+        Group group = newGroup(creator);
+        when(groupRepository.findById(GROUP_ID)).thenReturn(Optional.of(group));
+        when(groupMemberRepository.findByGroupIdAndMemberId(GROUP_ID, 20L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> groupService.regenerateInviteCode(GROUP_ID, 20L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.NOT_GROUP_MEMBER);
+    }
+
+    private GroupMember newMembership(Group group, Member member, GroupRole role, GroupMemberStatus status) {
+        return GroupMember.builder().group(group).member(member).role(role).status(status).build();
+    }
+
     private Group newGroup(Member creator) {
-        return Group.builder().id(GROUP_ID).name("그룹").createdBy(creator).build();
+        return Group.builder().id(GROUP_ID).name("그룹").inviteCode("TESTCD01").createdBy(creator).build();
     }
 
     private Member newMember(Long id, String username) {

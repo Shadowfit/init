@@ -34,8 +34,8 @@ class GroupEventRepositoryTest {
     @BeforeEach
     void setUp() {
         sender = memberRepository.saveAndFlush(newMember("sender@test.com", "sender"));
-        group = groupRepository.saveAndFlush(Group.builder().name("그룹").createdBy(sender).build());
-        otherGroup = groupRepository.saveAndFlush(Group.builder().name("다른 그룹").createdBy(sender).build());
+        group = groupRepository.saveAndFlush(Group.builder().name("그룹").inviteCode("TESTCD01").createdBy(sender).build());
+        otherGroup = groupRepository.saveAndFlush(Group.builder().name("다른 그룹").inviteCode("TESTCD02").createdBy(sender).build());
 
         saveEvent(group, 1L);
         saveEvent(group, 2L);

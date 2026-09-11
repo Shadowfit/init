@@ -3,6 +3,7 @@ package com.shadowfit.integration;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shadowfit.dto.group.CreateGroupRequestDto;
 import com.shadowfit.dto.login.CustomUserInfoDto;
+import com.shadowfit.global.error.ErrorCode;
 import com.shadowfit.global.security.jwt.JwtUtil;
 import com.shadowfit.model.group.Group;
 import com.shadowfit.model.group.GroupMember;
@@ -24,6 +25,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -165,8 +167,66 @@ class GroupControllerIntegrationTest {
                 .andExpect(status().isForbidden());
     }
 
+    @Test
+    @DisplayName("그룹 생성 — description 과 8자리 초대 코드가 응답에 실리고 DB 에도 저장된다")
+    void createGroup_issuesInviteCodeAndStoresDescription() throws Exception {
+        String body = objectMapper.writeValueAsString(new CreateGroupRequestDto("거북목 탈출", "우리 진짜 거북목 되지 말자"));
+        String json = mockMvc.perform(post("/groups")
+                        .header("Authorization", "Bearer " + ownerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.description").value("우리 진짜 거북목 되지 말자"))
+                .andExpect(jsonPath("$.inviteCode").isString())
+                .andReturn().getResponse().getContentAsString();
+
+        String code = objectMapper.readTree(json).get("inviteCode").asText();
+        assertThat(code).hasSize(8).matches("[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{8}");
+        assertThat(groupRepository.existsByInviteCode(code)).isTrue();
+    }
+
+    @Test
+    @DisplayName("초대 코드 재발급 — OWNER 는 200 과 새 코드, 이전 코드는 더 이상 존재하지 않는다")
+    void regenerateInviteCode_ownerGetsFreshCode() throws Exception {
+        Group group = createGroupWithOwner();
+
+        String json = mockMvc.perform(post("/groups/" + group.getId() + "/invite-code")
+                        .header("Authorization", "Bearer " + ownerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.inviteCode").isString())
+                .andReturn().getResponse().getContentAsString();
+
+        String fresh = objectMapper.readTree(json).get("inviteCode").asText();
+        assertThat(fresh).hasSize(8).isNotEqualTo("TESTCD01");
+        groupRepository.flush();
+        assertThat(groupRepository.existsByInviteCode("TESTCD01")).isFalse();
+        assertThat(groupRepository.existsByInviteCode(fresh)).isTrue();
+    }
+
+    @Test
+    @DisplayName("초대 코드 재발급 — 일반 멤버는 403 NOT_GROUP_OWNER, 비멤버는 403 NOT_GROUP_MEMBER")
+    void regenerateInviteCode_nonOwnerForbidden() throws Exception {
+        Group group = createGroupWithOwner();
+        Member plain = memberRepository.saveAndFlush(newMember("plain@test.com", "plain"));
+        groupMemberRepository.saveAndFlush(GroupMember.builder()
+                .group(group).member(plain).role(GroupRole.MEMBER).status(GroupMemberStatus.ACTIVE).build());
+
+        mockMvc.perform(post("/groups/" + group.getId() + "/invite-code")
+                        .header("Authorization", "Bearer " + tokenFor(plain)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value(ErrorCode.NOT_GROUP_OWNER.getMessage()));
+
+        mockMvc.perform(post("/groups/" + group.getId() + "/invite-code")
+                        .header("Authorization", "Bearer " + outsiderToken))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value(ErrorCode.NOT_GROUP_MEMBER.getMessage()));
+
+        // 실패한 요청은 코드를 건드리지 않는다.
+        assertThat(groupRepository.existsByInviteCode("TESTCD01")).isTrue();
+    }
+
     private Group createGroupWithOwner() {
-        Group group = groupRepository.saveAndFlush(Group.builder().name("그룹").createdBy(owner).build());
+        Group group = groupRepository.saveAndFlush(Group.builder().name("그룹").inviteCode("TESTCD01").createdBy(owner).build());
         groupMemberRepository.saveAndFlush(GroupMember.builder()
                 .group(group).member(owner).role(GroupRole.OWNER).status(GroupMemberStatus.ACTIVE).build());
         return group;

@@ -24,6 +24,12 @@ public class GroupDetailResponseDto {
     @Schema(description = "그룹 이름", requiredMode = Schema.RequiredMode.REQUIRED)
     private String name;
 
+    @Schema(description = "모임 소개 한 줄 (선택)")
+    private String description;
+
+    @Schema(description = "코드 참여용 초대 코드 (8자리). 멤버가 공유한다", requiredMode = Schema.RequiredMode.REQUIRED)
+    private String inviteCode;
+
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ss")
     @Schema(description = "생성 시각", requiredMode = Schema.RequiredMode.REQUIRED)
     private LocalDateTime createdAt;
@@ -35,6 +41,8 @@ public class GroupDetailResponseDto {
         return GroupDetailResponseDto.builder()
                 .id(group.getId())
                 .name(group.getName())
+                .description(group.getDescription())
+                .inviteCode(group.getInviteCode())
                 .createdAt(group.getCreatedAt())
                 .members(members.stream().map(GroupMemberResponseDto::from).toList())
                 .build();

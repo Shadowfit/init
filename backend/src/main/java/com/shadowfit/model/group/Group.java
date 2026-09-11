@@ -35,6 +35,18 @@ public class Group {
     @Column(nullable = false, length = 100)
     private String name;
 
+    /** 모임 소개 한 줄 (선택). 레퍼런스 화면의 그룹명 아래 줄. */
+    @Column(length = 255)
+    private String description;
+
+    /**
+     * 코드 참여용 초대 코드 — 그룹당 1개 고정, 8자리 (V15, social-cheer-and-group-feed.md §3-F).
+     * 발급은 {@code InviteCodeGenerator}, 유일성은 {@code uk_workout_groups_invite_code} 가
+     * 최종 방어선. 유출 시 {@link #regenerateInviteCode(String)} 로 OWNER 가 갈아끼운다.
+     */
+    @Column(name = "invite_code", nullable = false, unique = true, length = 8)
+    private String inviteCode;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by", nullable = false)
     @OnDelete(action = OnDeleteAction.CASCADE)
@@ -55,5 +67,10 @@ public class Group {
     public long allocateNextSeq() {
         this.nextSeq += 1;
         return this.nextSeq;
+    }
+
+    /** 초대 코드를 새 값으로 바꾼다. 이전 코드로는 더 이상 참여할 수 없다. */
+    public void regenerateInviteCode(String newCode) {
+        this.inviteCode = newCode;
     }
 }
