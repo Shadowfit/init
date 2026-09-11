@@ -11,7 +11,6 @@ import com.shadowfit.model.exercise.Session;
 import com.shadowfit.model.exercise.Status;
 import com.shadowfit.model.exercise.SyncStats;
 import com.shadowfit.model.report.Report;
-import com.shadowfit.model.report.ReportType;
 import com.shadowfit.repository.exercise.PoseDataRepository;
 import com.shadowfit.repository.exercise.SessionRepository;
 import com.shadowfit.repository.report.ReportRepository;
@@ -148,7 +147,6 @@ public class SessionCompletionTx {
         Report report = new Report();
         report.setMember(session.getMember());
         report.setSession(session);
-        report.setReportType(ReportType.SESSION);
         // 둘 다 비면 컬럼을 비워 둔다 — 읽기 경로가 "저장된 게 없다"로 보고 재계산을 시도하는데,
         // 프레임이 없어서 비었던 것이라면 재계산도 같은 결과라 손해가 없다.
         if (worstSection != null || !repTrend.isEmpty()) {

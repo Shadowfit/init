@@ -14,7 +14,6 @@ import com.shadowfit.model.exercise.Session;
 import com.shadowfit.model.exercise.Status;
 import com.shadowfit.model.member.Member;
 import com.shadowfit.model.report.Report;
-import com.shadowfit.model.report.ReportType;
 import com.shadowfit.repository.exercise.PoseDataRepository;
 import com.shadowfit.repository.exercise.SessionRepository;
 import com.shadowfit.repository.report.ReportRepository;
@@ -85,7 +84,6 @@ class ReportServiceTest {
         report = new Report();
         report.setMember(member);
         report.setSession(session);
-        report.setReportType(ReportType.SESSION);
 
         when(sessionRepository.findSessionWithExerciseByIdAndMemberId(SESSION_ID, MEMBER_ID))
                 .thenReturn(Optional.of(session));

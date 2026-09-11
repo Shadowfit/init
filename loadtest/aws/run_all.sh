@@ -1273,13 +1273,13 @@ phase_ridealong() {
   {
     echo "# R1 worst-section — $(date -Is)"
     if $q -N -e "SELECT COUNT(*) FROM information_schema.tables
-                 WHERE table_schema='$DB_NAME' AND table_name='reports';" 2>/dev/null | grep -q '^1$'; then
-      $q -e "SELECT 'reports 전체' k, COUNT(*) v FROM reports
-             UNION ALL SELECT 'detailed_analysis 채워진 행', COUNT(*) FROM reports WHERE detailed_analysis IS NOT NULL
+                 WHERE table_schema='$DB_NAME' AND table_name='session_reports';" 2>/dev/null | grep -q '^1$'; then
+      $q -e "SELECT 'reports 전체' k, COUNT(*) v FROM session_reports
+             UNION ALL SELECT 'detailed_analysis 채워진 행', COUNT(*) FROM session_reports WHERE detailed_analysis IS NOT NULL
              UNION ALL SELECT 'pose_data 전체', COUNT(*) FROM pose_data
              UNION ALL SELECT 'exercise_sessions', COUNT(*) FROM exercise_sessions;" 2>>"$err"
     else
-      echo "해당 없음 — reports 테이블이 없다(백엔드/Flyway 미실행). 0 이 아니라 «측정 대상 부재» 다."
+      echo "해당 없음 — session_reports 테이블이 없다(백엔드/Flyway 미실행). 0 이 아니라 «측정 대상 부재» 다."
     fi
   } > "$out/R1_worst_section.txt" 2>>"$err"
 
@@ -1291,7 +1291,7 @@ phase_ridealong() {
          FROM performance_schema.events_statements_summary_by_digest
          ORDER BY SUM_TIMER_WAIT DESC LIMIT 20;" > "$out/R2_top_digest.txt" 2>>"$err"
 
-  # R3 — 3-way 조인 알고리즘 (reports ⋈ exercise_sessions ⋈ users)
+  # R3 — 3-way 조인 알고리즘 (session_reports ⋈ exercise_sessions ⋈ users)
   #
   # 🔴 2026-09-04 배선. 그 전까지 이 자리는 «무조건 스킵» 스텁이었고 라운드 둘을 그렇게
   #    지나갔다. 스킵 «경로» 자체는 남긴다 — 시딩이 안 된 박스에서 «안 걷었다» 를 정직하게
@@ -1308,13 +1308,13 @@ phase_ridealong() {
   #    .member_id → users.id` · `reports.session_id → exercise_sessions.id`) 스키마를 건드려야
   #    한다. 대신 `IGNORE INDEX FOR JOIN` 으로 **세션 범위에서만** 같은 조건을 만든다.
   local r3min
-  r3min=$($q -N -e "SELECT LEAST((SELECT COUNT(*) FROM reports),
+  r3min=$($q -N -e "SELECT LEAST((SELECT COUNT(*) FROM session_reports),
                                  (SELECT COUNT(*) FROM exercise_sessions),
                                  (SELECT COUNT(*) FROM users));" 2>>"$err" | tr -d '[:space:]')
   case "$r3min" in ''|*[!0-9]*) r3min=0 ;; esac
   if [ "$r3min" -eq 0 ]; then
     # 🔴 R1 이 두 라운드 내내 «전 테이블 0행» 을 답으로 착각한 자리다. 0행이면 답이 아니다.
-    { echo "미실행 — reports·exercise_sessions·users 중 최소 한 테이블이 0행이다."
+    { echo "미실행 — session_reports·exercise_sessions·users 중 최소 한 테이블이 0행이다."
       echo "시딩 선행: loadtest/seed/seed_report_rig.sh (세션 1,000 × 750행)"
       echo "🔴 users 행이 먼저 있어야 한다 — 시더는 member_id 를 참조만 하고 INSERT 하지 않는다."
       echo "설계: AWS-RIDE-ALONG.md §1 從-R3 · loadtest/aws/ROUND-2026-09-03-quiet-box.md §3 판③"
@@ -1325,16 +1325,17 @@ phase_ridealong() {
     # 🔴 `--raw` 가 필요하다 — 기본 출력은 TREE 의 개행을 리터럴 `\n` 두 글자로 이스케이프해서
     #    플랜이 한 줄로 뭉친다(2026-09-04 로컬 확인).
     local r3sel="SELECT r.id, s.start_time, u.id"
-    local r3nat="FROM reports r
+    # 2026-09-11: reports → session_reports 리네임 + report_type 컬럼 삭제(V16)로 예전 판의
+    #   `WHERE r.report_type='SESSION'` 이 빠졌다. 그 술어는 비인덱스 컬럼·선택도 100% 라 조인
+    #   알고리즘 선택엔 영향이 없었지만, 이전 라운드 결과와 비교할 때 쿼리 텍스트가 다르다는 건 알 것.
+    local r3nat="FROM session_reports r
                    JOIN exercise_sessions s ON s.id = r.session_id
-                   JOIN users u ON u.id = r.member_id
-                  WHERE r.report_type='SESSION'"
-    local r3ign="FROM reports r
+                   JOIN users u ON u.id = r.member_id"
+    local r3ign="FROM session_reports r
                    JOIN exercise_sessions s IGNORE INDEX FOR JOIN (PRIMARY) ON s.id = r.session_id
-                   JOIN users u IGNORE INDEX FOR JOIN (PRIMARY) ON u.id = r.member_id
-                  WHERE r.report_type='SESSION'"
+                   JOIN users u IGNORE INDEX FOR JOIN (PRIMARY) ON u.id = r.member_id"
     { echo "# R3 3-way 조인 알고리즘 — $(date -Is)"
-      echo "# 조인: reports ⋈ exercise_sessions ⋈ users"
+      echo "# 조인: session_reports ⋈ exercise_sessions ⋈ users"
       echo "# 🔴 조건 — 시딩이 단일 템플릿 복제라 값 분포가 균일하다."
       echo "#    플랜 «모양» 만 읽는다. 카디널리티 추정·선택도 결론 금지."
       echo "# 🔴 오독 방지 — ㉡ 의 실행시간이 ㉠ 보다 느린 것은 «hash join 이 느리다» 가 아니다."
@@ -1342,10 +1343,10 @@ phase_ridealong() {
       echo "#    (같은 인덱스 없는 조건에서 hash join 켬/끔)의 cost 를 비교할 것."
       echo
       echo "## 무대 (행 수 · 소유자 분산)"
-      $qraw -e "SELECT (SELECT COUNT(*) FROM reports) AS reports,
+      $qraw -e "SELECT (SELECT COUNT(*) FROM session_reports) AS reports,
                        (SELECT COUNT(*) FROM exercise_sessions) AS sessions,
                        (SELECT COUNT(*) FROM users) AS users,
-                       (SELECT COUNT(DISTINCT member_id) FROM reports) AS distinct_owners;" 2>>"$err"
+                       (SELECT COUNT(DISTINCT member_id) FROM session_reports) AS distinct_owners;" 2>>"$err"
       echo
       echo "## 팔 ㉠ — 자연 선택 (인덱스 그대로)"
       echo "#    hash join 이 «안 나오는 것» 도 답이다 — FK 인덱스가 있으면 조건이 안 선다"

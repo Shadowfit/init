@@ -18,7 +18,6 @@ import com.shadowfit.model.member.Member;
 import com.shadowfit.model.member.SelectedPersona;
 import com.shadowfit.model.member.UserRole;
 import com.shadowfit.model.report.Report;
-import com.shadowfit.model.report.ReportType;
 import com.shadowfit.repository.exercise.ExercisesRepository;
 import com.shadowfit.repository.exercise.PoseDataRepository;
 import com.shadowfit.repository.exercise.SessionFeedbackLogRepository;
@@ -229,7 +228,6 @@ class ExerciseSessionFlowIntegrationTest {
             // then: precompute-on-write — 세션 완료와 같은 트랜잭션에서 reports가 미리 생성됨
             // (report-read-path.md §9, 조회 시점 pose_data 재계산 없이 바로 읽을 수 있어야 함)
             Report report = reportRepository.findBySessionId(sessionId).orElseThrow();
-            assertThat(report.getReportType()).isEqualTo(ReportType.SESSION);
             assertThat(report.getMember().getId()).isEqualTo(testMember.getId());
             assertThat(report.getDetailedAnalysis()).isNotBlank();
             assertThat(report.getDetailedAnalysis()).contains("싱크로율");

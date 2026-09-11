@@ -11,7 +11,6 @@ import com.shadowfit.model.member.SelectedPersona;
 import com.shadowfit.model.member.UserRole;
 import com.shadowfit.model.report.DailyLog;
 import com.shadowfit.model.report.Report;
-import com.shadowfit.model.report.ReportType;
 import com.shadowfit.repository.exercise.ExercisesRepository;
 import com.shadowfit.repository.exercise.SessionFeedbackLogRepository;
 import com.shadowfit.repository.exercise.SessionRepository;
@@ -91,7 +90,6 @@ class MemberDeletionCascadeIntegrationTest {
         Report report = new Report();
         report.setMember(member);
         report.setSession(session);
-        report.setReportType(ReportType.SESSION);
         reportRepository.saveAndFlush(report);
 
         feedbackLogRepository.saveAndFlush(SessionFeedbackLog.builder()

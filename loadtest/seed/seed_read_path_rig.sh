@@ -122,9 +122,9 @@ SELECT s.id session_id,
 stage_R(){
   echo "## [R] reports (세션당 1건) · daily_logs (회원×날짜)"
   DB -e "
-INSERT IGNORE INTO reports (member_id, session_id, report_type, summary, detailed_analysis,
+INSERT IGNORE INTO session_reports (member_id, session_id, summary, detailed_analysis,
                             improvement_tips, created_at)
-SELECT s.member_id, s.id, 'SESSION',
+SELECT s.member_id, s.id,
        CONCAT('세션 ', s.id, ' 요약'),
        JSON_OBJECT('avgSyncRate', s.avg_sync_rate, 'totalReps', s.total_reps,
                    'worstRep', 1 + (s.id % 25), 'kneeAngleMin', 80 + (s.id % 20)),
@@ -142,7 +142,7 @@ SELECT s.member_id, DATE(s.start_time),
   FROM exercise_sessions s
  WHERE s.reference_source IN ('seed204','seed204b','seedB','seedC')
  GROUP BY s.member_id, DATE(s.start_time);"
-  DB -e "SELECT (SELECT COUNT(*) FROM reports) reports, (SELECT COUNT(*) FROM daily_logs) daily_logs;"
+  DB -e "SELECT (SELECT COUNT(*) FROM session_reports) reports, (SELECT COUNT(*) FROM daily_logs) daily_logs;"
 }
 
 # ── X. pose_data 를 버퍼풀(2GB) 위로 ────────────────────────────────────────
@@ -180,7 +180,7 @@ esac
 
 echo
 echo "## 확인"
-DB -e "ANALYZE TABLE pose_data, exercise_sessions, users, reports, daily_logs;" >/dev/null
+DB -e "ANALYZE TABLE pose_data, exercise_sessions, users, session_reports, daily_logs;" >/dev/null
 DB -e "
 SELECT reference_source, COUNT(*) sessions FROM exercise_sessions GROUP BY reference_source;
 SELECT COUNT(*) pose_rows, COUNT(DISTINCT session_id) pose_sessions FROM pose_data;
