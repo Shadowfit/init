@@ -31,11 +31,11 @@ docker compose up -d   # mysql + backend + ai-server 전부 기동
 ### Backend (`backend/`)
 ```bash
 ./gradlew bootRun       # 실행
-./gradlew test          # 전체 테스트 — H2 인메모리, Docker 불필요
+./gradlew test          # 전체 테스트 — 기본 H2 인메모리. 실 MySQL 테스트(race 프로파일)는 Docker 있으면 Testcontainers 로 자동, 없으면 건너뜀
 ./gradlew test --tests "ExerciseSessionFlowIntegrationTest"   # 단일 테스트
 ./gradlew build         # 빌드 + 테스트
 ```
-테스트는 `src/test/resources/application.yml`을 따로 써서 MySQL 대신 H2(`MODE=MySQL`)로 뜬다 — gRPC 서버/클라이언트도 테스트 프로파일에서 비활성화된다. 상세: [`docs/18-testing-guide.md`](./docs/18-testing-guide.md).
+테스트는 `src/test/resources/application.yml`을 따로 써서 MySQL 대신 H2(`MODE=MySQL`)로 뜬다 — gRPC 서버/클라이언트도 테스트 프로파일에서 비활성화된다. H2 가 원리상 못 보는 것(마이그레이션↔엔티티 정합·`JSON_TABLE`·FK 없는 파티션 표)은 `race` 프로파일 — `MySqlContainerSupport` 상속 — 이 실 MySQL 컨테이너에서 Flyway + `ddl-auto: validate` 로 검증한다. 상세: [`docs/18-testing-guide.md`](./docs/18-testing-guide.md) §2.4.
 
 ### AI Server (`ai-server/`)
 ```bash

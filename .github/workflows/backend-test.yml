@@ -1,8 +1,10 @@
 name: Backend tests
 
 # 백엔드 테스트 스위트를 PR마다 자동 실행한다.
-# 테스트는 H2(MySQL 모드) 인메모리로 돌고 JWT/내부토큰은 src/test/resources/application.yml 의
+# 기본 테스트는 H2(MySQL 모드) 인메모리로 돌고 JWT/내부토큰은 src/test/resources/application.yml 의
 # 더미값을 쓰므로, 외부 DB나 시크릿 없이 러너 단독으로 완결된다.
+# race 프로파일(실 MySQL — 마이그레이션↔엔티티 정합·JSON_TABLE·FK 없는 파티션 표)은 Testcontainers 가
+# 러너의 Docker 로 mysql:8.0 을 띄워서 돈다 — ubuntu-latest 에는 Docker 가 있으므로 별도 서비스 정의가 없다.
 
 on:
   # CD 가 배포 전 게이트로 이 워크플로를 호출한다 (cd-backend.yml).

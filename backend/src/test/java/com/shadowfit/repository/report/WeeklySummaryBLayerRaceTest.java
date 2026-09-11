@@ -1,5 +1,6 @@
 package com.shadowfit.repository.report;
 
+import com.shadowfit.support.MySqlContainerSupport;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shadowfit.dto.report.detailreport.RepSyncRateDto;
 import com.shadowfit.dto.report.detailreport.SessionDetailedAnalysis;
@@ -22,7 +23,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -49,22 +49,16 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 이 프로젝트가 이미 갖고 있는 «race» 프로파일(실제 MySQL, {@code PoseDataOrphanRaceTest} 등)에
  * 얹는다 — CI(H2 전용)는 이 클래스를 건드리지 않고 조용히 건너뛴다.
  *
- * <p><b>실행법</b> — 시스템 프로퍼티가 없으면 통째로 건너뛰므로 CI 는 영향받지 않는다:
+ * <p><b>실행법</b> — {@link MySqlContainerSupport} 가 mysql:8.0 컨테이너를 띄우고 Flyway 가
+ * 스키마를 만든다. Docker 가 없으면 «건너뜀» 으로 보고된다(CI 러너에는 있다):
  * <pre>
- *   docker run -d --name shadowfit-race-mysql -e MYSQL_ROOT_PASSWORD=racetest \
- *     -e MYSQL_DATABASE=shadowfit -p 3307:3306 mysql:8.0 \
- *     --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
- *   for f in backend/src/main/resources/db/migration/V*.sql; do
- *     docker exec -i shadowfit-race-mysql mysql -uroot -pracetest shadowfit &lt; "$f"; done
- *   ./gradlew :backend:test --tests '*WeeklySummaryBLayerRaceTest' -Drace.mysql=true
+ *   ./gradlew :backend:test --tests '*WeeklySummaryBLayerRaceTest'
  * </pre>
  */
 @SpringBootTest
 @ActiveProfiles("race")
-@EnabledIfSystemProperty(named = "race.mysql", matches = "true",
-        disabledReason = "실제 MySQL(3307)이 필요 — 클래스 주석의 docker 명령 참고")
 @DisplayName("주간 B층 집계 쿼리 (JSON_TABLE, 실 MySQL)")
-class WeeklySummaryBLayerRaceTest {
+class WeeklySummaryBLayerRaceTest extends MySqlContainerSupport {
 
     @Autowired private WeeklySummaryQueryRepository repository;
     @Autowired private MemberRepository memberRepository;
@@ -92,7 +86,10 @@ class WeeklySummaryBLayerRaceTest {
         otherMember = memberRepository.saveAndFlush(Member.builder()
                 .email("weekly-blayer-other@test.com").username("B층남").password("dummy")
                 .selectedPersona(SelectedPersona.BEGINNER).role(UserRole.USER).build());
-        Category category = categoryRepository.save(Category.builder().name("LOWER").build());
+        // V10 이 LOWER 를 시드하므로 있으면 쓰고 없으면 만든다 — Flyway 스키마 위에서 도는 지금은
+        // 항상 «있다» 쪽이다(예전 수동 절차 시절에 쓰인 무조건 save 는 UNIQUE 위반으로 죽는다).
+        Category category = categoryRepository.findByName("LOWER")
+                .orElseGet(() -> categoryRepository.save(Category.builder().name("LOWER").build()));
         exercise = exercisesRepository.saveAndFlush(Exercise.builder()
                 .name("스쿼트").category(category).expectedDurationMinutes(15)
                 .syncThresholdBeginner(new BigDecimal("60.00"))

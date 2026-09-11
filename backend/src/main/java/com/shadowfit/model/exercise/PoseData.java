@@ -39,13 +39,16 @@ public class PoseData {
     @Builder.Default
     private Integer repNumber = 0;
 
-    @Column(name = "timestamp_sec", nullable = false)
+    // columnDefinition 은 Flyway 스키마(V1)를 그대로 옮긴 것이다 — race 프로파일의 ddl-auto: validate 가
+    // 자바 Double(FLOAT) 과 DECIMAL 을 동치로 안 봐서, 선언이 없으면 컨텍스트가 안 뜬다.
+    @Column(name = "timestamp_sec", nullable = false, columnDefinition = "DECIMAL(10,3)")
     private Double timestampSec; // 영상 내 시간대 (초)
 
-    @Lob // 데이터가 길 수 있으므로 대용량 데이터 타입 지정
-    @Column(columnDefinition = "TEXT", nullable = false)
+    // ExerciseReference 와 같은 선언. 예전엔 @Lob TEXT 였는데 V1 은 JSON 이라 validate 가 잡았다.
+    @Column(columnDefinition = "json", nullable = false)
     private String jointCoordinates; // 관절 좌표 (JSON 문자열)
 
+    @Column(columnDefinition = "DECIMAL(5,2)")
     private Double syncRate; // 정답 영상과의 일치율
 
     /**
@@ -66,7 +69,7 @@ public class PoseData {
      * 파생된 값인데 임계값(40)을 쓰기 시점에 굳혀 저장해 AI 의 persona 임계값(BEGINNER 60)과
      * 한 행 안에서 모순됐다. 판정은 임계값을 아는 쪽이 한 번만 한다.
      */
-    @Column(name = "smoothed_knee_angle", nullable = false)
+    @Column(name = "smoothed_knee_angle", nullable = false, columnDefinition = "DECIMAL(5,2)")
     @Builder.Default
     private Double smoothedKneeAngle = 0.0;
 

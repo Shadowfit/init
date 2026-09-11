@@ -1,4 +1,4 @@
-# 경쟁조건 재현 전용 프로파일 — 실제 MySQL 을 가리킨다.
+# 실 MySQL 프로파일 — Testcontainers 가 띄운 mysql:8.0 을 가리킨다.
 #
 # 왜 H2(기본 테스트 프로파일)로는 안 되는가:
 #   기본 테스트는 ddl-auto: create-drop 이라 Hibernate 가 엔티티에서 스키마를 만든다.
@@ -8,44 +8,30 @@
 #
 #   그래서 orphan INSERT 가 H2 에서는 참조무결성 위반으로 터지고 MySQL 에서는 조용히 들어간다.
 #   재현이 안 되는 게 아니라 결과가 반대로 나온다. "FK 가 없다"는 전제 위에 세워진 결함은
-#   원리상 H2 로 검증할 수 없다.
+#   원리상 H2 로 검증할 수 없다. JSON_TABLE(주간 B층)·벤더 제약명(가입 경합)도 같은 종류다.
 #
-# 띄우는 법 (개발용 DB 를 건드리지 않도록 3307 에 일회용 컨테이너):
-#   docker run -d --name shadowfit-race-mysql -e MYSQL_ROOT_PASSWORD=racetest \
-#     -e MYSQL_DATABASE=shadowfit -p 3307:3306 mysql:8.0 \
-#     --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
-#   for f in backend/src/main/resources/db/migration/V*.sql; do \
-#     docker exec -i shadowfit-race-mysql mysql -uroot -pracetest shadowfit < "$f"; done
+# 띄우는 법: 없다. com.shadowfit.support.MySqlContainerSupport 를 상속하면 컨테이너가 뜨고
+#   @ServiceConnection 이 datasource url/username/password 를 넣는다 — 그래서 이 파일엔
+#   datasource 가 없다. Docker 가 없으면 테스트는 «건너뜀» 으로 보고된다.
 #
-#   [정정 2026-08-22 · #342] 여기 「V1__baseline.sql 하나만」 적재하라고 적혀 있었다.
-#   마이그레이션이 V8 까지 왔으므로(V8 = 세션 nonce, #323) 그대로 따라 하면 엔티티와 스키마가
-#   어긋나 `Unknown column 'session_nonce'` 로 죽는다. 절차가 낡으면 테스트가 «있어도 안 도는»
-#   상태가 되고, 이 파일의 테스트들은 CI 에서 건너뛰므로 그 사실이 드러나지 않는다.
-#   그래서 파일을 집지 않고 디렉터리 전체를 순서대로 적재한다 — 마이그레이션이 늘어도 안 낡는다.
+#   [이력] 2026-09-11 이전에는 3307 에 컨테이너를 손으로 띄우고 V*.sql 을 순서대로 부어 넣은 뒤
+#   -Drace.mysql=true 로 열어야 했다. 그 절차는 한 번 낡아서(#342 — V1 만 적재하라고 적혀
+#   있던 것) 테스트가 «있어도 안 도는» 상태가 됐고, CI 는 이 프로파일을 한 번도 돌린 적이 없었다.
 #
-#   (경로가 바뀐 이유: Flyway 도입으로 schema.sql 이 V1__baseline.sql 이 됐다.
-#    파일에서 CREATE DATABASE/USE 를 뺐지만 위 명령이 DB 를 지정하므로 그대로 동작한다.)
-#
-# 도는 법 (시스템 프로퍼티가 없으면 테스트 자체가 건너뛰어져 CI 는 영향 없음):
-#   ./gradlew :backend:test --tests '*PoseDataOrphanRaceTest' -Drace.mysql=true
+# 도는 법:
+#   ./gradlew :backend:test --tests '*PoseDataOrphanRaceTest'
 spring:
-  datasource:
-    url: jdbc:mysql://localhost:3307/shadowfit?serverTimezone=Asia/Seoul&characterEncoding=UTF-8
-    username: root
-    password: racetest
-    driver-class-name: com.mysql.cj.jdbc.Driver
-
-  # Flyway 를 끈다 — 이 프로파일은 위 수동 절차로 만든 스키마를 **그대로** 관찰하는 게
-  # 목적이다. 스키마를 누가 만들었는지가 재현 결과를 바꾸진 않지만(V1 이 곧 옛 schema.sql),
-  # 재현 harness 는 변수를 늘리지 않는 편이 낫다.
+  # Flyway 가 스키마를 만든다 — 운영과 같은 경로. 마이그레이션이 곧 테스트 픽스처라
+  # 번호 중복(#653)·엔티티와 어긋난 컬럼이 컨텍스트 기동에서 바로 잡힌다.
   flyway:
-    enabled: false
+    enabled: true
 
   jpa:
-    # 스키마는 위 수동 절차(V1__baseline.sql)가 만든 것을 그대로 쓴다 — 엔티티에서
-    # 생성하면 위에 적은 FK 문제가 그대로 재현된다.
     hibernate:
-      ddl-auto: none
+      # validate: 엔티티 매핑을 Flyway 가 만든 스키마와 대조만 한다(만들거나 고치지 않음).
+      # 기본 프로파일(create-drop)은 «엔티티 ≠ 마이그레이션» 이어도 초록불이 뜨는데,
+      # 여기서는 그 틈이 «Missing column/table» 로 드러난다.
+      ddl-auto: validate
     database-platform: org.hibernate.dialect.MySQLDialect
 
   sql:

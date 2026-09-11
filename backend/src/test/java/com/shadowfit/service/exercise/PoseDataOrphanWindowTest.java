@@ -1,5 +1,7 @@
 package com.shadowfit.service.exercise;
 
+import com.shadowfit.support.MySqlContainerSupport;
+import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import com.shadowfit.grpc.PoseDataRequest;
 import com.shadowfit.model.exercise.Exercise;
 import com.shadowfit.model.exercise.Category;
@@ -17,7 +19,6 @@ import io.micrometer.core.instrument.distribution.ValueAtPercentile;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -54,14 +55,17 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 절대 수치는 환경 종속이다(프로젝트가 이미 못박은 전제). 신뢰할 것은 <b>자릿수</b>와
  * <b>동시성에 따른 상대 변화</b>이지 소수점이 아니다.
  *
- * <p>실행법은 {@link PoseDataOrphanRaceTest} 와 같다(3307 컨테이너 + {@code -Drace.mysql=true}).
+ * <p>실행: {@code ./gradlew :backend:test --tests '*PoseDataOrphanWindowTest' -Dmeasure.orphan.window=true}
+ * ({@link MySqlContainerSupport} 가 컨테이너를 띄운다 — 프로퍼티는 «돌릴지» 만 정한다).
  */
 @SpringBootTest
 @ActiveProfiles("race")
-@EnabledIfSystemProperty(named = "race.mysql", matches = "true",
-        disabledReason = "실제 MySQL(3307)이 필요 — PoseDataOrphanRaceTest 주석의 docker 명령 참고")
+// 측정 장치라 CI 에서 안 돌린다 — 동시성 1/10/30 × 배치 1,750회로 4분 넘게 걸리고, 2026-09-11 이 박스에서는
+// 30스레드 구간이 InnoDB 데드락(ON DUPLICATE KEY UPDATE)으로 끝났다. 컨테이너는 자동이지만 실행은 명시적으로.
+@EnabledIfSystemProperty(named = "measure.orphan.window", matches = "true",
+        disabledReason = "측정 장치 — -Dmeasure.orphan.window=true 로만 실행")
 @DisplayName("pose_data 고아 창 폭 측정")
-class PoseDataOrphanWindowTest {
+class PoseDataOrphanWindowTest extends MySqlContainerSupport {
 
     private static final String WINDOW_METRIC = "shadowfit.pose.orphan.window";
     private static final int SESSION_COUNT = 30;   // 라운드로빈 대상 — 세션 간 직렬화 회피
@@ -208,7 +212,10 @@ class PoseDataOrphanWindowTest {
                 .role(UserRole.USER).build());
         memberId = member.getId();
 
-        Category category = categoryRepository.save(Category.builder().name("LOWER").build());
+        // V10 이 LOWER 를 시드하므로 있으면 쓰고 없으면 만든다 — Flyway 스키마 위에서 도는 지금은
+        // 항상 «있다» 쪽이다(예전 수동 절차 시절에 쓰인 무조건 save 는 UNIQUE 위반으로 죽는다).
+        Category category = categoryRepository.findByName("LOWER")
+                .orElseGet(() -> categoryRepository.save(Category.builder().name("LOWER").build()));
         Exercise exercise = exercisesRepository.saveAndFlush(Exercise.builder()
                 .name("스쿼트").category(category).expectedDurationMinutes(15)
                 .syncThresholdBeginner(new BigDecimal("60.00"))

@@ -114,6 +114,14 @@ dependencies {
 	testImplementation 'org.springframework.security:spring-security-test'
 	testRuntimeOnly 'com.h2database:h2'
 
+	// 실 MySQL 테스트(race 프로파일) — Testcontainers 가 mysql:8.0 컨테이너를 띄우고
+	// @ServiceConnection 이 datasource 를 주입한다. 버전은 Boot BOM 이 관리한다.
+	// 왜 필요한가: H2(MySQL 모드)는 JSON_TABLE·파티션·FK 없는 pose_data 를 재현 못 한다 —
+	// src/test/resources/application-race.yml 헤더 참조.
+	testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+	testImplementation 'org.testcontainers:mysql'
+	testImplementation 'org.testcontainers:junit-jupiter'
+
 	//docker 빌드 없이 바로 수정
 	developmentOnly 'org.springframework.boot:spring-boot-devtools'
 }
