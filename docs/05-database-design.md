@@ -137,20 +137,23 @@ CREATE TABLE daily_logs (
 > 2026-09-11 V16: `reports` → `session_reports`, `report_type` 삭제. 원래 `ENUM('SESSION','WEEKLY','MONTHLY')` 이었지만
 > `session_id NOT NULL` + `UNIQUE(session_id)` 라 주간·월간 행은 존재할 수 없었고, 주간·월간은 저장하지 않기로 결정돼
 > 있어([`decisions/weekly-monthly-stat-preaggregation.md`](./decisions/weekly-monthly-stat-preaggregation.md)) 이름을 좁혔다.
-> 실제 컬럼은 `member_id`(아래 `user_id` 는 초기 설계 표기) — 정확한 DDL 은 `V1__baseline.sql` + `V16`.
+> 아래 DDL 은 `V1__baseline.sql` 에 V16 을 적용한 실제 모양이다 (이 문서의 다른 표는 초기 설계 표기 `user_id` 를
+> 쓰지만 실제 컬럼은 `member_id` — 이 표만 실물로 맞췄다).
 
 ```sql
 CREATE TABLE session_reports (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    user_id BIGINT NOT NULL,
+    member_id BIGINT NOT NULL,
     session_id BIGINT NOT NULL,
-    summary TEXT,                          -- GPT 생성 피드백 요약
-    detailed_analysis JSON,               -- 상세 분석 데이터
+    summary TEXT,                          -- 세션 총평
+    detailed_analysis JSON,               -- 상세 분석 (repTrend·worst 구간 등, JSON_TABLE 로 주간 집계가 읽음)
     improvement_tips TEXT,                 -- 개선 포인트
     comparison_with_previous JSON,        -- 이전 기록 대비 변화량
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id),
-    FOREIGN KEY (session_id) REFERENCES exercise_sessions(id)
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NULL,
+    FOREIGN KEY (member_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (session_id) REFERENCES exercise_sessions(id) ON DELETE CASCADE,
+    UNIQUE KEY uk_report_session (session_id)   -- 세션당 1건 (제약 이름은 리네임 전 그대로)
 );
 ```
 
