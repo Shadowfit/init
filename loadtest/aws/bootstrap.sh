@@ -63,7 +63,7 @@ INTERNAL_API_TOKEN=${INTERNAL_API_TOKEN:-}
 AI_PY_VERSION=${AI_PY_VERSION:-3.12}
 AI_PY=${AI_PY:-}                         # 인터프리터를 직접 줄 때 (배포판에 3.12 가 없는 경우)
 
-# p6-loader 전용
+# p6-loader 전용 (K6_VERSION 은 client-ab 도 쓴다)
 GHZ_VERSION=${GHZ_VERSION:-0.120.0}
 GHZ_SESSIONS=${GHZ_SESSIONS:-901-1900}   # seed-multi-sessions.sql 과 **같은 범위여야** 한다
 GHZ_REPS=${GHZ_REPS:-25}
@@ -73,6 +73,24 @@ K6_VERSION=${K6_VERSION:-2.1.0}
 
 step() { echo; echo "──── $* ────"; }
 die()  { echo; echo "🔴 부트스트랩 중단 — $*" >&2; exit 1; }
+
+# k6 릴리스 바이너리 설치. p6-loader(HTTP p99 축)와 client-ab(4차 동시성 축 드라이버)가 같이 쓴다 —
+# 버전이 측정 조건이라(K6_VERSION 주석) 두 ROLE 이 각자 받으면 안 되고 여기 한 곳이어야 한다.
+ensure_k6() {
+  K6_BIN=/usr/local/bin/k6
+  if [ ! -x "$K6_BIN" ]; then
+    case "$(uname -m)" in
+      x86_64)  K6_ARCH=amd64 ;;
+      aarch64) K6_ARCH=arm64 ;;
+      *) die "k6 릴리스에 없는 아키텍처: $(uname -m)" ;;
+    esac
+    K6_DIR="k6-v${K6_VERSION}-linux-${K6_ARCH}"
+    curl -fsSL "https://github.com/grafana/k6/releases/download/v${K6_VERSION}/${K6_DIR}.tar.gz"       -o /tmp/k6.tgz || die "k6 내려받기 실패 (버전 $K6_VERSION)"
+    tar -xzf /tmp/k6.tgz -C /tmp "${K6_DIR}/k6" || die "k6 압축 해제 실패"
+    install -m 0755 "/tmp/${K6_DIR}/k6" "$K6_BIN" || die "k6 설치 실패"
+  fi
+  echo "  k6  → $("$K6_BIN" version 2>&1 | head -1)"
+}
 
 [ "$(id -u)" = "0" ] || die "root 로 돌려야 한다 (sudo -i). 위 주석의 docker 그룹 함정 참고"
 
@@ -408,19 +426,7 @@ if [ "$ROLE" = "p6-loader" ]; then
   echo "  ghz → $("$GHZ_BIN" --version 2>&1 | head -1)"
 
   # k6 — HTTP 축(읽기·쓰기 p99)용. ghz 는 gRPC 만 걸 수 있어서 HTTP 판을 못 만든다.
-  K6_BIN=/usr/local/bin/k6
-  if [ ! -x "$K6_BIN" ]; then
-    case "$(uname -m)" in
-      x86_64)  K6_ARCH=amd64 ;;
-      aarch64) K6_ARCH=arm64 ;;
-      *) die "k6 릴리스에 없는 아키텍처: $(uname -m)" ;;
-    esac
-    K6_DIR="k6-v${K6_VERSION}-linux-${K6_ARCH}"
-    curl -fsSL "https://github.com/grafana/k6/releases/download/v${K6_VERSION}/${K6_DIR}.tar.gz"       -o /tmp/k6.tgz || die "k6 내려받기 실패 (버전 $K6_VERSION)"
-    tar -xzf /tmp/k6.tgz -C /tmp "${K6_DIR}/k6" || die "k6 압축 해제 실패"
-    install -m 0755 "/tmp/${K6_DIR}/k6" "$K6_BIN" || die "k6 설치 실패"
-  fi
-  echo "  k6  → $("$K6_BIN" version 2>&1 | head -1)"
+  ensure_k6
 
   # 從 부하 페이로드. 🔴 커밋돼 있지 않다(~54MB, .gitignore) — 여기서 만든다.
   #    세션 범위는 대상 박스의 시드와 **같아야** 한다. 다르면 전 요청이 FK 로 실패하는데
@@ -879,6 +885,11 @@ if [ "$ROLE" = "client-ab" ]; then
   REFN=$(docker exec -i -e MYSQL_PWD="$PW" shadowfit-mysql mysql -uroot "$DB_NAME" -N            -e "SELECT COUNT(*) FROM exercise_references;" 2>/dev/null | tr -d '[:space:]')
   [ "${REFN:-0}" -gt 0 ] || die "exercise_references 가 0행이다 — 재부착 페이로드가 비어 큰 요청 축이 사라진다"
   echo "  exercise_references ${REFN}행"
+
+  # 4차(동시성 축)의 드라이버. 2·3차 rig 은 bash 순차 루프라 k6 가 필요 없었다 —
+  # 여기서 안 깔면 measure_ai_call_concurrency.sh 가 첫 줄에서 «k6 가 없다» 로 멈춘다.
+  step "k6 (4차 동시성 축 드라이버)"
+  ensure_k6
 fi
 
 # ── 요약 ─────────────────────────────────────────────────────────────────

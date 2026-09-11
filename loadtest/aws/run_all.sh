@@ -137,6 +137,7 @@ if [ -z "$OUTDIR" ]; then
       q2)                                  _r=q2-partition-quiet-box ;;
       card_a_seed|card_a)                  _r=card-a-write-cost ;;
       clientab)                            _r=ai-call-latency-ab ;;
+      clientconc)                          _r=ai-call-concurrency ;;
       *)                                   continue ;;   # preflight·ridealong·collect 는 라운드를 안 정한다
     esac
     case " $_rounds " in *" $_r "*) ;; *) _rounds="${_rounds:+$_rounds }$_r" ;; esac
@@ -464,6 +465,16 @@ TIMEOUT_CLIENTAB=${TIMEOUT_CLIENTAB:-14400}     # 4시간
 CLIENTAB_N=${CLIENTAB_N:-100}                   # 블록당 사이클
 CLIENTAB_BLOCKS=${CLIENTAB_BLOCKS:-5}           # 유효 블록(팔당). 앞에 버림 블록이 하나 더 붙는다
 CLIENTAB_WARMUP=${CLIENTAB_WARMUP:-10}
+
+# ── 동시성 축 (clientconc, 4차) — 같은 박스(ROLE=client-ab)에서 돈다 ──────────────
+# 설계: docs/decisions/grpc-webclient-concurrency-round.md. 재기동은 팔 전환(12회)뿐이고 칸 50개.
+#   PHASES="clientconc ridealong collect"
+#   🔴 clientab 과 같은 PHASES 에 넣지 말 것 — 라운드가 둘 섞여 결과 디렉터리 추론이 막힌다(#358).
+TIMEOUT_CLIENTCONC=${TIMEOUT_CLIENTCONC:-14400}   # 4시간
+CLIENTCONC_N=${CLIENTCONC_N:-100}                 # VU 당 사이클(칸당 표본 = N × c)
+CLIENTCONC_BLOCKS=${CLIENTCONC_BLOCKS:-5}
+CLIENTCONC_WARMUP=${CLIENTCONC_WARMUP:-10}
+CLIENTCONC_LEVELS=${CLIENTCONC_LEVELS:-"1 4 8 16 32"}   # 구조 문턱(설계 §4-2). 게이트 실측이 다르면 여기서
 
 # 🔴 이름을 **여기서 한 번** 정하고 rig 에 물려준다 (#374).
 #    게이트(위 repl_preflight)와 rig(`repl2_rig.sh:60`)가 각각 이름을 들고 있으면,
@@ -1710,6 +1721,29 @@ phase_clientab() {
   return 0
 }
 
+phase_clientconc() {
+  local out=$OUTDIR/clientconc
+  mkdir -p "$out"
+
+  timeout $TIMEOUT_CLIENTCONC env       N="$CLIENTCONC_N" BLOCKS="$CLIENTCONC_BLOCKS" WARMUP="$CLIENTCONC_WARMUP" LEVELS="$CLIENTCONC_LEVELS"       COMPOSE_DIR="$ROOT" OUT="$out"       bash "$ROOT/loadtest/measure_ai_call_concurrency.sh" > "$out/run.log" 2>&1
+  local rc=$?
+
+  # 구조 게이트 결과를 단계 로그에도 올린다 — structure.txt 안에만 있으면 «c 수준이 문턱을
+  # 끼웠는지» 를 아무도 안 본다(설계 §5-4).
+  grep -E "이벤트루프 .* 개|GRPC_MAX_WORKERS=" "$out/run.log" | tail -3 | while read -r l; do note "  $l"; done
+
+  # 집계는 실패해도 원자료는 남는다 — rc 와 무관하게 시도한다.
+  python3 "$ROOT/loadtest/analyze_ai_call_concurrency.py" "$out" > "$out/summary.txt" 2>&1
+  grep -E "^## reattach 평균|^ +[0-9]+ .*(안 겹침|판별 불가)|기울기|c=[0-9]+ +(✅|🟡)" "$out/summary.txt" | head -20 | while read -r l; do note "  $l"; done
+
+  if [ $rc -ne 0 ]; then
+    note "🔴 clientconc rc=$rc — run.log 를 볼 것 (칸 $(( $(wc -l < "$out/cells.tsv" 2>/dev/null || echo 1) - 1 )) 개)"
+    return 1
+  fi
+  note "clientconc 완료 — 팔 2 × 블록 ${CLIENTCONC_BLOCKS} × c [${CLIENTCONC_LEVELS}] × VU당 ${CLIENTCONC_N} — $out/summary.txt"
+  return 0
+}
+
 phase_q2() {
   local out=$OUTDIR/q2
   mkdir -p "$out"
@@ -2022,6 +2056,7 @@ for p in $PHASES; do
     httpread)  run_phase httpread  phase_httpread ;;
     q2)          run_phase q2          phase_q2 ;;
     clientab)    run_phase clientab    phase_clientab ;;
+    clientconc)  run_phase clientconc  phase_clientconc ;;
     card_a_seed) run_phase card_a_seed phase_card_a_seed ;;
     card_a)      run_phase card_a      phase_card_a ;;
     ridealong) run_phase ridealong phase_ridealong ;;

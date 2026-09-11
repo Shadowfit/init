@@ -1,6 +1,6 @@
 # 설계: 동시성 축 — 클라이언트 쪽 고정비는 동시 호출에서 어떻게 커지나 (4차 라운드)
 
-상태: 📝 **설계 (2026-09-11) — 착수 전 §7 미결 5개 확인 필요.** 사용자가 [`grpc-webclient-empirical-comparison.md` §11-4](./grpc-webclient-empirical-comparison.md#11-4-남은-선택지) 의 **ㄴ(동시성 축 먼저 → 결정)** 을 골랐다(2026-09-11).
+상태: 🔧 **rig 구현 중 (2026-09-11) — §7 미결 6개는 전부 추천안(a)으로 사용자 확정, 로컬 스모크 진행 중.** 사용자가 [`grpc-webclient-empirical-comparison.md` §11-4](./grpc-webclient-empirical-comparison.md#11-4-남은-선택지) 의 **ㄴ(동시성 축 먼저 → 결정)** 을 골랐다(2026-09-11).
 작성: 2026-09-11
 배경: 3차 라운드([`grpc-webclient-transport-cost-breakdown.md`](./grpc-webclient-transport-cost-breakdown.md))가 「기제는 홉이 아니라 **클라이언트 쪽**」까지 좁혔고, 동시성 축은 세 라운드 내내 미측정이었다.
 연관: [`grpc-webclient-production-client-round.md`](./grpc-webclient-production-client-round.md)(2차 — 계기·rig 의 원형) ·
@@ -129,7 +129,8 @@ c=32 를 넘기지 않는다 — 그 위는 B 의 대기열(32)도 넘어 **거�
 2·3차의 bash 순차 루프는 c=1 전용이다. c 를 주려면 드라이버가 동시 사이클을 돌려야 한다:
 
 - **k6**, executor `per-vu-iterations`: `vus = c`, `iterations = N` (VU 당). 사이클 = 세션 시작 →
-  재부착 → 종료, 2차와 같다. VU i 는 계정 i 의 토큰을 쓴다(한 계정이 동시 세션을 열지 않도록).
+  재부착 → 종료, 2차와 같다. VU i 는 **자기 계정 묶음**(R=25 개)을 돌려 쓴다 — 한 계정이 동시
+  세션을 열지 않도록, 그리고 바로 다음 사이클에 같은 계정을 다시 쓰면 409 가 나므로(§9-1 1번).
 - 표본은 칸당 **N × c** 사이클 — c=1 이면 2차와 같은 100, c=32 면 3,200. 처리량은
   k6 의 iterations ÷ 벽시계.
 - 계정 준비·팔 전환·배수·스크레이프는 `measure_ai_call_latency_ab.sh` 의 것을 그대로 쓴다
@@ -163,7 +164,8 @@ c=32 를 넘기지 않는다 — 그 위는 B 의 대기열(32)도 넘어 **거�
 
 **예상 소요**: 재기동 12회 × 1.5분 + 칸 50개 × (본판 ~1분 + 배수) — 배수가 §5-3 ③ 대로면
 **1.5시간 안팎**, 20/s 그대로면 배수만 6,100 stop/블록 ÷ 20 ≈ 5분 × 10블록 = 50분이 더 붙는다.
-인스턴스 1대(`c7i.2xlarge`, 8 vCPU — 백엔드 `cpus: 4` · AI `cpus: 4` 는 compose 기본).
+인스턴스 1대(`c7i.2xlarge`, 8 vCPU — 백엔드 `cpus: 4` · AI `cpus: 4` 는 compose 기본). 계정 800개
+준비(§9-1 1번)가 앞에 ≈17분 더 붙는다.
 
 ### 5-3. 공정성 장치 — 이게 없으면 다른 걸 재게 된다
 
@@ -236,6 +238,8 @@ c=32 를 넘기지 않는다 — 그 위는 B 의 대기열(32)도 넘어 **거�
 | ⑤ | 드라이버 도구 | (a) **k6** / (b) bash `xargs -P` | **(a)** | iterations·실패율·벽시계가 공짜. bootstrap `ROLE=client-ab` 에 k6 설치를 붙여야 한다(지금은 p6-loader 에만 있다) |
 | ⑥ | Reactor Netty 계기 | (a) **끈 채로**(간접 신호) / (b) `metrics(true)` 켜기 | **(a)** | (b) 는 코드 변경 + 계기가 B 팔에만 붙어 비대칭. 풀 대기는 c=32 의 실패 계수로 충분히 보인다 |
 
+✅ **2026-09-11 사용자 결정: ①~⑥ 전부 (a).**
+
 ---
 
 ## 8. 안 재는 것
@@ -251,20 +255,30 @@ c=32 를 넘기지 않는다 — 그 위는 B 의 대기열(32)도 넘어 **거�
 
 ---
 
-## 9. 착수하려면 필요한 것 (아직 안 함)
+## 9. 착수 — rig (2026-09-11 구현)
 
-| # | 무엇 | 크기 |
+| # | 무엇 | 상태 |
 |---|---|---|
-| 1 | k6 스크립트 `loadtest/k6/ai_call_cycle.js` — 토큰 파일을 읽어 VU 별 계정으로 사이클(시작→재부착→종료), `per-vu-iterations` | 소 |
-| 2 | rig `measure_ai_call_concurrency.sh` — 2차 rig 의 계정 준비·`switch_arm`·`drain`·`scrape` 를 재사용하고, 블록 = (팔, c 회전 5수준), 칸마다 `cpu.stat` 전/후 + k6 summary 회수 | 중 |
-| 3 | 측정용 compose 오버레이 — `GRPC_MAX_WORKERS`·`OUTBOX_PUBLISHER_BATCH_SIZE` 실어보내기(§5-3 ①③) | 소 |
-| 4 | bootstrap `ROLE=client-ab` 에 k6 설치(p6-loader 의 블록 재사용) + 구조 확인 게이트(§5-4) | 소 |
-| 5 | 분석기 — (팔 × c) 격자 표: Reattach p50/p99 델타 · 처리량 · CPU/사이클 · 실패 계수, 규칙 1·2 판정 | 중 |
-| 6 | `run_all.sh` 에 `clientconc` phase 등록 + 결과 디렉터리 이름 매핑 | 소 |
+| 1 | `loadtest/k6/ai_call_cycle.js` — VU 별 계정 묶음으로 사이클(시작→재부착→종료), `per-vu-iterations`, 칸 요약 JSON | ✅ |
+| 2 | `loadtest/measure_ai_call_concurrency.sh` — 블록 = (팔, c 회전), 칸마다 스크레이프·cgroup CPU·k6 요약·서킷 상태 회수, 구조 게이트 | ✅ |
+| 3 | `loadtest/aws/compose.clientconc.yml` — `GRPC_MAX_WORKERS=40`·`OUTBOX_PUBLISHER_BATCH_SIZE=200` 오버레이(§5-3 ①③). rig 이 `COMPOSE_FILE` 로 얹고 게이트가 확인 | ✅ |
+| 4 | `bootstrap.sh` `ROLE=client-ab` 에 k6 설치(`ensure_k6` 로 p6-loader 와 공용) | ✅ |
+| 5 | `loadtest/analyze_ai_call_concurrency.py` — (팔 × c) 격자: 평균/p50/p99 델타 · 처리량 · CPU/사이클 · 실패, 규칙 1·2·3 | ✅ |
+| 6 | `run_all.sh` `clientconc` phase + 결과 디렉터리 `ai-call-concurrency-aws-<날짜>` | ✅ |
+| 7 | 2·3차 rig 의 공용 함수를 `loadtest/ai_call_ab_lib.sh` 로 뺐다 — 팔 전환·계정 준비·배수가 한 곳 | ✅ |
 
-🔴 **로컬 스모크를 먼저 돌린다** — `c ∈ {1, 4}` · N=2 · 블록 1. 2차는 EC2 를 네 번 띄워 셋을
-헛돌렸고 원인은 전부 「로컬에서 안 밟아본 코드」였다. 이번엔 k6 스크립트와 cgroup 회수가 새
-코드다.
+### 9-1. 로컬 스모크가 잡은 것 (2026-09-10~11, docker compose 로컬)
+
+| # | 결함 | 왜 났나 | 조치 |
+|---|---|---|---|
+| 1 | **VU 의 두 번째 사이클이 전부 409** (`SESSION_ALREADY_IN_PROGRESS`) | `PATCH /end` 는 endTime 만 적고 **status 는 아웃박스 → AI → 콜백이 돌아와야 바뀐다**(`SessionService.endSession` 주석). 2·3차는 계정 100개를 순환해서 안 보였다 | VU 마다 계정 묶음 R 개를 돌려 쓴다(`ROTATION=25`, 계정 = 25 × 최대 c = 800). 🔴 25 는 근거 있는 수가 아니라 «틱 1s + 콜백» 보다 넉넉한 자리 — 모자라면 k6 가 `start_409` 로 세고 분석기가 그 칸을 뺀다(규칙 3). 계정 준비 ≈ 17분이 라운드에 더 붙는다 |
+| 2 | 구조 게이트가 이벤트루프를 0개로 셌다 | 리눅스 Reactor Netty 는 `reactor-http-epoll-N`(nio 아님) + `/proc/*/comm` 15자 절단 | 접두어 `reactor-http-` 로 센다. ELG 는 게으르게 생겨 «지금까지 쓰인 수» 라 큰 c 를 밟은 뒤에 센다 |
+| 3 | 컨테이너 CPU 가 전부 `na` | Git Bash 가 `/sys/fs/cgroup/…` 를 Windows 경로로 바꿔 버림(로컬 전용 함정) | `MSYS_NO_PATHCONV=1` — 리눅스에선 무효 |
+| 4 | `COMPOSE_FILE` 이 통째로 깨짐 | Windows compose 의 경로 구분자가 `;` | `COMPOSE_PATH_SEPARATOR=:` 명시 |
+
+§2-1 의 스레드 수 기본값도 로컬(컨테이너 `cpus: 4`)에서 확인됐다: `reactor-http-epoll` **4** ·
+`grpc-default-worker-ELG` 3~4(게으른 생성) · `grpc-default-executor` 4. EC2 게이트에서 같은 값이
+나오는지 본 뒤 c 수준을 확정한다.
 
 ---
 
@@ -272,4 +286,7 @@ c=32 를 넘기지 않는다 — 그 위는 B 의 대기열(32)도 넘어 **거�
 
 - 2026-09-11: 문서 신설. 사용자가 §11-4 의 **ㄴ(동시성 축 먼저 → 결정)** 을 골랐다. 팔 2(풀 3)·
   c 5수준(구조 문턱 1/4/8/16/32)·지표 5(지연·start 콜백·처리량·Spring CPU/사이클·AI CPU)·판정
-  규칙(겹침 두 겹)까지 잡았다. **§7 미결 ①~⑥은 사용자 확인 대기, 착수 시점도 사용자 결정.**
+  규칙(겹침 두 겹)까지 잡았다.
+- 2026-09-11: **§7 ①~⑥ 전부 (a) 로 사용자 확정**, rig 착수(§9). 로컬 스모크에서 결함 4건(§9-1) —
+  그중 1번(409)은 rig 결함이 아니라 **제품 사실**(종료 뒤 status 전환은 콜백이 한다)이 동시 드라이버와
+  만난 것이고, 계정 묶음 회전으로 우회했다. **EC2 라운드 기동은 아직 — 사용자 결정.**
