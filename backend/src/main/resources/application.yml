@@ -1,8 +1,15 @@
+# 프로파일 규약 (2026-09-11, redesign-from-scratch-2026-09-11.md F1)
+#   이 파일(프로파일 없음)이 «어디서 돌아도 안전한 기본값» 이다 — Swagger 꺼짐, SQL 로그 꺼짐, 로그 INFO.
+#   dev  : application-dev.yml 이 편의를 켠다 (docker-compose.yml · 로컬 bootRun --args='--spring.profiles.active=dev')
+#   prod : application-prod.yml — 프록시 뒤에서 살기 위한 것만 (docker-compose.prod.yml)
+#   test : src/test/resources/application.yml 이 이 파일을 통째로 가린다 (클래스패스 순서)
+#   예전엔 여기 `spring.profiles.active: prod` 가 기본값이었고 dev compose 도 prod 로 떠서, dev/prod 를
+#   프로파일로 못 가르고 SPRINGDOC_ENABLED 같은 env var 게이트를 하나씩 달아야 했다. 그리고
+#   application.properties 가 같이 있어 show-sql=true 가 프로파일 없이 운영까지 새고 있었다 — 그 파일은
+#   이 yml 로 흡수했다(.properties 가 yml 을 덮어쓰는 함정 자체를 없앤다).
 spring:
   application:
     name: shadowfit
-  profiles:
-    active: prod
 
   # 시간대 — 한국 전용 서비스 (협의 안건 #16, 갱신 15)
   # LocalDateTime 직렬화 형식 — § 12.5 결정과 정합 ("2026-05-28T10:00:03", timezone 마커 없음)
@@ -53,6 +60,16 @@ spring:
       # ⚠️ 여기 있던 «병목이 백엔드 CPU 로 옮겨갔다» 는 **철회된 주장이라 지웠다** — 근거로 들었던
       #    수치가 수집된 적 없는 지표였다(pool-cliff-vs-concurrency.md §0-1). 인용하지 말 것.
       maximum-pool-size: 15
+      # 아래 둘은 application.properties 에서 옮겨왔다(2026-09-11, 그 파일 삭제). 값은 그대로.
+      initialization-fail-timeout: 30000
+      connection-timeout: 30000
+
+  # 스키마는 Flyway 가 소유한다 — Spring 의 SQL 초기화(schema.sql/data.sql 자동 실행)는 끈다.
+  # (application.properties 에서 옮겨왔다. defer 는 init 을 JPA 뒤로 미루지 않는다는 뜻인데 init 자체가
+  #  never 라 «함께 꺼둔 상태» 를 명시하는 것.)
+  sql:
+    init:
+      mode: never
 
   # [1-1] Flyway — 스키마 마이그레이션 (이슈 #115, schema-migration-tracking.md §8)
   #
@@ -81,6 +98,8 @@ spring:
 
   jpa:
      open-in-view: false # 2026-07-15: lazy 필드 접근이 뷰 렌더링 단계까지 조용히 숨겨지는 것 방지, 코드 작을 때 끔
+     defer-datasource-initialization: false
+     # show-sql 은 여기 없다 — dev 프로파일만 켠다. 예전 application.properties 의 show-sql=true 가 운영까지 샜다.
      hibernate:
        # Flyway 가 스키마를 소유한다. Hibernate 는 만들지도 검증하지도 않는다.
        ddl-auto: none
@@ -145,17 +164,17 @@ ai:
 
 # [3] Swagger 및 기타 설정 (최상단 레벨)
 #
-# 기본은 꺼짐이다 — SPRING_PROFILES_ACTIVE 로는 dev/prod 를 못 가른다(docker-compose.yml 의
-# dev 기동도 SPRING_PROFILES_ACTIVE: prod 를 쓴다). 그래서 별도 env var(SPRINGDOC_ENABLED)로
-# 연다. security.whitelist 의 /v3/api-docs·/swagger-ui 항목은 그대로 둔다 — 꺼져 있으면
+# 기본은 꺼짐이고 **env var 로도 못 켠다** — 켜는 건 dev 프로파일(application-dev.yml)뿐이다.
+# (예전엔 SPRINGDOC_ENABLED 로 열었다 — dev/prod 를 프로파일로 못 가르던 시절의 우회.)
+# security.whitelist 의 /v3/api-docs·/swagger-ui 항목은 그대로 둔다 — 꺼져 있으면
 # springdoc 이 그 경로에 아무 핸들러도 안 등록해 permitAll 이어도 노출될 게 없다.
 springdoc:
   api-docs:
     path: /v3/api-docs
-    enabled: ${SPRINGDOC_ENABLED:false}
+    enabled: false
   swagger-ui:
     path: /swagger-ui.html
-    enabled: ${SPRINGDOC_ENABLED:false}
+    enabled: false
 
 security:
   whitelist:
@@ -415,10 +434,8 @@ pose-data:
     check-cron: "0 30 4 * * *"
 
 # [4] 로깅 설정 (최상단 레벨)
+# 기본은 INFO 한 줄. 패키지별 DEBUG 는 dev 프로파일에 있다 — 예전엔 여기 com.shadowfit·net.devh 가
+# DEBUG 라 운영 컨테이너도 그 수준으로 찍었다.
 logging:
   level:
-    root: INFO
-    com.shadowfit: DEBUG
-    io.github.lognet.grpc: DEBUG
-    net.devh: DEBUG
-    org.springframework.jdbc.datasource.init: DEBUG # SQL 초기화 로그 확인용
+    root: ${LOG_LEVEL_ROOT:INFO}

@@ -44,9 +44,9 @@ docker exec -it shadowfit-mysql mysql -u root -pshadowfit -e "SHOW DATABASES;"
 # JWT_SECRET=your-secret-key
 # OPENAI_API_KEY=sk-xxx
 
-# 서버 실행
+# 서버 실행 (dev 프로파일 — Swagger·SQL 로그 켬. 없으면 안전 기본)
 cd backend
-./gradlew bootRun
+./gradlew bootRun --args='--spring.profiles.active=dev'
 ```
 
 ### 5단계: Frontend 셋업
@@ -162,7 +162,7 @@ docker compose up -d mysql
 
 # 터미널 1: Backend
 cd shadowfit/backend
-./gradlew bootRun
+./gradlew bootRun --args='--spring.profiles.active=dev'
 
 # 터미널 2: Frontend
 cd shadowfit/frontend
