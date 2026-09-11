@@ -130,7 +130,7 @@ public class WeeklySummaryQueryRepositoryImpl implements WeeklySummaryQueryRepos
     public List<RepCurvePointDto> repCurveBetween(Long memberId, LocalDateTime from, LocalDateTime to) {
         List<Object[]> rows = entityManager.createNativeQuery("""
                 SELECT jt.rep_number, AVG(jt.sync_rate), COUNT(*)
-                  FROM reports r
+                  FROM session_reports r
                   JOIN exercise_sessions s ON s.id = r.session_id
                  CROSS JOIN JSON_TABLE(r.detailed_analysis, '$.repTrend[*]'
                         COLUMNS (rep_number INT PATH '$.repNumber',
@@ -159,7 +159,7 @@ public class WeeklySummaryQueryRepositoryImpl implements WeeklySummaryQueryRepos
         // «국면» 이 아니라 «회차» 다 — WorstSectionDto 에 국면 이름표가 없다(#80).
         List<Object[]> rows = entityManager.createNativeQuery("""
                 SELECT jt.worst_rep, COUNT(*)
-                  FROM reports r
+                  FROM session_reports r
                   JOIN exercise_sessions s ON s.id = r.session_id
                  CROSS JOIN JSON_TABLE(r.detailed_analysis, '$'
                         COLUMNS (worst_rep INT PATH '$.worstSection.repNumber')) jt

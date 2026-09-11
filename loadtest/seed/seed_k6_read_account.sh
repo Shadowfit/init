@@ -70,7 +70,7 @@ echo
 echo "## [3] K6_SIDS — 리포트가 붙은 세션만"
 SIDS=$(DB -e "
   SELECT s.id FROM exercise_sessions s
-    JOIN reports r ON r.session_id = s.id
+    JOIN session_reports r ON r.session_id = s.id
    WHERE s.member_id = $MEMBER_ID AND s.reference_source = '$TAG'
    ORDER BY s.id LIMIT $SIDS_LIMIT;" | tr '\n' ',' | sed 's/,$//')
 

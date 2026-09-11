@@ -15,7 +15,6 @@ import com.shadowfit.model.member.Member;
 import com.shadowfit.model.member.SelectedPersona;
 import com.shadowfit.model.member.UserRole;
 import com.shadowfit.model.report.Report;
-import com.shadowfit.model.report.ReportType;
 import com.shadowfit.repository.exercise.ExercisesRepository;
 import com.shadowfit.repository.exercise.SessionRepository;
 import com.shadowfit.repository.member.MemberRepository;
@@ -100,7 +99,7 @@ class WeeklySummaryBLayerRaceTest extends MySqlContainerSupport {
     void tearDown() {
         // ddl-auto: none 프로파일이라 @Transactional 롤백에 기대지 않고 직접 지운다
         // (SignupUsernameRaceTest 와 같은 이유). FK 순서대로 자식부터 지운다.
-        jdbcTemplate.update("DELETE FROM reports WHERE member_id IN (?, ?)", member.getId(), otherMember.getId());
+        jdbcTemplate.update("DELETE FROM session_reports WHERE member_id IN (?, ?)", member.getId(), otherMember.getId());
         jdbcTemplate.update("DELETE FROM exercise_sessions WHERE member_id IN (?, ?)",
                 member.getId(), otherMember.getId());
         jdbcTemplate.update("DELETE FROM exercises WHERE id = ?", exercise.getId());
@@ -121,7 +120,6 @@ class WeeklySummaryBLayerRaceTest extends MySqlContainerSupport {
         Report report = new Report();
         report.setMember(owner);
         report.setSession(s);
-        report.setReportType(ReportType.SESSION);
         try {
             report.setDetailedAnalysis(
                     objectMapper.writeValueAsString(new SessionDetailedAnalysis(worstSection, repTrend)));

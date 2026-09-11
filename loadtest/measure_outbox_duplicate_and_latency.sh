@@ -143,7 +143,7 @@ log "1차 발행 SENT 까지: ${elapsed}s"
 row_before=$(echo "SELECT id,status,retry_count FROM outbox_events WHERE aggregate_id=$sid ORDER BY id DESC LIMIT 1;" | sql)
 outbox_id=$(echo "$row_before" | awk '{print $1}')
 session_status_before=$(echo "SELECT status FROM exercise_sessions WHERE id=$sid;" | sql)
-report_count_before=$(echo "SELECT COUNT(*) FROM reports WHERE session_id=$sid;" | sql)
+report_count_before=$(echo "SELECT COUNT(*) FROM session_reports WHERE session_id=$sid;" | sql)
 log "1차 발행 후 — outbox: [$row_before] · session.status=$session_status_before · reports=$report_count_before"
 
 log
@@ -155,7 +155,7 @@ log "2차(강제 재전송) 도달까지: ${elapsed2}s"
 
 row_after=$(echo "SELECT id,status,retry_count FROM outbox_events WHERE aggregate_id=$sid ORDER BY id DESC LIMIT 1;" | sql)
 session_status_after=$(echo "SELECT status FROM exercise_sessions WHERE id=$sid;" | sql)
-report_count_after=$(echo "SELECT COUNT(*) FROM reports WHERE session_id=$sid;" | sql)
+report_count_after=$(echo "SELECT COUNT(*) FROM session_reports WHERE session_id=$sid;" | sql)
 log "2차 발행 후 — outbox: [$row_after] · session.status=$session_status_after · reports=$report_count_after"
 
 log

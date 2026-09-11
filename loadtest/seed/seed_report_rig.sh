@@ -108,9 +108,9 @@ if [ "$WITH_REPORTS" = "1" ]; then
   #    재계산을 타고, 그러면 이 rig 이 재는 것이 «읽기» 가 아니라 «재계산» 이 된다.
   #    (worst-section-rep-resolution.md 가 그 두 경로를 갈라놓은 자리다)
   DB -e "
-    INSERT INTO reports (member_id, session_id, report_type, summary, detailed_analysis,
+    INSERT INTO session_reports (member_id, session_id, summary, detailed_analysis,
                          improvement_tips, created_at, updated_at)
-    SELECT s.member_id, s.id, 'SESSION',
+    SELECT s.member_id, s.id,
            CONCAT('세션 ', s.id, ' 요약 — 시드(', '$TAG', ')'),
            JSON_OBJECT('worst_section', 'BOTTOM', 'avg_sync_rate', s.avg_sync_rate,
                        'rep_count', s.total_reps, 'seeded', TRUE),
@@ -118,7 +118,7 @@ if [ "$WITH_REPORTS" = "1" ]; then
            s.start_time, s.start_time
       FROM exercise_sessions s
      WHERE s.reference_source='$TAG';"
-  DB -e "SELECT COUNT(*) reports FROM reports r JOIN exercise_sessions s ON s.id=r.session_id
+  DB -e "SELECT COUNT(*) reports FROM session_reports r JOIN exercise_sessions s ON s.id=r.session_id
           WHERE s.reference_source='$TAG';"
 fi
 

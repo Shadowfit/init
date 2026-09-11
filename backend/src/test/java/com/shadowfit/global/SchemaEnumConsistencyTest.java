@@ -5,7 +5,6 @@ import com.shadowfit.model.exercise.Status;
 import com.shadowfit.model.member.SelectedPersona;
 import com.shadowfit.model.member.Sex;
 import com.shadowfit.model.outbox.OutboxStatus;
-import com.shadowfit.model.report.ReportType;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -61,7 +60,6 @@ class SchemaEnumConsistencyTest {
         put("users.selected_persona", SelectedPersona.class);
         put("exercise_sessions.status", Status.class);
         put("daily_logs.mood", Mood.class);
-        put("reports.report_type", ReportType.class);
         put("outbox_events.status", OutboxStatus.class);
     }};
 
@@ -75,8 +73,14 @@ class SchemaEnumConsistencyTest {
      * 매핑표에 없는 ENUM 컬럼을 실패로 다루는 이유("새 컬럼이 감시망을 빠져나가지 못하게")가
      * 이 컬럼엔 적용되지 않는다 — 새로 생긴 게 아니라 이미 없어진 컬럼의 낡은 흔적이라, 여기
      * 주석으로 남기고 예외 처리한다(클래스 주석이 안내하는 바로 그 경로).
+     *
+     * <p>{@code reports.report_type} 도 같은 종류다 — V16 이 {@code reports} 를 {@code session_reports} 로
+     * 리네임하며 이 컬럼을 DROP 했다({@code ENUM('SESSION','WEEKLY','MONTHLY')} 이었지만 {@code session_id
+     * NOT NULL} 이라 SESSION 외 값은 존재할 수 없었다). Java enum({@code ReportType})도 같이 삭제됐다.
+     * 실제 스키마 기준 검증은 {@code FlywayMigrationValidationTest}(race 프로파일, 실 MySQL)가 맡는다 —
+     * 이 클래스는 V1 텍스트만 보므로 이런 «지워진 컬럼» 목록이 마이그레이션마다 자랄 수 있다.
      */
-    private static final Set<String> STALE_ENUM_COLUMNS = Set.of("exercises.category");
+    private static final Set<String> STALE_ENUM_COLUMNS = Set.of("exercises.category", "reports.report_type");
 
     private static final Pattern CREATE_TABLE = Pattern.compile(
             "CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?`?(\\w+)`?", Pattern.CASE_INSENSITIVE);

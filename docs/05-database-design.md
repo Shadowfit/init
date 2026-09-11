@@ -132,13 +132,18 @@ CREATE TABLE daily_logs (
 );
 ```
 
-### reports (운동 보고서)
+### session_reports (세션 리포트)
+
+> 2026-09-11 V16: `reports` → `session_reports`, `report_type` 삭제. 원래 `ENUM('SESSION','WEEKLY','MONTHLY')` 이었지만
+> `session_id NOT NULL` + `UNIQUE(session_id)` 라 주간·월간 행은 존재할 수 없었고, 주간·월간은 저장하지 않기로 결정돼
+> 있어([`decisions/weekly-monthly-stat-preaggregation.md`](./decisions/weekly-monthly-stat-preaggregation.md)) 이름을 좁혔다.
+> 실제 컬럼은 `member_id`(아래 `user_id` 는 초기 설계 표기) — 정확한 DDL 은 `V1__baseline.sql` + `V16`.
+
 ```sql
-CREATE TABLE reports (
+CREATE TABLE session_reports (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     user_id BIGINT NOT NULL,
     session_id BIGINT NOT NULL,
-    report_type ENUM('SESSION', 'WEEKLY', 'MONTHLY') DEFAULT 'SESSION',
     summary TEXT,                          -- GPT 생성 피드백 요약
     detailed_analysis JSON,               -- 상세 분석 데이터
     improvement_tips TEXT,                 -- 개선 포인트
