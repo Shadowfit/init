@@ -4,7 +4,7 @@
 
 입력(measure_ai_call_concurrency.sh 가 남긴 것):
   scrape/b{블록}_{팔}_c{c}_{before|after}.txt  — shadowfit.ai.call 버킷(차분은 analyze_ai_call_latency_ab 의 것을 쓴다)
-  k6/b{블록}_{팔}_c{c}.json                     — iterations·실패 계수
+  k6/b{블록}_{팔}_c{c}.json                     — 재부착 성공 건수(reattach_ok)·실패 계수
   cells.tsv                                      — 벽시계·컨테이너 CPU usec 전/후·서킷 상태
 
 판정은 두 겹 다 «겹침» 뿐이다(load-test-strategy.md §2-1). 배수·판정선은 안 쓴다.
@@ -179,29 +179,36 @@ def main(root):
         judge_grid(f"{rpc} p50", "ms", lambda arm, c, b, rpc=rpc: lat.get((rpc, arm, c), {}).get(b, {}).get("p50"))
         judge_grid(f"{rpc} p99", "ms", lambda arm, c, b, rpc=rpc: lat.get((rpc, arm, c), {}).get(b, {}).get("p99"))
 
-    # ── 2. 처리량 — 사이클/초 (k6 iterations ÷ rig 벽시계) ─────────────────────────
+    # ── 2. 처리량 — 재부착/초 (k6 reattach_ok ÷ rig 벽시계) ────────────────────────
+    # 칸 = VU c 개 × 재부착 N 회. 분자는 «성공한 재부착 호출 수» — 옛 사이클 드라이버의 iterations 와
+    # 다르다(k6/ai_call_cycle.js 머리 주석).
+    def calls(k6):
+        if not k6:
+            return None
+        return k6.get("reattach_ok") if k6.get("reattach_ok") is not None else k6.get("iterations")
     def throughput(arm, c, b):
         cell, k6 = cells.get((b, arm, c)), load_k6(root, b, arm, c)
-        if not cell or not k6 or not k6.get("iterations") or cell["wall_s"] <= 0:
+        if not cell or not calls(k6) or cell["wall_s"] <= 0:
             return None
-        return k6["iterations"] / cell["wall_s"]
+        return calls(k6) / cell["wall_s"]
     if cells:
         print("\n# 처리량")
-        judge_grid("사이클/초", "cycles/s", throughput, lower_is_better=False)
+        judge_grid("재부착/초", "calls/s", throughput, lower_is_better=False)
 
-    # ── 3. CPU-초/사이클 — 컨테이너별. 서버 포화에도 살아남는 지표(§3-1) ──────────────
-    def cpu_per_cycle(name):
+    # ── 3. CPU-초/재부착 — 컨테이너별. 서버 포화에도 살아남는 지표(§3-1) ──────────────
+    # 칸의 CPU 에는 start·end 각 c 건도 들어 있다(재부착 N×c 에 비해 1/N) — 두 팔에 같이 걸린다.
+    def cpu_per_call(name):
         def f(arm, c, b):
             cell, k6 = cells.get((b, arm, c)), load_k6(root, b, arm, c)
-            if not cell or not k6 or not k6.get("iterations") or cell["cpu_s"].get(name) is None:
+            if not cell or not calls(k6) or cell["cpu_s"].get(name) is None:
                 return None
-            return cell["cpu_s"][name] / k6["iterations"] * 1000   # ms of CPU per cycle
+            return cell["cpu_s"][name] / calls(k6) * 1000   # ms of CPU per reattach call
         return f
     if cells:
-        print("\n# CPU-ms/사이클 (cgroup 차분 ÷ 사이클)")
-        judge_grid("backend CPU/사이클 — 클라이언트 구조의 대가가 여기 나타난다", "cpu-ms/cycle", cpu_per_cycle("backend"))
-        judge_grid("ai CPU/사이클 — 혼입 확인: 두 팔에서 서버 몫이 같은가", "cpu-ms/cycle", cpu_per_cycle("ai"))
-        judge_grid("nginx CPU/사이클 — webclient 팔만 거친다", "cpu-ms/cycle", cpu_per_cycle("nginx"))
+        print("\n# CPU-ms/재부착 (cgroup 차분 ÷ 재부착 건수)")
+        judge_grid("backend CPU/재부착 — 클라이언트 구조의 대가가 여기 나타난다", "cpu-ms/call", cpu_per_call("backend"))
+        judge_grid("ai CPU/재부착 — 혼입 확인: 두 팔에서 서버 몫이 같은가", "cpu-ms/call", cpu_per_call("ai"))
+        judge_grid("nginx CPU/재부착 — webclient 팔만 거친다", "cpu-ms/call", cpu_per_call("nginx"))
         # AI 포화 여부 — 칸 벽시계 대비 AI CPU 가 워커 수(코어) 근처면 서버 지배 구간이다.
         print("\n   AI 컨테이너 CPU 점유(코어 수 환산, 벽시계 대비) — 워커 3 이면 3 근처가 포화:")
         for c in levels:
