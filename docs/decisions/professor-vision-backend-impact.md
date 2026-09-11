@@ -118,6 +118,8 @@
 
 ### 4-1. 신규 도메인 — 폐기했던 그 테이블들
 
+> 🔄 **2026-09-11 정정** — 이 절의 전제는 그 뒤 두 번 바뀌었다. ① 그룹 4테이블(`workout_groups`·`group_members`·`group_invitations`·`group_events`)이 [`multiuser-realtime-sync.md`](./multiuser-realtime-sync.md) 로 채택·구현돼(V12) **`activity_feed` 자리는 `group_events` 가 대신한다.** ② [`social-cheer-and-group-feed.md`](./social-cheer-and-group-feed.md) 에서 **`friendships` 는 안 만들기로 결정**(친구 = 같은 모임 멤버, 레퍼런스에 친구 신청 화면이 없음)했고, `notifications` 는 푸시(Expo Push, 아웃박스 경유)와 함께 만들기로 했다. 아래 원문은 그대로 둔다.
+
 폐기 결정에서 *"안 만든다"* 고 못박은 `friendships` / `activity_feed` / `notifications` 가 그대로 필요하다.
 
 - **`friendships`** — 단순 M:N 이 아니라 **상태머신**이다. 신청 → 수락/거절 → 해제, 그리고 **양방향 대칭 문제**(A→B 와 B→A 를 한 행으로 볼 것인가 두 행으로 볼 것인가). 신청 중복·자기 자신 신청·차단 상태를 DB 제약으로 막을지 애플리케이션에서 막을지가 갈린다
