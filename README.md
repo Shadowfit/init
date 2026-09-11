@@ -52,10 +52,10 @@ Spring Boot API 서버. 회원·인증(JWT)·세션 라이프사이클·리포�
 
 ```bash
 cd backend
-./gradlew bootRun
+./gradlew bootRun --args='--spring.profiles.active=dev'   # dev 프로파일이 Swagger·SQL 로그를 켠다
 ```
 
-- API 문서: 로컬 기동 후 `http://localhost:8080/swagger-ui`
+- API 문서: 로컬 기동 후 `http://localhost:8080/swagger-ui` — **dev 프로파일에서만** 열린다. 프로파일 없이 띄우면 안전 기본(문서·SQL 로그 꺼짐, `application.yml` 머리말)
 - 설계 문서: [`docs/07-api-design.md`](./docs/07-api-design.md), [`docs/05-database-design.md`](./docs/05-database-design.md)
 
 ### 🤖 AI Server — `ai-server/`

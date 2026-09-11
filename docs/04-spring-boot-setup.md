@@ -220,11 +220,12 @@ MySQL이 실행되면 `shadowfit` 데이터베이스가 자동 생성됩니다 (
 ```bash
 cd backend
 
-# Gradle Wrapper로 실행
-./gradlew bootRun
+# Gradle Wrapper로 실행 — dev 프로파일이 Swagger·SQL 로그·DEBUG 로그를 켠다.
+# 프로파일 없이 띄우면 «안전 기본»(전부 꺼짐). 규약은 application.yml 머리말·application-dev.yml.
+./gradlew bootRun --args='--spring.profiles.active=dev'
 
 # 또는 Windows
-gradlew.bat bootRun
+gradlew.bat bootRun --args='--spring.profiles.active=dev'
 
 # 빌드 후 실행
 ./gradlew build
