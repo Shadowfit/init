@@ -10,6 +10,7 @@ on:
     branches: [main]
     paths:
       - 'ai-server/**'
+      - 'proto/**'
       - '.github/workflows/cd-ai-server.yml'
       - '.github/workflows/ai-server-test.yml'
   workflow_dispatch:
@@ -65,7 +66,7 @@ jobs:
       - name: 빌드·푸시
         uses: docker/build-push-action@v6
         with:
-          context: ./ai-server
+          context: .
           file: ./ai-server/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}

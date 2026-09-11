@@ -1,0 +1,26 @@
+# 루트 빌드 컨텍스트용 — backend/Dockerfile·ai-server/Dockerfile 이 저장소 루트를 컨텍스트로 쓴다
+# (gRPC 계약 proto/ 가 서비스 폴더 밖에 있어서). 서비스 폴더 + proto/ 만 남기고 나머지는 잘라낸다.
+# 서비스별 제외 목록(backend/.dockerignore·ai-server/.dockerignore)은 컨텍스트가 루트일 때 안 읽히므로
+# 그 내용도 여기 포함한다.
+*
+!backend/
+!ai-server/
+!proto/
+
+# backend/.dockerignore 이관
+backend/.gradle
+backend/build
+backend/bin
+backend/.idea
+backend/*.iml
+backend/out
+backend/Dockerfile
+# ai-server/.dockerignore 이관
+ai-server/venv/
+ai-server/.venv/
+ai-server/**/__pycache__/
+ai-server/**/*.pyc
+ai-server/.pytest_cache/
+ai-server/models/*.bin
+# 비밀은 환경변수로만 — .env 가 이미지 레이어에 구워지지 않게 (#402)
+**/.env

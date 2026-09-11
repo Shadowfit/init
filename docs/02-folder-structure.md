@@ -90,10 +90,7 @@ shadowfit/
 │   │   │   ├── exercise_servicer.py   # Spring 요청 수신 (StartAnalysis / StopAnalysis / ExtractReferenceData)
 │   │   │   ├── spring_client.py       # Spring 콜백 (SavePoseDataBatch / CompleteAnalysis, 3회 재시도)
 │   │   │   └── session_state.py       # 진행 중 세션 in-memory 상태
-│   │   ├── proto/                 # gRPC 스키마 (backend/src/main/proto/와 수동 동기)
-│   │   │   ├── exercise.proto
-│   │   │   ├── exercise_pb2.py        # 코드 생성 산출물
-│   │   │   └── exercise_pb2_grpc.py
+│   │   ├── proto/                 # README 만 — 계약 원본은 루트 proto/ (2026-09-11 단일화)
 │   │   ├── core/                  # 핵심 AI 로직
 │   │   │   ├── mediapipe_detector.py  # MediaPipe (threading.local, 커밋 c7657f1)
 │   │   │   ├── squat_analyzer.py      # 스트리밍 스쿼트 분석기
@@ -192,7 +189,6 @@ shadowfit/
 │   │   │       └── logback-spring.xml          # 🆕 로그 패턴에 %X{cid}
 │   │   └── test/                              # 테스트
 │   │       └── java/com/shadowfit/
-│   ├── src/main/proto/exercise.proto  # ai-server/app/proto/ 와 수동 동기
 │   ├── build.gradle
 │   └── settings.gradle
 │
@@ -225,7 +221,7 @@ shadowfit/
 |---------|------|
 | `ai-server/app/api/` | 포즈 감지, 동기화율, 영상 전처리 REST API |
 | `ai-server/app/grpc/` | Spring↔AI gRPC 양방향 결합 (서버·콜백·세션 상태). 결합 상세는 [`architecture/ai-backend-integration.md`](./architecture/ai-backend-integration.md) |
-| `ai-server/app/proto/` | gRPC 스키마. `backend/src/main/proto/`와 수동 동기. |
+| `proto/` (루트) | gRPC 계약 `exercise.proto` **한 벌**. backend Gradle·ai-server 이미지 빌드가 같은 파일에서 생성. 생성 산출물 `ai-server/exercise_pb2*.py` 는 커밋(로컬·pytest 용, CI 가 원본과 대조) |
 | `ai-server/app/core/` | MediaPipe, DTW, 스쿼트 분석기, 좌표 필터 |
 | `ai-server/app/models/` | Pydantic 요청/응답 데이터 모델 |
 | `frontend/app/` | Expo Router 기반 파일 라우팅. 화면 단위 컴포넌트 |
@@ -236,4 +232,3 @@ shadowfit/
 | `backend/service/` | 비즈니스 로직 (gRPC 클라이언트/콜백·스케줄러 포함) |
 | `backend/model/` | DB 테이블 매핑 엔티티 (코드상 `model/`, `entity/` 아님) |
 | `backend/repository/` | JPA 데이터 접근 레이어 (도메인별 폴더) |
-| `backend/src/main/proto/` | gRPC 스키마. `com.shadowfit.grpc` 패키지로 생성. |

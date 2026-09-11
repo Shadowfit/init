@@ -30,7 +30,7 @@
 | 차원 | 현재 방식 |
 |------|---------|
 | 통신 프로토콜 | gRPC (양방향, 동기 unary RPC) |
-| 스키마 공유 | `exercise.proto` 양쪽 저장소에 동일 파일 중복. (`user.proto` 는 아무도 안 써서 2026-08-12 삭제 — #133) |
+| 스키마 공유 | 루트 `proto/exercise.proto` **한 벌** (2026-09-11 단일화 — 그 전엔 양쪽에 동일 파일 중복). `user.proto` 는 아무도 안 써서 2026-08-12 삭제 — #133 |
 | 인증 | 내부 공유 토큰(`INTERNAL_API_TOKEN`) 기반, gRPC metadata `Authorization: Bearer …` |
 | 네트워크 | Docker Compose `shadowfit-net` 브리지, 컨테이너명 DNS |
 | 호출 패턴 | Spring → AI: RPC마다 다르다 — §3-2 참조 / AI → Spring: 콜백 (3회 재시도) |
@@ -81,10 +81,10 @@ Docker 네트워크는 `shadowfit-net` 브리지 한 개. 외부 노출은 backe
 
 ## 3. gRPC 인터페이스
 
-스키마 파일:
-- `backend/src/main/proto/exercise.proto`
-- `ai-server/app/proto/exercise.proto`
-- 두 파일은 **수동으로 동기화** 필요. 변경 시 양쪽 모두 수정 + 코드 생성 재실행.
+스키마 파일: 루트 `proto/exercise.proto` 한 벌.
+- backend: Gradle protobuf 플러그인이 `../proto` 를 읽어 빌드마다 생성 (`build.gradle` sourceSets.main.proto)
+- ai-server: 이미지 빌드가 같은 파일로 생성. 로컬·pytest 는 커밋된 `ai-server/exercise_pb2*.py` — 변경 시 `ai-server/scripts/gen_proto.sh` 로 재생성해 같이 커밋 (CI 가 대조)
+- 두 Dockerfile 의 빌드 컨텍스트가 저장소 루트인 이유가 이것이다
 
 `ExerciseService` 정의된 RPC — **7개** (2026-05-23 판에는 5개만 적혀 있었다):
 

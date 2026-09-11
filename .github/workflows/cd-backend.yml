@@ -17,6 +17,7 @@ on:
     branches: [main]
     paths:
       - 'backend/**'
+      - 'proto/**'
       - '.github/workflows/cd-backend.yml'
       - '.github/workflows/backend-test.yml'
   # 코드 변경 없이 이미지를 다시 굽고 싶을 때 (베이스 이미지 보안 패치 등)
@@ -82,7 +83,8 @@ jobs:
       - name: 빌드·푸시
         uses: docker/build-push-action@v6
         with:
-          context: ./backend
+          # 컨텍스트가 루트인 이유는 docker-compose.yml 의 build 주석 참조 (proto/ 한 벌)
+          context: .
           file: ./backend/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}

@@ -32,7 +32,7 @@ Postman 의 일반 HTTP 요청은 gRPC 호출 안 됨. 컬렉션의 gRPC 폴더�
 ### 옵션 A. Postman gRPC Request 기능
 1. 좌측 `New` → `gRPC Request`
 2. Server URL: `localhost:6565`
-3. `Select a method` → `Import a .proto file` → `backend/src/main/proto/exercise.proto`
+3. `Select a method` → `Import a .proto file` → `proto/exercise.proto`
 4. Service / Method 선택
 5. Metadata 에 `authorization: Bearer <internalToken>` 추가 (콜백 RPC 만 필요)
 6. 컬렉션의 gRPC 요청 body 를 Message 에 복붙
@@ -76,5 +76,5 @@ grpcurl -plaintext `
 
 - 결정 문서: [`../docs/decisions/tts-design.md`](../docs/decisions/tts-design.md), [`../docs/decisions/session-end-trigger.md`](../docs/decisions/session-end-trigger.md), [`../docs/decisions/latency-perception.md`](../docs/decisions/latency-perception.md)
 - API 명세: [`../docs/07-api-design.md`](../docs/07-api-design.md)
-- proto: [`../backend/src/main/proto/exercise.proto`](../backend/src/main/proto/exercise.proto)
+- proto: [`../proto/exercise.proto`](../proto/exercise.proto)
 - Swagger UI: http://localhost:8080/swagger-ui/index.html

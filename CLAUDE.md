@@ -61,7 +61,7 @@ frontend --(REST)--> backend --(gRPC)--> ai-server
 frontend --(HTTP, 카메라 프레임)--> ai-server   # 분기 H2: 프론트→AI 직결
 ```
 
-- **gRPC 계약은 두 곳에 중복 존재**: `backend/src/main/proto/exercise.proto`와 `ai-server/app/proto/exercise.proto`가 **바이트 단위로 동일**해야 한다. 한쪽만 고치면 CI(`proto-sync-check.yml`)가 diff로 잡지만, 로컬에서 먼저 양쪽을 손으로 맞출 것 — 안 맞으면 런타임 직렬화 오류.
+- **gRPC 계약은 저장소 루트 `proto/exercise.proto` 한 벌**이다 — backend 는 Gradle 이 `../proto` 에서 Java 스텁을 생성하고, ai-server 는 이미지 빌드에서 같은 파일로 생성한다. 그래서 두 Dockerfile 의 빌드 컨텍스트가 **저장소 루트**다(`context: .`). 로컬 실행·pytest 는 커밋된 `ai-server/exercise_pb2*.py` 를 import 하므로 **proto 를 고쳤으면 `cd ai-server && ./scripts/gen_proto.sh` 로 재생성해서 같이 커밋**할 것 — CI(`ai-server-test.yml`)가 원본에서 재생성한 것과 다르면 막는다. (2026-09-11 이전엔 두 서비스에 사본이 있어 손으로 맞춰야 했다.)
 - **AI 서버는 멀티프로세스**(`AI_WORKER_COUNT`, 기본 3) — `entrypoint.sh`가 워커별로 다른 포트(8000/8001/8002)에 띄우고, `ai-nginx`가 Spring이 세션 시작 응답으로 알려준 워커 인덱스(`X-AI-Worker` 헤더)로 고정 라우팅한다. 이 구조는 GIL이 프로세스당 처리량을 직렬화한다는 실측(`docs/decisions/per-process-ceiling-cause.md`)에서 나왔다 — 스레드가 아니라 프로세스를 늘리는 이유가 여기 있다.
 - **AI→Spring 완료 콜백은 아웃박스 패턴**(`OutboxEvent`/`OutboxPublisher`)으로 전달을 보장한다 — 예전엔 dual-write라 3회 실패 시 유실됐다.
 - **검출기 풀 크기는 컨테이너 메모리 한도에서 유도**한다(`mediapipe_detector.py`) — 검출기 1개 ≈ 98.7MB(실측)이므로 `POSE_DETECTOR_POOL_SIZE`를 안 주면 `(mem_limit − 기본 RSS) / 98.7MB`로 자동 계산된다. 근거 없는 숫자를 코드에 안 박는다는 원칙(둘 다 없으면 기동 거부).

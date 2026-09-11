@@ -74,8 +74,10 @@ services:
 
   shadowfit-backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      # 컨텍스트가 루트인 이유: gRPC 계약이 proto/ 한 벌이라 두 서비스 빌드가 서비스 폴더 밖을 읽는다.
+      # 루트 .dockerignore 가 docs·loadtest·frontend 등을 잘라내므로 컨텍스트 크기는 서비스 폴더 수준이다.
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: shadowfit-backend
     restart: unless-stopped
     ports:
@@ -162,8 +164,8 @@ services:
 
   shadowfit-ai:
     build:
-      context: ./ai-server
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: ai-server/Dockerfile
     container_name: shadowfit-ai
     restart: unless-stopped
     # 분기 H2 (프론트 → AI 직결) 채택. HTTP 8000 은 InternalAuthMiddleware

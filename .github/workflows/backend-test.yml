@@ -14,6 +14,7 @@ on:
   pull_request:
     paths:
       - 'backend/**'
+      - 'proto/**'
       - 'build.gradle'
       - 'settings.gradle'
       - 'gradle/**'
@@ -23,6 +24,7 @@ on:
     branches: [main]
     paths:
       - 'backend/**'
+      - 'proto/**'
       - 'build.gradle'
       - 'settings.gradle'
       - 'gradle/**'
