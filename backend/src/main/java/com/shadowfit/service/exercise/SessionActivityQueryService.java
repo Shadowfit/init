@@ -8,7 +8,6 @@ import com.shadowfit.dto.report.record.DailyLogSummaryDto;
 import com.shadowfit.dto.report.record.WeeklyActivityResponseDto;
 import com.shadowfit.global.util.SetSummaryFormatter;
 import com.shadowfit.model.exercise.Session;
-import com.shadowfit.model.exercise.Status;
 import com.shadowfit.repository.exercise.SessionRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -17,7 +16,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -34,6 +32,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class SessionActivityQueryService {
     private final SessionRepository sessionRepository;
+    private final AttendanceService attendanceService;
 
     @Transactional(readOnly = true)
     public WeeklyActivityResponseDto getWeeklyActivity(Long memberId) {
@@ -140,7 +139,9 @@ public class SessionActivityQueryService {
         CalendarMainResponseDto response = new CalendarMainResponseDto();
         response.setMonthlyExerciseDays((int) monthlySessions.stream().map(s -> s.getStartTime().toLocalDate()).distinct().count());
         response.setTotalAvgSyncRate((int) avgSyncRate);
-        response.setConsecutiveDays(calculateConsecutiveDays(memberId)); // 연속 일수 계산 유틸 호출
+        // 연속일수는 출석 정의(COMPLETED 만, 창 없이 커서)를 한곳에 둔 AttendanceService 가 센다 —
+        // 예전엔 여기서 status 전부·100일 창으로 따로 셌다(social-cheer-and-group-feed.md §3-B).
+        response.setConsecutiveDays(attendanceService.currentStreak(memberId, LocalDate.now()));
 
         response.setYear(year);   // 파라미터로 받은 year 세팅
         response.setMonth(month); // 파라미터로 받은 month 세팅
@@ -188,30 +189,4 @@ public class SessionActivityQueryService {
         return (int) java.time.Duration.between(session.getStartTime(), session.getEndTime()).toMinutes();
     }
 
-    private int calculateConsecutiveDays(Long memberId) {
-        LocalDate today = LocalDate.now();
-
-        // 최근 100일치 활동 날짜를 한 번에 조회 (루프 N+1 → 쿼리 1방)
-        // status 전부(List.of(Status.values()))를 넘긴다 — 결과를 좁히려는 게 아니라
-        // idx_session_member_status_start 가 status 등치 없이는 start_time 을 seek 못 해
-        // 회원 전체 이력을 읽던 걸 막으려는 것(#541). 필터링 의미는 그대로다.
-        Set<LocalDate> activeDates = sessionRepository.findDistinctActiveDates(
-                        memberId,
-                        List.of(Status.values()),
-                        today.minusDays(100).atStartOfDay(),
-                        today.atTime(23, 59, 59)
-                ).stream()
-                .map(java.sql.Date::toLocalDate)
-                .collect(Collectors.toSet());
-
-        // 오늘 기록 없으면 어제부터 체크 (오늘 아직 안 했을 수도 있으니)
-        LocalDate checkDate = activeDates.contains(today) ? today : today.minusDays(1);
-
-        int consecutiveDays = 0;
-        while (activeDates.contains(checkDate)) {
-            consecutiveDays++;
-            checkDate = checkDate.minusDays(1);
-        }
-        return consecutiveDays;
-    }
 }
