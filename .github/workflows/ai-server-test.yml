@@ -79,7 +79,7 @@ jobs:
       - name: Check committed gRPC stubs match proto/
         working-directory: ai-server
         run: |
-          ./scripts/gen_proto.sh
+          bash ./scripts/gen_proto.sh
           if ! git diff --exit-code -- exercise_pb2.py exercise_pb2_grpc.py; then
             echo "::error::ai-server/exercise_pb2*.py 가 proto/exercise.proto 와 다릅니다 — cd ai-server && ./scripts/gen_proto.sh 로 재생성해서 커밋하세요."
             exit 1
