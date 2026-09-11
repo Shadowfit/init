@@ -1,6 +1,6 @@
 # Decision: 친구 현황·재촉하기·모임 피드·출석 캘린더 — 레퍼런스 화면을 어디까지, 어떤 구조로
 
-상태: ✅ **§3 분기 A~G 전부 결정됨(2026-09-11, 사용자 confirm)** — 남은 미결은 §6 의 층·학기 계획 조정 둘. 각 분기의 결정은 해당 절 안 ✅ 블록에 박제
+상태: ✅ **전부 결정됨(2026-09-11, 사용자 confirm)** — §3 분기 A~G, 층 L1, 학기 계획 조정까지. 각 결정은 해당 절 안 ✅ 블록에 박제. 다음은 구현(§4-1 #1~#12)
 작성: 2026-09-11
 배경: 레퍼런스 앱 화면 6장(홈·커뮤니티·모임 상세·출석 캘린더·루틴 실행·루틴 시작 모달)을 보고 "이런 느낌"으로 응원하기 기능을 만들자는 논의. [`professor-vision-backend-impact.md`](./professor-vision-backend-impact.md) §4 갈래 ②(파트너십)의 구체화이자, 그 문서 §4-1 의 전제("폐기했던 그 테이블들이 그대로 필요") 가 **그룹 테이블 채택(2026-08-30)으로 이미 절반 바뀐** 상태의 재산정.
 연관: [`multiuser-realtime-sync.md`](./multiuser-realtime-sync.md)(그룹 4테이블·WS 릴레이 — 이미 구현), [`weekly-monthly-stat-preaggregation.md`](./weekly-monthly-stat-preaggregation.md)(파생값을 미리 계산할지 — 같은 축), [`goal-domain-design.md`](./goal-domain-design.md)(rolling window 를 조회 시점 계산으로 확정한 선례), [`trainer-live-monitoring.md`](./trainer-live-monitoring.md)(1:1 SSE 푸시 선례), [`admin-page-scope.md`](./admin-page-scope.md)(읽기 주체가 늘 때 인덱스가 갈린 선례), [`withdrawal-with-active-session.md`](./withdrawal-with-active-session.md)(탈퇴 시 남의 화면에 남는 데이터)
@@ -245,7 +245,7 @@ professor-vision §2 의 "행 단위 접근 제어" 가 여기서 처음 실제�
 - [x] **3-F** 코드 참여 — ✅ **a. 추가·공존, 그룹당 코드 1개 고정, 승인 없이 ACTIVE, 재발급 API 동반** (2026-09-11)
 - [x] **3-G** 공개 범위 — ✅ **a. 같은 모임 = 공개, 노출 항목 3개 고정(오늘 여부·연속일수·합산 출석)** (2026-09-11)
 - [x] 층 — ✅ **L1** (결정 조합상 확정, 2026-09-11). 견적 §4-1: 단독 ≈28~38h / 병행 ≈19~25h
-- [ ] `24-semester2-plan.md` 에서 **무엇을 뺄지** — professor-vision §6 대로 추가만 하는 결정은 성립 안 함
+- [x] `24-semester2-plan.md` 에서 **무엇을 뺄지** — ✅ (2026-09-11) BE-09 세트+런지·플랭크 결합(12h) · 2차 사용자 테스트(6h+) · cleanup 축소(4h) = 22h. 7주 재편성(L1 → 테스트 준비 → 1차 테스트 → 핫픽스 → 발표)은 [`../tasks/24-semester2-plan.md`](../tasks/24-semester2-plan.md) 머리 블록
 
 ---
 
@@ -265,6 +265,7 @@ professor-vision §2 의 "행 단위 접근 제어" 가 여기서 처음 실제�
 
 ## 결정 로그
 
+- 2026-09-11 (10): **학기 계획 조정 확정** — 24 문서 실측 점검(기능 축 BE-05~08 전부 완료 확인) 후 BE-09+종목 결합·2차 테스트·cleanup 축소로 22h 확보. 미결 0.
 - 2026-09-11 (9): **층 L1 확정 + §4-1 견적.** 12개 작업, 단독 ≈33h / 병행 ≈22h 중앙값. 푸시(#8·#9)가 c 선택의 대가 5~6h.
 - 2026-09-11 (8): **3-F 하위 — 코드 8자리(혼동 글자 제외 32자), `description` 컬럼 추가.** `POST /groups` 응답에 `inviteCode` 포함.
 - 2026-09-11 (7): **3-E 결정 — a(현재 ACTIVE 분모·분자).** 이로써 §3 분기 7개(A~G) 전부 확정. 남은 미결은 층(L0/L1 — 결정 조합상 사실상 L1)과 학기 계획에서 뺄 항목.

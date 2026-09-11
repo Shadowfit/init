@@ -1,5 +1,57 @@
 # Backend 2학기 10주 계획
 
+> ## 🔄 2026-09-11 실측 점검 + 재편성 — 기능 축은 끝났고, 소셜 L1 이 들어온다
+>
+> 8-08 정정 블록이 요구한 «Week 1 실제 진척 점검»을 개강 후 처음 수행했다. 계획 항목을 코드·PR 로 대조한 결과와, [`../decisions/social-cheer-and-group-feed.md`](../decisions/social-cheer-and-group-feed.md)(L1, 병행 ≈19~25h)를 넣기 위해 **무엇을 뺐는지**를 여기 박제한다. 아래 §1 주차 표는 원문 보존 — 이 블록이 정본이다.
+>
+> ### 계획 vs 실제
+>
+> | 계획 항목 | 추정 | 2026-09-11 실제 |
+> |---|:--:|---|
+> | OP-07 CI · OP-04 Flyway · OP-08 Actuator+Prometheus | 10h | ✅ 방학 완료 |
+> | BE-05 관리자 통계 | 6h | ✅ 백엔드 완료(A·B·C·D). 관리자 **프론트**만 미착수 |
+> | BE-06 Goal | 10h | ✅ 완료 — V11, `GoalController` 5 endpoint. «진척 자동 갱신»은 rolling window 조회 계산으로 대체(08-30 confirm, [`goal-domain-design.md`](../decisions/goal-domain-design.md)) |
+> | BE-07 패턴 분석 | 8h | ✅ 완료 — `/patterns/periodicity·intensity-trend·consistency` |
+> | BE-08 추천 | 7h | ✅ 완료(08-30, PR #625) — `/recommendations/next-session` 1개. 계획의 «오늘 3운동 루틴»은 종목이 스쿼트뿐이라 성립 안 함 |
+> | OP-03 prod compose | 1h | ✅ `docker-compose.prod.yml` |
+> | DB 백업(Week 9) | 2h | ✅ 08-13 RTO/RPO 실측 포함 |
+> | BE-09 세트 도입(proto+DB) | 8h | ❌ 미착수 — AI-03 동시 필요. `SetSummaryFormatter.FIXED_SET_COUNT=1` 로 화면만 흉내 |
+> | 런지·플랭크 카탈로그 결합 | 4h | ❌ 행만 있고 `analysis_supported=FALSE`. AI 분석기가 `squat_analyzer.py` 하나뿐이라 백엔드가 할 게 없음 |
+> | OP-01 Slack 알람 | 3h | ❌ 없음 |
+> | OP-02 HTTPS | 2h | ❌ 배포 호스트 없어 막힘(CD 도 같은 이유, [`28-remaining-work-plan.md`](./28-remaining-work-plan.md) #4) |
+> | 사용자 테스트 준비·1차·2차 | ~10h + 핫픽스 버퍼 14h | ❌ 미착수 |
+> | cleanup·Flyway 점검(Week 9) | 6h | ❌ |
+> | Week 10 발표 산출물 | 18h | ❌ |
+> | 계획에 없던 완료 | — | 그룹 WS(08-30) · 트레이너 SSE(`CoachingStreamController`) · outbox · 복제 · 무중단 DDL · 보안 3건 · AWS 실측 4회 |
+>
+> **남은 기능 작업은 없다.** 남은 건 AI 에 막힌 것(BE-09·종목 확장), 인프라에 막힌 것(HTTPS), 사용자 테스트, 발표다.
+>
+> ### 시간
+>
+> 9/11 → 10/31 ≈ **7주 × 8h = 56h**. 고정: 발표 18h. 소셜 L1 병행 ≈22h. 남는 것 ≈16h — 사용자 테스트 준비(시드·로깅·알람·모집 ~9h) + 1차 핫픽스 버퍼 + 최소 cleanup.
+>
+> ### ✅ 뺀 것 (2026-09-11, 사용자 결정)
+>
+> | | 항목 | 절약 | 근거 |
+> |:--:|---|:--:|---|
+> | ① | **BE-09 세트 도입 + 런지·플랭크 결합** | 12h | AI 쪽 분석기·세트 인지가 이번 학기에 안 온다 — 백엔드만 하면 죽은 코드. **발표는 스쿼트 하나로 간다**(정직하게 적어둠) |
+> | ② | **2차 사용자 테스트**(Week 9) | 6h+ | 1차만 하고 2차는 발표 리허설로 대체. **1차는 유지** — 소셜 기능이 1차에 들어가야 의미가 있다 |
+> | ③ | **cleanup 6h → 2h** | 4h | deprecated `/complete` 제거 검토 정도만 |
+>
+> ①+②+③ = 22h ≈ L1 분량. OP-02 HTTPS 는 «뺀 것»이 아니라 AWS 연결 시 조건부(2h).
+>
+> ### 재편성 (7주, 9/11 기준)
+>
+> | 주 | 기간 | 백엔드 |
+> |:--:|---|---|
+> | 1~3 | 9/11 ~ 10/2 | **소셜 L1** — [`social-cheer-and-group-feed.md`](../decisions/social-cheer-and-group-feed.md) §4-1 의 #1~#12 순서. 병렬로 OP-01 알람(3h) |
+> | 4 | 10/5 ~ 10/9 | 사용자 테스트 준비 — 시드·로깅·모집. HTTPS 는 호스트 생기면 |
+> | 5 | 10/12 ~ 10/16 | **1차 사용자 테스트**(소셜 포함). 핫픽스 대응 |
+> | 6 | 10/19 ~ 10/23 | 피드백 트리아지·핫픽스. cleanup 2h |
+> | 7 | 10/26 ~ 10/30 | 발표 산출물 18h(보고서·PPT·시연·Q&A·리허설). 2차 테스트 자리는 리허설 |
+>
+> 순서 제약: **L1 이 1차 테스트 전에 끝나야** 모임 기능이 테스트에 들어간다. 3주가 늘어지면 1차 테스트를 미루는 게 아니라 L1 의 #11(리액션)·#7(1:1 소켓)을 뒤로 뺀다 — 재촉은 알림 행 + 푸시만으로도 성립한다.
+
 > ## 🔄 출발점 가정이 이미 달라졌다 (2026-08-08 대조)
 >
 > 이 문서 스스로 적어둔 전제 — *"**이 문서는 가정 기반 계획**입니다. 방학 진척에 따라 출발점이 달라지면 주차 매핑이 밀리거나 압축됨. **Week 1에 실제 진척 점검 후 조정**"* — 이 정확히 발동할 상황이다.
@@ -20,7 +72,7 @@
 >
 > 📌 백엔드 잔여의 현재 정본은 [`28-remaining-work-plan.md`](./28-remaining-work-plan.md), AI 는 [`30-ai-remaining-work.md`](./30-ai-remaining-work.md).
 
-마지막 업데이트: 2026-05-24 · 출발점 대조: **2026-08-08**
+마지막 업데이트: 2026-05-24 · 출발점 대조: **2026-08-08** · 실측 점검·재편성: **2026-09-11**
 범위: **백엔드(Spring) 작업자 1명 시점**의 2학기 10주 계획. 프론트엔드·AI·인프라는 다른 트랙(또는 다른 사람)이라 가정하고, 백엔드가 챙길 작업과 그 작업이 다른 트랙에 의존하는 지점만 다룬다.
 연관: [`20-feature-roadmap.md`](./20-feature-roadmap.md), [`21-task-assignment.md`](./21-task-assignment.md), [`22-backend-tasks-detail.md`](./22-backend-tasks-detail.md)
 
@@ -71,8 +123,8 @@
 
 | 작업 | 추정 | 비고 |
 |------|------|------|
-| BE-09 의 proto 확장 — `backend/src/main/proto/exercise.proto` 에 `PoseDataRequest.set_index/rep_index_in_set`, `CompleteRequest.total_sets/sets[]` 추가 | 2h | AI 측 proto 동시 변경 필요 (AI 작업자 일정) |
-| `ExerciseGrpcService.java`, `PoseDataService.java` 에서 새 필드 받기/저장 (기본값 처리 — AI 가 아직 안 보내면 set_index=1) | 2h | 호환성 유지 |
+| ~~BE-09 의 proto 확장 — `backend/src/main/proto/exercise.proto` 에 `PoseDataRequest.set_index/rep_index_in_set`, `CompleteRequest.total_sets/sets[]` 추가~~ | ~~2h~~ | 🗑️ **2026-09-11 제외(①)** — 머리 블록 |
+| ~~`ExerciseGrpcService.java`, `PoseDataService.java` 에서 새 필드 받기/저장 (기본값 처리 — AI 가 아직 안 보내면 set_index=1)~~ | ~~2h~~ | 🗑️ **2026-09-11 제외(①)** |
 | OP-01 (Slack 웹훅 + `AlertService` 헬퍼 + 감지 지점 3곳) | 3h | 사용자 테스트 시작 전 필수 |
 | OP-08 (Spring Actuator 기본 + Prometheus 메트릭 노출) | 4h | Grafana 는 인프라 사람에게 위임 가능 |
 
@@ -84,8 +136,8 @@
 
 | 작업 | 추정 | 비고 |
 |------|------|------|
-| 운동 카탈로그 시드 — 런지 (`mysql/data.sql` 또는 Flyway 마이그레이션, 기준 좌표 등록 endpoint 호출) | 2h | AI-02 런지 분석기가 Week 3 안에 나온다는 가정 |
-| BE-09 의 DB 컬럼 (`Session.setCount`, `PoseData.setIndex`) — Flyway 마이그레이션 | 2h | proto 만 했던 것을 영속까지 |
+| ~~운동 카탈로그 시드 — 런지 (`mysql/data.sql` 또는 Flyway 마이그레이션, 기준 좌표 등록 endpoint 호출)~~ | ~~2h~~ | 🗑️ **2026-09-11 제외(①)** — 행은 V2 에 있음, 분석기 없음 |
+| ~~BE-09 의 DB 컬럼 (`Session.setCount`, `PoseData.setIndex`) — Flyway 마이그레이션~~ | ~~2h~~ | 🗑️ **2026-09-11 제외(①)** |
 | BE-06 (Goal 도메인) 시작 — `model/member/Goal.java`, `GoalRepository`, `mysql/schema.sql` 컬럼 | 2h | |
 | BE-06 — `GoalController` + 4 endpoint (POST/GET/PATCH/DELETE) | 3h | |
 
@@ -99,8 +151,8 @@
 |------|------|------|
 | BE-06 — `GoalService` 의 진척 자동 갱신: 세션 종료 콜백(`CompleteAnalysis` 핸들러) 에서 관련 Goal 의 `currentValue` 증가 | 3h | gRPC 콜백 흐름 변경, [`136f0e6 SessionTimeoutScheduler`](../architecture/ai-backend-monthly-log.md) 와 같은 자리 |
 | BE-06 단위 테스트 — 주간 세션 목표 진척 시나리오 | 2h | |
-| 운동 카탈로그 시드 — 플랭크 (rep 대신 hold_seconds 의미. 시드 데이터에 운동 종류별 단위 명시) | 2h | AI-02 플랭크 분석기 나오는 시점에 맞춤 |
-| BE-09 + 플랭크 결합 검증 — 플랭크의 "1 rep = 1 hold" 가 set 카운트에서 어떻게 동작하는지 e2e 1회 | 2h | 의미 충돌 가능 지점 |
+| ~~운동 카탈로그 시드 — 플랭크 (rep 대신 hold_seconds 의미. 시드 데이터에 운동 종류별 단위 명시)~~ | ~~2h~~ | 🗑️ **2026-09-11 제외(①)** |
+| ~~BE-09 + 플랭크 결합 검증 — 플랭크의 "1 rep = 1 hold" 가 set 카운트에서 어떻게 동작하는지 e2e 1회~~ | ~~2h~~ | 🗑️ **2026-09-11 제외(①)** |
 
 **백엔드 마일스톤**: Goal 진척이 실제로 갱신됨. 운동 3종 (스쿼트·런지·플랭크) 카탈로그 정착.
 
@@ -166,11 +218,11 @@
 
 | 작업 | 추정 | 비고 |
 |------|------|------|
-| 2차 사용자 테스트 진행 (3~5일, 1차 수정 검증 + 새 기능 검수) | 모니터링만 | |
-| 2차 발견 백엔드 이슈 처리 | 6h+ | |
+| ~~2차 사용자 테스트 진행 (3~5일, 1차 수정 검증 + 새 기능 검수)~~ | — | 🗑️ **2026-09-11 제외(②)** — 리허설로 대체 |
+| ~~2차 발견 백엔드 이슈 처리~~ | ~~6h+~~ | 🗑️ **2026-09-11 제외(②)** |
 | DB 백업 절차 정립 + 1회 백업 실행 (운영 첫 사용자 데이터 보호) | 2h | `mysqldump` 크론 + 보관 정책 |
-| 백엔드 코드 cleanup — TODO 정리, 미사용 controller/dto 삭제, deprecated `/complete` endpoint 최종 제거 검토 | 4h | |
-| Flyway 마이그레이션 일원화 점검 (방학~Week 5 사이 누적된 schema 변경) | 2h | |
+| 백엔드 코드 cleanup — ~~TODO 정리, 미사용 controller/dto 삭제,~~ deprecated `/complete` endpoint 최종 제거 검토 | ~~4h~~ → 2h | ✂️ **2026-09-11 축소(③)** |
+| ~~Flyway 마이그레이션 일원화 점검 (방학~Week 5 사이 누적된 schema 변경)~~ | ~~2h~~ | 🗑️ **2026-09-11 제외(③)** — V1~V14 가 이미 Flyway 정본 |
 
 **백엔드 마일스톤**: 발표 시연 직전 안정화. 회귀 없음 보장.
 
