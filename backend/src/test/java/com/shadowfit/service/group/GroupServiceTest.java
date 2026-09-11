@@ -4,14 +4,19 @@ import com.shadowfit.dto.group.CreateGroupRequestDto;
 import com.shadowfit.dto.group.GroupDetailResponseDto;
 import com.shadowfit.dto.group.GroupResponseDto;
 import com.shadowfit.dto.group.InviteCodeResponseDto;
+import com.shadowfit.dto.group.JoinGroupRequestDto;
 import com.shadowfit.global.error.BusinessException;
 import com.shadowfit.global.error.ErrorCode;
 import com.shadowfit.model.group.Group;
 import com.shadowfit.model.group.GroupMember;
 import com.shadowfit.model.group.GroupMemberStatus;
+import com.shadowfit.model.group.GroupInvitation;
 import com.shadowfit.model.group.GroupRole;
+import com.shadowfit.model.group.InvitationStatus;
 import com.shadowfit.model.member.Member;
 import com.shadowfit.model.member.UserRole;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.shadowfit.repository.group.GroupInvitationRepository;
 import com.shadowfit.repository.group.GroupMemberRepository;
 import com.shadowfit.repository.group.GroupRepository;
 import com.shadowfit.repository.member.MemberRepository;
@@ -29,6 +34,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -43,6 +52,8 @@ class GroupServiceTest {
     @Mock private GroupMemberRepository groupMemberRepository;
     @Mock private MemberRepository memberRepository;
     @Mock private InviteCodeGenerator inviteCodeGenerator;
+    @Mock private GroupInvitationRepository groupInvitationRepository;
+    @Mock private GroupEventService groupEventService;
 
     private GroupService groupService;
     private Member creator;
@@ -50,7 +61,8 @@ class GroupServiceTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        groupService = new GroupService(groupRepository, groupMemberRepository, memberRepository, inviteCodeGenerator);
+        groupService = new GroupService(groupRepository, groupMemberRepository, memberRepository, inviteCodeGenerator,
+                groupInvitationRepository, groupEventService, new ObjectMapper());
         creator = newMember(MEMBER_ID, "creator");
         // 기본: 첫 번째로 뽑은 코드가 곧 통과한다. 충돌 시나리오는 개별 테스트에서 덮어쓴다.
         when(inviteCodeGenerator.generate()).thenReturn("FRESHCD1");
@@ -259,6 +271,115 @@ class GroupServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.NOT_GROUP_MEMBER);
+    }
+
+    // ---- admit / joinByInviteCode ----
+
+    @Test
+    @DisplayName("admit — 가입 이력이 없으면 MEMBER·ACTIVE 로 새 행을 만들고 MEMBER_JOINED 를 발신자 없이 발행한다")
+    void admit_newMember_savesAndPublishes() {
+        Group group = newGroup(creator);
+        Member newcomer = newMember(20L, "newcomer");
+        when(groupMemberRepository.findByGroupIdAndMemberId(GROUP_ID, 20L)).thenReturn(Optional.empty());
+        when(groupMemberRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        GroupMember membership = groupService.admit(group, newcomer);
+
+        assertThat(membership.getRole()).isEqualTo(GroupRole.MEMBER);
+        assertThat(membership.getStatus()).isEqualTo(GroupMemberStatus.ACTIVE);
+        // 시스템이 발행하는 이벤트라 senderId 는 null — GroupEventService.publish 계약.
+        verify(groupEventService).publish(eq(GROUP_ID), isNull(), eq("MEMBER_JOINED"), contains("\"memberId\":20"));
+    }
+
+    @Test
+    @DisplayName("admit — LEFT 였던 행은 새로 넣지 않고 되살린다 (UNIQUE(group_id, member_id) 재삽입 500 회귀 방지)")
+    void admit_leftMember_reactivatesExistingRow() {
+        Group group = newGroup(creator);
+        Member returning = newMember(20L, "returning");
+        GroupMember left = newMembership(group, returning, GroupRole.MEMBER, GroupMemberStatus.LEFT);
+        when(groupMemberRepository.findByGroupIdAndMemberId(GROUP_ID, 20L)).thenReturn(Optional.of(left));
+
+        groupService.admit(group, returning);
+
+        assertThat(left.getStatus()).isEqualTo(GroupMemberStatus.ACTIVE);
+        verify(groupMemberRepository, never()).save(any());
+        verify(groupEventService).publish(eq(GROUP_ID), isNull(), eq("MEMBER_JOINED"), any());
+    }
+
+    @Test
+    @DisplayName("admit — 이미 ACTIVE 면 ALREADY_GROUP_MEMBER, 이벤트도 안 나간다 (더블탭 두 번째 요청의 결말)")
+    void admit_alreadyActive_throwsWithoutEvent() {
+        Group group = newGroup(creator);
+        Member member = newMember(20L, "member");
+        when(groupMemberRepository.findByGroupIdAndMemberId(GROUP_ID, 20L))
+                .thenReturn(Optional.of(newMembership(group, member, GroupRole.MEMBER, GroupMemberStatus.ACTIVE)));
+
+        assertThatThrownBy(() -> groupService.admit(group, member))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ALREADY_GROUP_MEMBER);
+        verify(groupEventService, never()).publish(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("joinByInviteCode — 코드를 잠금 조회로 찾아 admit 하고 GroupResponseDto 를 돌려준다")
+    void joinByInviteCode_success() {
+        Group group = newGroup(creator);
+        Member joiner = newMember(20L, "joiner");
+        when(groupRepository.findByInviteCodeForUpdate("TESTCD01")).thenReturn(Optional.of(group));
+        when(memberRepository.findById(20L)).thenReturn(Optional.of(joiner));
+        when(groupMemberRepository.findByGroupIdAndMemberId(GROUP_ID, 20L)).thenReturn(Optional.empty());
+        when(groupMemberRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(groupInvitationRepository.findByGroupIdAndInviteeIdAndStatus(GROUP_ID, 20L, InvitationStatus.PENDING))
+                .thenReturn(Optional.empty());
+
+        GroupResponseDto response = groupService.joinByInviteCode(20L, new JoinGroupRequestDto("TESTCD01"));
+
+        assertThat(response.getId()).isEqualTo(GROUP_ID);
+        assertThat(response.getInviteCode()).isEqualTo("TESTCD01");
+        verify(groupRepository).findByInviteCodeForUpdate("TESTCD01");
+    }
+
+    @Test
+    @DisplayName("joinByInviteCode — 소문자·공백 입력은 정규화해서 찾는다")
+    void joinByInviteCode_normalizesInput() {
+        Group group = newGroup(creator);
+        Member joiner = newMember(20L, "joiner");
+        when(groupRepository.findByInviteCodeForUpdate("TESTCD01")).thenReturn(Optional.of(group));
+        when(memberRepository.findById(20L)).thenReturn(Optional.of(joiner));
+        when(groupMemberRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        groupService.joinByInviteCode(20L, new JoinGroupRequestDto("  testcd01 "));
+
+        verify(groupRepository).findByInviteCodeForUpdate("TESTCD01");
+    }
+
+    @Test
+    @DisplayName("joinByInviteCode — 없는 코드면 INVALID_INVITE_CODE")
+    void joinByInviteCode_unknownCode_throws() {
+        when(groupRepository.findByInviteCodeForUpdate("NOPE1234")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> groupService.joinByInviteCode(20L, new JoinGroupRequestDto("NOPE1234")))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_INVITE_CODE);
+    }
+
+    @Test
+    @DisplayName("joinByInviteCode — 같은 (그룹, 회원)의 PENDING 초대가 있으면 ACCEPTED 로 닫는다")
+    void joinByInviteCode_closesPendingInvitation() {
+        Group group = newGroup(creator);
+        Member joiner = newMember(20L, "joiner");
+        GroupInvitation pending = GroupInvitation.builder().group(group).inviter(creator).invitee(joiner).build();
+        when(groupRepository.findByInviteCodeForUpdate("TESTCD01")).thenReturn(Optional.of(group));
+        when(memberRepository.findById(20L)).thenReturn(Optional.of(joiner));
+        when(groupMemberRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(groupInvitationRepository.findByGroupIdAndInviteeIdAndStatus(GROUP_ID, 20L, InvitationStatus.PENDING))
+                .thenReturn(Optional.of(pending));
+
+        groupService.joinByInviteCode(20L, new JoinGroupRequestDto("TESTCD01"));
+
+        assertThat(pending.getStatus()).isEqualTo(InvitationStatus.ACCEPTED);
     }
 
     private GroupMember newMembership(Group group, Member member, GroupRole role, GroupMemberStatus status) {

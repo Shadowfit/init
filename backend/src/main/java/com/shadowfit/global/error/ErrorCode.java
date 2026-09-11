@@ -146,7 +146,8 @@ public enum ErrorCode {
     INVITATION_NOT_FOUND(404, "G004", "존재하지 않는 초대입니다."),
     INVITATION_ALREADY_RESPONDED(409, "G005", "이미 응답한 초대입니다."),
     INVITATION_ALREADY_PENDING(409, "G006", "이미 초대를 보냈습니다."),
-    NOT_GROUP_OWNER(403, "G007", "그룹장만 할 수 있습니다.");
+    NOT_GROUP_OWNER(403, "G007", "그룹장만 할 수 있습니다."),
+    INVALID_INVITE_CODE(404, "G008", "유효하지 않은 초대 코드입니다.");
 
     private final int status;
     private final String code;

@@ -1,15 +1,12 @@
 package com.shadowfit.service.group;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shadowfit.dto.group.CreateInvitationRequestDto;
 import com.shadowfit.dto.group.InvitationResponseDto;
 import com.shadowfit.global.error.BusinessException;
 import com.shadowfit.global.error.ErrorCode;
 import com.shadowfit.model.group.Group;
 import com.shadowfit.model.group.GroupInvitation;
-import com.shadowfit.model.group.GroupMember;
 import com.shadowfit.model.group.GroupMemberStatus;
-import com.shadowfit.model.group.GroupRole;
 import com.shadowfit.model.group.InvitationStatus;
 import com.shadowfit.model.member.Member;
 import com.shadowfit.model.member.UserRole;
@@ -29,10 +26,6 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -49,7 +42,7 @@ class GroupInvitationServiceTest {
     @Mock private GroupMemberRepository groupMemberRepository;
     @Mock private GroupInvitationRepository groupInvitationRepository;
     @Mock private MemberRepository memberRepository;
-    @Mock private GroupEventService groupEventService;
+    @Mock private GroupService groupService;
 
     private GroupInvitationService service;
     private Group group;
@@ -60,7 +53,7 @@ class GroupInvitationServiceTest {
     void setUp() {
         MockitoAnnotations.openMocks(this);
         service = new GroupInvitationService(groupRepository, groupMemberRepository, groupInvitationRepository,
-                memberRepository, groupEventService, new ObjectMapper());
+                memberRepository, groupService);
 
         inviter = newMember(INVITER_ID, "inviter");
         invitee = newMember(INVITEE_ID, "invitee");
@@ -178,36 +171,19 @@ class GroupInvitationServiceTest {
     }
 
     @Test
-    @DisplayName("accept — 성공 시 그룹 멤버로 가입되고 MEMBER_JOINED 이벤트가 발행된다(발신자 없음)")
-    void accept_success_joinsAndPublishesEvent() {
+    @DisplayName("accept — 성공 시 초대가 ACCEPTED 가 되고, 그룹 행을 잠근 채 GroupService.admit 에 가입을 맡긴다")
+    void accept_success_marksAcceptedAndAdmitsUnderLock() {
         GroupInvitation invitation = GroupInvitation.builder().group(group).inviter(inviter).invitee(invitee).build();
         when(groupInvitationRepository.findById(INVITATION_ID)).thenReturn(Optional.of(invitation));
-        when(groupMemberRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(groupRepository.findByIdForUpdate(GROUP_ID)).thenReturn(Optional.of(group));
 
         service.accept(INVITATION_ID, INVITEE_ID);
 
         assertThat(invitation.getStatus()).isEqualTo(InvitationStatus.ACCEPTED);
-        // 시스템이 발행하는 이벤트라 senderId 는 null 이어야 한다 — GroupEventService.publish 계약.
-        verify(groupEventService).publish(eq(GROUP_ID), isNull(), eq("MEMBER_JOINED"), anyString());
-    }
-
-    @Test
-    @DisplayName("accept — 탈퇴(LEFT)했던 멤버가 재초대를 수락하면 새 행을 만들지 않고 기존 행을 되살린다"
-            + " (재삽입 시 UNIQUE(group_id, member_id) 위반으로 500이 나던 버그의 회귀 방지)")
-    void accept_rejoiningLeftMember_reactivatesExistingRow() {
-        GroupInvitation invitation = GroupInvitation.builder().group(group).inviter(inviter).invitee(invitee).build();
-        when(groupInvitationRepository.findById(INVITATION_ID)).thenReturn(Optional.of(invitation));
-
-        GroupMember left = GroupMember.builder().id(500L).group(group).member(invitee)
-                .role(GroupRole.MEMBER).status(GroupMemberStatus.LEFT).build();
-        when(groupMemberRepository.findByGroupIdAndMemberId(GROUP_ID, INVITEE_ID)).thenReturn(Optional.of(left));
-
-        service.accept(INVITATION_ID, INVITEE_ID);
-
-        assertThat(left.getStatus()).isEqualTo(GroupMemberStatus.ACTIVE);
-        assertThat(left.getRole()).isEqualTo(GroupRole.MEMBER);
-        // 기존 행을 그대로 되살렸다 — 새 행을 또 넣지 않았다(그게 원래 버그였다).
-        verify(groupMemberRepository, never()).save(any());
+        // 가입(LEFT 되살리기·MEMBER_JOINED 발행)은 코드 참여와 공유하는 admit 의 몫 — GroupServiceTest 가 검증.
+        // 여기서는 잠금 조회(findByIdForUpdate)로 얻은 그룹을 넘겼는지만 본다(더블탭 500 → 409 의 전제).
+        verify(groupRepository).findByIdForUpdate(GROUP_ID);
+        verify(groupService).admit(group, invitee);
     }
 
     @Test
@@ -219,7 +195,7 @@ class GroupInvitationServiceTest {
         service.decline(INVITATION_ID, INVITEE_ID);
 
         assertThat(invitation.getStatus()).isEqualTo(InvitationStatus.DECLINED);
-        verify(groupEventService, never()).publish(anyLong(), any(), anyString(), anyString());
+        verify(groupService, never()).admit(any(), any());
     }
 
     @Test

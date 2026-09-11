@@ -5,6 +5,7 @@ import com.shadowfit.dto.group.GroupDetailResponseDto;
 import com.shadowfit.dto.group.GroupEventResponseDto;
 import com.shadowfit.dto.group.GroupResponseDto;
 import com.shadowfit.dto.group.InviteCodeResponseDto;
+import com.shadowfit.dto.group.JoinGroupRequestDto;
 import com.shadowfit.global.security.auth.CustomUserDetails;
 import com.shadowfit.repository.group.GroupEventRepository;
 import com.shadowfit.service.group.GroupService;
@@ -34,6 +35,18 @@ public class GroupController {
             @AuthenticationPrincipal CustomUserDetails userDetails
     ) {
         GroupResponseDto response = groupService.createGroup(userDetails.getMember().getId(), request);
+        return ResponseEntity.status(201).body(response);
+    }
+
+    @Operation(summary = "코드로 모임 참여",
+            description = "초대 코드를 입력하면 승인 없이 바로 ACTIVE 멤버가 된다. 코드가 없으면 404, 이미 멤버면 409. "
+                    + "참여하면 모임 사람들에게 출석 여부·연속일수가 보인다(social-cheer-and-group-feed.md §3-G).")
+    @PostMapping("/join")
+    public ResponseEntity<GroupResponseDto> joinByInviteCode(
+            @Valid @RequestBody JoinGroupRequestDto request,
+            @AuthenticationPrincipal CustomUserDetails userDetails
+    ) {
+        GroupResponseDto response = groupService.joinByInviteCode(userDetails.getMember().getId(), request);
         return ResponseEntity.status(201).body(response);
     }
 

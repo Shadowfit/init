@@ -1,16 +1,12 @@
 package com.shadowfit.service.group;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.shadowfit.dto.group.CreateInvitationRequestDto;
 import com.shadowfit.dto.group.InvitationResponseDto;
 import com.shadowfit.global.error.BusinessException;
 import com.shadowfit.global.error.ErrorCode;
 import com.shadowfit.model.group.Group;
 import com.shadowfit.model.group.GroupInvitation;
-import com.shadowfit.model.group.GroupMember;
 import com.shadowfit.model.group.GroupMemberStatus;
-import com.shadowfit.model.group.GroupRole;
 import com.shadowfit.model.group.InvitationStatus;
 import com.shadowfit.model.member.Member;
 import com.shadowfit.repository.group.GroupInvitationRepository;
@@ -32,8 +28,7 @@ public class GroupInvitationService {
     private final GroupMemberRepository groupMemberRepository;
     private final GroupInvitationRepository groupInvitationRepository;
     private final MemberRepository memberRepository;
-    private final GroupEventService groupEventService;
-    private final ObjectMapper objectMapper;
+    private final GroupService groupService;
 
     public InvitationResponseDto invite(Long groupId, Long inviterId, CreateInvitationRequestDto request) {
         Group group = groupRepository.findById(groupId)
@@ -76,23 +71,11 @@ public class GroupInvitationService {
 
         invitation.accept();
 
-        // leaveGroup() 은 기존 group_members 행을 LEFT 로만 남긴다 — 재초대·재수락 시 새 행을
-        // 또 넣으면 UNIQUE(group_id, member_id) 위반으로 트랜잭션이 통째로 실패한다(500).
-        // 기존 행(LEFT 포함)이 있으면 되살리고, 없을 때만 새로 만든다.
-        GroupMember member = groupMemberRepository
-                .findByGroupIdAndMemberId(invitation.getGroup().getId(), invitation.getInvitee().getId())
-                .map(existing -> { existing.rejoin(); return existing; })
-                .orElseGet(() -> groupMemberRepository.save(GroupMember.builder()
-                        .group(invitation.getGroup())
-                        .member(invitation.getInvitee())
-                        .role(GroupRole.MEMBER)
-                        .status(GroupMemberStatus.ACTIVE)
-                        .build()));
-
-        ObjectNode payload = objectMapper.createObjectNode();
-        payload.put("memberId", member.getMember().getId());
-        payload.put("username", member.getMember().getUsername());
-        groupEventService.publish(invitation.getGroup().getId(), null, "MEMBER_JOINED", payload.toString());
+        // 가입(LEFT 되살리기 포함)과 MEMBER_JOINED 발행은 코드 참여와 공유한다 — GroupService.admit.
+        // admit 은 그룹 행이 FOR UPDATE 로 잠긴 상태를 전제하므로 여기서 잠그고 넘긴다(더블탭 500 → 409).
+        Group group = groupRepository.findByIdForUpdate(invitation.getGroup().getId())
+                .orElseThrow(() -> new BusinessException(ErrorCode.GROUP_NOT_FOUND));
+        groupService.admit(group, invitation.getInvitee());
     }
 
     public void decline(Long invitationId, Long inviteeId) {
