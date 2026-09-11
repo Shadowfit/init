@@ -9,7 +9,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 출석(«그날 운동했다»)의 단일 정의와 그 파생값 — 오늘 했는지, 며칠째 연속인지.
@@ -49,6 +51,15 @@ public class AttendanceService {
     public boolean attendedOn(Long memberId, LocalDate date) {
         return sessionRepository.existsByMemberIdAndStatusAndStartTimeBetween(
                 memberId, Status.COMPLETED, date.atStartOfDay(), date.atTime(23, 59, 59));
+    }
+
+    /** 여러 회원 중 그날 출석한 회원 id 집합 — 쿼리 한 번. 빈 입력이면 빈 집합. */
+    public Set<Long> attendedOn(Collection<Long> memberIds, LocalDate date) {
+        if (memberIds.isEmpty()) {
+            return Set.of();
+        }
+        return sessionRepository.findMemberIdsWithStatusBetween(
+                memberIds, Status.COMPLETED, date.atStartOfDay(), date.atTime(23, 59, 59));
     }
 
     /**

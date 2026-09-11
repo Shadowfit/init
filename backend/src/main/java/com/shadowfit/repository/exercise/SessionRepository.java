@@ -12,7 +12,9 @@ import org.springframework.stereotype.Repository;
 
 import java.sql.Date;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import java.util.Optional;
 
 @Repository
@@ -340,6 +342,17 @@ public interface SessionRepository extends JpaRepository<Session,Long> {
     /** 그날 해당 status 세션이 있나 — «오늘 했나» 판정. (member_id, status, start_time) 등치·등치·범위. */
     boolean existsByMemberIdAndStatusAndStartTimeBetween(Long memberId, Status status,
                                                          LocalDateTime start, LocalDateTime end);
+
+    /**
+     * 여러 회원의 «그날 했나»를 한 번에 — 모임 구성원·친구 현황이 멤버 N명을 N번 묻지 않게.
+     * IN 의 회원마다 같은 인덱스 구간을 seek 하므로 읽는 행은 «그날의 COMPLETED 세션» 만이다.
+     */
+    @Query("SELECT DISTINCT s.member.id FROM Session s "
+         + "WHERE s.member.id IN :memberIds AND s.status = :status AND s.startTime BETWEEN :start AND :end")
+    Set<Long> findMemberIdsWithStatusBetween(@Param("memberIds") Collection<Long> memberIds,
+                                             @Param("status") Status status,
+                                             @Param("start") LocalDateTime start,
+                                             @Param("end") LocalDateTime end);
 
     /**
      * 연속 출석 계산용 — {@code before} 이전의 세션 시작 시각을 최신순으로 한 페이지. 엔티티가
