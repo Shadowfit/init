@@ -236,6 +236,38 @@ professor-vision §2 의 "행 단위 접근 제어" 가 여기서 처음 실제�
 
 ---
 
+### 4-2. 구현 분기 — #6 알림 · #7 소켓 (2026-09-12, 사용자 confirm)
+
+§4-1 을 실제로 짜다 보니 견적 표가 안 정한 자리가 #6 에 여섯, #7 에 하나 있었다. 코드 선례로 후보를 좁히고 사용자가 추천을 그대로 채택했다.
+
+#### #6 `notifications`
+
+| | 결정 | 근거 |
+|:--:|---|---|
+| ① | **`type` = Java enum + `VARCHAR(30)`**, DB ENUM 아님 | V12 그룹 4테이블·outbox 가 전부 VARCHAR + `@Enumerated(STRING)`. V16 이 «존재할 수 없던 enum 값» 때문에 DB ENUM 을 지운 것이 하루 전. 값 추가(CHEER 등) 시 DDL 없음 |
+| ② | **읽음 = 건별 `PATCH /notifications/{id}/read` + `PATCH /notifications/read-all`** | read-all 은 `UPDATE … WHERE recipient_id=? AND read_at IS NULL` 한 문장. 건별만 두면 프론트가 N번 호출 |
+| ③ | **`target_date` = 서버 LocalDate**, 요청 바디에 날짜 없음 | UNIQUE 의 «하루» 는 P1(오늘 했나)의 판정 단위에서 온 것이고, 그 판정은 `AttendanceService` 가 서버 LocalDate 로 한다. 두 시계가 같아야 «안 했다 → 재촉 → 자정 넘어 다시 가능» 이 일치 |
+| ④ | **서버는 «오늘 이미 완료한 대상» 재촉을 막지 않는다** — 프론트 규칙(버튼 노출 = `!attendedToday`) | 재촉 = 응원이라 완료자에게 가도 해가 없고, 서버 규칙은 남발 방지 하나로 좁게 둬야 검증 면적이 작다. 막으려면 출석 조회가 1회 더 든다 |
+| ⑤ | **목록 = keyset**(`created_at DESC, id DESC`, `?before=<id>&size=`), `GET /notifications/unread-count` 별도 | 이 repo 첫 keyset 자리. 알림은 append-only + 최신순이라 자연스럽고, offset 이 손해 보는 이유를 실측으로 붙일 수 있다([`portfolio-benchmark.md`](./portfolio-benchmark.md) «채울 키워드»). unread-count 는 배지 폴링용 경량 엔드포인트 |
+| ⑥ | 스키마 — `id, recipient_id NOT NULL, sender_id NULL, type, target_date DATE, read_at NULL, created_at` · UNIQUE `(sender_id, recipient_id, type, target_date)` · INDEX `(recipient_id, read_at, id)` · FK recipient CASCADE / sender SET NULL · **`payload`·`ref_id` 없음** | sender SET NULL 은 `group_events.sender_id` 와 같은 정책(탈퇴자의 재촉은 UNIQUE 에서 빠지지만 무해). NUDGE 는 sender 가 곧 내용이라 payload 가 필요 없다 — CHEER·리액션 알림이 생길 때 그 타입이 요구하는 만큼 V17 이후에 추가 |
+
+권한 가드는 #4 의 «같은 ACTIVE 그룹» 을 그대로 — 아니면 403(`G002`). 더블탭은 사전 exists 검사 + UNIQUE 위반 catch 둘 다 409 로 — 사전 검사만 두면 경합의 두 번째가 500 이 된다(#2 의 더블탭 봉합과 같은 이유).
+
+#### #7 1:1 소켓 전달
+
+사실 셋 — (1) 그룹 WS 는 핸드셰이크가 그룹 단위(`/ws/groups/{groupId}`, ACTIVE 멤버십 검사)이고 attributes 에 `memberId` 는 이미 실린다. (2) `TrainerConnectionRegistry` 가 회원 키 1:1 채널(SSE) 선례로 있으나 방향이 반대. (3) **프론트에 실시간 수신 클라이언트가 하나도 없다** — `ws/groups`·SSE·`expo-notifications` 전부 `frontend/` 참조 0. «접속 중이면 즉시 전달» 의 «접속 중» 인 사람이 지금 0명이다.
+
+| | 구성 | 판정 |
+|---|---|---|
+| A. 개인 엔드포인트 `/ws/me` + `MemberSocketRegistry` | 인터셉터에 그룹 검사 없는 분기, 레지스트리는 `GroupSocketRegistry` 패턴 복제 | **한다면 이것.** 1:1 이 채널로 보장되고 그룹 seq·백필 계약과 안 섞임 |
+| B. 그룹 소켓에 회원→세션 2차 인덱스 | 새 URL 없음 | ✗ 수신자가 그 그룹 화면을 열고 있을 때만 도달, 그룹 채널에 비그룹 메시지가 섞여 seq 계약 깨짐 — 3-C ① 의 문제 반쯤 재발 |
+| C. SSE `/notifications/stream` | Trainer 패턴 | ✗ RN 은 EventSource 가 없어 폴리필 의존, 그룹 WS 와 프로토콜이 둘 |
+| D. 소켓 없음 — 행 + 푸시 | `expo-notifications` 는 앱이 켜져 있어도 수신 리스너로 받는다 | 푸시 하나가 포그라운드·백그라운드를 덮는다. 대가는 Expo 경유 수 초 지연 + 외부 의존 |
+
+> ✅ **결정(2026-09-12): 순서를 #8 → #9(푸시) 먼저로 바꾸고, #7 은 A 로 뒤에 둔다. 1차 사용자 테스트 전까지 프론트가 소켓 클라이언트를 안 붙이면 D 로 닫는다.** 재편성 블록의 «늘어지면 #7 을 뒤로 뺀다» 조항을 «받을 클라이언트가 없어서» 앞당겨 쓰는 것. 푸시는 아웃박스 두 번째 용처라 서사가 붙지만 개인 소켓은 패턴 복제라 서사가 없다. D 로 닫히면 3-C(c) 를 «저장 + 푸시(포그라운드 포함)» 로 정정하고 이유(클라이언트 부재)를 적는다.
+
+---
+
 ## 5. 추천 (결정 아님)
 
 - ~~**3-B 를 먼저 정한다.** `daily_logs` 통일 추천~~ → **3-B 는 d(원본+COMPLETED)로 결정됨.** 처음엔 `daily_logs` 통일을 추천했다가 삭제 드리프트(§3-B)를 확인하고 철회 — 읽기 상수배를 사기 위해 정합성 유지 코드를 들이는 교환은 손해라는 판단.
@@ -275,6 +307,7 @@ professor-vision §2 의 "행 단위 접근 제어" 가 여기서 처음 실제�
 
 ## 결정 로그
 
+- 2026-09-12 (12): **#6·#7 구현 분기 확정(§4-2).** #6 여섯(VARCHAR enum · 건별+read-all · 서버 LocalDate · 완료자 재촉 서버 불차단 · keyset+unread-count · payload 없는 스키마) 추천 그대로. #7 은 프론트에 실시간 수신 클라이언트가 0개임을 확인 → 순서를 #8·#9 앞으로, #7 은 A(`/ws/me`)로 뒤에, 1차 테스트 전 클라이언트가 없으면 D(푸시만)로 닫기.
 - 2026-09-11 (11): **3-B 하위 streak 창 — C(커서, 첫 끊김 중단).** 구현 #3 착수 시 streak 구현이 둘(캘린더 100일·status 전부 / 패턴 분석 28일·COMPLETED)임을 확인. 패턴 분석 쪽은 별개 정의라 유지.
 - 2026-09-11 (10): **학기 계획 조정 확정** — 24 문서 실측 점검(기능 축 BE-05~08 전부 완료 확인) 후 BE-09+종목 결합·2차 테스트·cleanup 축소로 22h 확보. 미결 0.
 - 2026-09-11 (9): **층 L1 확정 + §4-1 견적.** 12개 작업, 단독 ≈33h / 병행 ≈22h 중앙값. 푸시(#8·#9)가 c 선택의 대가 5~6h.
