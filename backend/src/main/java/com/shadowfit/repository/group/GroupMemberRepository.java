@@ -36,4 +36,12 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> 
          + "where gm.group.id in :groupIds and gm.status = :status")
     List<GroupMember> findAllWithMemberByGroupIdInAndStatus(@Param("groupIds") Collection<Long> groupIds,
                                                             @Param("status") GroupMemberStatus status);
+
+    // 재촉하기 권한(social-cheer-and-group-feed.md §3-G a) — 두 사람이 같은 그룹에 둘 다 ACTIVE 인 그룹이
+    // 하나라도 있는가. 셀프 조인이라 같은 사람을 넣으면 자기 그룹 수가 나온다 — 호출자가 self 를 먼저 거른다.
+    @Query("select count(a) from GroupMember a, GroupMember b "
+         + "where a.group = b.group and a.member.id = :memberA and b.member.id = :memberB "
+         + "and a.status = :status and b.status = :status")
+    long countSharedGroups(@Param("memberA") Long memberA, @Param("memberB") Long memberB,
+                           @Param("status") GroupMemberStatus status);
 }
