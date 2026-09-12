@@ -1,0 +1,31 @@
+# 관리자 인덱스 쓰기 대가 — 측정 조건
+라운드      : admin-write-cost-2026-09-10
+커밋        : b69478bc6e7ba142f620e5567054eb3bee09582a
+bootstrap rc: 0
+rig rc      : 0
+시각(UTC)   : 2026-09-10T14:32:47+00:00
+
+## 박스
+인스턴스ID  : i-077b8ec0bf00f4ce8
+타입        : m6i.xlarge
+AZ          : ap-northeast-2c
+AMI         : ami-071eb8c676c4c4bf5
+vCPU        : 4
+MemTotal    : 15709 MB
+커널        : 6.1.182-227.379.amzn2023.x86_64
+디스크      : 
+
+## 동거
+컨테이너    : shadowfit-mysql (mysql:8.0) Up 2 minutes (healthy);
+  → ROLE=db 라 MySQL 하나만 떠 있어야 정상이다.
+
+## MySQL
+버전        : 8.0.46
+버퍼풀      : 2048 MB
+flush_at_trx: 1
+sync_binlog : 1
+binlog      : 1
+doublewrite : ON
+
+## 요금 (Cost Explorer 에서 Project=shadowfit-measure 로 채운다)
+실제 청구액 : (미기입)
