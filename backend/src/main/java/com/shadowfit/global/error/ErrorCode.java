@@ -147,7 +147,14 @@ public enum ErrorCode {
     INVITATION_ALREADY_RESPONDED(409, "G005", "이미 응답한 초대입니다."),
     INVITATION_ALREADY_PENDING(409, "G006", "이미 초대를 보냈습니다."),
     NOT_GROUP_OWNER(403, "G007", "그룹장만 할 수 있습니다."),
-    INVALID_INVITE_CODE(404, "G008", "유효하지 않은 초대 코드입니다.");
+    INVALID_INVITE_CODE(404, "G008", "유효하지 않은 초대 코드입니다."),
+
+    // --- 알림·재촉 (social-cheer-and-group-feed.md §3-C) ---
+    // 남의 알림 id 도 «없음» 과 같게 404 — 세션 삭제(본인 것 아니면 404)와 같은 모양.
+    NOTIFICATION_NOT_FOUND(404, "N001", "존재하지 않는 알림입니다."),
+    // uk_notifications_sender_recipient_type_date(V17) 위반 — 같은 사람에게 같은 날 1회. goals 의 GL002 와 같은 결.
+    NUDGE_ALREADY_SENT_TODAY(409, "N002", "오늘은 이미 재촉했습니다."),
+    NUDGE_SELF_NOT_ALLOWED(400, "N003", "자기 자신은 재촉할 수 없습니다.");
 
     private final int status;
     private final String code;
