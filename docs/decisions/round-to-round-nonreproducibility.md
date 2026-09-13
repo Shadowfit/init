@@ -1,8 +1,10 @@
 # 라운드를 건너면 절대값이 안 맞는다 (+17.7%) — 설계 (2026-08-23 작성)
 
 작성일: 2026-08-23
-상태: **축 A 부분 실행 (2026-08-26, K=2)** — [결과](../../loadtest/results/nonrepro-axisA-2026-08-26/README.md).
-축 B·C 는 여전히 미실행 (착수는 사용자 confirm 후)
+상태: **축 A 부분 실행 (2026-08-26, K=2)** — [결과](../../loadtest/results/nonrepro-axisA-2026-08-26/README.md) ·
+**축 B 실행 완료 (2026-09-14, M=5)** — [결과](../../loadtest/results/nonrepro-axisB-2026-09-14/README.md): stop→start 만으로
+처리량 **+21% 폭**(284.8~344.6 rps), AI CPU 는 안 따라감(r=−0.26), calib `cpu` 축이 처리량비를 6부팅 중 5개에서 3%p 안에서
+설명 → 판정선 ㄴ 의 답은 **「박스 문제」**. 축 C 는 §4-1 대로 불필요. 인용 규칙 채택(결과 §8)은 사용자 결정 대기
 발단: [P6-b §5](../../loadtest/results/coresidency-aws-b-2026-08-16/README.md) · 재고표 [AI 축 3번](./experiment-inventory.md)
 추적: **[#498](https://github.com/Shadowfit/init/issues/498)**(설계 검토, OPEN) · [#496](https://github.com/Shadowfit/init/pull/496)(이 설계)
 🔴 **[#255](https://github.com/Shadowfit/init/issues/255) 는 이 문제가 아니다** — 같은 라운드에서 같이 나온 **부하기 샘플러 음수** 결함이고 **CLOSED** 다. 번호가 눌어붙어 여러 문서가 잘못 인용했다

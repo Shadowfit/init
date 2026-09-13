@@ -1,0 +1,57 @@
+[2026-09-14T00:15:23+09:00] launch c7i.4xlarge
+[2026-09-14T00:15:32+09:00] instance i-04962c061c3bd30c1
+[2026-09-14T00:15:54+09:00] running · ip=3.37.61.115
+[2026-09-14T00:16:00+09:00] ssh up(ec2-user) · 부트스트랩 대기
+[2026-09-14T00:17:44+09:00] 부트스트랩 완료
+[2026-09-14T00:19:34+09:00] boot1: 작업 시작
+[2026-09-14T00:28:27+09:00] boot1: 회수 완료
+  {"processed_fps": 299.61, "rps": 299.61, "p50_ms": 492.2, "p95_ms": 853.0, "requests": 25439, "error": null}
+  {"processed_fps": 300.12, "rps": 300.12, "p50_ms": 490.6, "p95_ms": 853.4, "requests": 25465, "error": null}
+  {"processed_fps": 298.0, "rps": 298.0, "p50_ms": 494.1, "p95_ms": 852.4, "requests": 25366, "error": null}
+[2026-09-14T00:28:34+09:00] boot1: stop-instances
+[2026-09-14T00:29:19+09:00] boot1: stopped
+[2026-09-14T00:29:19+09:00] boot2: start-instances
+[2026-09-14T00:29:52+09:00] boot2: running · ip=43.201.36.240
+[2026-09-14T00:29:54+09:00] boot2: 작업 시작
+[2026-09-14T00:38:38+09:00] boot2: 회수 완료
+  {"processed_fps": 331.75, "rps": 331.75, "p50_ms": 433.5, "p95_ms": 840.3, "requests": 28234, "error": null}
+  {"processed_fps": 332.91, "rps": 332.91, "p50_ms": 431.5, "p95_ms": 834.6, "requests": 28339, "error": null}
+  {"processed_fps": 331.78, "rps": 331.78, "p50_ms": 433.2, "p95_ms": 851.9, "requests": 28154, "error": null}
+[2026-09-14T00:38:39+09:00] boot2: stop-instances
+[2026-09-14T00:39:03+09:00] boot2: stopped
+[2026-09-14T00:39:03+09:00] boot3: start-instances
+[2026-09-14T00:39:16+09:00] boot3: running · ip=54.180.8.112
+[2026-09-14T00:39:42+09:00] boot3: 작업 시작
+[2026-09-14T00:48:28+09:00] boot3: 회수 완료
+  {"processed_fps": 298.44, "rps": 298.44, "p50_ms": 491.1, "p95_ms": 841.0, "requests": 25399, "error": null}
+  {"processed_fps": 299.62, "rps": 299.62, "p50_ms": 490.0, "p95_ms": 850.7, "requests": 25516, "error": null}
+  {"processed_fps": 296.9, "rps": 296.9, "p50_ms": 492.9, "p95_ms": 851.8, "requests": 25275, "error": null}
+[2026-09-14T00:48:32+09:00] boot3: stop-instances
+[2026-09-14T00:49:09+09:00] boot3: stopped
+[2026-09-14T00:49:09+09:00] boot4: start-instances
+[2026-09-14T00:49:43+09:00] boot4: running · ip=13.125.224.81
+[2026-09-14T00:49:48+09:00] boot4: 작업 시작
+[2026-09-14T00:58:26+09:00] boot4: 회수 완료
+  {"processed_fps": 297.42, "rps": 297.42, "p50_ms": 492.6, "p95_ms": 856.7, "requests": 25312, "error": null}
+  {"processed_fps": 298.96, "rps": 298.96, "p50_ms": 490.5, "p95_ms": 841.7, "requests": 25452, "error": null}
+  {"processed_fps": 299.91, "rps": 299.91, "p50_ms": 491.1, "p95_ms": 852.7, "requests": 25524, "error": null}
+[2026-09-14T00:58:28+09:00] boot4: stop-instances
+[2026-09-14T00:59:00+09:00] boot4: stopped
+[2026-09-14T00:59:04+09:00] boot5: start-instances
+[2026-09-14T00:59:44+09:00] boot5: running · ip=15.164.95.23
+[2026-09-14T00:59:45+09:00] boot5: 작업 시작
+[2026-09-14T01:08:22+09:00] boot5: 회수 완료
+  {"processed_fps": 284.87, "rps": 284.87, "p50_ms": 508.1, "p95_ms": 943.6, "requests": 24246, "error": null}
+  {"processed_fps": 284.99, "rps": 284.99, "p50_ms": 507.2, "p95_ms": 947.4, "requests": 24252, "error": null}
+  {"processed_fps": 284.84, "rps": 284.84, "p50_ms": 506.3, "p95_ms": 944.6, "requests": 24251, "error": null}
+[2026-09-14T01:08:25+09:00] boot5: stop-instances
+[2026-09-14T01:09:06+09:00] boot5: stopped
+[2026-09-14T01:09:06+09:00] boot6: start-instances
+[2026-09-14T01:09:42+09:00] boot6: running · ip=13.209.97.89
+[2026-09-14T01:09:44+09:00] boot6: 작업 시작
+[2026-09-14T01:18:15+09:00] boot6: 회수 완료
+  {"processed_fps": 344.81, "rps": 344.81, "p50_ms": 421.4, "p95_ms": 775.1, "requests": 29338, "error": null}
+  {"processed_fps": 344.06, "rps": 344.06, "p50_ms": 421.4, "p95_ms": 782.9, "requests": 29270, "error": null}
+  {"processed_fps": 344.81, "rps": 344.81, "p50_ms": 421.3, "p95_ms": 781.2, "requests": 29353, "error": null}
+[2026-09-14T01:18:17+09:00] terminate i-04962c061c3bd30c1
+[2026-09-14T01:18:54+09:00] terminated. 남은 볼륨: 
