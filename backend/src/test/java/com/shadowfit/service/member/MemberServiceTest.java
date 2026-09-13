@@ -65,6 +65,7 @@ class MemberServiceTest {
     @Mock private SessionRepository sessionRepository;
     @Mock private PoseDataCleanupService poseDataCleanupService;
     @Mock private PasswordEncoder passwordEncoder;
+    @Mock private com.shadowfit.repository.notification.PushTokenRepository pushTokenRepository;
 
     private MemberService memberService;
 
@@ -86,7 +87,7 @@ class MemberServiceTest {
         memberService = new MemberService(jwtUtil, memberRepository, refreshTokenRepository,
                 sessionRepository, poseDataCleanupService, passwordEncoder,
                 new com.shadowfit.global.security.jwt.RefreshTokenHasher(),
-                new LoginAttemptLimiter(new AuthRateLimitProperties()));
+                new LoginAttemptLimiter(new AuthRateLimitProperties()), pushTokenRepository);
     }
 
     @Nested

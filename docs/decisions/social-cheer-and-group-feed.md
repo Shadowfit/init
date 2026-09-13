@@ -236,6 +236,21 @@ professor-vision §2 의 "행 단위 접근 제어" 가 여기서 처음 실제�
 
 ---
 
+### 4-2. 구현 분기 — #8 `push_tokens` (2026-09-12, 사용자 confirm)
+
+사실: 로그아웃이 **계정 단위**다(`MemberService.logout()` 이 refresh token 을 `deleteByMemberId` 로 전부 지운다 — 기기별 로그아웃이 서버에 없다). Expo 토큰은 `ExponentPushToken[…]`(구형 `ExpoPushToken[…]`) 꼴이고 최대 길이는 미문서. 죽은 토큰은 #9 의 Expo 응답 `DeviceNotRegistered` 가 알려준다.
+
+| | 결정 | 근거 |
+|:--:|---|---|
+| ① | **`UNIQUE(token)` + 등록 시 소유자 이동(upsert)** — (member_id, token) 아님 | 한 기기의 토큰은 항상 마지막으로 등록한 계정 것. (member_id, token) 이면 공용 기기에서 A 의 로그아웃 요청이 유실된 채 B 가 로그인할 때 B 의 기기에 A 의 재촉이 간다. 동시 INSERT 경합은 #6 과 같은 모양 — UNIQUE 위반 catch 후 재조회·갱신 |
+| ② | **삭제 = 로그아웃 시 `deleteByMemberId` + #9 의 `DeviceNotRegistered` → `deleteByToken`.** 별도 DELETE API 없음 | 로그아웃이 계정 단위라 refresh token 과 같은 의미로 묶는 게 맞고, 클라이언트가 토큰을 안 보내도 된다. 기기 단위 «알림 끄기» 토글은 레퍼런스 화면에 없다. 탈퇴는 FK CASCADE. §4-1 #8 의 «삭제 포함» 은 이 두 자리를 뜻한다 |
+| ③ | **만료·상한 없음** — `updated_at` 은 기록만 | «N일 미갱신 삭제» 는 근거 없는 임계값. 죽은 토큰은 ②가 정확히 알려준다. 회원당 기기 수 상한도 근거 없음 |
+| ④ | **`POST /push-tokens` `{token, platform}` → 신규든 갱신이든 200.** 형식 검증 `^(ExponentPushToken\|ExpoPushToken)\[[^\]]+\]$` 아니면 400. `platform` = Java enum `IOS\|ANDROID` + VARCHAR(10) | 멱등 upsert 라 201/200 을 가를 정보가 프론트에 없다. 토큰에 `[ ]` 가 있어 path 에 못 넣는다. Expo 에 보내기 전에 걸러야 #9 의 실패 분류가 깨끗하다. platform 은 발송에 안 쓰이고 진단용 |
+
+스키마 — `push_tokens(id, member_id NOT NULL FK CASCADE, token VARCHAR(255) NOT NULL, platform VARCHAR(10) NOT NULL, created_at, updated_at)` · UNIQUE `(token)` · INDEX `(member_id)`(#9 가 수신자 기준으로 읽는 자리). 255 는 Expo 가 길이를 안 정해 repo 의 불투명 외부 문자열 기본값(V15 `description`)을 따른 것. #9 가 쓸 `findAllByMemberId`·`deleteByToken` 을 여기서 같이 둔다.
+
+---
+
 ## 5. 추천 (결정 아님)
 
 - ~~**3-B 를 먼저 정한다.** `daily_logs` 통일 추천~~ → **3-B 는 d(원본+COMPLETED)로 결정됨.** 처음엔 `daily_logs` 통일을 추천했다가 삭제 드리프트(§3-B)를 확인하고 철회 — 읽기 상수배를 사기 위해 정합성 유지 코드를 들이는 교환은 손해라는 판단.
@@ -275,6 +290,7 @@ professor-vision §2 의 "행 단위 접근 제어" 가 여기서 처음 실제�
 
 ## 결정 로그
 
+- 2026-09-12 (13): **#8 push_tokens 분기 확정(§4-2).** UNIQUE(token)+소유자 이동 · 삭제는 로그아웃(계정 단위)+DeviceNotRegistered 두 자리, 별도 DELETE 없음 · 만료·상한 없음 · POST /push-tokens 멱등 200 + 형식 검증. 추천 그대로.
 - 2026-09-12 (12): **구현 #6 착수 시 하위 결정 5개(사용자 confirm).** ① `notifications.type` 은 **Java enum `NotificationType{NUDGE}` + `VARCHAR(50)`**(DB ENUM 아님 — V16 이 지운 `report_type` 과 같은 함정 회피, `group_events.event_type` 관례). ② 읽음은 **건별 `PATCH /notifications/{id}/read` 만, «모두 읽음» 없음**(레퍼런스 화면에 없음). ③ 3-C 스케치의 `ref` 컬럼은 **지금 안 만듦**(NUDGE 는 가리킬 대상 없음, 필요 시 nullable ADD COLUMN). ④ `sender_id` FK 는 **ON DELETE SET NULL**(알림은 수신자의 기록 — `group_events.sender_id` 와 같은 판단), `recipient_id` 는 CASCADE. ⑤ 재촉 경로는 **`POST /friends/{memberId}/nudge`** — 권한 조건(같은 모임 ACTIVE)이 곧 «친구» 라 URL 과 규칙이 같다. §4-1 표의 `/members/{id}/nudge` 는 견적 표기였다(#4 의 `/feed/friends`→`/friends` 와 같은 정정). 목록은 `GET /notifications?page&size`(관리자 목록과 같은 offset·상한 100). 서버는 «오늘 이미 완료한 상대» 재촉을 막지 않는다(버튼 노출은 프론트).
 - 2026-09-11 (11): **3-B 하위 streak 창 — C(커서, 첫 끊김 중단).** 구현 #3 착수 시 streak 구현이 둘(캘린더 100일·status 전부 / 패턴 분석 28일·COMPLETED)임을 확인. 패턴 분석 쪽은 별개 정의라 유지.
 - 2026-09-11 (10): **학기 계획 조정 확정** — 24 문서 실측 점검(기능 축 BE-05~08 전부 완료 확인) 후 BE-09+종목 결합·2차 테스트·cleanup 축소로 22h 확보. 미결 0.
