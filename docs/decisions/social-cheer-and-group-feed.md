@@ -251,6 +251,39 @@ professor-vision §2 의 "행 단위 접근 제어" 가 여기서 처음 실제�
 
 ---
 
+### 4-3. 구현 분기 — #9 푸시 발행 (2026-09-14, 사용자 confirm)
+
+사실(코드에서 확인):
+
+- 아웃박스는 `OutboxEventType` enum + `OutboxPublisher.dispatchOne` 의 switch 로 갈린다. 결과는 `DispatchOutcome{SENT, RETRY, TERMINAL_FAILED}` 셋. 선점 lease 60초, 배치 20행, 재시도 상한 10회, 백오프 1s→300s. `aggregate_type` 은 String 라벨(현재 `"SESSION"`), `payload` JSON, 행에 correlationId 가 실린다.
+- **lease 60초는 gRPC 데드라인 5초를 전제로 잡혔고, AI 쪽은 서킷브레이커가 빠른 실패를 맡는다.** 발행기가 배치 20행을 순서대로 보내므로, 외부 호출이 매번 타임아웃까지 걸리면 20×5s = 100s > 60s — **lease 가 배치 도중 만료돼 자기 행을 `claimStale` 이 회수하고 중복 송신이 난다.** AI 채널은 서킷이 OPEN 되면 즉시 RETRY 로 빠져 이 창이 안 열린다. Expo 에도 같은 장치가 없으면 이 창이 열린다.
+- main 에 HTTP 클라이언트가 없다(WebClient 는 `test/webclient-full-journey` 브랜치에만). Spring Boot 3.5 의 `RestClient` 는 `spring-web` 에 들어 있어 의존성 추가 없이 쓸 수 있고, 테스트는 `MockRestServiceServer` 로 잡힌다.
+- Expo Push API: `POST https://exp.host/--/api/v2/push/send`, 요청 하나에 메시지 ≤100, 응답은 메시지별 티켓 `{status: ok|error, details.error}`. 문서화된 `details.error`: `DeviceNotRegistered`(토큰 죽음, 재시도 무의미), `MessageTooBig`, `MessageRateExceeded`(문서가 «지수 백오프로 재시도» 라고 명시), `MismatchSenderId`·`InvalidCredentials`(자격 증명 설정 문제). HTTP 429 는 요청 단위 rate limit. 접근 토큰(`Authorization: Bearer`)은 선택 — 없어도 보내지지만 있으면 남이 내 앱 이름으로 못 보낸다. receipt API 는 별도이고 §3-C 하위 ①이 이미 범위 밖으로 뒀다(SENT = Expo 수신).
+- `notifications.sender_id` 는 SET NULL 이라 본문을 만들 때 보낸 사람이 없을 수 있다. 표시 이름은 `users.username`.
+- 프론트 `expo-notifications` 는 아직 없다(§4-1 프론트 참고 행). 서버가 먼저 가고 토큰이 붙으면 실기기로 확인한다.
+
+| | 분기 | 후보 | 추천 | 근거 |
+|:--:|---|---|:--:|---|
+| ① | **아웃박스 행 단위** | a. 알림 1건 = 행 1개, 수신자 토큰은 송신 시점에 읽어 한 요청에 묶음 / b. 토큰당 행 1개 | **a** | 재촉이 사람·날짜당 1회라 행 수는 어차피 작고, b 는 적재 시점 토큰이 송신 시점과 달라지는 문제(그새 로그아웃·재등록)를 행마다 처리해야 한다. a 의 대가는 아래 ③의 «일부 토큰만 재시도 대상» 일 때 나머지 토큰에 중복이 갈 수 있다는 것 — at-least-once 의 의미 그대로라 문서화로 닫는다 |
+| ② | **적재 위치** | `NotificationWriter.insert` 가 알림 행과 **같은 트랜잭션**에 `OutboxEvent` INSERT (`aggregate_type="NOTIFICATION"`, `aggregate_id=notification.id`, payload `{"notificationId":n}`) | — | 아웃박스 패턴의 정의라 분기가 아니다. 적어두는 이유는 #7 소켓 전달이 같은 자리(insert 뒤)에 붙어 두 PR 이 이 파일에서 만난다는 것 |
+| ③ | **결과 분류** | 전송 실패(연결·타임아웃·5xx·429) → `RETRY` · 200 + 티켓 전부 ok → `SENT` · 티켓 `DeviceNotRegistered` → 그 토큰 `deleteByToken`, 나머지가 ok 면 `SENT` · `MessageRateExceeded` → `RETRY`(행 전체 — ①a 의 대가) · `MismatchSenderId`·`InvalidCredentials`·`MessageTooBig`·미지의 오류 → `TERMINAL_FAILED` + ERROR 로그 | 위 | Expo 문서의 분류를 그대로 옮긴 것. 자격 증명 오류를 RETRY 로 두면 설정을 고칠 때까지 행이 10회 돌다 FAILED 로 떨어지는데 결과는 같고 로그만 10배다 |
+| ④ | **수신자 토큰 0개** | a. `SENT` / b. `TERMINAL_FAILED` / c. 적재 시점에 토큰이 없으면 아웃박스 행을 안 만들고, 송신 시점에 0개면 `TERMINAL_FAILED` / d. `DispatchOutcome`·`OutboxStatus` 에 «대상 없음» 값 신설 | **c** | a 는 «보냈다» 가 거짓. b 는 앱 알림 권한을 안 준 회원 전부가 매번 FAILED 지표·로그를 만든다 — 실패가 아니라 대상이 없는 것. d 가 가장 정직하지만 상태 enum·회수 쿼리·지표 라벨을 다 건드린다. c 는 흔한 경우(권한 없음)를 적재에서 거르고, 드문 경우(적재↔송신 사이 로그아웃)만 FAILED 로 남긴다 — 그 FAILED 는 실제로 «못 보냈다» 이므로 정직하다 |
+| ⑤ | **빠른 실패 장치** | a. 없음 — 타임아웃 + 아웃박스 백오프만 / b. Resilience4j 서킷브레이커 인스턴스 `expoPush` 추가(설정 + `@CircuitBreaker` 하나) | **b** | 사실 2번째 줄 — Expo 가 죽어 있으면 배치 20 × 타임아웃이 lease 60초를 넘어 자기 행을 회수·중복 송신한다. AI 채널이 이 창을 서킷으로 닫았으니 같은 장치를 같은 이유로. 설정은 `default` 를 상속하고 인스턴스 이름만 추가 |
+| ⑥ | **HTTP 타임아웃** | 연결·읽기 각 **5초** — `GRPC_CALL_TIMEOUT_SECONDS` 와 같은 값 | 5s | 근거는 «측정» 이 아니라 **제약**이다: lease 60초 안에 배치 20행이 서킷 OPEN 전까지(슬라이딩 윈도 10건) 실패해도 10×5s = 50s < 60s 로 들어와야 한다. 5초는 그 제약을 만족하는 기존 값이라 새 숫자를 안 만든다. Expo 응답 시간 분포는 실측이 없다 — 실기기 테스트 때 `outbox_lag` 로 본다 |
+| ⑦ | **메시지 본문** | title `"ShadowFit"`, body `"{username}님이 오늘 운동을 재촉했어요"`, sender 가 없으면(탈퇴) `"모임 친구가 오늘 운동을 재촉했어요"`, `data: {notificationId, type}` | — | 문구는 제품 결정이라 확인 필요. `data` 는 프론트가 알림함으로 딥링크할 최소 정보 |
+| ⑧ | **자격 증명·URL** | `push.expo.url`(기본 `https://exp.host/--/api/v2/push/send`, 테스트는 mock) + `EXPO_ACCESS_TOKEN`(비면 헤더 생략) | — | 토큰은 Expo 대시보드에서 발급(비코딩, §4-1 참고 행). 없어도 동작하므로 배포를 막지 않는다 |
+| ⑨ | **회수분 재배달** | `possiblyRedelivered=true` 인 행은 이미 한 번 폰에 갔을 수 있다 — 구분해서 안 보낼 방법이 없다(Expo 수신 여부를 우리가 모른다) | 그대로 보냄 | at-least-once. 재촉 한 번이 두 번 울리는 것이 안 울리는 것보다 낫다는 판단 — 이건 제품 판단이라 확인 필요 |
+
+> ✅ **결정(2026-09-14, 사용자 confirm): 추천 그대로 ①a·②·③·④c·⑤b·⑥5s·⑦·⑧·⑨.** 구현하며 표에 없던 경우 하나를 채웠다 — **티켓이 전부 `DeviceNotRegistered` 이면 SENT 가 아니라 TERMINAL_FAILED**(토큰은 삭제). ③의 「나머지가 ok 면 SENT」 는 ok 가 하나라도 있을 때 얘기고, 하나도 없으면 아무 데도 안 간 것이라 ④의 「SENT 는 거짓」 과 같은 판단이다. 요청 단위 4xx(429 제외)·규격 밖 응답은 `ExpoPushRejectedException` 으로 TERMINAL_FAILED 이고 서킷 집계에서 뺀다(`ignoreExceptions`) — AI 채널의 `isClientRejection` 과 같은 이유.
+>
+> 구현: `OutboxEventType.PUSH_NOTIFICATION` · `NotificationWriter.insert` 가 같은 트랜잭션에 행 INSERT(수신자 기기 있을 때만) · `service/notification/push/`(`ExpoPushClient`·`PushDispatchService`·`PushDispatchStore`) · Resilience4j `expoPush` · `push.expo.*` 설정 · `EXPO_ACCESS_TOKEN`. 테스트는 mock 서버(`MockRestServiceServer`)와 H2 통합(`NudgePushOutboxIntegrationTest`) — 실제 exp.host 는 테스트가 절대 안 친다(테스트 yml 이 닫힌 포트를 가리킨다).
+
+**이 견적에 없는 것**: receipt 조회(§3-C 하위 ①이 범위 밖), 알림 종류별 문구 분기(지금 NUDGE 하나), 프론트 `expo-notifications`(별도 산정).
+
+**#7 과의 접점**: 둘 다 `NotificationWriter.insert` 뒤에 «전달» 을 붙인다. #7 은 트랜잭션 밖 릴레이(커밋 후), #9 는 트랜잭션 안 아웃박스 INSERT — 같은 파일이지만 다른 줄이다. 먼저 머지되는 쪽에 나머지가 리베이스한다.
+
+---
+
 ## 5. 추천 (결정 아님)
 
 - ~~**3-B 를 먼저 정한다.** `daily_logs` 통일 추천~~ → **3-B 는 d(원본+COMPLETED)로 결정됨.** 처음엔 `daily_logs` 통일을 추천했다가 삭제 드리프트(§3-B)를 확인하고 철회 — 읽기 상수배를 사기 위해 정합성 유지 코드를 들이는 교환은 손해라는 판단.
@@ -290,6 +323,7 @@ professor-vision §2 의 "행 단위 접근 제어" 가 여기서 처음 실제�
 
 ## 결정 로그
 
+- 2026-09-14 (14): **#9 푸시 발행 분기 확정(§4-3).** 행 = 알림 1건 · 적재는 알림과 같은 트랜잭션(기기 있을 때만) · 결과 분류는 Expo 문서 그대로 + 전부 죽은 토큰이면 FAILED · 서킷 `expoPush` 추가(배치 20 × 5s > lease 60s 창) · 타임아웃 5s 는 제약에서 · 문구 확정. 추천 그대로. 구현 착수 전에 발견한 사실: **AI 채널의 서킷이 없었다면 lease 60초는 배치 20행을 못 버틴다** — 새 외부 호출을 붙일 때마다 같은 장치가 필요하다.
 - 2026-09-12 (13): **#8 push_tokens 분기 확정(§4-2).** UNIQUE(token)+소유자 이동 · 삭제는 로그아웃(계정 단위)+DeviceNotRegistered 두 자리, 별도 DELETE 없음 · 만료·상한 없음 · POST /push-tokens 멱등 200 + 형식 검증. 추천 그대로.
 - 2026-09-12 (12): **구현 #6 착수 시 하위 결정 5개(사용자 confirm).** ① `notifications.type` 은 **Java enum `NotificationType{NUDGE}` + `VARCHAR(50)`**(DB ENUM 아님 — V16 이 지운 `report_type` 과 같은 함정 회피, `group_events.event_type` 관례). ② 읽음은 **건별 `PATCH /notifications/{id}/read` 만, «모두 읽음» 없음**(레퍼런스 화면에 없음). ③ 3-C 스케치의 `ref` 컬럼은 **지금 안 만듦**(NUDGE 는 가리킬 대상 없음, 필요 시 nullable ADD COLUMN). ④ `sender_id` FK 는 **ON DELETE SET NULL**(알림은 수신자의 기록 — `group_events.sender_id` 와 같은 판단), `recipient_id` 는 CASCADE. ⑤ 재촉 경로는 **`POST /friends/{memberId}/nudge`** — 권한 조건(같은 모임 ACTIVE)이 곧 «친구» 라 URL 과 규칙이 같다. §4-1 표의 `/members/{id}/nudge` 는 견적 표기였다(#4 의 `/feed/friends`→`/friends` 와 같은 정정). 목록은 `GET /notifications?page&size`(관리자 목록과 같은 offset·상한 100). 서버는 «오늘 이미 완료한 상대» 재촉을 막지 않는다(버튼 노출은 프론트).
 - 2026-09-11 (11): **3-B 하위 streak 창 — C(커서, 첫 끊김 중단).** 구현 #3 착수 시 streak 구현이 둘(캘린더 100일·status 전부 / 패턴 분석 28일·COMPLETED)임을 확인. 패턴 분석 쪽은 별개 정의라 유지.

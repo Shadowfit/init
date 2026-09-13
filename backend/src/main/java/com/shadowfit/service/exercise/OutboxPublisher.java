@@ -6,6 +6,7 @@ import com.shadowfit.model.outbox.DispatchOutcome;
 import com.shadowfit.model.outbox.OutboxEvent;
 import com.shadowfit.model.outbox.OutboxStatus;
 import com.shadowfit.repository.outbox.OutboxEventRepository;
+import com.shadowfit.service.notification.push.PushDispatchService;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
@@ -20,7 +21,8 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * 아웃박스 발행기 — {@code PENDING} 행을 집어 AI 에 실제로 송신하고 결과를 행 상태로 되돌린다.
+ * 아웃박스 발행기 — {@code PENDING} 행을 집어 실제로 송신하고 결과를 행 상태로 되돌린다.
+ * 상대는 타입에 따라 AI(gRPC) 또는 Expo Push(HTTP)다 — 두 번째 용처는 {@link PushDispatchService}.
  *
  * <p>[전체 그림] {@code endSession} 은 세션 변경과 통보 행 INSERT 를 한 트랜잭션에 커밋하고 끝난다
  * (gRPC 없음). 전달 책임은 여기가 진다 — 실패하면 행이 남아 다음 tick 에 다시 시도되므로,
@@ -42,6 +44,7 @@ public class OutboxPublisher {
 
     private final OutboxEventRepository outboxRepository;
     private final ExerciseAnalysisService analysisService;
+    private final PushDispatchService pushDispatchService;
     private final SessionMetrics sessionMetrics;
     private final OutboxEventStore outboxEventStore;
 
@@ -119,8 +122,11 @@ public class OutboxPublisher {
     private void dispatchBatch(List<OutboxEvent> claimed, boolean possiblyRedelivered) {
         for (OutboxEvent event : claimed) {
             // 행에 적힌 cid 로 복원 — MDC 는 스레드에 매달려 죽지만 DB 에 적힌 cid 는 재시작을 견딘다.
+            // sessionId MDC 는 애그리거트가 세션일 때만 — 알림 id 를 세션 자리에 찍으면 로그가 거짓말한다.
+            Long sessionId = OutboxEvent.AGGREGATE_TYPE_SESSION.equals(event.getAggregateType())
+                    ? event.getAggregateId() : null;
             try (CorrelationIds.Scope perRow = CorrelationIds.withCorrelationId(event.getCorrelationId());
-                 CorrelationIds.Scope session = CorrelationIds.withSession(event.getAggregateId())) {
+                 CorrelationIds.Scope session = CorrelationIds.withSession(sessionId)) {
                 dispatchOne(event, possiblyRedelivered);
             } catch (Exception e) {
                 // 한 건의 실패가 배치 전체를 멈추면 안 된다. 상태를 못 바꾸고 빠져도 행은
@@ -137,6 +143,9 @@ public class OutboxPublisher {
             // possiblyRedelivered 를 안 쓴다 — 재부착은 이미 AI 쪽 already_active 로 멱등해서
             // (§2-1 stopAnalysis 와 달리) 회수분 구분이 결과 해석에 영향을 주지 않는다.
             case REATTACH_ANALYSIS -> analysisService.reattachFromOutbox(event.getAggregateId());
+            // possiblyRedelivered 를 안 쓴다 — 이미 폰에 갔는지 알 길이 없어 구분해도 할 수 있는 게 없다
+            // (social-cheer-and-group-feed.md §4-3 ⑨). aggregateId 는 notification id.
+            case PUSH_NOTIFICATION -> pushDispatchService.dispatch(event.getAggregateId());
         };
 
         switch (outcome) {
@@ -156,8 +165,8 @@ public class OutboxPublisher {
                     return;
                 }
                 sessionMetrics.outboxDispatch("failed");
-                log.warn("아웃박스 전달 종료(재시도 무의미) - id: {}, sessionId: {}",
-                        event.getId(), event.getAggregateId());
+                log.warn("아웃박스 전달 종료(재시도 무의미) - id: {}, {}: {}",
+                        event.getId(), event.getAggregateType(), event.getAggregateId());
             }
             case RETRY -> {
                 int attempts = event.getRetryCount() + 1;
@@ -166,8 +175,8 @@ public class OutboxPublisher {
                         return;
                     }
                     sessionMetrics.outboxDispatch("failed");
-                    log.error("아웃박스 재시도 한도 초과 — 독 메시지로 종료 (id: {}, sessionId: {}, 시도: {})",
-                            event.getId(), event.getAggregateId(), attempts);
+                    log.error("아웃박스 재시도 한도 초과 — 독 메시지로 종료 (id: {}, {}: {}, 시도: {})",
+                            event.getId(), event.getAggregateType(), event.getAggregateId(), attempts);
                     return;
                 }
                 LocalDateTime nextAt = LocalDateTime.now().plusSeconds(backoffSeconds(attempts));
@@ -191,9 +200,9 @@ public class OutboxPublisher {
             return true;
         }
         sessionMetrics.outboxDispatch("lease-lost");
-        log.warn("선점을 잃은 뒤 결과를 기록하려 함 — 다른 발행기가 회수했다 (id: {}, sessionId: {}). "
-                + "lease({}s)가 gRPC 데드라인 대비 너무 짧지 않은지 확인 필요",
-                event.getId(), event.getAggregateId(), lockTimeoutSeconds);
+        log.warn("선점을 잃은 뒤 결과를 기록하려 함 — 다른 발행기가 회수했다 (id: {}, {}: {}). "
+                + "lease({}s)가 송신 데드라인 대비 너무 짧지 않은지 확인 필요",
+                event.getId(), event.getAggregateType(), event.getAggregateId(), lockTimeoutSeconds);
         return false;
     }
 
