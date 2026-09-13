@@ -324,6 +324,32 @@ resilience4j:
         waitDurationInOpenState: 10s
         permittedNumberOfCallsInHalfOpenState: 3
         automaticTransitionFromOpenToHalfOpenEnabled: true
+    instances:
+      # Spring→Expo Push HTTP (social-cheer-and-group-feed.md §4-3 ⑤). default 를 그대로 상속한다 —
+      # 근거가 다른 숫자를 만들 이유가 없다. 붙이는 이유는 AI 채널과 같다: 상대가 죽어 있을 때
+      # 배치 20행 × 타임아웃 5s = 100s 가 아웃박스 lease 60s 를 넘어 자기 행을 회수·중복 송신하는
+      # 창을 서킷 OPEN 의 즉시 실패로 닫는다.
+      expoPush:
+        baseConfig: default
+        # 우리 요청이 틀린 것(4xx·규격 밖 응답)은 상대의 건강 신호가 아니다 —
+        # ExerciseAnalysisService.isClientRejection 과 같은 판단.
+        ignoreExceptions:
+          - com.shadowfit.service.notification.push.ExpoPushRejectedException
+
+# [8] Expo Push (social-cheer-and-group-feed.md §3-C c 하위 ①, §4-3 ⑥·⑧)
+# 알림 행 → 아웃박스 → 이 URL 로 POST. Expo 가 FCM/APNs 로 중계한다.
+push:
+  expo:
+    url: https://exp.host/--/api/v2/push/send
+    # 선택. 비어 있으면 Authorization 헤더를 안 붙인다 — 기본 발송은 수신자 토큰만으로 된다.
+    # EAS 의 enhanced push security 를 켠 프로젝트는 이 값이 있어야 발송이 받아진다(.env.example).
+    # 설정돼 있으면 url 은 HTTPS 여야 기동된다(ExpoPushClientConfig).
+    access-token: ${EXPO_ACCESS_TOKEN:}
+    # 연결·읽기 타임아웃. 측정값이 아니라 **제약에서 온 값**이다: 아웃박스 lease 60s 안에서
+    # 서킷이 OPEN 되기 전(슬라이딩 윈도 10건)까지의 실패 10 × 5s = 50s 가 들어와야 한다.
+    # 5s 는 그 제약을 만족하는 기존 값(ExerciseAnalysisService.GRPC_CALL_TIMEOUT_SECONDS)이라
+    # 새 숫자를 만들지 않았다. Expo 응답 시간 분포는 실측이 없다 — 실기기 테스트 때 outbox_lag 로 본다.
+    timeout-seconds: 5
 
 jwt:
   secret: ${JWT_SECRET}

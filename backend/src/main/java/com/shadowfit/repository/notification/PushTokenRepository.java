@@ -16,6 +16,9 @@ public interface PushTokenRepository extends JpaRepository<PushToken, Long> {
     // #9 발행기가 «이 수신자의 기기들» 을 읽는 자리 — idx_push_tokens_member.
     List<PushToken> findAllByMemberId(Long memberId);
 
+    // 적재 시점 «보낼 기기가 하나라도 있나» — 없으면 아웃박스 행을 안 만든다(§4-3 ④ c).
+    boolean existsByMemberId(Long memberId);
+
     // #9 — Expo 가 DeviceNotRegistered 로 답한 토큰을 지운다.
     void deleteByToken(String token);
 

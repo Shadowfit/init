@@ -24,5 +24,13 @@ public enum OutboxEventType {
      * 자동으로 재시도한다(docs/decisions/ai-channel-pool-hardening.md §3-1 ㄴ).
      * payload: {@code { "sessionId": 42 }}
      */
-    REATTACH_ANALYSIS
+    REATTACH_ANALYSIS,
+
+    /**
+     * 알림 행 생성 → 수신자의 기기로 푸시(Expo Push HTTP). 아웃박스의 <b>두 번째 용처</b>다 —
+     * 상대가 AI 가 아니라 외부 푸시 서비스이고, 애그리거트는 세션이 아니라 알림이다
+     * (docs/decisions/social-cheer-and-group-feed.md §3-C c, §4-3).
+     * payload: {@code { "notificationId": 42 }}
+     */
+    PUSH_NOTIFICATION
 }

@@ -132,6 +132,7 @@ services:
       AI_CHANNEL_POOL_SIZE: ${AI_WORKER_COUNT:-3}
       JWT_SECRET: ${JWT_SECRET:-shadowfit-prod-secret-key-change-this}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      EXPO_ACCESS_TOKEN: ${EXPO_ACCESS_TOKEN:-}
       # 데드락 재시도 상한 (#276 ②). 기본 5 는 팔당 6판 재측정으로 재확정한 값이다(2026-08-26
       # 사용자 confirm, r276-ceiling-rank-aws-2026-08-26: 잔여 실패율 3=8.0% > 4=5.9% > 5=2.5%,
       # 짝비교로 5 가 4 를 6/6·3 을 5/6 에서 이긴다). 코드 기본값(ExerciseGrpcService.deadlockMaxRetries)도
