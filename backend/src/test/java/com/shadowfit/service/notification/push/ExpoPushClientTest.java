@@ -157,4 +157,20 @@ class ExpoPushClientTest {
         assertThatThrownBy(() -> client.send(tooMany)).isInstanceOf(ExpoPushRejectedException.class);
         server.verify();
     }
+
+    @Test
+    @DisplayName("접근 토큰이 있는데 URL 이 HTTP 면 기동을 거부한다 — 토큰이 평문으로 나가지 않게")
+    void httpsRequiredWhenTokenSet() {
+        ExpoPushProperties p = new ExpoPushProperties();
+        p.setUrl("http://exp.host/--/api/v2/push/send");
+        p.setAccessToken("secret");
+        assertThatThrownBy(() -> ExpoPushClientConfig.requireHttpsWhenTokenSet(p))
+                .isInstanceOf(IllegalStateException.class);
+
+        p.setAccessToken("");
+        ExpoPushClientConfig.requireHttpsWhenTokenSet(p); // 토큰 없는 HTTP 는 허용(테스트·로컬 mock)
+        p.setAccessToken("secret");
+        p.setUrl("HTTPS://exp.host/--/api/v2/push/send");
+        ExpoPushClientConfig.requireHttpsWhenTokenSet(p);
+    }
 }

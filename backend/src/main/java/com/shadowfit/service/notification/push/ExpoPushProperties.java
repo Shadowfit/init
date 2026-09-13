@@ -20,8 +20,9 @@ public class ExpoPushProperties {
     private String url = "https://exp.host/--/api/v2/push/send";
 
     /**
-     * Expo 접근 토큰(선택). 비어 있으면 {@code Authorization} 헤더를 안 붙인다 — 없어도 보내지지만,
-     * 있으면 프로젝트 ID 를 아는 남이 우리 앱 이름으로 못 보낸다.
+     * Expo 접근 토큰(선택). 비어 있으면 {@code Authorization} 헤더를 안 붙인다 — 기본 발송은 수신자의
+     * ExpoPushToken 만으로 된다. EAS 의 enhanced push security 를 켠 프로젝트는 이 토큰 없이는 발송이
+     * 거절되므로 그때 채운다. 설정돼 있으면 {@link #url} 은 HTTPS 여야 한다({@code ExpoPushClientConfig}).
      */
     private String accessToken = "";
 

@@ -143,4 +143,30 @@ class PushDispatchServiceTest {
         assertThat(service.dispatch(NID)).isEqualTo(DispatchOutcome.TERMINAL_FAILED);
         verify(client, never()).send(any());
     }
+
+    @Test
+    @DisplayName("토큰이 100개를 넘으면 100개씩 나눠 보내고 티켓을 순서대로 합친다")
+    void moreThanMaxPerRequest_chunked() {
+        int n = ExpoPushClient.MAX_MESSAGES_PER_REQUEST + 50;
+        String[] tokens = java.util.stream.IntStream.range(0, n)
+                .mapToObj(i -> "ExponentPushToken[" + i + "]").toArray(String[]::new);
+        target(tokens);
+        when(client.send(anyList())).thenAnswer(inv -> {
+            List<ExpoPushMessage> chunk = inv.getArgument(0);
+            // 마지막 토큰만 죽은 것으로 — 순서가 보존돼야 정확히 그 토큰이 지워진다
+            return chunk.stream()
+                    .map(m -> m.to().equals("ExponentPushToken[" + (n - 1) + "]")
+                            ? error(ExpoPushTicket.DEVICE_NOT_REGISTERED) : ok())
+                    .toList();
+        });
+
+        assertThat(service.dispatch(NID)).isEqualTo(DispatchOutcome.SENT);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<ExpoPushMessage>> captor = ArgumentCaptor.forClass(List.class);
+        verify(client, org.mockito.Mockito.times(2)).send(captor.capture());
+        assertThat(captor.getAllValues().get(0)).hasSize(ExpoPushClient.MAX_MESSAGES_PER_REQUEST);
+        assertThat(captor.getAllValues().get(1)).hasSize(50);
+        verify(store).forgetDeadTokens(List.of("ExponentPushToken[" + (n - 1) + "]"));
+    }
 }

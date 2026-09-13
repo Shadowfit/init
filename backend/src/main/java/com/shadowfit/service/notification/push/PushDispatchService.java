@@ -61,7 +61,7 @@ public class PushDispatchService {
 
         List<ExpoPushTicket> tickets;
         try {
-            tickets = client.send(messages);
+            tickets = sendInChunks(messages);
         } catch (ExpoPushTransportException e) {
             log.warn("Expo 전송 실패 — 재시도 대상 (notificationId: {}): {}", notificationId, e.getMessage());
             return DispatchOutcome.RETRY;
@@ -70,6 +70,23 @@ public class PushDispatchService {
             return DispatchOutcome.TERMINAL_FAILED;
         }
         return classify(target, messages, tickets);
+    }
+
+    /**
+     * Expo 의 요청당 상한(100)을 넘는 만큼의 기기를 가진 회원이 있으면 나눠 보낸다 — 회원당 기기 수에
+     * 상한을 안 뒀으므로(§4-2 ③) 여기서 감당해야 한다. 티켓은 메시지와 같은 순서로 이어 붙인다.
+     * 뒤 묶음이 전송 실패하면 행 전체가 RETRY 라 앞 묶음엔 중복이 갈 수 있다 — ①a 의 대가와 같은 성질.
+     */
+    private List<ExpoPushTicket> sendInChunks(List<ExpoPushMessage> messages) {
+        int max = ExpoPushClient.MAX_MESSAGES_PER_REQUEST;
+        if (messages.size() <= max) {
+            return client.send(messages);
+        }
+        List<ExpoPushTicket> tickets = new ArrayList<>(messages.size());
+        for (int from = 0; from < messages.size(); from += max) {
+            tickets.addAll(client.send(messages.subList(from, Math.min(from + max, messages.size()))));
+        }
+        return tickets;
     }
 
     private DispatchOutcome classify(PushTarget target, List<ExpoPushMessage> messages, List<ExpoPushTicket> tickets) {

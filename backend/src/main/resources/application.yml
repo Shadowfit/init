@@ -341,7 +341,9 @@ resilience4j:
 push:
   expo:
     url: https://exp.host/--/api/v2/push/send
-    # 선택. 비어 있으면 Authorization 헤더를 안 붙인다(없어도 발송된다).
+    # 선택. 비어 있으면 Authorization 헤더를 안 붙인다 — 기본 발송은 수신자 토큰만으로 된다.
+    # EAS 의 enhanced push security 를 켠 프로젝트는 이 값이 있어야 발송이 받아진다(.env.example).
+    # 설정돼 있으면 url 은 HTTPS 여야 기동된다(ExpoPushClientConfig).
     access-token: ${EXPO_ACCESS_TOKEN:}
     # 연결·읽기 타임아웃. 측정값이 아니라 **제약에서 온 값**이다: 아웃박스 lease 60s 안에서
     # 서킷이 OPEN 되기 전(슬라이딩 윈도 10건)까지의 실패 10 × 5s = 50s 가 들어와야 한다.
