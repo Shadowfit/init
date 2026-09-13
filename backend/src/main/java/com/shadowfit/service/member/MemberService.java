@@ -13,6 +13,7 @@ import com.shadowfit.model.member.UserRole;
 import com.shadowfit.repository.exercise.SessionRepository;
 import com.shadowfit.repository.member.MemberRepository;
 import com.shadowfit.repository.member.RefreshTokenRepository;
+import com.shadowfit.repository.notification.PushTokenRepository;
 import com.shadowfit.service.exercise.PoseDataCleanupService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -42,6 +43,7 @@ public class MemberService{
     private final PasswordEncoder passwordEncoder;
     private final RefreshTokenHasher refreshTokenHasher;
     private final LoginAttemptLimiter loginAttemptLimiter;
+    private final PushTokenRepository pushTokenRepository;
 
     /**
      * 이 시간 동안 프레임 유입이 없으면 그 세션은 죽은 것으로 본다(탈퇴 가드 판정 기준).
@@ -246,6 +248,9 @@ public class MemberService{
         Member requester = memberRepository.findByEmail(requesterEmail)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
         refreshTokenRepository.deleteByMemberId(requester.getId());
+        // 푸시 토큰도 같이 — 로그아웃이 계정 단위(모든 기기의 refresh 가 죽는다)라 푸시도 같은 범위로 끊는다.
+        // 다시 로그인하면 앱이 재등록한다(social-cheer-and-group-feed.md §4-2 ②).
+        pushTokenRepository.deleteByMemberId(requester.getId());
     }
 
     /**
