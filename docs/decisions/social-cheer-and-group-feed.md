@@ -275,6 +275,7 @@ professor-vision §2 의 "행 단위 접근 제어" 가 여기서 처음 실제�
 
 ## 결정 로그
 
+- 2026-09-12 (12): **구현 #6 착수 시 하위 결정 5개(사용자 confirm).** ① `notifications.type` 은 **Java enum `NotificationType{NUDGE}` + `VARCHAR(50)`**(DB ENUM 아님 — V16 이 지운 `report_type` 과 같은 함정 회피, `group_events.event_type` 관례). ② 읽음은 **건별 `PATCH /notifications/{id}/read` 만, «모두 읽음» 없음**(레퍼런스 화면에 없음). ③ 3-C 스케치의 `ref` 컬럼은 **지금 안 만듦**(NUDGE 는 가리킬 대상 없음, 필요 시 nullable ADD COLUMN). ④ `sender_id` FK 는 **ON DELETE SET NULL**(알림은 수신자의 기록 — `group_events.sender_id` 와 같은 판단), `recipient_id` 는 CASCADE. ⑤ 재촉 경로는 **`POST /friends/{memberId}/nudge`** — 권한 조건(같은 모임 ACTIVE)이 곧 «친구» 라 URL 과 규칙이 같다. §4-1 표의 `/members/{id}/nudge` 는 견적 표기였다(#4 의 `/feed/friends`→`/friends` 와 같은 정정). 목록은 `GET /notifications?page&size`(관리자 목록과 같은 offset·상한 100). 서버는 «오늘 이미 완료한 상대» 재촉을 막지 않는다(버튼 노출은 프론트).
 - 2026-09-11 (11): **3-B 하위 streak 창 — C(커서, 첫 끊김 중단).** 구현 #3 착수 시 streak 구현이 둘(캘린더 100일·status 전부 / 패턴 분석 28일·COMPLETED)임을 확인. 패턴 분석 쪽은 별개 정의라 유지.
 - 2026-09-11 (10): **학기 계획 조정 확정** — 24 문서 실측 점검(기능 축 BE-05~08 전부 완료 확인) 후 BE-09+종목 결합·2차 테스트·cleanup 축소로 22h 확보. 미결 0.
 - 2026-09-11 (9): **층 L1 확정 + §4-1 견적.** 12개 작업, 단독 ≈33h / 병행 ≈22h 중앙값. 푸시(#8·#9)가 c 선택의 대가 5~6h.

@@ -96,6 +96,42 @@ class GroupMemberRepositoryTest {
                 .isEqualTo(GroupMemberStatus.LEFT);
     }
 
+    // --- shareGroupWithStatus — 재촉 권한(§3-G)의 유일한 근거. ACTIVE 둘 다여야 참이고, 자기 자신은 참이다.
+
+    @Test
+    @DisplayName("shareGroupWithStatus — 같은 그룹 ACTIVE 둘이면 true, 순서 무관")
+    void shareGroup_bothActive_isTrue() {
+        Member second = memberRepository.saveAndFlush(newMember("second@test.com", "second"));
+        groupMemberRepository.saveAndFlush(newGroupMember(second, GroupMemberStatus.ACTIVE));
+
+        assertThat(groupMemberRepository.shareGroupWithStatus(activeMember.getId(), second.getId(), GroupMemberStatus.ACTIVE)).isTrue();
+        assertThat(groupMemberRepository.shareGroupWithStatus(second.getId(), activeMember.getId(), GroupMemberStatus.ACTIVE)).isTrue();
+    }
+
+    @Test
+    @DisplayName("shareGroupWithStatus — 한쪽이 LEFT 거나 가입한 적 없으면 false")
+    void shareGroup_leftOrStranger_isFalse() {
+        assertThat(groupMemberRepository.shareGroupWithStatus(activeMember.getId(), leftMember.getId(), GroupMemberStatus.ACTIVE)).isFalse();
+        assertThat(groupMemberRepository.shareGroupWithStatus(activeMember.getId(), stranger.getId(), GroupMemberStatus.ACTIVE)).isFalse();
+    }
+
+    @Test
+    @DisplayName("shareGroupWithStatus — 서로 다른 그룹에만 있으면 false")
+    void shareGroup_differentGroups_isFalse() {
+        Member other = memberRepository.saveAndFlush(newMember("other@test.com", "other"));
+        Group otherGroup = groupRepository.saveAndFlush(Group.builder().name("다른 그룹").inviteCode("TESTCD02").createdBy(other).build());
+        groupMemberRepository.saveAndFlush(GroupMember.builder().group(otherGroup).member(other)
+                .role(GroupRole.OWNER).status(GroupMemberStatus.ACTIVE).build());
+
+        assertThat(groupMemberRepository.shareGroupWithStatus(activeMember.getId(), other.getId(), GroupMemberStatus.ACTIVE)).isFalse();
+    }
+
+    @Test
+    @DisplayName("shareGroupWithStatus — 자기 자신은 true (호출자가 먼저 걸러야 하는 이유)")
+    void shareGroup_self_isTrue() {
+        assertThat(groupMemberRepository.shareGroupWithStatus(activeMember.getId(), activeMember.getId(), GroupMemberStatus.ACTIVE)).isTrue();
+    }
+
     private GroupMember newGroupMember(Member member, GroupMemberStatus status) {
         return GroupMember.builder().group(group).member(member).role(GroupRole.MEMBER).status(status).build();
     }
