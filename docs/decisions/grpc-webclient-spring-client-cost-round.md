@@ -1,6 +1,6 @@
 # 설계: Spring 클라이언트 쪽 호출당 CPU — «WebClient 가 gRPC 스텁보다 비싼가» 를 스레드 단위로 (6차 라운드)
 
-상태: 📝 **설계 확정(§7 ①~⑥ 전부 (a), 사용자 결정 2026-09-14) — 착수 중.**
+상태: ✅ **실행 완료 (2026-09-14)** — 결과: [`spring-client-cost-aws-2026-09-14`](../../loadtest/results/spring-client-cost-aws-2026-09-14/README.md). **답: §6 의 첫 번째 문장 — WebClient 경로가 호출당 +0.37~0.53 cpu-ms 더 쓴다(블록 5 전부 안 겹침), 자리는 Reactor 이벤트루프(0.74~0.88 vs gRPC netty ELG 0.31). 호출 스레드(Tomcat) 몫은 두 팔이 같다** — «블로킹 브리지» 가설은 CPU 로는 안 보인다. 채택 판단은 안 바뀐다(설계 §1 그대로).
 작성: 2026-09-14
 배경: 4차·5차 모두 **Spring 컨테이너의 CPU/호출은 판별 불가**였다(4차 §4-1 · 5차 §4-3). 칸이 1~5초라 cgroup 차분에 JIT·GC·아웃박스
 발행기·액추에이터 스크레이프가 섞이고, 재부착 핸들러 자체가 호출당 16~45 cpu-ms 라 그 안의 1ms 를 못 가른다. 그래서 지금 문장은
@@ -119,9 +119,16 @@
 - **AI 쪽 내부 분해** — 5차 §6.
 - **채택.**
 
-## 9. 착수 — (§7 확정 뒤)
+## 9. 착수 — rig (2026-09-14 구현·실행)
+
+`measure_ai_call_concurrency.sh` 에 `THREADS=1`(칸 전후 `/proc/1/task/*/schedstat` 스냅샷 — after 는 k6 직후·배수 전)·`WARMUP_CELLS`·게이트(PID 1=java·빈 값 0·그룹 스레드 수)를 더하고,
+`analyze_spring_client_cost.py`(그룹 차분 ÷ `reattach_ok`, C−A 겹침)·`run_all.sh` phase `springclient`(calib 시작·끝)를 붙였다. 로컬 스모크(2팔×2블록) 뒤 EC2 —
+`RUN_ID=springclient-20260914-075216`, 본 측정 819초, 칸 10개 전부 유효. 결과·서사는 [README](../../loadtest/results/spring-client-cost-aws-2026-09-14/README.md).
+
+**분해능이 예상보다 훨씬 좋았다** — 그룹당 블록 범위 폭 0.05~0.14 cpu-ms(5차 cgroup 의 1/200). §4 의 «0.3 안팎이면 겹칠 수 있다» 는 기우였다. 대신 워밍업 2×500 으로는 C2 가 안 끝나 JIT 가 호출당 3 cpu-ms 로 남았다(판정 그룹 밖).
 
 ## 10. 결정 로그
 
 - 2026-09-14: 사용자 「(Spring 쪽 대가는) 실측해야 하니 — 측정해보자」. 초안. §7 ①~⑥ 확정 대기.
 - 2026-09-14: **§7 ①~⑥ 전부 (a) 로 사용자 확정** — 유저 저니 드라이버 · 팔 A·C · N=2,000 · 워밍업 칸 2 · schedstat · calib.
+- 2026-09-14: **실행 완료.** 첫 번째 문장 — +0.37~0.53 cpu-ms/호출, Reactor 루프. 왕복 델타(+1.64~1.88ms)의 분해가 세 라운드 조각(Spring 0.4~0.5 · AI ~1 · 홉 ≤0.9)으로 닫혔다. [README](../../loadtest/results/spring-client-cost-aws-2026-09-14/README.md) §6.

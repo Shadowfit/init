@@ -1,0 +1,75 @@
+# Spring 클라이언트 쪽 호출당 CPU — 스레드 그룹 차분 (6차)
+
+## ★ 클라이언트 경로 = tomcat + reactor + grpc-elg — 주 판정(§6 규칙 1) (cpu-ms/재부착)
+   c                         grpc             webclient-native
+   1          [2.591, 2.642] n=5           [2.988, 3.129] n=5 
+     webclient-native−grpc 델타       [0.371, 0.531] (블록 5)  ✅ 안 겹침 — grpc 우세
+
+## tomcat — 핸들러 + (A) 스텁 프레이밍/디코딩 + (C) block 대기 (규칙 2: 어디서 나나) (cpu-ms/재부착)
+   c                         grpc             webclient-native
+   1          [2.275, 2.328] n=5           [2.223, 2.344] n=5 
+     webclient-native−grpc 델타      [-0.058, 0.052] (블록 5)  🟡 겹침 — 판별 불가 (범위 폭 grpc 0.05 · webclient-native 0.12)
+
+## reactor — (C) 인코딩·I/O·디코딩 — A 는 0 이어야 한다 (규칙 2: 어디서 나나) (cpu-ms/재부착)
+   c                         grpc             webclient-native
+   1                       — n=0           [0.744, 0.877] n=5 
+     webclient-native−grpc 델타                    — (블록 0)  🟡 한 팔이 비어 판정 없음
+
+## grpc-elg — (A) 클라이언트 채널 netty I/O + 두 팔 공통의 콜백 서버(AI→Spring) I/O — C 에 남는 양이 서버 몫 (규칙 2: 어디서 나나) (cpu-ms/재부착)
+   c                         grpc             webclient-native
+   1          [0.314, 0.317] n=5           [0.000, 0.000] n=5 
+     webclient-native−grpc 델타     [-0.317, -0.314] (블록 5)  ✅ 안 겹침 — webclient-native 우세
+
+# 배경 그룹 — 판정 밖, 팔 간에 다르면 적는다(규칙 3)
+
+## grpc-exec (cpu-ms/재부착)
+   c                         grpc             webclient-native
+   1          [0.001, 0.001] n=5           [0.001, 0.001] n=5 
+     webclient-native−grpc 델타     [-0.001, -0.000] (블록 5)  ✅ 안 겹침 — webclient-native 우세
+
+## actuator (cpu-ms/재부착)
+   c                         grpc             webclient-native
+   1          [0.000, 0.000] n=5           [0.000, 0.000] n=5 
+     webclient-native−grpc 델타       [0.000, 0.000] (블록 5)  🟡 겹침 — 판별 불가 (범위 폭 grpc 0.00 · webclient-native 0.00)
+
+## jit (cpu-ms/재부착)
+   c                         grpc             webclient-native
+   1          [2.655, 3.058] n=5           [3.298, 3.598] n=5 
+     webclient-native−grpc 델타       [0.362, 0.802] (블록 5)  ✅ 안 겹침 — grpc 우세
+
+## gc (cpu-ms/재부착)
+   c                         grpc             webclient-native
+   1          [0.192, 0.208] n=5           [0.132, 0.164] n=5 
+     webclient-native−grpc 델타     [-0.060, -0.028] (블록 5)  ✅ 안 겹침 — webclient-native 우세
+
+## sched (cpu-ms/재부착)
+   c                         grpc             webclient-native
+   1          [0.019, 0.022] n=5           [0.017, 0.022] n=5 
+     webclient-native−grpc 델타      [-0.005, 0.003] (블록 5)  🟡 겹침 — 판별 불가 (범위 폭 grpc 0.00 · webclient-native 0.01)
+
+## other (cpu-ms/재부착)
+   c                         grpc             webclient-native
+   1          [0.247, 0.279] n=5           [0.195, 0.244] n=5 
+     webclient-native−grpc 델타     [-0.068, -0.011] (블록 5)  ✅ 안 겹침 — webclient-native 우세
+
+## 스레드 합 (모든 그룹) — cgroup 과 대조 (cpu-ms/재부착)
+   c                         grpc             webclient-native
+   1          [5.709, 6.147] n=5           [6.730, 7.085] n=5 
+     webclient-native−grpc 델타       [0.687, 1.198] (블록 5)  ✅ 안 겹침 — grpc 우세
+
+## cgroup 차분 (4·5차와 같은 지표) (cpu-ms/재부착)
+   c                         grpc             webclient-native
+   1          [7.666, 8.025] n=5           [8.285, 8.966] n=5 
+     webclient-native−grpc 델타       [0.619, 1.030] (블록 5)  ✅ 안 겹침 — grpc 우세
+
+# 샌 스레드(before 에만 있던 tid) — 그 CPU 는 못 본다
+  b2/grpc/c1: 1개
+  b2/webclient-native/c1: 1개
+
+# Reattach p50 (ms) — 왕복 델타는 클라이언트 대가의 상한
+  c=1: grpc [4.620, 4.805] · webclient-native [6.403, 6.496] · webclient-native−grpc [1.635, 1.875]
+
+# 실패 (규칙 4 — 위 판정에서 제외)
+  없음
+
+(절대값엔 calib cpu 병기(㉠). 결론 문장은 설계 §6 의 셋 중 하나로만 — 여기서는 안 고른다.)

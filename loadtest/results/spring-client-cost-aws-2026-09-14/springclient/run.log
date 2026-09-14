@@ -1,0 +1,126 @@
+# Spring→AI 동시성 축 — 2026-09-14T07:56:53Z
+BASE=http://localhost:8080 N=2000 BLOCKS=5 WARMUP=500 LEVELS=[1] ARMS=[grpc webclient-native] POOL=3
+## AI 재기동(오버레이 적용: GRPC_MAX_WORKERS=40 · mem_limit=6000m) (07:56:53)
+## 팔 전환 → grpc (client-type=grpc nginx-host=- contract=mirror) (07:57:08)
+   AI_CLIENT_TYPE=grpc · AI_NGINX_HOST=- · CONTRACT=mirror · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 1 여야 한다)
+## 계정 준비 2 개 (간격 1.3s)
+  ✅ 계정 2 개
+## 세 REST 팔 응답 동등성 스모크 (07:57:24)
+   mirror  HTTP 200  body=84,491 B  → {'success': True, 'rep_count': 4, 'already_active': False, 'message': '재부착 완료'}
+   native  HTTP 200  body=84,491 B  → {'success': True, 'rep_count': 4, 'already_active': True, 'message': '이미 분석 중'}
+   nested  HTTP 200  body=74,531 B  → {'success': True, 'rep_count': 4, 'already_active': True, 'message': '이미 분석 중'}
+   stop    HTTP 200 → {'success': True, 'message': '분석 중단 및 결과 보고 예약 완료.'}
+   ✅ mirror(1번째): success=true · already_active=false
+   ✅ native(2번째): success=true · already_active=true
+   ✅ nested(3번째) == native(2번째)
+   ✅ rep_count 가 initial_rep_count(4) 그대로 보존
+   ✅ 본문 크기: mirror = native > nested
+   버림 grpc c=1
+   배수 완료(discard/grpc) — stop 누적 1
+## 구조 게이트 회수 — /root/init/loadtest/results/spring-client-cost-aws-2026-09-14/springclient/structure_grpc.txt
+   [grpc] reactor-http-* 이벤트루프 0 개 · grpc-default-worker-ELG 4 개 · JVM cores 4.0 (c 수준 [1] 이 이 문턱을 끼우는지 볼 것)
+## 팔 전환 → webclient-native (client-type=webclient nginx-host=ai-nginx contract=native) (07:57:46)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=native · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 1 여야 한다)
+   버림 webclient-native c=1
+   배수 완료(discard/webclient-native) — stop 누적 1
+## 구조 게이트 회수 — /root/init/loadtest/results/spring-client-cost-aws-2026-09-14/springclient/structure_webclient-native.txt
+   [webclient-native] reactor-http-* 이벤트루프 4 개 · grpc-default-worker-ELG 1 개 · JVM cores 4.0 (c 수준 [1] 이 이 문턱을 끼우는지 볼 것)
+## nginx 본문 임시파일 버퍼링 0건 — ⑧ 확인
+## 블록 1 팔 순서:  grpc webclient-native
+## 팔 전환 → grpc (client-type=grpc nginx-host=- contract=mirror) (07:58:22)
+   AI_CLIENT_TYPE=grpc · AI_NGINX_HOST=- · CONTRACT=mirror · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 1 여야 한다)
+   배수 완료(warmup b1/grpc) — stop 누적 2
+## 블록 1 grpc c 순서:  1
+     k6| k6 재부착 2000/2000 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b1_grpc_c1) — stop 누적 3
+   ✅ 칸 b1_grpc_c1 회수 — 벽시계 15.291s · k6 rc=0
+## 팔 전환 → webclient-native (client-type=webclient nginx-host=ai-nginx contract=native) (07:59:33)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=native · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 1 여야 한다)
+   배수 완료(warmup b1/webclient-native) — stop 누적 2
+## 블록 1 webclient-native c 순서:  1
+     k6| k6 재부착 2000/2000 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b1_webclient-native_c1) — stop 누적 3
+   ✅ 칸 b1_webclient-native_c1 회수 — 벽시계 19.836s · k6 rc=0
+## 블록 2 팔 순서:  webclient-native grpc
+## 팔 전환 → webclient-native (client-type=webclient nginx-host=ai-nginx contract=native) (08:00:45)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=native · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 1 여야 한다)
+   배수 완료(warmup b2/webclient-native) — stop 누적 2
+## 블록 2 webclient-native c 순서:  1
+     k6| k6 재부착 2000/2000 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b2_webclient-native_c1) — stop 누적 3
+   ✅ 칸 b2_webclient-native_c1 회수 — 벽시계 20.331s · k6 rc=0
+## 팔 전환 → grpc (client-type=grpc nginx-host=- contract=mirror) (08:02:04)
+   AI_CLIENT_TYPE=grpc · AI_NGINX_HOST=- · CONTRACT=mirror · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 1 여야 한다)
+   배수 완료(warmup b2/grpc) — stop 누적 2
+## 블록 2 grpc c 순서:  1
+     k6| k6 재부착 2000/2000 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b2_grpc_c1) — stop 누적 3
+   ✅ 칸 b2_grpc_c1 회수 — 벽시계 15.367s · k6 rc=0
+## 블록 3 팔 순서:  grpc webclient-native
+## 팔 전환 → grpc (client-type=grpc nginx-host=- contract=mirror) (08:03:11)
+   AI_CLIENT_TYPE=grpc · AI_NGINX_HOST=- · CONTRACT=mirror · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 1 여야 한다)
+   배수 완료(warmup b3/grpc) — stop 누적 2
+## 블록 3 grpc c 순서:  1
+     k6| k6 재부착 2000/2000 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b3_grpc_c1) — stop 누적 3
+   ✅ 칸 b3_grpc_c1 회수 — 벽시계 15.642s · k6 rc=0
+## 팔 전환 → webclient-native (client-type=webclient nginx-host=ai-nginx contract=native) (08:04:16)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=native · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 1 여야 한다)
+   배수 완료(warmup b3/webclient-native) — stop 누적 2
+## 블록 3 webclient-native c 순서:  1
+     k6| k6 재부착 2000/2000 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b3_webclient-native_c1) — stop 누적 3
+   ✅ 칸 b3_webclient-native_c1 회수 — 벽시계 20.531s · k6 rc=0
+## 블록 4 팔 순서:  webclient-native grpc
+## 팔 전환 → webclient-native (client-type=webclient nginx-host=ai-nginx contract=native) (08:05:34)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=native · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 1 여야 한다)
+   배수 완료(warmup b4/webclient-native) — stop 누적 2
+## 블록 4 webclient-native c 순서:  1
+     k6| k6 재부착 2000/2000 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b4_webclient-native_c1) — stop 누적 3
+   ✅ 칸 b4_webclient-native_c1 회수 — 벽시계 20.159s · k6 rc=0
+## 팔 전환 → grpc (client-type=grpc nginx-host=- contract=mirror) (08:06:53)
+   AI_CLIENT_TYPE=grpc · AI_NGINX_HOST=- · CONTRACT=mirror · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 1 여야 한다)
+   배수 완료(warmup b4/grpc) — stop 누적 2
+## 블록 4 grpc c 순서:  1
+     k6| k6 재부착 2000/2000 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b4_grpc_c1) — stop 누적 3
+   ✅ 칸 b4_grpc_c1 회수 — 벽시계 15.382s · k6 rc=0
+## 블록 5 팔 순서:  grpc webclient-native
+## 팔 전환 → grpc (client-type=grpc nginx-host=- contract=mirror) (08:08:05)
+   AI_CLIENT_TYPE=grpc · AI_NGINX_HOST=- · CONTRACT=mirror · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 1 여야 한다)
+   배수 완료(warmup b5/grpc) — stop 누적 2
+## 블록 5 grpc c 순서:  1
+     k6| k6 재부착 2000/2000 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b5_grpc_c1) — stop 누적 3
+   ✅ 칸 b5_grpc_c1 회수 — 벽시계 15.637s · k6 rc=0
+## 팔 전환 → webclient-native (client-type=webclient nginx-host=ai-nginx contract=native) (08:09:15)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=native · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 1 여야 한다)
+   배수 완료(warmup b5/webclient-native) — stop 누적 2
+## 블록 5 webclient-native c 순서:  1
+     k6| k6 재부착 2000/2000 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b5_webclient-native_c1) — stop 누적 3
+   ✅ 칸 b5_webclient-native_c1 회수 — 벽시계 20.048s · k6 rc=0
+## 완료 2026-09-14T08:10:32Z — 칸 10 개 · 스크레이프 20 개
+   집계: python loadtest/analyze_ai_call_concurrency.py /root/init/loadtest/results/spring-client-cost-aws-2026-09-14/springclient
+YPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=native · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 1 여야 한다)
+   배수 완료(warmup b5/webclient-native) — stop 누적 2
+## 블록 5 webclient-native c 순서:  1
+     k6| k6 재부착 2000/2000 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b5_webclient-native_c1) — stop 누적 3
+   ✅ 칸 b5_webclient-native_c1 회수 — 벽시계 20.048s · k6 rc=0
+## 완료 2026-09-14T08:10:32Z — 칸 10 개 · 스크레이프 20 개
+   집계: python loadtest/analyze_ai_call_concurrency.py /root/init/loadtest/results/spring-client-cost-aws-2026-09-14/springclient

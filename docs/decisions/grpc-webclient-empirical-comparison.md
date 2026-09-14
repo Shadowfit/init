@@ -397,6 +397,7 @@ fire-and-forget 문제를 피할 수 있다.
 | **3차** ([설계](./grpc-webclient-transport-cost-breakdown.md) · [결과](../../loadtest/results/transport-breakdown-aws-2026-09-10/README.md)) | 팔 3개 **뺄셈**(홉 ↔ 잔여) | **기제는 홉이 아니라 클라이언트 쪽** — 홉 0.01~0.88ms, 잔여 1.35~3.03ms. 커넥션 수립도 아님(재사용률 98.8) | 🔴 잔여의 **내부 분해**(브리지 ↔ 직렬화) 안 함 · 동시성 미측정. **4차가 정정**: 잔여에는 AI 쪽 경로 차이(REST 미러 ↔ gRPC 서비서)도 들어 있다 |
 | **4차** ([설계](./grpc-webclient-concurrency-round.md) · [결과](../../loadtest/results/ai-call-concurrency-aws-2026-09-11/README.md)) | 같은 두 팔을 **c=1~32 동시 재부착**으로 — 지연·처리량·컨테이너 CPU/호출 | 델타는 c 와 함께 **커진다**(1.2~3.9 → 9.7~29.0ms) — 그러나 꺾이는 자리는 클라이언트 문턱이 아니라 **AI 포화(c=8)**. **AI 가 REST 미러에서 호출당 +1~3 cpu-ms**(5수준 안 겹침) → 포화 처리량 **−15%**. Spring CPU 대가는 **검출 안 됨** | 🔴 Spring CPU/호출 판별 불가(칸 1~14초) · AI 쪽 1~3ms 내부 미분해 · 재시작 칸 1개 원인 미검증 |
 | **5차** ([설계](./grpc-webclient-native-rest-round.md) · [결과](../../loadtest/results/ai-call-native-rest-aws-2026-09-14/README.md)) | 팔 4개 — 미러(B)에 **겹을 뺀 네이티브(C)** 와 **중첩 JSON(D)** 를 더해 B−C·C−A·C−D 를 같은 라운드에서 뺄셈 | **겹은 대가가 아니었다**(B−C 겹침). REST 고유 비용 c=8 **+1.49~2.53 cpu-ms/호출**(안 겹침), 포화 처리량 C −12.7%(판별 불가)·B −15.8%(안 겹침, 4차 재현). **중첩 JSON 은 더 비싸다**(C−D −1.2~−1.9, 안 겹침) | 🔴 REST 고유 비용의 내부(JSON 파싱↔pydantic↔스레드풀) 미분해 · c=1 의 C−A 는 분해능 밖(판별 불가) · Spring CPU 판별 불가 |
+| **6차** ([설계](./grpc-webclient-spring-client-cost-round.md) · [결과](../../loadtest/results/spring-client-cost-aws-2026-09-14/README.md)) | Spring 안 **스레드 그룹별 CPU**(schedstat)로 클라이언트 경로(Tomcat+Reactor+gRPC ELG)만 뺄셈, c=1 · 칸 20배 | **WebClient 경로 +0.37~0.53 cpu-ms/호출**(안 겹침), 자리는 Reactor 루프(0.74~0.88 vs ELG 0.31). **호출 스레드 몫은 같다** — 4·5차의 «Spring CPU 판별 불가» 가 닫혔고 «블로킹 브리지» 가설은 CPU 로 안 보인다 | 🔴 Reactor 루프 안(인코딩↔I/O↔디코딩) 미분해 · 절대값은 JIT 진행 중 조건 |
 
 ### 11-2. gRPC 를 정당화하던 근거 넷 — 지금 상태
 
@@ -440,6 +441,11 @@ fire-and-forget 문제를 피할 수 있다.
 팔 2(풀 3) × c ∈ {1, 4, 8, 16, 32}(구조 문턱) × 지표 5(지연·start 콜백·처리량·Spring CPU/사이클·AI CPU).
 착수 전 그 문서 §7 의 미결 6개(팔 구성·서버 스레드 상한·아웃박스 배치·드라이버 자리·도구·계기)를 확인해야 한다.
 
+**6차도 끝났다(2026-09-14).** 사용자가 «Spring 쪽 대가는 실측해야 하니» 로 연 것 — [설계](./grpc-webclient-spring-client-cost-round.md) · [결과](../../loadtest/results/spring-client-cost-aws-2026-09-14/README.md).
+4·5차의 «판별 불가» 는 지표가 아니라 칸 길이(1~2초)·JIT 때문이었고, 스레드 분리 + 칸 20배로 **WebClient 경로 +0.37~0.53 cpu-ms/호출**이 나왔다.
+자리는 Reactor 이벤트루프, 호출 스레드 몫은 두 팔이 같다. 이것으로 왕복 델타의 분해가 닫힌다 — c=1 +1.6~1.9ms = Spring 0.4~0.5 + AI 입구 ~1 + 홉 ≤0.9.
+**채택 판단에 오르는 것은 5차 그대로**(0.4 cpu-ms 는 저울에 안 오른다).
+
 **5차도 끝났다(2026-09-14).** 사용자가 «미러는 gRPC 를 감싼 겹이라 그 방향이 예정된 것 아니냐» 를 짚어 네이티브 REST 팔을 세워 잰
 것([설계](./grpc-webclient-native-rest-round.md) · [결과](../../loadtest/results/ai-call-native-rest-aws-2026-09-14/README.md)). 표에 오른 것이 바뀐다: **겹은 대가가 아니었고**, REST 고유 비용
 c=8 +1.49~2.53 cpu-ms/호출 · 포화 처리량 B −15.8%(재현)·C −12.7% · 재부착 c=1 +2.3~3.8ms · **중첩 JSON 계약은 더 비쌈** ·
@@ -465,5 +471,7 @@ nginx 디스크 버퍼링은 설정 한 줄로 0건. 남은 측정 후보는 «R
 - 2026-09-14: **5차 실측 완료(네이티브 REST 팔).** 4차의 «겹의 대가» 해석을 **반증** — 겹을 뺀 팔이 미러와 겹친다. REST 고유 비용
   c=8 +1.49~2.53 cpu-ms/호출(안 겹침), 중첩 JSON 은 더 비쌈(C−D 안 겹침). 4차 README §4-2·본 문서 §11-2 를 정정했다.
   [결과](../../loadtest/results/ai-call-native-rest-aws-2026-09-14/README.md).
-- **아직 안 정한 것**: 어느 프로토콜을 쓸지(5차까지 끝났으니 이제 결정 차례). 결정하면 **반대편 구현을
+- 2026-09-14: **6차 실측 완료(Spring 클라이언트 쪽 CPU).** 스레드 그룹 차분으로 WebClient 경로 +0.37~0.53 cpu-ms/호출(Reactor 루프),
+  호출 스레드 몫은 같음. 4·5차의 «Spring CPU 판별 불가» 를 닫았다. [결과](../../loadtest/results/spring-client-cost-aws-2026-09-14/README.md).
+- **아직 안 정한 것**: 어느 프로토콜을 쓸지(6차까지 끝났으니 이제 결정 차례). 결정하면 **반대편 구현을
   걷어내는 것까지가 한 작업**이다 — 두 벌을 영구히 두는 것은 §1 에서 이미 기각했다.

@@ -1,0 +1,89 @@
+
+════════ 무인 측정 — springclient-20260914-075216 ════════
+  결과   : /root/init/loadtest/results/spring-client-cost-aws-2026-09-14
+  S3     : s3://shadowfit-measure-055447613012/shadowfit/springclient-20260914-075216
+  단계   : springclient ridealong collect
+  자동정지: 꺼짐
+  S3 주기 동기화 시작 — 300초마다 → s3://shadowfit-measure-055447613012/shadowfit/springclient-20260914-075216
+
+════════ springclient ════════
+  ── 박스 보정 ──
+    박스   : 8 vCPU · 물리 4 · Intel(R) Xeon(R) Platinum 8488C
+    스택   : python 3.9.25 · 커밋 135851d
+    cpu    : 14,045,332.6 iter/s  (0.2136s)
+    infer  : 🔴 건너뜀 — ModuleNotFoundError("No module named 'cv2'")
+    🔴 판정에 안 쓰더라도 결과 디렉터리에 남길 것 (#255 축 0)
+  축 0 기록됨 → /root/init/loadtest/results/spring-client-cost-aws-2026-09-14/calibration.tsv (3줄)
+  ── 박스 보정 ──
+    박스   : 8 vCPU · 물리 4 · Intel(R) Xeon(R) Platinum 8488C
+    스택   : python 3.9.25 · 커밋 135851d
+    cpu    : 14,032,726.9 iter/s  (0.2138s)
+    infer  : 🔴 건너뜀 — ModuleNotFoundError("No module named 'cv2'")
+    🔴 판정에 안 쓰더라도 결과 디렉터리에 남길 것 (#255 축 0)
+  축 0 기록됨 → /root/init/loadtest/results/spring-client-cost-aws-2026-09-14/calibration.tsv (2줄)
+    AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=native · POOL=3
+    AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=native · POOL=3
+    AI_CLIENT_TYPE=grpc · AI_NGINX_HOST=- · CONTRACT=mirror · POOL=3
+    AI_CLIENT_TYPE=grpc · AI_NGINX_HOST=- · CONTRACT=mirror · POOL=3
+    AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=native · POOL=3
+    AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=native · POOL=3
+    AI_CLIENT_TYPE=grpc · AI_NGINX_HOST=- · CONTRACT=mirror · POOL=3
+    AI_CLIENT_TYPE=grpc · AI_NGINX_HOST=- · CONTRACT=mirror · POOL=3
+    AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=native · POOL=3
+    YPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=native · POOL=3
+    ## ★ 클라이언트 경로 = tomcat + reactor + grpc-elg — 주 판정(§6 규칙 1) (cpu-ms/재부착)
+    webclient-native−grpc 델타       [0.371, 0.531] (블록 5)  ✅ 안 겹침 — grpc 우세
+    webclient-native−grpc 델타      [-0.058, 0.052] (블록 5)  🟡 겹침 — 판별 불가 (범위 폭 grpc 0.05 · webclient-native 0.12)
+    webclient-native−grpc 델타                    — (블록 0)  🟡 한 팔이 비어 판정 없음
+    webclient-native−grpc 델타     [-0.317, -0.314] (블록 5)  ✅ 안 겹침 — webclient-native 우세
+    webclient-native−grpc 델타     [-0.001, -0.000] (블록 5)  ✅ 안 겹침 — webclient-native 우세
+    webclient-native−grpc 델타       [0.000, 0.000] (블록 5)  🟡 겹침 — 판별 불가 (범위 폭 grpc 0.00 · webclient-native 0.00)
+    webclient-native−grpc 델타       [0.362, 0.802] (블록 5)  ✅ 안 겹침 — grpc 우세
+    webclient-native−grpc 델타     [-0.060, -0.028] (블록 5)  ✅ 안 겹침 — webclient-native 우세
+    webclient-native−grpc 델타      [-0.005, 0.003] (블록 5)  🟡 겹침 — 판별 불가 (범위 폭 grpc 0.00 · webclient-native 0.01)
+    webclient-native−grpc 델타     [-0.068, -0.011] (블록 5)  ✅ 안 겹침 — webclient-native 우세
+    webclient-native−grpc 델타       [0.687, 1.198] (블록 5)  ✅ 안 겹침 — grpc 우세
+    webclient-native−grpc 델타       [0.619, 1.030] (블록 5)  ✅ 안 겹침 — grpc 우세
+    # Reattach p50 (ms) — 왕복 델타는 클라이언트 대가의 상한
+  springclient 완료 — 팔 [grpc webclient-native] × 블록 5 × c=1 × VU당 2000 — /root/init/loadtest/results/spring-client-cost-aws-2026-09-14/springclient/summary.txt
+  → springclient : OK (819초)
+
+════════ ridealong ════════
+  R3 수집 — 세 팔. ㉡ 에서 «hash join» 확인됨 (무대 최소 행수 2)
+  R1·R2 수집, R3 수집
+  → ridealong : OK (1초)
+
+════════ collect ════════
+# 측정 조건 — springclient-20260914-075216
+생성          : 2026-09-14T08:10:34+00:00
+커밋          : 135851dc098e5ea1bcd3fc771babb3750311193a (HEAD)
+인스턴스 타입 : c7i.2xlarge
+인스턴스 ID   : i-05841d0d7cc64bf16
+AZ / 리전     : ap-northeast-2c / ap-northeast-2
+vCPU / RAM    : 8 / 15GB
+커널          : 6.1.182-227.379.amzn2023.x86_64
+디스크        : 100G 여유 92G
+MySQL         : 8.0.46
+버퍼풀        : 2147483648
+WRITER_MAX_SEC: 14400
+S3 결과       : s3://shadowfit-measure-055447613012/shadowfit/springclient-20260914-075216
+
+# 단계
+phase	status	seconds	started_at
+springclient	OK	819	2026-09-14T07:56:53+00:00
+ridealong	OK	1	2026-09-14T08:10:33+00:00
+
+⚠️ 절대 소요 시간을 «운영에서 N분» 으로 인용 금지 — 하드웨어 종속(설계 §5)
+⚠️ rehearsal/ 의 수치는 측정값이 아니다 — 경로 점검용 축소 판
+  → collect : OK (0초)
+
+════════ 최종 업로드 ════════
+  ✅ s3://shadowfit-measure-055447613012/shadowfit/springclient-20260914-075216
+
+════════ 단계 요약 ════════
+phase	status	seconds	started_at
+springclient	OK	819	2026-09-14T07:56:53+00:00
+ridealong	OK	1	2026-09-14T08:10:33+00:00
+collect	OK	0	2026-09-14T08:10:34+00:00
+  자동 정지 꺼짐 — 회수 확인 후 직접 정지할 것. AWS-RIDE-ALONG.md §5 체크리스트를 볼 것
+run_all rc=0
