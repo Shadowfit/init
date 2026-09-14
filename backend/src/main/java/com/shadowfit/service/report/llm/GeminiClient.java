@@ -106,6 +106,9 @@ public class GeminiClient {
             throw new GeminiRejectedException("Gemini 응답에 candidates 가 없음 — promptFeedback=" + response);
         }
         Candidate candidate = response.candidates().get(0);
+        if (candidate == null) {
+            throw new GeminiRejectedException("Gemini 응답의 첫 candidate 가 null");
+        }
         if (candidate.content() == null || candidate.content().parts() == null || candidate.content().parts().isEmpty()) {
             // 안전 필터 등으로 본문 없이 끝난 경우 — finishReason 만 있다. 재시도해도 같은 입력엔 같다.
             throw new GeminiRejectedException("Gemini 응답에 본문이 없음 — finishReason=" + candidate.finishReason());

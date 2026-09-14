@@ -78,6 +78,7 @@ class WeeklyReportLlmOutboxIntegrationTest {
     @Autowired private WeeklyReportRepository weeklyReportRepository;
     @Autowired private OutboxPublisher defaultPublisher;
     @Autowired private WeeklyReportOutboxPublisher reportPublisher;
+    @Autowired private com.shadowfit.service.report.llm.WeeklyReportStore store;
 
     @MockitoBean private GeminiClient gemini;
     @MockitoBean private WeeklySummaryService weeklySummaryService;
@@ -156,6 +157,10 @@ class WeeklyReportLlmOutboxIntegrationTest {
         // 다시 tick 이 돌아도(회수분 시뮬레이션) 호출이 늘지 않는다 — 종료 상태 행은 멱등
         reportPublisher.dispatchPending();
         verify(gemini, times(1)).generate(anyString(), anyString(), any(), anyDouble());
+
+        // 종료 상태 전이는 «PENDING 일 때만» — 다른 발행기가 뒤늦게 폴백을 쓰려 해도 0행, LLM 결과가 덮이지 않는다
+        assertThat(store.fallBack(row.getId(), "late-loser", "x", "v1")).isFalse();
+        assertThat(weeklyReportRepository.findById(row.getId()).orElseThrow().getSummarySource()).isEqualTo(WeeklyReportSource.LLM);
     }
 
     @Test

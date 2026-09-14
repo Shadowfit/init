@@ -369,7 +369,7 @@ llm:
     # 필요 없다 — flash-lite 로 (사용자 결정 2026-09-14). 모델을 바꾸면 아래 timeout·lease 를 그 모델의 max 로 다시 유도할 것.
     model: gemini-3.5-flash-lite
     # 약속(threshold). 실측 max 1.66s 의 6배 — «여유 배수» 자체는 근거 없는 숫자다. 이 값의 실제 의미는 제약 쪽이다:
-    # lease 60s 안에 batch 5 × timeout 10s = 50s 가 들어와야 회수·중복 호출이 안 난다(아래 outbox.weekly-report).
+    # lease 60s 의 절반(30s) 안에 batch 3 × timeout 10s 가 들어와야 회수·중복 호출이 안 난다(아래 outbox.weekly-report).
     timeout-seconds: 10
 
 outbox:
@@ -378,10 +378,12 @@ outbox:
   #
   # 주간 리포트 차선(GENERATE_WEEKLY_REPORT) — 별도 발행기(§5-2 안 A). 기본 차선과 다른 이유는 호출 1건이 초 단위라서다.
   weekly-report:
-    # 제약에서 온 값: batch × timeout 이 lease 안에 들어와야 한다 → 5 × 10s = 50s < 60s. batch 20 이면 200s 라 lease 를
-    # 200s 이상으로 올려야 하는데, 그러면 크래시 후 회수가 그만큼 늦어진다. 주간 리포트는 tick 당 5건이면 충분하다 —
-    # 회원 10명 × 주 1회가 상한이라 «밀리는» 시나리오 자체가 없다(사용자 테스트 규모, 34-user-test-scenario.md).
-    batch-size: 5
+    # 제약에서 온 값: 한 tick 이 lease 안에 끝나야 한다. tick 한 건 = HTTP(≤timeout) + 집계 조회 + 검증 + 저장이고
+    # HTTP 만 상한이 있다(집계·저장은 실측 없음 — WeeklyReportMetrics.queryLatency 로 본다). 그래서 HTTP 몫을 lease 의
+    # 절반으로 잡는다: 3 × 10s = 30s, 나머지 30s 가 집계·저장 몫. batch 20 이면 lease 를 400s 로 올려야 하고 그만큼
+    # 크래시 후 회수가 늦어진다. 주간 리포트는 tick 당 3건이면 충분하다 — 회원 10명 × 주 1회가 상한이라 «밀리는»
+    # 시나리오 자체가 없다(사용자 테스트 규모, 34-user-test-scenario.md). 모델을 바꾸면 timeout 과 함께 다시 유도할 것.
+    batch-size: 3
     lock-timeout-seconds: 60
     # 사용자가 기다리며 블록되는 이벤트가 아니다(첫 조회는 이미 템플릿으로 응답). 1초 tick 을 두 벌 돌릴 이유가 없다.
     poll-interval-ms: 5000

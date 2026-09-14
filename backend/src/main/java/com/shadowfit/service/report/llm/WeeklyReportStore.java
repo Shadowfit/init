@@ -51,18 +51,18 @@ public class WeeklyReportStore {
         return weeklyReportRepository.findById(id);
     }
 
-    /** @return 실제로 바뀌었나 — 이미 종료 상태면 false(재배달·회수분은 여기서 멱등하게 흡수된다). */
+    /**
+     * @return 실제로 바뀌었나 — 이미 종료 상태(또는 행 없음)면 false. 조건부 UPDATE 라 두 발행기가 같은 PENDING 행을
+     *         동시에 끝내려 해도 하나만 이긴다({@code WeeklyReportRepository} 주석). 진 쪽은 재배달로 보고 흡수한다.
+     */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean completeWithLlm(Long id, String summary, String citedMetricsJson, String model, String promptVersion) {
-        return weeklyReportRepository.findById(id)
-                .map(r -> r.completeWithLlm(summary, citedMetricsJson, model, promptVersion, LocalDateTime.now()))
-                .orElse(false);
+        return weeklyReportRepository.completeWithLlmIfPending(id, summary, citedMetricsJson, model, promptVersion,
+                LocalDateTime.now()) > 0;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean fallBack(Long id, String reason, String model, String promptVersion) {
-        return weeklyReportRepository.findById(id)
-                .map(r -> r.fallBack(reason, model, promptVersion, LocalDateTime.now()))
-                .orElse(false);
+        return weeklyReportRepository.fallBackIfPending(id, reason, model, promptVersion, LocalDateTime.now()) > 0;
     }
 }

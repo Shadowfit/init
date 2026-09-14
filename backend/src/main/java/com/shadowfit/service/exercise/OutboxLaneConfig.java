@@ -34,7 +34,7 @@ public class OutboxLaneConfig {
      */
     @Bean
     OutboxEventStore weeklyReportOutboxStore(OutboxEventRepository repository,
-                                             @Value("${outbox.weekly-report.batch-size:5}") int batchSize,
+                                             @Value("${outbox.weekly-report.batch-size:3}") int batchSize,
                                              @Value("${outbox.weekly-report.lock-timeout-seconds:60}") long lockTimeoutSeconds) {
         return new OutboxEventStore(repository, Set.of(OutboxEventType.GENERATE_WEEKLY_REPORT), batchSize, lockTimeoutSeconds);
     }

@@ -52,9 +52,11 @@ public abstract class AbstractOutboxPublisher {
     protected abstract DispatchOutcome dispatch(OutboxEvent event, boolean possiblyRedelivered);
 
     /**
-     * 이 이벤트를 영구히 포기할 때(재시도 한도 초과·재시도 무의미) 한 번 불린다 — 행 상태가 FAILED 로 바뀐 <b>뒤</b>다.
-     * 기본은 아무것도 안 한다. 이벤트 뒤에 «대기 중» 상태를 가진 애그리거트가 있는 차선(주간 리포트 PENDING 행)이
-     * 여기서 그 애그리거트를 종료 상태로 옮긴다 — 안 그러면 아웃박스는 FAILED 인데 화면은 영원히 «준비 중» 이다.
+     * 이 이벤트를 영구히 포기할 때(재시도 한도 초과·재시도 무의미) 한 번 불린다 — 행 상태를 FAILED 로 바꾸기 <b>전</b>이다.
+     * 순서가 이래야 하는 이유: FAILED 를 먼저 커밋한 뒤 여기서 죽으면 아웃박스는 끝났는데 애그리거트는 영원히 «대기 중»
+     * 이다. 반대로 여기까지 하고 FAILED 기록에 실패하면(크래시·lease 상실) 행은 다시 회수돼 재처리되는데, 그때는
+     * 애그리거트가 이미 종료 상태라 SENT 로 흡수된다 — 멱등이 이 방향으로만 성립한다.
+     * 기본은 아무것도 안 한다. 주간 리포트 차선은 PENDING 행을 TEMPLATE_FALLBACK 으로 옮긴다.
      */
     protected void onGivenUp(OutboxEvent event) {
     }
@@ -137,25 +139,25 @@ public abstract class AbstractOutboxPublisher {
                 }
             }
             case TERMINAL_FAILED -> {
-                // 재시도가 원리상 무의미한 실패 — 한도와 무관하게 즉시 종료 상태로 보낸다.
+                // 재시도가 원리상 무의미한 실패 — 한도와 무관하게 즉시 종료 상태로 보낸다. 애그리거트 먼저(위 onGivenUp 주석).
+                onGivenUp(event);
                 if (!owned(store.recordFailed(event.getId(), publisherId), event)) {
                     return;
                 }
                 sessionMetrics.outboxDispatch(lane, "failed");
                 log.warn("아웃박스 전달 종료(재시도 무의미) - id: {}, {}: {}",
                         event.getId(), event.getAggregateType(), event.getAggregateId());
-                onGivenUp(event);
             }
             case RETRY -> {
                 int attempts = event.getRetryCount() + 1;
                 if (attempts > maxRetry) {
+                    onGivenUp(event);
                     if (!owned(store.recordFailed(event.getId(), publisherId), event)) {
                         return;
                     }
                     sessionMetrics.outboxDispatch(lane, "failed");
                     log.error("아웃박스 재시도 한도 초과 — 독 메시지로 종료 (id: {}, {}: {}, 시도: {})",
                             event.getId(), event.getAggregateType(), event.getAggregateId(), attempts);
-                    onGivenUp(event);
                     return;
                 }
                 LocalDateTime nextAt = LocalDateTime.now().plusSeconds(backoffSeconds(attempts));

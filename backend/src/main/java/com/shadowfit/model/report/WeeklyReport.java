@@ -76,30 +76,6 @@ public class WeeklyReport {
                 .build();
     }
 
-    /** 종료 상태는 한 번뿐 — 이미 끝난 행에 다시 쓰면 무시한다(재배달·회수분 멱등). @return 실제로 바뀌었나 */
-    public boolean completeWithLlm(String summary, String citedMetricsJson, String model, String promptVersion,
-                                   LocalDateTime at) {
-        if (summarySource.isTerminal()) {
-            return false;
-        }
-        this.summarySource = WeeklyReportSource.LLM;
-        this.summary = summary;
-        this.citedMetrics = citedMetricsJson;
-        this.generationModel = model;
-        this.promptVersion = promptVersion;
-        this.generatedAt = at;
-        return true;
-    }
-
-    public boolean fallBack(String reason, String model, String promptVersion, LocalDateTime at) {
-        if (summarySource.isTerminal()) {
-            return false;
-        }
-        this.summarySource = WeeklyReportSource.TEMPLATE_FALLBACK;
-        this.fallbackReason = reason;
-        this.generationModel = model;
-        this.promptVersion = promptVersion;
-        this.generatedAt = at;
-        return true;
-    }
+    // 종료 상태 전이(LLM / TEMPLATE_FALLBACK)는 엔티티 setter 가 아니라 WeeklyReportRepository 의 «PENDING 일 때만»
+    // 조건부 UPDATE 로만 한다 — 읽고-바꾸기는 두 발행기 경합에서 나중 커밋이 먼저 것을 덮는다.
 }

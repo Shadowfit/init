@@ -73,8 +73,10 @@ def input_numbers(obj, acc=None):
 
 
 def korean_only(text):
-    # 한글·ASCII·기본 문장부호·화살표만 허용 — 영어 단어(ASCII 문자)는 rep 같은 용어 때문에 막지 않는다
-    return all(ord(ch) < 0x3000 or 0xAC00 <= ord(ch) <= 0xD7A3 or ch in "→" for ch in text)
+    # 한글·ASCII·기본 문장부호·화살표만 허용 — 영어 단어(ASCII 문자)는 rep 같은 용어 때문에 막지 않는다.
+    # 그리고 한글 음절이 최소 하나 — ASCII 만으로 된 영문 문장은 «한국어만» 이 아니다(WeeklyReportOutputValidator 와 같은 규칙)
+    has_hangul = any(0xAC00 <= ord(ch) <= 0xD7A3 for ch in text)
+    return has_hangul and all(ord(ch) < 0x3000 or 0xAC00 <= ord(ch) <= 0xD7A3 or ch in "→" for ch in text)
 
 
 def call(model, key, timeout):
@@ -97,7 +99,13 @@ def call(model, key, timeout):
     lat = round(time.perf_counter() - t0, 3)
     d = json.loads(raw)
     usage = d.get("usageMetadata", {})
-    text = d["candidates"][0]["content"]["parts"][0]["text"]
+    cands = d.get("candidates") or []
+    parts = (cands[0].get("content") or {}).get("parts") if cands and cands[0] else None
+    if not parts:
+        # 프롬프트 차단 등 — promptFeedback 만 오고 candidates 가 없다. 측정을 멈추지 말고 실패 행으로 남긴다.
+        return {"status": status, "latency_s": lat, "error": "no-candidates: " + json.dumps(d.get("promptFeedback") or
+                (cands[0].get("finishReason") if cands and cands[0] else None), ensure_ascii=False)[:200]}
+    text = parts[0].get("text", "")
     out = {"status": status, "latency_s": lat, "prompt_tokens": usage.get("promptTokenCount"),
            "output_tokens": usage.get("candidatesTokenCount"), "thinking_tokens": usage.get("thoughtsTokenCount"),
            "finish": d["candidates"][0].get("finishReason")}

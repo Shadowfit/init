@@ -60,6 +60,13 @@ class WeeklyReportOutputValidatorTest {
     }
 
     @Test
+    @DisplayName("한글이 한 자도 없는 영문 문장은 non-korean — ASCII 만으로 통과하면 «한국어만» 이 아니다")
+    void englishOnly() {
+        String en = "{\"summary\":\"Reps went from 41 to 58.\",\"cited_metrics\":[{\"name\":\"a\",\"value\":58}]}";
+        assertThat(WeeklyReportOutputValidator.validate(en, ALLOWED).reason()).isEqualTo("non-korean");
+    }
+
+    @Test
     @DisplayName("JSON 이 아니거나 summary 가 비면 json-parse / empty-summary")
     void malformed() {
         assertThat(WeeklyReportOutputValidator.validate("이건 JSON 이 아니다", ALLOWED).reason()).isEqualTo("json-parse");

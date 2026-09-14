@@ -138,7 +138,9 @@ class WeeklyReportGenerationServiceTest {
     @Test
     @DisplayName("이미 종료 상태인 행(재배달·회수분) → 아무것도 안 하고 SENT")
     void terminalRow_isIdempotent() {
-        pending.fallBack("no-record", null, "v1", java.time.LocalDateTime.now());
+        WeeklyReport terminal = WeeklyReport.builder().id(1L).member(pending.getMember()).periodStart(WEEK)
+                .periodEnd(WEEK.plusWeeks(1)).summarySource(WeeklyReportSource.TEMPLATE_FALLBACK).build();
+        when(store.findById(1L)).thenReturn(Optional.of(terminal));
 
         assertThat(service.dispatch(1L)).isEqualTo(DispatchOutcome.SENT);
         verify(summaryService, never()).compute(anyLong(), any());

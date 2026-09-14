@@ -20,7 +20,8 @@ import java.util.regex.Pattern;
  *   <li>JSON 파싱 + summary 비어 있지 않음</li>
  *   <li><b>숫자 대조</b> — {@code cited_metrics} 의 값과 summary 본문에 나온 숫자 전부가 입력 집계에 있던 수여야 한다.
  *       인용이 0건이면 «달라진 것» 을 숫자 없이 말한 것이라 역시 폐기 — ㄱ 은 숫자 인용이 정의다</li>
- *   <li>한국어만 — 한글·ASCII·기본 부호 밖의 문자(한자·가나·키릴 등)가 있으면 폐기. 영문 단어(rep) 는 용어라 허용</li>
+ *   <li>한국어만 — 한글·ASCII·기본 부호 밖의 문자(한자·가나·키릴 등)가 있으면 폐기, 그리고 한글이 한 자도 없어도 폐기
+ *       (영문만으로 쓴 문장). 영문 단어(rep) 는 용어라 허용</li>
  * </ol>
  *
  * <p>2026-09-14 실측 30회에서 위반 0 이었지만, 그건 «이 검증이 불필요하다» 가 아니라 «지금 모델이 통과한다» 다.
@@ -95,9 +96,13 @@ public final class WeeklyReportOutputValidator {
         return found;
     }
 
-    /** 허용: ASCII · 한글(음절·자모·호환 자모) · 일반 구두점(U+2000~206F, «» 포함) · 화살표 · 가운뎃점. 그 밖(한자·가나·키릴 …)은 거절. */
+    /**
+     * 허용: ASCII · 한글(음절·자모·호환 자모) · 일반 구두점(U+2000~206F, «» 포함) · 화살표 · 가운뎃점. 그 밖(한자·가나·키릴 …)은 거절.
+     * 그리고 한글 음절이 최소 하나 — ASCII 만으로 된 영문 문장은 «한국어만» 이 아니다.
+     */
     static boolean koreanOnly(String text) {
-        return text.chars().allMatch(ch -> ch < 0x80
+        boolean hasHangul = text.chars().anyMatch(ch -> ch >= 0xAC00 && ch <= 0xD7A3);
+        return hasHangul && text.chars().allMatch(ch -> ch < 0x80
                 || ch == 0x00B7 || ch == 0x00AB || ch == 0x00BB
                 || (ch >= 0x2000 && ch <= 0x206F)
                 || (ch >= 0x2190 && ch <= 0x21FF)
