@@ -1,6 +1,6 @@
 # 설계: 네이티브 REST 팔 — 4차의 «겹의 대가» 에서 겹을 빼면 무엇이 남나 (5차 라운드)
 
-상태: 📝 **설계 초안 — §7 미결 확정 전. 착수 안 함.**
+상태: 📝 **설계 확정(§7 ①~⑨ 사용자 결정, 2026-09-14) — 착수 전.**
 작성: 2026-09-14
 배경: 4차([`grpc-webclient-concurrency-round.md`](./grpc-webclient-concurrency-round.md) · [결과 §4-2](../../loadtest/results/ai-call-concurrency-aws-2026-09-11/README.md))가
 webclient 팔의 대가를 **AI 쪽 호출당 +1~3 cpu-ms → 포화 처리량 −15%** 로 좁혔는데, 그 REST 미러는
@@ -213,6 +213,10 @@ VU=세션, 재부착 반복, 계정 교대 — 전부 4차 §5-1.
 | ⑤ | D 의 랜드마크 검증 | (a) **`list[dict]`(파싱만)** / (b) `list[LandmarkDto]`(필드 검증) | **(a)** | proto 가 안 하는 검증을 D 에만 얹으면 대칭이 깨진다. (b) 가 프로덕션 모양이긴 하나 그건 채택 뒤 |
 | ⑥ | 블록 수 | (a) **5**(4차·2차와 같음) / (b) 4(회전 한 바퀴) | **(a)** | 겹침 판정의 표본 수를 앞 라운드와 맞춘다 |
 | ⑦ | 인스턴스 | (a) **c7i.2xlarge 1대, 4차와 같은 형상** / (b) 부하기 분리 | **(a)** | 4차 ④ 와 같은 이유 |
+| ⑧ | Spring 쪽 팔 스위치 | (a) **`ai.webclient.contract: mirror\|native\|nested` 프로퍼티 추가**(`AI_WEBCLIENT_CONTRACT`) / (b) `AI_CLIENT_TYPE` 에 값 추가 | **(a)** | 구현체 선택(grpc/webclient)과 계약 선택이 다른 축이다. 클래스 하나가 경로·DTO 만 바꾸므로 «전송 계층이 세 REST 팔에서 같다» 가 코드로 보인다 |
+| ⑨ | 박스 보정(calib) | (a) **라운드 시작·끝에 `calibrate_box.py` 1회씩** / (b) 안 넣음 | **(a)** | 인용 규칙 ㉠([`round-to-round-nonreproducibility.md` §8](./round-to-round-nonreproducibility.md)) — CPU/호출·처리량은 절대값이라 calib `cpu` 를 병기해야 한다. 4차 rig 엔 없었다. 라운드 안 뺄셈에는 안 쓴다 |
+
+✅ **2026-09-14 사용자 결정: ①~⑨ 전부 (a).**
 
 ---
 
@@ -232,4 +236,5 @@ VU=세션, 재부착 반복, 계정 교대 — 전부 4차 §5-1.
 ## 10. 결정 로그
 
 - 2026-09-14: 사용자가 「REST 전용으로 다시 짜서 재면 어떻게 될까」 → 「설계하고 측정하자」. 이 문서 초안.
-  §7 ①~⑦ 은 사용자 확정 대기.
+- 2026-09-14: **§7 ①~⑨ 전부 (a) 로 사용자 확정** — 팔 4개 · c {1, 8} · nginx 메모리 버퍼 · AI 구현 (i) · D 는 `list[dict]` ·
+  블록 5 · c7i.2xlarge 1대 · `ai.webclient.contract` 스위치 · calib 시작·끝. 착수는 §9 에 적는다.
