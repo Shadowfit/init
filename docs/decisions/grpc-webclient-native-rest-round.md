@@ -231,7 +231,35 @@ VU=세션, 재부착 반복, 계정 교대 — 전부 4차 §5-1.
 
 ---
 
-## 9. 착수 — (§7 확정 뒤 채운다)
+## 9. 착수 — rig (2026-09-14 구현)
+
+브랜치 `measure/grpc-webclient-native-rest`(`test/webclient-full-journey` 에서 분기). 4차 rig 을 그대로 쓰고 아래를 더했다.
+
+| 자리 | 무엇 | 파일 |
+|---|---|---|
+| Spring 팔 스위치 | `ai.webclient.contract: mirror\|native\|nested`(`AI_WEBCLIENT_CONTRACT`). 경로 접두 + nested 는 `PoseRef.jointCoordinates` 에 `@JsonRawValue` MixIn. 전송 계층은 세 팔 동일 | `WebClientAiAnalysisClient.java` · `application.yml` · `docker-compose.yml` |
+| AI 네이티브 팔 | `/native/*` — pydantic command 를 서비서에 **직접**(방식 (i), 측정용 명시). `/native-nested/*` — `list[dict]` 로 받고 `_parse_reference_poses` 가 디코드된 list 는 그대로 씀 | `internal_analysis.py` · `models/internal_analysis.py` · `exercise_servicer.py`(+3줄) |
+| 동등성 | 단위 테스트(세 팔 같은 세션 → `already_active` 보존 · nested 각도 = 문자열 각도 · native abort→400) + **컨테이너 스모크** `native_rest_parity_smoke.py`(rig 이 버림 블록 전에 돌리고 다르면 중단) | `tests/test_internal_analysis_rest.py` · `loadtest/native_rest_parity_smoke.py` |
+| rig 팔 | `webclient-native`·`webclient-nested` → contract 매핑, 팔 전환 게이트가 contract 까지 확인(옛 이미지면 빈 값 → 중단) | `ai_call_ab_lib.sh` |
+| ⑧ nginx 버퍼 | `client_body_buffer_size 128k`(4차 실측 114,223 B 보다 큰 최소 2^n) 오버레이. 버림 블록 뒤 임시파일 경고 **0건** 아니면 중단 | `compose.clientconc.yml` · `nginx-ai.body-buffer.conf` · `measure_ai_call_concurrency.sh` |
+| 지표 6·7 | `cells.tsv` 에 `restarts_before/after`, `docker-events.log`, `dmesg-tail.txt`, 팔별 재부착 `req_len` 을 `structure_<팔>.txt` 에 | `measure_ai_call_concurrency.sh` |
+| ⑨ calib | `phase_nativerest` 가 시작·끝에 `calibrate_box` → `calibration.tsv` | `run_all.sh` |
+| 집계 | 팔 4 격자, 뺄셈 B−C · C−A · C−D(+B−A), 겹침 규칙, 재시작 칸은 규칙 4 로 제외 | `analyze_ai_call_native_rest.py` |
+
+호출: `PHASES="nativerest ridealong collect"`(run_all.sh) — `ARMS="grpc webclient webclient-native webclient-nested" LEVELS="1 8"` 로 4차 rig 을 부른다.
+
+### 9-1. 로컬 스모크 (2026-09-14, docker compose 로컬)
+
+- 컨테이너 동등성 스모크: mirror → native → nested 셋 다 200, 2·3번째 `already_active=true`, `rep_count` 보존.
+  본문 30프레임 기준 mirror = native **84,491 B** > nested **74,531 B**(−11.8%, 이스케이프 몫). 라운드 페이로드(37프레임)의 값은 게이트가 따로 적는다.
+- nginx 오버레이: `nginx -T` 에 `client_body_buffer_size 128k` 확인.
+- rig 스모크(`N=3 BLOCKS=1 LEVELS="1" WARMUP=1`, 팔 4개, `AI_CONC_MEM_LIMIT=2800m`): 팔 전환 게이트 4회 전부 contract 일치,
+  동등성 스모크 ✅ 5/5, 버림 블록 뒤 nginx 임시파일 경고 **0건**, 칸 4개 전부 `reattach_ok=3`·실패 0·재시작 0, 집계기 동작.
+  Spring 이 실제 DB 기준 좌표로 보낸 재부착 `req_len`: mirror **114,220** · native **114,227**(4차의 114,223 과 같은 자리) ·
+  nested **101,950**(−10.7%). 이 수치는 게이트 산출물이고 판정엔 안 쓴다.
+- 🔴 이 로컬 박스의 `python3` 는 Windows 스토어 스텁이라(run_all.sh 의 calibrate_box 주석과 같은 것) 동등성 스모크가
+  «Python» 한 줄 찍고 실패했다 — `PYTHON_BIN=python` 으로 돌렸다. EC2 는 python3 그대로.
+- 남은 것: EC2 무인 라운드(`PHASES="nativerest ridealong collect"`, bootstrap 은 커밋 SHA 고정) → 결과 README → §11 갱신.
 
 ## 10. 결정 로그
 
