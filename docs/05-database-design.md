@@ -178,14 +178,18 @@ CREATE TABLE exercise_feedback_templates (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     exercise_id BIGINT NOT NULL,
     feedback_type VARCHAR(30) NOT NULL,    -- KNEE_OVER, BACK_BEND, GOOD_FORM, REP_COUNT 등
+    persona VARCHAR(10) NULL,              -- 페르소나별 멘트. NULL = 페르소나 행이 없을 때의 공통 fallback
+    persona_key VARCHAR(10) AS (COALESCE(persona, '')) VIRTUAL,   -- V21: UNIQUE 용 투영 (#715)
     message VARCHAR(200) NOT NULL,         -- 한국어 멘트 (예: "무릎이 발끝을 넘었습니다")
     priority INT NOT NULL DEFAULT 100,     -- 낮을수록 우선
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE CASCADE,
-    UNIQUE KEY uk_exercise_feedback (exercise_id, feedback_type)
+    UNIQUE KEY uk_exercise_feedback_persona_key (exercise_id, feedback_type, persona_key)
 );
 ```
 세션 시작 시 클라이언트가 `GET /exercises/{exerciseId}/feedback-templates` 로 받아 device TTS 로 재생. 다국어 분리 컬럼 없음 ([[project_korean_only]]).
+
+UNIQUE 가 `persona` 가 아니라 `persona_key` 에 걸린 이유(#715): MySQL 은 UNIQUE 인덱스에서 NULL 을 서로 다른 값으로 보므로 `(exercise_id, feedback_type, persona)` 로는 **fallback 행(persona NULL)만 몇 개든 들어갔다** — 제약이 제일 필요한 자리에서 안 걸렸다. `COALESCE(persona, '')` 생성 컬럼에 걸면 fallback 도 종목·결함당 한 줄이다. `persona` 는 그대로 nullable 이라 읽는 쪽(`persona IS NULL` fallback merge)은 안 바뀐다.
 
 ### session_feedback_logs (세션별 TTS 발화 이벤트 로그) — 2026-05 추가
 ```sql
