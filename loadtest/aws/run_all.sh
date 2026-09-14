@@ -139,6 +139,7 @@ if [ -z "$OUTDIR" ]; then
       clientab)                            _r=ai-call-latency-ab ;;
       clientconc)                          _r=ai-call-concurrency ;;
       nativerest)                          _r=ai-call-native-rest ;;
+      springclient)                        _r=spring-client-cost ;;
       *)                                   continue ;;   # preflight·ridealong·collect 는 라운드를 안 정한다
     esac
     case " $_rounds " in *" $_r "*) ;; *) _rounds="${_rounds:+$_rounds }$_r" ;; esac
@@ -487,6 +488,16 @@ NATIVEREST_BLOCKS=${NATIVEREST_BLOCKS:-5}
 NATIVEREST_WARMUP=${NATIVEREST_WARMUP:-10}
 NATIVEREST_LEVELS=${NATIVEREST_LEVELS:-"1 8"}     # §7 ② — c=1 기준값 + c=8 포화(4차가 «CPU/호출은 c 무관» 을 답했다)
 NATIVEREST_ARMS=${NATIVEREST_ARMS:-"grpc webclient webclient-native webclient-nested"}   # §7 ①
+
+# ── Spring 클라이언트 쪽 호출당 CPU (springclient, 6차) — 같은 rig, 팔 2 · c=1 · 긴 칸 · 스레드별 CPU ──
+# 설계: docs/decisions/grpc-webclient-spring-client-cost-round.md. 재기동 10회 + 칸 10개(~20초) ≈ 25분.
+#   PHASES="springclient ridealong collect"
+TIMEOUT_SPRINGCLIENT=${TIMEOUT_SPRINGCLIENT:-7200}
+SPRINGCLIENT_N=${SPRINGCLIENT_N:-2000}            # §7 ③ — 칸 ≈ 15~20초
+SPRINGCLIENT_BLOCKS=${SPRINGCLIENT_BLOCKS:-5}
+SPRINGCLIENT_WARMUP=${SPRINGCLIENT_WARMUP:-500}     # §7 ④ — 워밍업 칸당 재부착
+SPRINGCLIENT_WARMUP_CELLS=${SPRINGCLIENT_WARMUP_CELLS:-2}
+SPRINGCLIENT_ARMS=${SPRINGCLIENT_ARMS:-"grpc webclient-native"}   # §7 ①
 
 # 🔴 이름을 **여기서 한 번** 정하고 rig 에 물려준다 (#374).
 #    게이트(위 repl_preflight)와 rig(`repl2_rig.sh:60`)가 각각 이름을 들고 있으면,
@@ -1785,6 +1796,33 @@ phase_nativerest() {
   return 0
 }
 
+# 6차 — Spring 클라이언트 쪽 호출당 CPU. 4·5차 rig 을 팔 2 · c=1 · N=2000 · 스레드 스냅샷으로 부른다.
+phase_springclient() {
+  local out=$OUTDIR/springclient
+  mkdir -p "$out"
+
+  calibrate_box
+  timeout $TIMEOUT_SPRINGCLIENT env \
+      N="$SPRINGCLIENT_N" BLOCKS="$SPRINGCLIENT_BLOCKS" WARMUP="$SPRINGCLIENT_WARMUP" WARMUP_CELLS="$SPRINGCLIENT_WARMUP_CELLS" \
+      LEVELS="1" ARMS="$SPRINGCLIENT_ARMS" THREADS=1 \
+      COMPOSE_DIR="$ROOT" OUT="$out" \
+      bash "$ROOT/loadtest/measure_ai_call_concurrency.sh" > "$out/run.log" 2>&1
+  local rc=$?
+  calibrate_box
+
+  grep -E "PID 1 comm|schedstat 스냅샷|판정 그룹|CONTRACT=|재시작" "$out/run.log" | tail -10 | while read -r l; do note "  $l"; done
+
+  python3 "$ROOT/loadtest/analyze_spring_client_cost.py" "$out" > "$out/summary.txt" 2>&1
+  grep -E "^## ★|^   C−A|델타" "$out/summary.txt" | head -20 | while read -r l; do note "  $l"; done
+
+  if [ $rc -ne 0 ]; then
+    note "🔴 springclient rc=$rc — run.log 를 볼 것 (칸 $(( $(wc -l < "$out/cells.tsv" 2>/dev/null || echo 1) - 1 )) 개)"
+    return 1
+  fi
+  note "springclient 완료 — 팔 [${SPRINGCLIENT_ARMS}] × 블록 ${SPRINGCLIENT_BLOCKS} × c=1 × VU당 ${SPRINGCLIENT_N} — $out/summary.txt"
+  return 0
+}
+
 phase_q2() {
   local out=$OUTDIR/q2
   mkdir -p "$out"
@@ -2099,6 +2137,7 @@ for p in $PHASES; do
     clientab)    run_phase clientab    phase_clientab ;;
     clientconc)  run_phase clientconc  phase_clientconc ;;
     nativerest)  run_phase nativerest  phase_nativerest ;;
+    springclient) run_phase springclient phase_springclient ;;
     card_a_seed) run_phase card_a_seed phase_card_a_seed ;;
     card_a)      run_phase card_a      phase_card_a ;;
     ridealong) run_phase ridealong phase_ridealong ;;

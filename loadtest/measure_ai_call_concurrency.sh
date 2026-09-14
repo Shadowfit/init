@@ -41,6 +41,16 @@
 #     · nginx 본문 임시파일 0건 게이트(§5-3 ⑧) · 팔별 재부착 req_len(§5-4)
 #     · 컨테이너 재시작 계수(cells.tsv restarts_*) + docker events 로그 + dmesg 꼬리(#731)
 #   박스 보정(calib, §7 ⑨)은 run_all.sh 의 calibrate_box 가 phase 시작·끝에 남긴다.
+#
+# ## 6차(Spring 클라이언트 쪽 호출당 CPU) — 같은 rig, 팔 2개 · c=1 · 칸을 길게 · 스레드별 CPU
+#
+#   설계: docs/decisions/grpc-webclient-spring-client-cost-round.md. ARMS="grpc webclient-native" LEVELS="1"
+#   N=2000 WARMUP=500 WARMUP_CELLS=2 (run_all.sh phase_springclient). 이 라운드가 더한 것:
+#     · threads/b{b}_{팔}_c{c}_{before|after}.txt — 백엔드 /proc/1/task/*/schedstat 스냅샷(tid·comm·ns).
+#       🔴 after 는 k6 직후·배수 전에 찍는다 — 배수 루프가 액추에이터를 치는 동안의 CPU 가 섞이지 않게.
+#     · WARMUP_CELLS — 팔 전환 뒤 워밍업 칸 수(기본 1 = 4·5차와 같음). 6차는 2 (C2 정착).
+#     · 게이트 — schedstat 이 읽히는지·그룹별 스레드 수.
+#   집계는 analyze_spring_client_cost.py.
 set -uo pipefail
 
 BASE=${BASE:-http://localhost:8080}
@@ -49,6 +59,8 @@ COMPOSE_DIR=${COMPOSE_DIR:-$(pwd)}
 N=${N:-100}                 # VU 당 재부착 수(칸당 표본 = N × c)
 BLOCKS=${BLOCKS:-5}         # 유효 블록 수(팔당). 앞에 버림 블록 1개가 더 붙는다
 WARMUP=${WARMUP:-10}        # 팔 전환 직후 버리는 재부착 수(c=1) · 버림 블록의 VU 당 재부착 수
+WARMUP_CELLS=${WARMUP_CELLS:-1}   # 팔 전환 직후 워밍업 칸 수(각 c=1 × WARMUP). 6차는 2 — 10건으로는 C2 가 안 돈다
+THREADS=${THREADS:-1}       # 1 이면 칸 전후로 백엔드 스레드별 CPU(schedstat)를 남긴다(6차). 0 이면 4·5차와 같다
 LEVELS=${LEVELS:-"1 4 8 16 32"}   # 설계 §4-2 의 구조 문턱. 게이트 실측이 다르면 여기서 바꾼다
 ARMS=${ARMS:-"grpc webclient"}
 # 🔴 풀 3 = 배포 형상. 두 팔 다 session_id % 3 으로 같은 워커에 가므로 병렬도가 같다(§4-1).
@@ -76,7 +88,7 @@ MAX_C=0; for c in $LEVELS; do [ "$c" -gt "$MAX_C" ] && MAX_C=$c; done
 ACCOUNTS=${ACCOUNTS:-$(( ROTATION * MAX_C ))}
 [ "$ACCOUNTS" -ge "$MAX_C" ] || { echo "🔴 ACCOUNTS=$ACCOUNTS < 최대 c=$MAX_C — VU 가 계정을 나눠 쓰게 된다"; exit 1; }
 
-mkdir -p "$OUT/scrape" "$OUT/k6" || exit 1
+mkdir -p "$OUT/scrape" "$OUT/k6" "$OUT/threads" || exit 1
 exec > >(tee -a "$OUT/run.log") 2>&1
 echo "# Spring→AI 동시성 축 — $(date -u +%FT%TZ)"
 echo "BASE=$BASE N=$N BLOCKS=$BLOCKS WARMUP=$WARMUP LEVELS=[$LEVELS] ARMS=[$ARMS] POOL=$CHANNEL_POOL_SIZE"
@@ -163,6 +175,15 @@ cpu_usec() {  # $1=컨테이너
 }
 CONTAINERS="shadowfit-backend shadowfit-ai shadowfit-ai-nginx shadowfit-mysql"
 cpu_row() { local c out=""; for c in $CONTAINERS; do out="$out	$(cpu_usec "$c")"; done; echo "$out"; }
+# 백엔드 스레드별 누적 CPU(ns) — /proc/1/task/<tid>/schedstat 의 첫 필드(sum_exec_runtime). PID 1 = java
+# (Dockerfile 이 exec 로 띄운다 — 게이트가 comm 으로 확인). 줄: «tid<TAB>comm<TAB>ns». comm 은 15자 절단이라
+# 집계기가 접두로 묶는다(설계 §2). JVM 플래그·에이전트 없음 — 두 팔에 같은 방식으로 걸린다.
+thread_snapshot() {  # $1=파일
+  MSYS_NO_PATHCONV=1 docker exec shadowfit-backend sh -c \
+    'for t in /proc/1/task/*; do printf "%s\t%s\t%s\n" "${t##*/}" "$(cat "$t/comm" 2>/dev/null)" "$(cut -d" " -f1 "$t/schedstat" 2>/dev/null)"; done' \
+    2>/dev/null | tr -d '\r' > "$1"
+}
+
 # 컨테이너 재시작 누계 — «backend=0,ai=1,nginx=0,mysql=0» 한 칸. 전/후가 다르면 그 칸에서 재시작이 났다.
 restart_row() {
   local c out="" n
@@ -207,9 +228,12 @@ run_cell() {  # $1=블록 $2=팔 $3=c $4=회전 자리
   local cpu_b cpu_a cb_b cb_a rs_b rs_a t0 t1 rc started wall
   scrape "${tag}_before"
   cpu_b=$(cpu_row); cb_b=$(cb_state); rs_b=$(restart_row)
+  [ "$THREADS" = "1" ] && thread_snapshot "$OUT/threads/${tag}_before.txt"
   started=$(date -u +%FT%TZ); t0=$(date +%s.%N)
   run_k6 "$c" "$N" "$OUT/k6/${tag}.json"; rc=$?
   t1=$(date +%s.%N)
+  # 🔴 스레드 스냅샷은 k6 직후·배수 전 — 배수 루프(액추에이터 폴링)의 CPU 가 tomcat 그룹에 섞이지 않게(6차 설계 §3-1).
+  [ "$THREADS" = "1" ] && thread_snapshot "$OUT/threads/${tag}_after.txt"
   # 🔴 칸 경계마다 배수 — 앞 칸의 stop 이 다음 칸의 AI 부하에 섞이지 않게. 벽시계엔 안 넣는다.
   drain "$tag" || true
   scrape "${tag}_after"
@@ -241,6 +265,13 @@ structure_gate() {  # $1=팔 — 팔마다 스레드 구성이 다르므로 파�
       docker logs shadowfit-ai-nginx 2>/dev/null | grep -F "POST ${prefix}reattach " | grep -oE 'req_len=[0-9]+' | tail -5 | tr '\n' ' '; echo
     fi
     echo "## nginx 본문 임시파일 버퍼링 경고 누계: $(nginx_tmpfile_count) (5차 §5-3 ⑧ — 0 이어야 한다)"
+    if [ "$THREADS" = "1" ]; then
+      # 6차 §3-1 — PID 1 이 java 인지, schedstat 이 읽히는지, 판정 그룹의 스레드 수. 안 읽히면 스레드 지표가 통째로 빈다.
+      echo "## 백엔드 PID 1 comm: $(MSYS_NO_PATHCONV=1 docker exec shadowfit-backend cat /proc/1/comm 2>/dev/null | tr -d '\r') (java 여야 한다)"
+      thread_snapshot "$OUT/threads/gate_$1.txt"
+      echo "## schedstat 스냅샷 줄 수: $(wc -l < "$OUT/threads/gate_$1.txt") · ns 필드 비어 있는 줄: $(awk -F'\t' '$3==""' "$OUT/threads/gate_$1.txt" | wc -l) (0 이어야 한다)"
+      echo "## 판정 그룹 스레드 수 — tomcat(http-nio-8080-e) $(grep -c $'\thttp-nio-8080-e' "$OUT/threads/gate_$1.txt") · reactor(reactor-http-ep) $(grep -c $'\treactor-http-ep' "$OUT/threads/gate_$1.txt") · grpc-elg(grpc-default-wo) $(grep -c $'\tgrpc-default-wo' "$OUT/threads/gate_$1.txt")"
+    fi
   } > "$f" 2>&1
   echo "## 구조 게이트 회수 — $f"
   # 🔴 리눅스 Reactor Netty 는 epoll 이라 스레드 이름이 reactor-http-epoll-N 이다(nio 아님). 15자 절단까지
@@ -306,8 +337,10 @@ for b in $(seq 1 "$BLOCKS"); do
   echo "## 블록 $b 팔 순서: $order"
   for arm in $order; do
     switch_arm_conc "$arm"
-    # 팔 전환 직후 워밍업(c=1) → 배수 → 본판. 워밍업 잔여가 첫 칸에 섞이지 않게.
-    run_k6 1 "$WARMUP" "" >/dev/null
+    # 팔 전환 직후 워밍업(c=1) → 배수 → 본판. 워밍업 잔여가 첫 칸에 섞이지 않게. 6차는 칸 2개(C2 정착).
+    for _w in $(seq 1 "$WARMUP_CELLS"); do
+      run_k6 1 "$WARMUP" "" >/dev/null
+    done
     drain "warmup b$b/$arm" || true
     # c 순서는 칸(팔)마다 한 칸씩 회전 — «큰 c 뒤의 작은 c» 효과가 특정 c 에만 붙지 않게(§5-2).
     lorder=$(rotate $(( slot % NL )) "${LEVEL_ARRAY[@]}")
