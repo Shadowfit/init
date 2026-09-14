@@ -1,0 +1,52 @@
+# 구조 확인 게이트 (webclient-native) 2026-09-14T02:56:03Z
+## JVM 이 보는 코어 수 (system_cpu_count — /actuator/metrics 는 401 이라 prometheus 에서 읽는다)
+system_cpu_count 4.0
+## 백엔드 스레드 이름별 개수 (/proc/*/task/*/comm — 15자 절단)
+     10 http-nio-9090-e
+     10 http-nio-8080-e
+      9 grpc-default-ex
+      5 shadowfit-sched
+      4 reactor-http-ep
+      4 Catalina-utilit
+      3 grpc-default-wo
+      2 java
+      2 cat
+      2 C2 CompilerThre
+      1 task-8
+      1 task-7
+      1 task-6
+      1 task-5
+      1 task-4
+      1 task-3
+      1 task-2
+      1 task-1
+      1 sort
+      1 sh
+      1 parallel-4
+      1 parallel-3
+      1 parallel-2
+      1 parallel-1
+      1 mysql-cj-abando
+      1 http-nio-9090-P
+      1 http-nio-9090-A
+      1 http-nio-8080-P
+      1 http-nio-8080-A
+      1 grpc-server-con
+      1 grpc-default-bo
+      1 container-1
+      1 container-0
+      1 VM Thread
+      1 VM Periodic Tas
+      1 Signal Dispatch
+      1 Service Thread
+      1 Reference Handl
+      1 Notification Th
+      1 Monitor Deflati
+## 기대(§2): reactor-http-epoll|nio = max(cores,4) · grpc-default-worker-ELG = cores×2(🟡 확인 대상)
+## 🔴 comm 은 15자 절단이다 — reactor-http-epoll-N 은 «reactor-http-ep», grpc-default-worker-ELG-N 은 «grpc-default-wo» 로 보인다
+## AI 컨테이너: GRPC_MAX_WORKERS=40 AI_WORKER_COUNT=3
+## 백엔드: AI_CHANNEL_POOL_SIZE=3 OUTBOX_PUBLISHER_BATCH_SIZE=200
+## 백엔드: AI_CLIENT_TYPE=webclient AI_WEBCLIENT_CONTRACT=native
+## 재부착 req_len (마지막 5건, 경로 /api/v1/internal/analysis/native/reattach):
+req_len=114229 req_len=114229 req_len=114229 req_len=114229 req_len=114229 
+## nginx 본문 임시파일 버퍼링 경고 누계: 0 (5차 §5-3 ⑧ — 0 이어야 한다)

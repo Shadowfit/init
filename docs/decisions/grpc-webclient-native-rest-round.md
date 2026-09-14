@@ -1,6 +1,6 @@
 # 설계: 네이티브 REST 팔 — 4차의 «겹의 대가» 에서 겹을 빼면 무엇이 남나 (5차 라운드)
 
-상태: 📝 **설계 확정(§7 ①~⑨ 사용자 결정, 2026-09-14) — 착수 전.**
+상태: ✅ **실행 완료 (2026-09-14)** — 결과: [`ai-call-native-rest-aws-2026-09-14`](../../loadtest/results/ai-call-native-rest-aws-2026-09-14/README.md). **답: §6 의 세 번째 문장 — 겹은 대가가 아니었다**(B−C 겹침). REST 고유 비용은 c=8 +1.49~2.53 cpu-ms/호출(C−A 안 겹침, c=1 은 분해능 밖), **중첩 JSON 은 더 비싸다**(C−D −1.2~−1.9 안 겹침). 4차 §4-2 의 «구조적으로 예정» 은 틀렸고 그쪽에 정정을 달았다. 채택은 여전히 미결.
 작성: 2026-09-14
 배경: 4차([`grpc-webclient-concurrency-round.md`](./grpc-webclient-concurrency-round.md) · [결과 §4-2](../../loadtest/results/ai-call-concurrency-aws-2026-09-11/README.md))가
 webclient 팔의 대가를 **AI 쪽 호출당 +1~3 cpu-ms → 포화 처리량 −15%** 로 좁혔는데, 그 REST 미러는
@@ -266,3 +266,5 @@ VU=세션, 재부착 반복, 계정 교대 — 전부 4차 §5-1.
 - 2026-09-14: 사용자가 「REST 전용으로 다시 짜서 재면 어떻게 될까」 → 「설계하고 측정하자」. 이 문서 초안.
 - 2026-09-14: **§7 ①~⑨ 전부 (a) 로 사용자 확정** — 팔 4개 · c {1, 8} · nginx 메모리 버퍼 · AI 구현 (i) · D 는 `list[dict]` ·
   블록 5 · c7i.2xlarge 1대 · `ai.webclient.contract` 스위치 · calib 시작·끝. 착수는 §9 에 적는다.
+- 2026-09-14: **실행 완료** — `RUN_ID=nativerest-20260914-024859`, 칸 40개 전부 유효, 본 측정 1,641초(칸이 1~5초라 재기동 20회가 대부분).
+  결론은 §6 의 **세 번째 문장**. 서사 변화·정정은 [결과 README §7](../../loadtest/results/ai-call-native-rest-aws-2026-09-14/README.md).

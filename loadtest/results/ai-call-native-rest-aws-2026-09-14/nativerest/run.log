@@ -1,0 +1,285 @@
+# Spring→AI 동시성 축 — 2026-09-14T02:53:38Z
+BASE=http://localhost:8080 N=100 BLOCKS=5 WARMUP=10 LEVELS=[1 8] ARMS=[grpc webclient webclient-native webclient-nested] POOL=3
+## AI 재기동(오버레이 적용: GRPC_MAX_WORKERS=40 · mem_limit=6000m) (02:53:38)
+## 팔 전환 → grpc (client-type=grpc nginx-host=- contract=mirror) (02:53:54)
+   AI_CLIENT_TYPE=grpc · AI_NGINX_HOST=- · CONTRACT=mirror · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 8 여야 한다)
+## 계정 준비 16 개 (간격 1.3s)
+  ✅ 계정 16 개
+## 세 REST 팔 응답 동등성 스모크 (02:54:30)
+   mirror  HTTP 200  body=84,491 B  → {'success': True, 'rep_count': 4, 'already_active': False, 'message': '재부착 완료'}
+   native  HTTP 200  body=84,491 B  → {'success': True, 'rep_count': 4, 'already_active': True, 'message': '이미 분석 중'}
+   nested  HTTP 200  body=74,531 B  → {'success': True, 'rep_count': 4, 'already_active': True, 'message': '이미 분석 중'}
+   stop    HTTP 200 → {'success': True, 'message': '분석 중단 및 결과 보고 예약 완료.'}
+   ✅ mirror(1번째): success=true · already_active=false
+   ✅ native(2번째): success=true · already_active=true
+   ✅ nested(3번째) == native(2번째)
+   ✅ rep_count 가 initial_rep_count(4) 그대로 보존
+   ✅ 본문 크기: mirror = native > nested
+   버림 grpc c=1
+   버림 grpc c=8
+   배수 완료(discard/grpc) — stop 누적 9
+## 구조 게이트 회수 — /root/init/loadtest/results/ai-call-native-rest-aws-2026-09-14/nativerest/structure_grpc.txt
+   [grpc] reactor-http-* 이벤트루프 0 개 · grpc-default-worker-ELG 4 개 · JVM cores 4.0 (c 수준 [1 8] 이 이 문턱을 끼우는지 볼 것)
+## 팔 전환 → webclient (client-type=webclient nginx-host=ai-nginx contract=mirror) (02:54:47)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=mirror · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 8 여야 한다)
+   버림 webclient c=1
+   버림 webclient c=8
+   배수 완료(discard/webclient) — stop 누적 9
+## 구조 게이트 회수 — /root/init/loadtest/results/ai-call-native-rest-aws-2026-09-14/nativerest/structure_webclient.txt
+   [webclient] reactor-http-* 이벤트루프 4 개 · grpc-default-worker-ELG 3 개 · JVM cores 4.0 (c 수준 [1 8] 이 이 문턱을 끼우는지 볼 것)
+## 팔 전환 → webclient-native (client-type=webclient nginx-host=ai-nginx contract=native) (02:55:24)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=native · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 8 여야 한다)
+   버림 webclient-native c=1
+   버림 webclient-native c=8
+   배수 완료(discard/webclient-native) — stop 누적 9
+## 구조 게이트 회수 — /root/init/loadtest/results/ai-call-native-rest-aws-2026-09-14/nativerest/structure_webclient-native.txt
+   [webclient-native] reactor-http-* 이벤트루프 4 개 · grpc-default-worker-ELG 3 개 · JVM cores 4.0 (c 수준 [1 8] 이 이 문턱을 끼우는지 볼 것)
+## 팔 전환 → webclient-nested (client-type=webclient nginx-host=ai-nginx contract=nested) (02:56:03)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=nested · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 8 여야 한다)
+   버림 webclient-nested c=1
+   버림 webclient-nested c=8
+   배수 완료(discard/webclient-nested) — stop 누적 9
+## 구조 게이트 회수 — /root/init/loadtest/results/ai-call-native-rest-aws-2026-09-14/nativerest/structure_webclient-nested.txt
+   [webclient-nested] reactor-http-* 이벤트루프 4 개 · grpc-default-worker-ELG 3 개 · JVM cores 4.0 (c 수준 [1 8] 이 이 문턱을 끼우는지 볼 것)
+## nginx 본문 임시파일 버퍼링 0건 — ⑧ 확인
+## 블록 1 팔 순서:  grpc webclient webclient-native webclient-nested
+## 팔 전환 → grpc (client-type=grpc nginx-host=- contract=mirror) (02:56:39)
+   AI_CLIENT_TYPE=grpc · AI_NGINX_HOST=- · CONTRACT=mirror · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 8 여야 한다)
+   배수 완료(warmup b1/grpc) — stop 누적 1
+## 블록 1 grpc c 순서:  1 8
+     k6| k6 재부착 100/100 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b1_grpc_c1) — stop 누적 2
+   ✅ 칸 b1_grpc_c1 회수 — 벽시계 1.548s · k6 rc=0
+     k6| k6 재부착 800/800 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b1_grpc_c8) — stop 누적 10
+   ✅ 칸 b1_grpc_c8 회수 — 벽시계 3.290s · k6 rc=0
+## 팔 전환 → webclient (client-type=webclient nginx-host=ai-nginx contract=mirror) (02:57:53)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=mirror · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 8 여야 한다)
+   배수 완료(warmup b1/webclient) — stop 누적 1
+## 블록 1 webclient c 순서:  8 1
+     k6| k6 재부착 800/800 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b1_webclient_c8) — stop 누적 9
+   ✅ 칸 b1_webclient_c8 회수 — 벽시계 4.442s · k6 rc=0
+     k6| k6 재부착 100/100 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b1_webclient_c1) — stop 누적 10
+   ✅ 칸 b1_webclient_c1 회수 — 벽시계 1.344s · k6 rc=0
+## 팔 전환 → webclient-native (client-type=webclient nginx-host=ai-nginx contract=native) (02:59:03)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=native · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 8 여야 한다)
+   배수 완료(warmup b1/webclient-native) — stop 누적 1
+## 블록 1 webclient-native c 순서:  1 8
+     k6| k6 재부착 100/100 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b1_webclient-native_c1) — stop 누적 2
+   ✅ 칸 b1_webclient-native_c1 회수 — 벽시계 1.869s · k6 rc=0
+     k6| k6 재부착 800/800 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b1_webclient-native_c8) — stop 누적 10
+   ✅ 칸 b1_webclient-native_c8 회수 — 벽시계 3.768s · k6 rc=0
+## 팔 전환 → webclient-nested (client-type=webclient nginx-host=ai-nginx contract=nested) (03:00:15)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=nested · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 8 여야 한다)
+   배수 완료(warmup b1/webclient-nested) — stop 누적 1
+## 블록 1 webclient-nested c 순서:  8 1
+     k6| k6 재부착 800/800 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b1_webclient-nested_c8) — stop 누적 9
+   ✅ 칸 b1_webclient-nested_c8 회수 — 벽시계 4.533s · k6 rc=0
+     k6| k6 재부착 100/100 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b1_webclient-nested_c1) — stop 누적 10
+   ✅ 칸 b1_webclient-nested_c1 회수 — 벽시계 1.405s · k6 rc=0
+## 블록 2 팔 순서:  webclient webclient-native webclient-nested grpc
+## 팔 전환 → webclient (client-type=webclient nginx-host=ai-nginx contract=mirror) (03:01:30)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=mirror · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 8 여야 한다)
+   배수 완료(warmup b2/webclient) — stop 누적 1
+## 블록 2 webclient c 순서:  1 8
+     k6| k6 재부착 100/100 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b2_webclient_c1) — stop 누적 2
+   ✅ 칸 b2_webclient_c1 회수 — 벽시계 1.891s · k6 rc=0
+     k6| k6 재부착 800/800 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b2_webclient_c8) — stop 누적 10
+   ✅ 칸 b2_webclient_c8 회수 — 벽시계 3.944s · k6 rc=0
+## 팔 전환 → webclient-native (client-type=webclient nginx-host=ai-nginx contract=native) (03:02:45)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=native · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 8 여야 한다)
+   배수 완료(warmup b2/webclient-native) — stop 누적 1
+## 블록 2 webclient-native c 순서:  8 1
+     k6| k6 재부착 800/800 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b2_webclient-native_c8) — stop 누적 9
+   ✅ 칸 b2_webclient-native_c8 회수 — 벽시계 4.555s · k6 rc=0
+     k6| k6 재부착 100/100 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b2_webclient-native_c1) — stop 누적 10
+   ✅ 칸 b2_webclient-native_c1 회수 — 벽시계 1.337s · k6 rc=0
+## 팔 전환 → webclient-nested (client-type=webclient nginx-host=ai-nginx contract=nested) (03:03:57)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=nested · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 8 여야 한다)
+   배수 완료(warmup b2/webclient-nested) — stop 누적 1
+## 블록 2 webclient-nested c 순서:  1 8
+     k6| k6 재부착 100/100 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b2_webclient-nested_c1) — stop 누적 2
+   ✅ 칸 b2_webclient-nested_c1 회수 — 벽시계 1.935s · k6 rc=0
+     k6| k6 재부착 800/800 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b2_webclient-nested_c8) — stop 누적 10
+   ✅ 칸 b2_webclient-nested_c8 회수 — 벽시계 4.128s · k6 rc=0
+## 팔 전환 → grpc (client-type=grpc nginx-host=- contract=mirror) (03:05:13)
+   AI_CLIENT_TYPE=grpc · AI_NGINX_HOST=- · CONTRACT=mirror · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 8 여야 한다)
+   배수 완료(warmup b2/grpc) — stop 누적 1
+## 블록 2 grpc c 순서:  8 1
+     k6| k6 재부착 800/800 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b2_grpc_c8) — stop 누적 9
+   ✅ 칸 b2_grpc_c8 회수 — 벽시계 3.844s · k6 rc=0
+     k6| k6 재부착 100/100 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b2_grpc_c1) — stop 누적 10
+   ✅ 칸 b2_grpc_c1 회수 — 벽시계 1.147s · k6 rc=0
+## 블록 3 팔 순서:  webclient-native webclient-nested grpc webclient
+## 팔 전환 → webclient-native (client-type=webclient nginx-host=ai-nginx contract=native) (03:06:24)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=native · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 8 여야 한다)
+   배수 완료(warmup b3/webclient-native) — stop 누적 1
+## 블록 3 webclient-native c 순서:  1 8
+     k6| k6 재부착 100/100 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b3_webclient-native_c1) — stop 누적 2
+   ✅ 칸 b3_webclient-native_c1 회수 — 벽시계 2.086s · k6 rc=0
+     k6| k6 재부착 800/800 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b3_webclient-native_c8) — stop 누적 10
+   ✅ 칸 b3_webclient-native_c8 회수 — 벽시계 3.886s · k6 rc=0
+## 팔 전환 → webclient-nested (client-type=webclient nginx-host=ai-nginx contract=nested) (03:07:37)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=nested · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 8 여야 한다)
+   배수 완료(warmup b3/webclient-nested) — stop 누적 1
+## 블록 3 webclient-nested c 순서:  8 1
+     k6| k6 재부착 800/800 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b3_webclient-nested_c8) — stop 누적 9
+   ✅ 칸 b3_webclient-nested_c8 회수 — 벽시계 4.440s · k6 rc=0
+     k6| k6 재부착 100/100 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b3_webclient-nested_c1) — stop 누적 10
+   ✅ 칸 b3_webclient-nested_c1 회수 — 벽시계 1.436s · k6 rc=0
+## 팔 전환 → grpc (client-type=grpc nginx-host=- contract=mirror) (03:08:50)
+   AI_CLIENT_TYPE=grpc · AI_NGINX_HOST=- · CONTRACT=mirror · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 8 여야 한다)
+   배수 완료(warmup b3/grpc) — stop 누적 1
+## 블록 3 grpc c 순서:  1 8
+     k6| k6 재부착 100/100 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b3_grpc_c1) — stop 누적 2
+   ✅ 칸 b3_grpc_c1 회수 — 벽시계 1.556s · k6 rc=0
+     k6| k6 재부착 800/800 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b3_grpc_c8) — stop 누적 10
+   ✅ 칸 b3_grpc_c8 회수 — 벽시계 3.464s · k6 rc=0
+## 팔 전환 → webclient (client-type=webclient nginx-host=ai-nginx contract=mirror) (03:10:03)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=mirror · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 8 여야 한다)
+   배수 완료(warmup b3/webclient) — stop 누적 1
+## 블록 3 webclient c 순서:  8 1
+     k6| k6 재부착 800/800 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b3_webclient_c8) — stop 누적 9
+   ✅ 칸 b3_webclient_c8 회수 — 벽시계 4.325s · k6 rc=0
+     k6| k6 재부착 100/100 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b3_webclient_c1) — stop 누적 10
+   ✅ 칸 b3_webclient_c1 회수 — 벽시계 1.300s · k6 rc=0
+## 블록 4 팔 순서:  webclient-nested grpc webclient webclient-native
+## 팔 전환 → webclient-nested (client-type=webclient nginx-host=ai-nginx contract=nested) (03:11:16)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=nested · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 8 여야 한다)
+   배수 완료(warmup b4/webclient-nested) — stop 누적 1
+## 블록 4 webclient-nested c 순서:  1 8
+     k6| k6 재부착 100/100 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b4_webclient-nested_c1) — stop 누적 2
+   ✅ 칸 b4_webclient-nested_c1 회수 — 벽시계 1.975s · k6 rc=0
+     k6| k6 재부착 800/800 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b4_webclient-nested_c8) — stop 누적 10
+   ✅ 칸 b4_webclient-nested_c8 회수 — 벽시계 4.125s · k6 rc=0
+## 팔 전환 → grpc (client-type=grpc nginx-host=- contract=mirror) (03:12:32)
+   AI_CLIENT_TYPE=grpc · AI_NGINX_HOST=- · CONTRACT=mirror · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 8 여야 한다)
+   배수 완료(warmup b4/grpc) — stop 누적 1
+## 블록 4 grpc c 순서:  8 1
+     k6| k6 재부착 800/800 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b4_grpc_c8) — stop 누적 9
+   ✅ 칸 b4_grpc_c8 회수 — 벽시계 3.838s · k6 rc=0
+     k6| k6 재부착 100/100 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b4_grpc_c1) — stop 누적 10
+   ✅ 칸 b4_grpc_c1 회수 — 벽시계 1.116s · k6 rc=0
+## 팔 전환 → webclient (client-type=webclient nginx-host=ai-nginx contract=mirror) (03:13:43)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=mirror · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 8 여야 한다)
+   배수 완료(warmup b4/webclient) — stop 누적 1
+## 블록 4 webclient c 순서:  1 8
+     k6| k6 재부착 100/100 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b4_webclient_c1) — stop 누적 2
+   ✅ 칸 b4_webclient_c1 회수 — 벽시계 1.867s · k6 rc=0
+     k6| k6 재부착 800/800 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b4_webclient_c8) — stop 누적 10
+   ✅ 칸 b4_webclient_c8 회수 — 벽시계 3.898s · k6 rc=0
+## 팔 전환 → webclient-native (client-type=webclient nginx-host=ai-nginx contract=native) (03:14:56)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=native · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 8 여야 한다)
+   배수 완료(warmup b4/webclient-native) — stop 누적 1
+## 블록 4 webclient-native c 순서:  8 1
+     k6| k6 재부착 800/800 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b4_webclient-native_c8) — stop 누적 9
+   ✅ 칸 b4_webclient-native_c8 회수 — 벽시계 4.229s · k6 rc=0
+     k6| k6 재부착 100/100 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b4_webclient-native_c1) — stop 누적 10
+   ✅ 칸 b4_webclient-native_c1 회수 — 벽시계 1.269s · k6 rc=0
+## 블록 5 팔 순서:  grpc webclient webclient-native webclient-nested
+## 팔 전환 → grpc (client-type=grpc nginx-host=- contract=mirror) (03:16:11)
+   AI_CLIENT_TYPE=grpc · AI_NGINX_HOST=- · CONTRACT=mirror · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 8 여야 한다)
+   배수 완료(warmup b5/grpc) — stop 누적 1
+## 블록 5 grpc c 순서:  1 8
+     k6| k6 재부착 100/100 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b5_grpc_c1) — stop 누적 2
+   ✅ 칸 b5_grpc_c1 회수 — 벽시계 1.579s · k6 rc=0
+     k6| k6 재부착 800/800 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b5_grpc_c8) — stop 누적 10
+   ✅ 칸 b5_grpc_c8 회수 — 벽시계 3.308s · k6 rc=0
+## 팔 전환 → webclient (client-type=webclient nginx-host=ai-nginx contract=mirror) (03:17:21)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=mirror · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 8 여야 한다)
+   배수 완료(warmup b5/webclient) — stop 누적 1
+## 블록 5 webclient c 순서:  8 1
+     k6| k6 재부착 800/800 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b5_webclient_c8) — stop 누적 9
+   ✅ 칸 b5_webclient_c8 회수 — 벽시계 4.432s · k6 rc=0
+     k6| k6 재부착 100/100 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b5_webclient_c1) — stop 누적 10
+   ✅ 칸 b5_webclient_c1 회수 — 벽시계 1.294s · k6 rc=0
+## 팔 전환 → webclient-native (client-type=webclient nginx-host=ai-nginx contract=native) (03:18:32)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=native · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 8 여야 한다)
+   배수 완료(warmup b5/webclient-native) — stop 누적 1
+## 블록 5 webclient-native c 순서:  1 8
+     k6| k6 재부착 100/100 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b5_webclient-native_c1) — stop 누적 2
+   ✅ 칸 b5_webclient-native_c1 회수 — 벽시계 1.856s · k6 rc=0
+     k6| k6 재부착 800/800 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b5_webclient-native_c8) — stop 누적 10
+   ✅ 칸 b5_webclient-native_c8 회수 — 벽시계 3.886s · k6 rc=0
+## 팔 전환 → webclient-nested (client-type=webclient nginx-host=ai-nginx contract=nested) (03:19:47)
+   AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=nested · POOL=3
+   OUTBOX_BATCH=200 · JWT=14400s · GRPC_MAX_WORKERS=40 · AI mem=6000m → 검출기 풀 워커당 12 (합 36 ≥ 최대 c 8 여야 한다)
+   배수 완료(warmup b5/webclient-nested) — stop 누적 1
+## 블록 5 webclient-nested c 순서:  8 1
+     k6| k6 재부착 800/800 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b5_webclient-nested_c8) — stop 누적 9
+   ✅ 칸 b5_webclient-nested_c8 회수 — 벽시계 4.524s · k6 rc=0
+     k6| k6 재부착 100/100 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b5_webclient-nested_c1) — stop 누적 10
+   ✅ 칸 b5_webclient-nested_c1 회수 — 벽시계 1.387s · k6 rc=0
+## 완료 2026-09-14T03:20:59Z — 칸 40 개 · 스크레이프 80 개
+   집계: python loadtest/analyze_ai_call_concurrency.py /root/init/loadtest/results/ai-call-native-rest-aws-2026-09-14/nativerest
+/webclient-nested) — stop 누적 1
+## 블록 5 webclient-nested c 순서:  8 1
+     k6| k6 재부착 800/800 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 1/2
+   배수 완료(b5_webclient-nested_c8) — stop 누적 9
+   ✅ 칸 b5_webclient-nested_c8 회수 — 벽시계 4.524s · k6 rc=0
+     k6| k6 재부착 100/100 · start_fail 0(409: 0) · reattach_bad 0 · end_bad 0 · 계정 묶음 0/2
+   배수 완료(b5_webclient-nested_c1) — stop 누적 10
+   ✅ 칸 b5_webclient-nested_c1 회수 — 벽시계 1.387s · k6 rc=0
+## 완료 2026-09-14T03:20:59Z — 칸 40 개 · 스크레이프 80 개
+   집계: python loadtest/analyze_ai_call_concurrency.py /root/init/loadtest/results/ai-call-native-rest-aws-2026-09-14/nativerest

@@ -1,0 +1,5 @@
+ts	commit	ncpu	physical	python	model	axis	rate	unit	sec	note
+2026-09-14T02:53:38Z	3de16b9	8	4	3.9.25	Intel(R) Xeon(R) Platinum 8488C	cpu	12881896.7	iter/s	0.2329	
+2026-09-14T02:53:38Z	3de16b9	8	4	3.9.25	Intel(R) Xeon(R) Platinum 8488C	infer				ModuleNotFoundError("No module named 'cv2'")
+2026-09-14T03:20:59Z	3de16b9	8	4	3.9.25	Intel(R) Xeon(R) Platinum 8488C	cpu	13300187.9	iter/s	0.2256	
+2026-09-14T03:20:59Z	3de16b9	8	4	3.9.25	Intel(R) Xeon(R) Platinum 8488C	infer				ModuleNotFoundError("No module named 'cv2'")

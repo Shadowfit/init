@@ -1,0 +1,107 @@
+
+════════ 무인 측정 — nativerest-20260914-024859 ════════
+  결과   : /root/init/loadtest/results/ai-call-native-rest-aws-2026-09-14
+  S3     : s3://shadowfit-measure-055447613012/shadowfit/nativerest-20260914-024859
+  단계   : nativerest ridealong collect
+  자동정지: 꺼짐
+  S3 주기 동기화 시작 — 300초마다 → s3://shadowfit-measure-055447613012/shadowfit/nativerest-20260914-024859
+
+════════ nativerest ════════
+  ── 박스 보정 ──
+    박스   : 8 vCPU · 물리 4 · Intel(R) Xeon(R) Platinum 8488C
+    스택   : python 3.9.25 · 커밋 3de16b9
+    cpu    : 12,881,896.7 iter/s  (0.2329s)
+    infer  : 🔴 건너뜀 — ModuleNotFoundError("No module named 'cv2'")
+    🔴 판정에 안 쓰더라도 결과 디렉터리에 남길 것 (#255 축 0)
+  축 0 기록됨 → /root/init/loadtest/results/ai-call-native-rest-aws-2026-09-14/calibration.tsv (3줄)
+  ── 박스 보정 ──
+    박스   : 8 vCPU · 물리 4 · Intel(R) Xeon(R) Platinum 8488C
+    스택   : python 3.9.25 · 커밋 3de16b9
+    cpu    : 13,300,187.9 iter/s  (0.2256s)
+    infer  : 🔴 건너뜀 — ModuleNotFoundError("No module named 'cv2'")
+    🔴 판정에 안 쓰더라도 결과 디렉터리에 남길 것 (#255 축 0)
+  축 0 기록됨 → /root/init/loadtest/results/ai-call-native-rest-aws-2026-09-14/calibration.tsv (2줄)
+    AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=native · POOL=3
+    AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=nested · POOL=3
+    AI_CLIENT_TYPE=grpc · AI_NGINX_HOST=- · CONTRACT=mirror · POOL=3
+    AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=mirror · POOL=3
+    AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=nested · POOL=3
+    AI_CLIENT_TYPE=grpc · AI_NGINX_HOST=- · CONTRACT=mirror · POOL=3
+    AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=mirror · POOL=3
+    AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=native · POOL=3
+    AI_CLIENT_TYPE=grpc · AI_NGINX_HOST=- · CONTRACT=mirror · POOL=3
+    AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=mirror · POOL=3
+    AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=native · POOL=3
+    AI_CLIENT_TYPE=webclient · AI_NGINX_HOST=ai-nginx · CONTRACT=nested · POOL=3
+    # reattach (보조 — c=1 델타. 포화 구간은 큐잉 지배)
+    B−C 겹의 대가:
+    c=1   델타      [-2.086, 1.055] (블록 5)  🟡 겹침 — 판별 불가
+    c=8   델타      [-2.178, 2.915] (블록 5)  🟡 겹침 — 판별 불가
+    C−A REST 고유:
+    c=1   델타       [1.941, 3.781] (블록 5)  ✅ 안 겹침 — A·grpc 우세
+    c=8   델타       [5.399, 8.365] (블록 5)  ✅ 안 겹침 — A·grpc 우세
+    C−D 이중 인코딩:
+    c=1   델타      [-1.935, 0.924] (블록 5)  🟡 겹침 — 판별 불가
+    c=8   델타     [-4.654, -0.703] (블록 5)  ✅ 안 겹침 — C·native 우세
+    c=1   델타       [1.695, 3.200] (블록 5)  ✅ 안 겹침 — A·grpc 우세
+    c=8   델타       [6.049, 8.744] (블록 5)  ✅ 안 겹침 — A·grpc 우세
+    B−C 겹의 대가:
+    c=1   델타      [-2.049, 0.864] (블록 5)  🟡 겹침 — 판별 불가
+    c=8   델타      [-1.775, 3.284] (블록 5)  🟡 겹침 — 판별 불가
+    C−A REST 고유:
+    c=1   델타       [2.292, 3.774] (블록 5)  ✅ 안 겹침 — A·grpc 우세
+    c=8   델타       [5.521, 8.445] (블록 5)  ✅ 안 겹침 — A·grpc 우세
+    C−D 이중 인코딩:
+    c=1   델타      [-1.799, 0.874] (블록 5)  🟡 겹침 — 판별 불가
+    c=8   델타     [-4.811, -0.349] (블록 5)  ✅ 안 겹침 — C·native 우세
+    c=1   델타       [1.724, 3.156] (블록 5)  ✅ 안 겹침 — A·grpc 우세
+    c=8   델타       [6.670, 9.457] (블록 5)  ✅ 안 겹침 — A·grpc 우세
+    B−C 겹의 대가:
+    c=1   델타      [-7.648, 1.643] (블록 5)  🟡 겹침 — 판별 불가
+    c=8   델타     [-20.658, 0.276] (블록 5)  🟡 겹침 — 판별 불가
+    C−A REST 고유:
+    c=1   델타    [-11.013, 12.329] (블록 5)  🟡 겹침 — 판별 불가
+    c=8   델타     [16.369, 45.577] (블록 5)  ✅ 안 겹침 — A·grpc 우세
+    C−D 이중 인코딩:
+  nativerest 완료 — 팔 [grpc webclient webclient-native webclient-nested] × 블록 5 × c [1 8] × VU당 100 — /root/init/loadtest/results/ai-call-native-rest-aws-2026-09-14/nativerest/summary.txt
+  → nativerest : OK (1641초)
+
+════════ ridealong ════════
+  R3 수집 — 세 팔. ㉡ 에서 «hash join» 확인됨 (무대 최소 행수 16)
+  R1·R2 수집, R3 수집
+  → ridealong : OK (0초)
+
+════════ collect ════════
+# 측정 조건 — nativerest-20260914-024859
+생성          : 2026-09-14T03:21:01+00:00
+커밋          : 3de16b9d25ea42341aec88664da985172f821023 (HEAD)
+인스턴스 타입 : c7i.2xlarge
+인스턴스 ID   : i-0abb50749cead7361
+AZ / 리전     : ap-northeast-2c / ap-northeast-2
+vCPU / RAM    : 8 / 15GB
+커널          : 6.1.182-227.379.amzn2023.x86_64
+디스크        : 100G 여유 92G
+MySQL         : 8.0.46
+버퍼풀        : 2147483648
+WRITER_MAX_SEC: 14400
+S3 결과       : s3://shadowfit-measure-055447613012/shadowfit/nativerest-20260914-024859
+
+# 단계
+phase	status	seconds	started_at
+nativerest	OK	1641	2026-09-14T02:53:38+00:00
+ridealong	OK	0	2026-09-14T03:21:00+00:00
+
+⚠️ 절대 소요 시간을 «운영에서 N분» 으로 인용 금지 — 하드웨어 종속(설계 §5)
+⚠️ rehearsal/ 의 수치는 측정값이 아니다 — 경로 점검용 축소 판
+  → collect : OK (0초)
+
+════════ 최종 업로드 ════════
+  ✅ s3://shadowfit-measure-055447613012/shadowfit/nativerest-20260914-024859
+
+════════ 단계 요약 ════════
+phase	status	seconds	started_at
+nativerest	OK	1641	2026-09-14T02:53:38+00:00
+ridealong	OK	0	2026-09-14T03:21:00+00:00
+collect	OK	0	2026-09-14T03:21:01+00:00
+  자동 정지 꺼짐 — 회수 확인 후 직접 정지할 것. AWS-RIDE-ALONG.md §5 체크리스트를 볼 것
+run_all rc=0

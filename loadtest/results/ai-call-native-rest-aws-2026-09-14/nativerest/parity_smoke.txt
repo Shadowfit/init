@@ -1,0 +1,9 @@
+mirror  HTTP 200  body=84,491 B  → {'success': True, 'rep_count': 4, 'already_active': False, 'message': '재부착 완료'}
+native  HTTP 200  body=84,491 B  → {'success': True, 'rep_count': 4, 'already_active': True, 'message': '이미 분석 중'}
+nested  HTTP 200  body=74,531 B  → {'success': True, 'rep_count': 4, 'already_active': True, 'message': '이미 분석 중'}
+stop    HTTP 200 → {'success': True, 'message': '분석 중단 및 결과 보고 예약 완료.'}
+✅ mirror(1번째): success=true · already_active=false
+✅ native(2번째): success=true · already_active=true
+✅ nested(3번째) == native(2번째)
+✅ rep_count 가 initial_rep_count(4) 그대로 보존
+✅ 본문 크기: mirror = native > nested

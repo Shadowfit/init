@@ -1,0 +1,1183 @@
+
+──── root SSH (다른 박스가 이 박스로 붙는 라운드용, #642) ────
+  ec2-user 의 authorized_keys 를 root 로 복사, PermitRootLogin prohibit-password
+
+──── 패키지 ────
+  buildx 0.12.1 → 0.19.3 으로 올린다 (compose build 는 0.17+ 를 요구한다)
+
+──── 저장소 — https://github.com/Shadowfit/init.git @ 3de16b9d25ea42341aec88664da985172f821023 ────
+  커밋: 3de16b9
+
+──── .env ────
+/root/bootstrap.sh: line 225: compose: command not found
+/root/bootstrap.sh: line 225: shadowfit-ai: command not found
+/root/bootstrap.sh: line 225: INTERNAL_API_TOKEN:?: command not found
+/root/bootstrap.sh: line 225: MYSQL_EXPORTER_PASSWORD: command not found
+/root/bootstrap.sh: line 225: :?: command not found
+/root/bootstrap.sh: line 225: shadowfit-ai: command not found
+/root/bootstrap.sh: line 225: INTERNAL_API_TOKEN: command not found
+  MYSQL_ROOT_PASSWORD 를 rig 기본값과 맞췄다 (+ 해석만 되면 되는 변수들)
+  compose 해석 확인 ✅ (mysql 만 띄워도 파일 전체가 해석된다)
+  AI_PUBLIC_TOKEN=Naq8lWw27OXiEU7K10ka0gJoDgrlTN
+  INTERNAL_API_TOKEN=we9yf8eIld2FKSN2GpofjIREei8ATRK
+
+──── MySQL 컨테이너 ────
+time="2026-09-14T02:49:50Z" level=warning msg="/root/init/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"
+ Image mysql:8.0 Pulling 
+ edf85873f64e Pulling fs layer 0B
+ 6ef6c7b50a93 Pulling fs layer 0B
+ e3e5d1ac74c1 Pulling fs layer 0B
+ 0d74d296605b Pulling fs layer 0B
+ 297d04cfe470 Pulling fs layer 0B
+ 4c8a3e0d4e4b Pulling fs layer 0B
+ a63160a5eda1 Pulling fs layer 0B
+ 7534d1db9f8d Pulling fs layer 0B
+ 49ec2dab01d9 Pulling fs layer 0B
+ ab24264a27e9 Pulling fs layer 0B
+ 96d30d9fbee8 Pulling fs layer 0B
+ 7534d1db9f8d Waiting 0B
+ 96d30d9fbee8 Waiting 0B
+ a63160a5eda1 Waiting 0B
+ 297d04cfe470 Waiting 0B
+ 4c8a3e0d4e4b Waiting 0B
+ 49ec2dab01d9 Waiting 0B
+ ab24264a27e9 Waiting 0B
+ 0d74d296605b Waiting 0B
+ 6ef6c7b50a93 Downloading 884B
+ 6ef6c7b50a93 Verifying Checksum 0B
+ 6ef6c7b50a93 Download complete 0B
+ edf85873f64e Downloading 474.5kB
+ e3e5d1ac74c1 Downloading 15.75kB
+ e3e5d1ac74c1 Download complete 0B
+ edf85873f64e Downloading 46.09MB
+ edf85873f64e Verifying Checksum 0B
+ edf85873f64e Download complete 0B
+ edf85873f64e Extracting 491.5kB
+ edf85873f64e Extracting 6.39MB
+ edf85873f64e Extracting 10.81MB
+ edf85873f64e Extracting 20.15MB
+ 0d74d296605b Downloading 64.93kB
+ edf85873f64e Extracting 29.98MB
+ 0d74d296605b Verifying Checksum 0B
+ 0d74d296605b Download complete 0B
+ 297d04cfe470 Download complete 0B
+ edf85873f64e Extracting 40.8MB
+ 4c8a3e0d4e4b Downloading 335B
+ 4c8a3e0d4e4b Verifying Checksum 0B
+ 4c8a3e0d4e4b Download complete 0B
+ edf85873f64e Extracting 44.24MB
+ edf85873f64e Extracting 47.31MB
+ edf85873f64e Pull complete 0B
+ 6ef6c7b50a93 Extracting 884B
+ 6ef6c7b50a93 Extracting 884B
+ 6ef6c7b50a93 Pull complete 0B
+ e3e5d1ac74c1 Extracting 32.77kB
+ e3e5d1ac74c1 Extracting 783.6kB
+ e3e5d1ac74c1 Extracting 783.6kB
+ e3e5d1ac74c1 Pull complete 0B
+ 0d74d296605b Extracting 65.54kB
+ 0d74d296605b Extracting 6.095MB
+ 0d74d296605b Extracting 6.173MB
+ 0d74d296605b Pull complete 0B
+ 297d04cfe470 Extracting 2.607kB
+ 297d04cfe470 Extracting 2.607kB
+ 297d04cfe470 Pull complete 0B
+ 4c8a3e0d4e4b Extracting 335B
+ 4c8a3e0d4e4b Extracting 335B
+ a63160a5eda1 Downloading 507.3kB
+ 4c8a3e0d4e4b Pull complete 0B
+ 7534d1db9f8d Downloading 316B
+ 7534d1db9f8d Verifying Checksum 0B
+ 7534d1db9f8d Download complete 0B
+ a63160a5eda1 Downloading 38.6MB
+ 49ec2dab01d9 Downloading 535.9kB
+ a63160a5eda1 Verifying Checksum 0B
+ a63160a5eda1 Download complete 0B
+ a63160a5eda1 Extracting 524.3kB
+ 49ec2dab01d9 Downloading 58.41MB
+ a63160a5eda1 Extracting 9.437MB
+ 49ec2dab01d9 Downloading 116.7MB
+ 49ec2dab01d9 Verifying Checksum 0B
+ 49ec2dab01d9 Download complete 0B
+ a63160a5eda1 Extracting 17.3MB
+ a63160a5eda1 Extracting 27.26MB
+ ab24264a27e9 Downloading 3.502kB
+ ab24264a27e9 Download complete 0B
+ a63160a5eda1 Extracting 36.18MB
+ a63160a5eda1 Extracting 43.52MB
+ 96d30d9fbee8 Downloading 120B
+ 96d30d9fbee8 Verifying Checksum 0B
+ 96d30d9fbee8 Download complete 0B
+ a63160a5eda1 Extracting 49.93MB
+ a63160a5eda1 Pull complete 0B
+ 7534d1db9f8d Extracting 316B
+ 7534d1db9f8d Extracting 316B
+ 7534d1db9f8d Pull complete 0B
+ 49ec2dab01d9 Extracting 557.1kB
+ 49ec2dab01d9 Extracting 9.47MB
+ 49ec2dab01d9 Extracting 18.38MB
+ 49ec2dab01d9 Extracting 24.51MB
+ 49ec2dab01d9 Extracting 30.64MB
+ 49ec2dab01d9 Extracting 32.31MB
+ 49ec2dab01d9 Extracting 33.42MB
+ 49ec2dab01d9 Extracting 34.54MB
+ 49ec2dab01d9 Extracting 35.65MB
+ 49ec2dab01d9 Extracting 36.77MB
+ 49ec2dab01d9 Extracting 37.88MB
+ 49ec2dab01d9 Extracting 38.99MB
+ 49ec2dab01d9 Extracting 40.11MB
+ 49ec2dab01d9 Extracting 41.22MB
+ 49ec2dab01d9 Extracting 42.34MB
+ 49ec2dab01d9 Extracting 43.45MB
+ 49ec2dab01d9 Extracting 44.56MB
+ 49ec2dab01d9 Extracting 45.68MB
+ 49ec2dab01d9 Extracting 46.79MB
+ 49ec2dab01d9 Extracting 49.58MB
+ 49ec2dab01d9 Extracting 54.03MB
+ 49ec2dab01d9 Extracting 61.83MB
+ 49ec2dab01d9 Extracting 69.63MB
+ 49ec2dab01d9 Extracting 77.99MB
+ 49ec2dab01d9 Extracting 86.9MB
+ 49ec2dab01d9 Extracting 96.93MB
+ 49ec2dab01d9 Extracting 106.4MB
+ 49ec2dab01d9 Extracting 116.4MB
+ 49ec2dab01d9 Extracting 126.5MB
+ 49ec2dab01d9 Extracting 129.4MB
+ 49ec2dab01d9 Pull complete 0B
+ ab24264a27e9 Extracting 5.327kB
+ ab24264a27e9 Extracting 5.327kB
+ ab24264a27e9 Pull complete 0B
+ 96d30d9fbee8 Extracting 120B
+ 96d30d9fbee8 Extracting 120B
+ 96d30d9fbee8 Pull complete 0B
+ Image mysql:8.0 Pulled 
+ Volume init_mysql_data Creating 
+ Network init_shadowfit-net Creating 
+ Network init_shadowfit-net Creating 
+ Volume init_mysql_data Creating 
+ Volume init_mysql_data Created 
+ Volume init_mysql_data Created 
+ Network init_shadowfit-net Created 
+ Network init_shadowfit-net Created 
+ Container shadowfit-mysql Creating 
+ Container shadowfit-mysql Created 
+ Container shadowfit-mysql Starting 
+ Container shadowfit-mysql Started 
+  준비 대기... — 떴다 (TCP 인증 질의 연속 2회)
+
+──── percona-toolkit 이미지 ────
+docker.io/percona/percona-toolkit:latest
+
+──── 스키마 — Flyway 마이그레이션 ────
+Unable to find image 'flyway/flyway:latest' locally
+latest: Pulling from flyway/flyway
+e51aee9c82ec: Pulling fs layer
+e3a8f7a3bd85: Pulling fs layer
+4e10c7b12302: Pulling fs layer
+4f4fb700ef54: Pulling fs layer
+25b46b2a13c4: Pulling fs layer
+87bc1b731b50: Pulling fs layer
+8587968553d1: Pulling fs layer
+4f4fb700ef54: Waiting
+8587968553d1: Waiting
+25b46b2a13c4: Waiting
+87bc1b731b50: Waiting
+e3a8f7a3bd85: Verifying Checksum
+e3a8f7a3bd85: Download complete
+e51aee9c82ec: Verifying Checksum
+e51aee9c82ec: Download complete
+4e10c7b12302: Verifying Checksum
+4e10c7b12302: Download complete
+4f4fb700ef54: Verifying Checksum
+4f4fb700ef54: Download complete
+25b46b2a13c4: Verifying Checksum
+25b46b2a13c4: Download complete
+e51aee9c82ec: Pull complete
+87bc1b731b50: Verifying Checksum
+87bc1b731b50: Download complete
+e3a8f7a3bd85: Pull complete
+4e10c7b12302: Pull complete
+4f4fb700ef54: Pull complete
+25b46b2a13c4: Pull complete
+87bc1b731b50: Pull complete
+8587968553d1: Verifying Checksum
+8587968553d1: Download complete
+8587968553d1: Pull complete
+Digest: sha256:83a01b5d4377954d5e618baddd0d4e7e312613526b8a75a06d22d9f86b9df856
+Status: Downloaded newer image for flyway/flyway:latest
+WARNING: Storing migrations in 'sql' is not recommended and default scanning of this location may be deprecated in a future release
+Flyway OSS Edition 13.6.0 by Redgate
+
+See release notes here: https://help.red-gate.com/help/flyway-cli13/help_6.aspx?topic=release-notes-and-older-versions/release-notes-for-flyway-engine
+Database: ******** (MySQL 8.0)
+Schema history table `shadowfit`.`flyway_schema_history` does not exist yet
+Successfully validated 14 migrations (execution time 00:00.021s)
+Creating Schema History table `shadowfit`.`flyway_schema_history` ...
+Current version of schema `shadowfit`: << Empty Schema >>
+Migrating schema `shadowfit` to version "1 - baseline"
+Migrating schema `shadowfit` to version "2 - seed master data"
+Migrating schema `shadowfit` to version "3 - add refresh token rotation"
+Migrating schema `shadowfit` to version "4 - seed squat reference"
+Migrating schema `shadowfit` to version "5 - feedback log rep key"
+Migrating schema `shadowfit` to version "6 - add pose data idempotency key"
+Migrating schema `shadowfit` to version "7 - hash refresh token"
+Migrating schema `shadowfit` to version "8 - add session nonce"
+Migrating schema `shadowfit` to version "9 - normalize pose created at"
+Migrating schema `shadowfit` to version "10 - add categories table"
+Migrating schema `shadowfit` to version "11 - add goals table"
+Migrating schema `shadowfit` to version "12 - add group tables"
+Migrating schema `shadowfit` to version "13 - add trainer assignments table"
+Migrating schema `shadowfit` to version "14 - add ai instance endpoint"
+Successfully applied 14 migrations to schema `shadowfit`, now at version v14 (execution time 00:01.098s)
+  ✅ 스키마 생성됨 — 從 R1·R3 이 잴 대상이 생겼다
+
+──── Spring·AI 빌드 (10~25분) ────
+time="2026-09-14T02:50:44Z" level=warning msg="/root/init/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"
+ Image init-shadowfit-ai Building 
+ Image init-shadowfit-backend Building 
+#1 [internal] load local bake definitions
+#1 reading from stdin 949B done
+#1 DONE 0.0s
+
+#2 [shadowfit-backend internal] load build definition from Dockerfile
+#2 transferring dockerfile: 783B done
+#2 DONE 0.0s
+
+#3 [shadowfit-ai internal] load build definition from Dockerfile
+#3 transferring dockerfile: 775B done
+#3 DONE 0.0s
+
+#4 [shadowfit-ai internal] load metadata for docker.io/library/python:3.12-slim
+#4 ...
+
+#5 [shadowfit-backend internal] load metadata for docker.io/library/gradle:jdk21
+#5 DONE 1.7s
+
+#6 [shadowfit-backend internal] load metadata for docker.io/library/eclipse-temurin:21-jre
+#6 DONE 1.7s
+
+#4 [shadowfit-ai internal] load metadata for docker.io/library/python:3.12-slim
+#4 DONE 1.7s
+
+#7 [shadowfit-backend internal] load .dockerignore
+#7 transferring context: 172B done
+#7 DONE 0.0s
+
+#8 [shadowfit-ai internal] load .dockerignore
+#8 transferring context: 414B done
+#8 DONE 0.0s
+
+#9 [shadowfit-ai internal] load build context
+#9 DONE 0.0s
+
+#10 [shadowfit-ai 1/9] FROM docker.io/library/python:3.12-slim@sha256:78387bc3881b8273120a12ebe6c1ab22b018ccc2c9adf565ae1ac9b536e184ea
+#10 resolve docker.io/library/python:3.12-slim@sha256:78387bc3881b8273120a12ebe6c1ab22b018ccc2c9adf565ae1ac9b536e184ea
+#10 ...
+
+#11 [shadowfit-backend internal] load build context
+#11 transferring context: 2.26MB 0.0s done
+#11 DONE 0.1s
+
+#10 [shadowfit-ai 1/9] FROM docker.io/library/python:3.12-slim@sha256:78387bc3881b8273120a12ebe6c1ab22b018ccc2c9adf565ae1ac9b536e184ea
+#10 resolve docker.io/library/python:3.12-slim@sha256:78387bc3881b8273120a12ebe6c1ab22b018ccc2c9adf565ae1ac9b536e184ea 0.1s done
+#10 sha256:78387bc3881b8273120a12ebe6c1ab22b018ccc2c9adf565ae1ac9b536e184ea 10.37kB / 10.37kB done
+#10 sha256:2fe5997d249a808b8eeea52c58a1dbffbba28754dc11699ef5c029f2d818ce79 1.75kB / 1.75kB done
+#10 sha256:ec7d6c95cd3692a2e2d228a8b1ca74e4025b54121fcc4c5da6f09cfa473315ad 5.66kB / 5.66kB done
+#10 ...
+
+#9 [shadowfit-ai internal] load build context
+#9 transferring context: 54.56MB 0.2s done
+#9 DONE 0.2s
+
+#12 [shadowfit-backend builder 1/5] FROM docker.io/library/gradle:jdk21@sha256:42476a6a7f47c351b67769e87fcf897a97b07d3859b8a893fb44e8bc8431b02a
+#12 resolve docker.io/library/gradle:jdk21@sha256:42476a6a7f47c351b67769e87fcf897a97b07d3859b8a893fb44e8bc8431b02a 0.0s done
+#12 sha256:42476a6a7f47c351b67769e87fcf897a97b07d3859b8a893fb44e8bc8431b02a 5.23kB / 5.23kB done
+#12 sha256:08f5f5b2a2b0d2a960804adef3bd1783c5f2c20f42db5e290dc05d9529d11ae2 0B / 41.60MB 0.4s
+#12 sha256:6a7c4f6d8c3863707c14af40aad062db2bb477271491c7d3e99e03394dd261e3 0B / 394B 0.4s
+#12 sha256:df76245fe3dab61368b5c851ed001fd50dd765898254fedb0da3cf8597b3d3e6 30.35MB / 30.35MB 0.3s done
+#12 sha256:58861191fe658b5554b9c2da0a2f45a90ef865b1d997c3deb265e0551ee41c65 3.08kB / 3.08kB done
+#12 sha256:58cdf053bd50ad56a00c73711264d05d28d261e3d1fc05bafa31983adb067774 13.68kB / 13.68kB done
+#12 sha256:d57d902e9e5e50b186e039ba7a695381288b18e88e6de841d7be9595fa2c24c1 0B / 158.12MB 0.4s
+#12 sha256:08f5f5b2a2b0d2a960804adef3bd1783c5f2c20f42db5e290dc05d9529d11ae2 41.60MB / 41.60MB 0.5s
+#12 sha256:08f5f5b2a2b0d2a960804adef3bd1783c5f2c20f42db5e290dc05d9529d11ae2 41.60MB / 41.60MB 0.6s done
+#12 sha256:6a7c4f6d8c3863707c14af40aad062db2bb477271491c7d3e99e03394dd261e3 394B / 394B 0.6s done
+#12 sha256:edecb4850e95bd8045aa3cf36a1944742ca284a3d9a0f10a5fd78129072511a9 0B / 157B 0.6s
+#12 sha256:1c1b6537a2163c06983288b0b7fe20c52b66723236c13c456e354694461c546f 0B / 2.46kB 0.6s
+#12 sha256:d57d902e9e5e50b186e039ba7a695381288b18e88e6de841d7be9595fa2c24c1 57.67MB / 158.12MB 0.7s
+#12 extracting sha256:08f5f5b2a2b0d2a960804adef3bd1783c5f2c20f42db5e290dc05d9529d11ae2 0.1s
+#12 sha256:d57d902e9e5e50b186e039ba7a695381288b18e88e6de841d7be9595fa2c24c1 115.34MB / 158.12MB 0.8s
+#12 sha256:edecb4850e95bd8045aa3cf36a1944742ca284a3d9a0f10a5fd78129072511a9 157B / 157B 0.8s done
+#12 sha256:1c1b6537a2163c06983288b0b7fe20c52b66723236c13c456e354694461c546f 2.46kB / 2.46kB 0.8s done
+#12 sha256:53cc7c09265e1ba56768413ada21a025a9fdd8495fd0fad64e94e5e718262153 0B / 1.29kB 0.8s
+#12 sha256:4f4fb700ef54461cfa02571ae0db9a0dc1e0cdb5577484a6d75e68dc38e8acc1 0B / 32B 0.8s
+#12 sha256:d57d902e9e5e50b186e039ba7a695381288b18e88e6de841d7be9595fa2c24c1 158.12MB / 158.12MB 0.9s
+#12 sha256:53cc7c09265e1ba56768413ada21a025a9fdd8495fd0fad64e94e5e718262153 1.29kB / 1.29kB 1.0s
+#12 sha256:4f4fb700ef54461cfa02571ae0db9a0dc1e0cdb5577484a6d75e68dc38e8acc1 32B / 32B 1.0s
+#12 sha256:d57d902e9e5e50b186e039ba7a695381288b18e88e6de841d7be9595fa2c24c1 158.12MB / 158.12MB 1.2s done
+#12 sha256:53cc7c09265e1ba56768413ada21a025a9fdd8495fd0fad64e94e5e718262153 1.29kB / 1.29kB 1.3s done
+#12 sha256:4f4fb700ef54461cfa02571ae0db9a0dc1e0cdb5577484a6d75e68dc38e8acc1 32B / 32B 1.3s done
+#12 sha256:bd9fa12ebfb5cdcc1ffc4046bd1dcac6d97789629cd3511f960e39d23f2f4476 0B / 72.44MB 1.3s
+#12 sha256:542c964e4fc7eb73884e8d73356e2ce91d3b3ee99361489bf47d6bfe7bdf916e 0B / 151.35MB 1.3s
+#12 sha256:bd9fa12ebfb5cdcc1ffc4046bd1dcac6d97789629cd3511f960e39d23f2f4476 7.34MB / 72.44MB 1.5s
+#12 sha256:542c964e4fc7eb73884e8d73356e2ce91d3b3ee99361489bf47d6bfe7bdf916e 10.49MB / 151.35MB 1.5s
+#12 sha256:15008b8b2a63507e969cb6e109083bc7c0d255dc15128d018ad36bb17eccd65a 25.62kB / 25.62kB 1.5s done
+#12 sha256:bd9fa12ebfb5cdcc1ffc4046bd1dcac6d97789629cd3511f960e39d23f2f4476 53.48MB / 72.44MB 1.6s
+#12 sha256:542c964e4fc7eb73884e8d73356e2ce91d3b3ee99361489bf47d6bfe7bdf916e 66.06MB / 151.35MB 1.6s
+#12 sha256:bd9fa12ebfb5cdcc1ffc4046bd1dcac6d97789629cd3511f960e39d23f2f4476 72.44MB / 72.44MB 1.7s
+#12 sha256:542c964e4fc7eb73884e8d73356e2ce91d3b3ee99361489bf47d6bfe7bdf916e 120.59MB / 151.35MB 1.7s
+#12 sha256:bd9fa12ebfb5cdcc1ffc4046bd1dcac6d97789629cd3511f960e39d23f2f4476 72.44MB / 72.44MB 1.7s done
+#12 sha256:542c964e4fc7eb73884e8d73356e2ce91d3b3ee99361489bf47d6bfe7bdf916e 151.35MB / 151.35MB 1.8s
+#12 extracting sha256:08f5f5b2a2b0d2a960804adef3bd1783c5f2c20f42db5e290dc05d9529d11ae2 1.3s done
+#12 sha256:542c964e4fc7eb73884e8d73356e2ce91d3b3ee99361489bf47d6bfe7bdf916e 151.35MB / 151.35MB 3.1s done
+#12 extracting sha256:6a7c4f6d8c3863707c14af40aad062db2bb477271491c7d3e99e03394dd261e3 done
+#12 extracting sha256:df76245fe3dab61368b5c851ed001fd50dd765898254fedb0da3cf8597b3d3e6
+#12 extracting sha256:df76245fe3dab61368b5c851ed001fd50dd765898254fedb0da3cf8597b3d3e6 0.6s done
+#12 extracting sha256:d57d902e9e5e50b186e039ba7a695381288b18e88e6de841d7be9595fa2c24c1
+#12 ...
+
+#13 [shadowfit-backend stage-1 1/3] FROM docker.io/library/eclipse-temurin:21-jre@sha256:a80c51f2d09a3e7e00d521f1c817bbceb6b3be94109b4a784d46078099882dda
+#13 resolve docker.io/library/eclipse-temurin:21-jre@sha256:a80c51f2d09a3e7e00d521f1c817bbceb6b3be94109b4a784d46078099882dda 0.0s done
+#13 sha256:e5ff175a2fe9e650d8154097bfd887e30789847c0dbc47b0cfc1e69445aec9b5 8.72kB / 8.72kB done
+#13 sha256:677919d2f5cfc06a966b17d7b1b06c177fdf31928c60bcf20ac3016bca8a90b8 2.13kB / 2.13kB done
+#13 sha256:08f5f5b2a2b0d2a960804adef3bd1783c5f2c20f42db5e290dc05d9529d11ae2 41.60MB / 41.60MB 0.6s done
+#13 sha256:6a7c4f6d8c3863707c14af40aad062db2bb477271491c7d3e99e03394dd261e3 394B / 394B 0.6s done
+#13 sha256:a80c51f2d09a3e7e00d521f1c817bbceb6b3be94109b4a784d46078099882dda 5.92kB / 5.92kB done
+#13 sha256:57263cd37cf7a6b82cae610fd33cdccc25f8cf634134f3ddb9eeb077d1572b67 26.43MB / 26.43MB 1.9s done
+#13 sha256:65d8aee78b874a55d7c436a9e8fd8c471b683d14698b35e4cc585ccd47cea8c0 159B / 159B 3.1s done
+#13 extracting sha256:6a7c4f6d8c3863707c14af40aad062db2bb477271491c7d3e99e03394dd261e3 done
+#13 sha256:29bc158c92a65d8aa39021e60c4a5e190e00e29e5cce513a7ffe5b592305ef8e 53.10MB / 53.10MB 3.8s done
+#13 extracting sha256:57263cd37cf7a6b82cae610fd33cdccc25f8cf634134f3ddb9eeb077d1572b67 0.6s done
+#13 sha256:e9f7426d5fbdb9614d4b3efb22b2a44a2cde4f2713423a7ebfc26fc006f2ef8c 2.46kB / 2.46kB 3.8s done
+#13 extracting sha256:29bc158c92a65d8aa39021e60c4a5e190e00e29e5cce513a7ffe5b592305ef8e 0.7s done
+#13 extracting sha256:65d8aee78b874a55d7c436a9e8fd8c471b683d14698b35e4cc585ccd47cea8c0 done
+#13 extracting sha256:e9f7426d5fbdb9614d4b3efb22b2a44a2cde4f2713423a7ebfc26fc006f2ef8c done
+#13 DONE 4.7s
+
+#12 [shadowfit-backend builder 1/5] FROM docker.io/library/gradle:jdk21@sha256:42476a6a7f47c351b67769e87fcf897a97b07d3859b8a893fb44e8bc8431b02a
+#12 extracting sha256:d57d902e9e5e50b186e039ba7a695381288b18e88e6de841d7be9595fa2c24c1 1.3s done
+#12 extracting sha256:edecb4850e95bd8045aa3cf36a1944742ca284a3d9a0f10a5fd78129072511a9
+#12 extracting sha256:edecb4850e95bd8045aa3cf36a1944742ca284a3d9a0f10a5fd78129072511a9 done
+#12 extracting sha256:1c1b6537a2163c06983288b0b7fe20c52b66723236c13c456e354694461c546f
+#12 extracting sha256:1c1b6537a2163c06983288b0b7fe20c52b66723236c13c456e354694461c546f done
+#12 extracting sha256:53cc7c09265e1ba56768413ada21a025a9fdd8495fd0fad64e94e5e718262153
+#12 extracting sha256:53cc7c09265e1ba56768413ada21a025a9fdd8495fd0fad64e94e5e718262153 done
+#12 ...
+
+#10 [shadowfit-ai 1/9] FROM docker.io/library/python:3.12-slim@sha256:78387bc3881b8273120a12ebe6c1ab22b018ccc2c9adf565ae1ac9b536e184ea
+#10 sha256:6310eb16bf4251731feab01e8f633bf5e2d75a657ccad97f420b1f83cce457be 29.79MB / 29.79MB 3.3s done
+#10 extracting sha256:6310eb16bf4251731feab01e8f633bf5e2d75a657ccad97f420b1f83cce457be 0.7s done
+#10 sha256:dbd0b7849e6c06b61e1fa6b7ffe053f246ce0075890620e3db64b47bb662433a 4.27MB / 4.27MB 4.0s done
+#10 sha256:1560cfed01dc4c72c07f789d860078d74466a1f9a26b33a2e35d887b5f90dd3f 12.12MB / 12.12MB 4.2s done
+#10 sha256:56235e4245636e401a28cf88944d543b29ee028ae3b6c27e03d6b43e7b4eac5f 249B / 249B 4.3s done
+#10 extracting sha256:dbd0b7849e6c06b61e1fa6b7ffe053f246ce0075890620e3db64b47bb662433a 0.1s done
+#10 extracting sha256:1560cfed01dc4c72c07f789d860078d74466a1f9a26b33a2e35d887b5f90dd3f 0.4s done
+#10 extracting sha256:56235e4245636e401a28cf88944d543b29ee028ae3b6c27e03d6b43e7b4eac5f done
+#10 DONE 6.5s
+
+#12 [shadowfit-backend builder 1/5] FROM docker.io/library/gradle:jdk21@sha256:42476a6a7f47c351b67769e87fcf897a97b07d3859b8a893fb44e8bc8431b02a
+#12 extracting sha256:4f4fb700ef54461cfa02571ae0db9a0dc1e0cdb5577484a6d75e68dc38e8acc1 done
+#12 extracting sha256:bd9fa12ebfb5cdcc1ffc4046bd1dcac6d97789629cd3511f960e39d23f2f4476
+#12 extracting sha256:bd9fa12ebfb5cdcc1ffc4046bd1dcac6d97789629cd3511f960e39d23f2f4476 1.5s done
+#12 extracting sha256:542c964e4fc7eb73884e8d73356e2ce91d3b3ee99361489bf47d6bfe7bdf916e
+#12 extracting sha256:542c964e4fc7eb73884e8d73356e2ce91d3b3ee99361489bf47d6bfe7bdf916e 0.7s done
+#12 extracting sha256:15008b8b2a63507e969cb6e109083bc7c0d255dc15128d018ad36bb17eccd65a
+#12 extracting sha256:15008b8b2a63507e969cb6e109083bc7c0d255dc15128d018ad36bb17eccd65a done
+#12 ...
+
+#14 [shadowfit-backend stage-1 2/3] WORKDIR /app
+#14 DONE 10.1s
+
+#15 [shadowfit-ai 2/9] WORKDIR /app
+#15 DONE 8.2s
+
+#12 [shadowfit-backend builder 1/5] FROM docker.io/library/gradle:jdk21@sha256:42476a6a7f47c351b67769e87fcf897a97b07d3859b8a893fb44e8bc8431b02a
+#12 DONE 14.8s
+
+#16 [shadowfit-backend builder 2/5] WORKDIR /app
+#16 DONE 0.0s
+
+#17 [shadowfit-backend builder 3/5] COPY . .
+#17 DONE 0.1s
+
+#18 [shadowfit-backend builder 4/5] RUN chmod +x ./gradlew
+#18 DONE 0.4s
+
+#19 [shadowfit-ai 3/9] RUN apt-get update &&     apt-get install -y --no-install-recommends libgl1 libglib2.0-0 &&     rm -rf /var/lib/apt/lists/*
+#19 0.474 Get:1 http://deb.debian.org/debian trixie InRelease [140 kB]
+#19 0.484 Get:2 http://deb.debian.org/debian trixie-updates InRelease [47.3 kB]
+#19 0.484 Get:3 http://deb.debian.org/debian-security trixie-security InRelease [43.4 kB]
+#19 0.496 Get:4 http://deb.debian.org/debian trixie/main amd64 Packages [9678 kB]
+#19 0.538 Get:5 http://deb.debian.org/debian trixie-updates/main amd64 Packages [4412 B]
+#19 0.538 Get:6 http://deb.debian.org/debian-security trixie-security/main amd64 Packages [261 kB]
+#19 1.216 Fetched 10.2 MB in 1s (13.0 MB/s)
+#19 1.216 Reading package lists...
+#19 1.762 Reading package lists...
+#19 2.423 Building dependency tree...
+#19 2.515 Reading state information...
+#19 2.655 The following additional packages will be installed:
+#19 2.655   libatomic1 libdrm-amdgpu1 libdrm-common libdrm-intel1 libdrm2 libedit2
+#19 2.655   libelf1t64 libexpat1 libgbm1 libgl1-mesa-dri libglvnd0 libglx-mesa0 libglx0
+#19 2.655   libllvm19 libpciaccess0 libsensors-config libsensors5 libvulkan1
+#19 2.655   libwayland-server0 libx11-6 libx11-data libx11-xcb1 libxau6 libxcb-dri3-0
+#19 2.655   libxcb-glx0 libxcb-present0 libxcb-randr0 libxcb-shm0 libxcb-sync1
+#19 2.655   libxcb-xfixes0 libxcb1 libxdmcp6 libxext6 libxml2 libxshmfence1 libxxf86vm1
+#19 2.656   libz3-4 mesa-libgallium
+#19 2.656 Suggested packages:
+#19 2.656   low-memory-monitor pciutils lm-sensors
+#19 2.656 Recommended packages:
+#19 2.656   libglib2.0-data shared-mime-info xdg-user-dirs mesa-vulkan-drivers
+#19 2.656   | vulkan-icd
+#19 2.827 The following NEW packages will be installed:
+#19 2.827   libatomic1 libdrm-amdgpu1 libdrm-common libdrm-intel1 libdrm2 libedit2
+#19 2.827   libelf1t64 libexpat1 libgbm1 libgl1 libgl1-mesa-dri libglib2.0-0t64
+#19 2.828   libglvnd0 libglx-mesa0 libglx0 libllvm19 libpciaccess0 libsensors-config
+#19 2.828   libsensors5 libvulkan1 libwayland-server0 libx11-6 libx11-data libx11-xcb1
+#19 2.828   libxau6 libxcb-dri3-0 libxcb-glx0 libxcb-present0 libxcb-randr0 libxcb-shm0
+#19 2.828   libxcb-sync1 libxcb-xfixes0 libxcb1 libxdmcp6 libxext6 libxml2 libxshmfence1
+#19 2.828   libxxf86vm1 libz3-4 mesa-libgallium
+#19 2.849 0 upgraded, 40 newly installed, 0 to remove and 12 not upgraded.
+#19 2.849 Need to get 50.1 MB of archives.
+#19 2.849 After this operation, 218 MB of additional disk space will be used.
+#19 2.849 Get:1 http://deb.debian.org/debian trixie/main amd64 libexpat1 amd64 2.8.3-1~deb13u1 [123 kB]
+#19 2.853 Get:2 http://deb.debian.org/debian trixie/main amd64 libatomic1 amd64 14.2.0-19 [9308 B]
+#19 2.854 Get:3 http://deb.debian.org/debian trixie/main amd64 libdrm-common all 2.4.124-2 [8288 B]
+#19 2.854 Get:4 http://deb.debian.org/debian trixie/main amd64 libdrm2 amd64 2.4.124-2 [39.0 kB]
+#19 2.854 Get:5 http://deb.debian.org/debian trixie/main amd64 libdrm-amdgpu1 amd64 2.4.124-2 [22.6 kB]
+#19 2.855 Get:6 http://deb.debian.org/debian trixie/main amd64 libpciaccess0 amd64 0.17-3+b3 [51.9 kB]
+#19 2.856 Get:7 http://deb.debian.org/debian trixie/main amd64 libdrm-intel1 amd64 2.4.124-2 [64.1 kB]
+#19 2.856 Get:8 http://deb.debian.org/debian trixie/main amd64 libedit2 amd64 3.1-20250104-1 [93.8 kB]
+#19 2.858 Get:9 http://deb.debian.org/debian trixie/main amd64 libelf1t64 amd64 0.192-4 [189 kB]
+#19 2.859 Get:10 http://deb.debian.org/debian trixie/main amd64 libwayland-server0 amd64 1.23.1-3 [34.4 kB]
+#19 2.859 Get:11 http://deb.debian.org/debian trixie/main amd64 libxml2 amd64 2.12.7+dfsg+really2.9.14-2.1+deb13u3 [700 kB]
+#19 2.861 Get:12 http://deb.debian.org/debian trixie/main amd64 libz3-4 amd64 4.13.3-1 [8560 kB]
+#19 2.883 Get:13 http://deb.debian.org/debian trixie/main amd64 libllvm19 amd64 1:19.1.7-3+b1 [26.0 MB]
+#19 2.949 Get:14 http://deb.debian.org/debian trixie/main amd64 libsensors-config all 1:3.6.2-2 [16.2 kB]
+#19 2.949 Get:15 http://deb.debian.org/debian trixie/main amd64 libsensors5 amd64 1:3.6.2-2 [37.5 kB]
+#19 2.949 Get:16 http://deb.debian.org/debian trixie/main amd64 libxau6 amd64 1:1.0.11-1 [20.4 kB]
+#19 2.949 Get:17 http://deb.debian.org/debian trixie/main amd64 libxdmcp6 amd64 1:1.1.5-1 [27.8 kB]
+#19 2.949 Get:18 http://deb.debian.org/debian trixie/main amd64 libxcb1 amd64 1.17.0-2+b1 [144 kB]
+#19 2.950 Get:19 http://deb.debian.org/debian trixie/main amd64 libx11-data all 2:1.8.12-1 [343 kB]
+#19 2.951 Get:20 http://deb.debian.org/debian trixie/main amd64 libx11-6 amd64 2:1.8.12-1 [815 kB]
+#19 2.953 Get:21 http://deb.debian.org/debian trixie/main amd64 libx11-xcb1 amd64 2:1.8.12-1 [247 kB]
+#19 2.954 Get:22 http://deb.debian.org/debian trixie/main amd64 libxcb-dri3-0 amd64 1.17.0-2+b1 [107 kB]
+#19 2.955 Get:23 http://deb.debian.org/debian trixie/main amd64 libxcb-present0 amd64 1.17.0-2+b1 [106 kB]
+#19 2.955 Get:24 http://deb.debian.org/debian trixie/main amd64 libxcb-randr0 amd64 1.17.0-2+b1 [117 kB]
+#19 2.955 Get:25 http://deb.debian.org/debian trixie/main amd64 libxcb-sync1 amd64 1.17.0-2+b1 [109 kB]
+#19 2.956 Get:26 http://deb.debian.org/debian trixie/main amd64 libxcb-xfixes0 amd64 1.17.0-2+b1 [109 kB]
+#19 2.956 Get:27 http://deb.debian.org/debian trixie/main amd64 libxshmfence1 amd64 1.3.3-1 [10.9 kB]
+#19 2.957 Get:28 http://deb.debian.org/debian trixie/main amd64 mesa-libgallium amd64 25.0.7-2+deb13u1 [9630 kB]
+#19 2.981 Get:29 http://deb.debian.org/debian trixie/main amd64 libgbm1 amd64 25.0.7-2+deb13u1 [44.6 kB]
+#19 2.982 Get:30 http://deb.debian.org/debian trixie/main amd64 libglvnd0 amd64 1.7.0-1+b2 [52.0 kB]
+#19 2.982 Get:31 http://deb.debian.org/debian trixie/main amd64 libxcb-glx0 amd64 1.17.0-2+b1 [122 kB]
+#19 2.982 Get:32 http://deb.debian.org/debian trixie/main amd64 libxcb-shm0 amd64 1.17.0-2+b1 [105 kB]
+#19 2.983 Get:33 http://deb.debian.org/debian trixie/main amd64 libxext6 amd64 2:1.3.4-1+b3 [50.4 kB]
+#19 2.983 Get:34 http://deb.debian.org/debian trixie/main amd64 libxxf86vm1 amd64 1:1.1.4-1+b4 [19.3 kB]
+#19 2.983 Get:35 http://deb.debian.org/debian trixie/main amd64 libvulkan1 amd64 1.4.309.0-1 [130 kB]
+#19 2.984 Get:36 http://deb.debian.org/debian trixie/main amd64 libgl1-mesa-dri amd64 25.0.7-2+deb13u1 [46.2 kB]
+#19 2.984 Get:37 http://deb.debian.org/debian trixie/main amd64 libglx-mesa0 amd64 25.0.7-2+deb13u1 [143 kB]
+#19 2.984 Get:38 http://deb.debian.org/debian trixie/main amd64 libglx0 amd64 1.7.0-1+b2 [34.9 kB]
+#19 2.985 Get:39 http://deb.debian.org/debian trixie/main amd64 libgl1 amd64 1.7.0-1+b2 [89.5 kB]
+#19 2.985 Get:40 http://deb.debian.org/debian trixie/main amd64 libglib2.0-0t64 amd64 2.84.4-3~deb13u5 [1521 kB]
+#19 3.085 debconf: unable to initialize frontend: Dialog
+#19 3.085 debconf: (TERM is not set, so the dialog frontend is not usable.)
+#19 3.085 debconf: falling back to frontend: Readline
+#19 3.085 debconf: unable to initialize frontend: Readline
+#19 3.085 debconf: (Can't locate Term/ReadLine.pm in @INC (you may need to install the Term::ReadLine module) (@INC entries checked: /etc/perl /usr/local/lib/x86_64-linux-gnu/perl/5.40.1 /usr/local/share/perl/5.40.1 /usr/lib/x86_64-linux-gnu/perl5/5.40 /usr/share/perl5 /usr/lib/x86_64-linux-gnu/perl-base /usr/lib/x86_64-linux-gnu/perl/5.40 /usr/share/perl/5.40 /usr/local/lib/site_perl) at /usr/share/perl5/Debconf/FrontEnd/Readline.pm line 8, <STDIN> line 40.)
+#19 3.085 debconf: falling back to frontend: Teletype
+#19 3.088 debconf: unable to initialize frontend: Teletype
+#19 3.088 debconf: (This frontend requires a controlling tty.)
+#19 3.088 debconf: falling back to frontend: Noninteractive
+#19 4.171 Fetched 50.1 MB in 0s (330 MB/s)
+#19 4.186 Selecting previously unselected package libexpat1:amd64.
+#19 4.186 (Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 5652 files and directories currently installed.)
+#19 4.190 Preparing to unpack .../00-libexpat1_2.8.3-1~deb13u1_amd64.deb ...
+#19 4.194 Unpacking libexpat1:amd64 (2.8.3-1~deb13u1) ...
+#19 4.218 Selecting previously unselected package libatomic1:amd64.
+#19 4.219 Preparing to unpack .../01-libatomic1_14.2.0-19_amd64.deb ...
+#19 4.221 Unpacking libatomic1:amd64 (14.2.0-19) ...
+#19 4.237 Selecting previously unselected package libdrm-common.
+#19 4.238 Preparing to unpack .../02-libdrm-common_2.4.124-2_all.deb ...
+#19 4.240 Unpacking libdrm-common (2.4.124-2) ...
+#19 4.259 Selecting previously unselected package libdrm2:amd64.
+#19 4.259 Preparing to unpack .../03-libdrm2_2.4.124-2_amd64.deb ...
+#19 4.261 Unpacking libdrm2:amd64 (2.4.124-2) ...
+#19 4.281 Selecting previously unselected package libdrm-amdgpu1:amd64.
+#19 4.282 Preparing to unpack .../04-libdrm-amdgpu1_2.4.124-2_amd64.deb ...
+#19 4.284 Unpacking libdrm-amdgpu1:amd64 (2.4.124-2) ...
+#19 4.303 Selecting previously unselected package libpciaccess0:amd64.
+#19 4.304 Preparing to unpack .../05-libpciaccess0_0.17-3+b3_amd64.deb ...
+#19 4.306 Unpacking libpciaccess0:amd64 (0.17-3+b3) ...
+#19 4.324 Selecting previously unselected package libdrm-intel1:amd64.
+#19 4.325 Preparing to unpack .../06-libdrm-intel1_2.4.124-2_amd64.deb ...
+#19 4.327 Unpacking libdrm-intel1:amd64 (2.4.124-2) ...
+#19 4.347 Selecting previously unselected package libedit2:amd64.
+#19 4.348 Preparing to unpack .../07-libedit2_3.1-20250104-1_amd64.deb ...
+#19 4.350 Unpacking libedit2:amd64 (3.1-20250104-1) ...
+#19 4.371 Selecting previously unselected package libelf1t64:amd64.
+#19 4.372 Preparing to unpack .../08-libelf1t64_0.192-4_amd64.deb ...
+#19 4.373 Unpacking libelf1t64:amd64 (0.192-4) ...
+#19 4.401 Selecting previously unselected package libwayland-server0:amd64.
+#19 4.402 Preparing to unpack .../09-libwayland-server0_1.23.1-3_amd64.deb ...
+#19 4.404 Unpacking libwayland-server0:amd64 (1.23.1-3) ...
+#19 4.425 Selecting previously unselected package libxml2:amd64.
+#19 4.426 Preparing to unpack .../10-libxml2_2.12.7+dfsg+really2.9.14-2.1+deb13u3_amd64.deb ...
+#19 4.428 Unpacking libxml2:amd64 (2.12.7+dfsg+really2.9.14-2.1+deb13u3) ...
+#19 4.476 Selecting previously unselected package libz3-4:amd64.
+#19 4.477 Preparing to unpack .../11-libz3-4_4.13.3-1_amd64.deb ...
+#19 4.479 Unpacking libz3-4:amd64 (4.13.3-1) ...
+#19 4.828 Selecting previously unselected package libllvm19:amd64.
+#19 4.829 Preparing to unpack .../12-libllvm19_1%3a19.1.7-3+b1_amd64.deb ...
+#19 4.830 Unpacking libllvm19:amd64 (1:19.1.7-3+b1) ...
+#19 5.389 Selecting previously unselected package libsensors-config.
+#19 5.391 Preparing to unpack .../13-libsensors-config_1%3a3.6.2-2_all.deb ...
+#19 5.393 Unpacking libsensors-config (1:3.6.2-2) ...
+#19 5.410 Selecting previously unselected package libsensors5:amd64.
+#19 5.411 Preparing to unpack .../14-libsensors5_1%3a3.6.2-2_amd64.deb ...
+#19 5.413 Unpacking libsensors5:amd64 (1:3.6.2-2) ...
+#19 5.433 Selecting previously unselected package libxau6:amd64.
+#19 5.434 Preparing to unpack .../15-libxau6_1%3a1.0.11-1_amd64.deb ...
+#19 5.437 Unpacking libxau6:amd64 (1:1.0.11-1) ...
+#19 5.454 Selecting previously unselected package libxdmcp6:amd64.
+#19 5.455 Preparing to unpack .../16-libxdmcp6_1%3a1.1.5-1_amd64.deb ...
+#19 5.457 Unpacking libxdmcp6:amd64 (1:1.1.5-1) ...
+#19 5.476 Selecting previously unselected package libxcb1:amd64.
+#19 5.477 Preparing to unpack .../17-libxcb1_1.17.0-2+b1_amd64.deb ...
+#19 5.479 Unpacking libxcb1:amd64 (1.17.0-2+b1) ...
+#19 5.507 Selecting previously unselected package libx11-data.
+#19 5.508 Preparing to unpack .../18-libx11-data_2%3a1.8.12-1_all.deb ...
+#19 5.554 Unpacking libx11-data (2:1.8.12-1) ...
+#19 5.780 Selecting previously unselected package libx11-6:amd64.
+#19 5.781 Preparing to unpack .../19-libx11-6_2%3a1.8.12-1_amd64.deb ...
+#19 5.786 Unpacking libx11-6:amd64 (2:1.8.12-1) ...
+#19 5.837 Selecting previously unselected package libx11-xcb1:amd64.
+#19 5.838 Preparing to unpack .../20-libx11-xcb1_2%3a1.8.12-1_amd64.deb ...
+#19 5.840 Unpacking libx11-xcb1:amd64 (2:1.8.12-1) ...
+#19 5.861 Selecting previously unselected package libxcb-dri3-0:amd64.
+#19 5.861 Preparing to unpack .../21-libxcb-dri3-0_1.17.0-2+b1_amd64.deb ...
+#19 5.864 Unpacking libxcb-dri3-0:amd64 (1.17.0-2+b1) ...
+#19 5.883 Selecting previously unselected package libxcb-present0:amd64.
+#19 5.884 Preparing to unpack .../22-libxcb-present0_1.17.0-2+b1_amd64.deb ...
+#19 5.886 Unpacking libxcb-present0:amd64 (1.17.0-2+b1) ...
+#19 5.907 Selecting previously unselected package libxcb-randr0:amd64.
+#19 5.908 Preparing to unpack .../23-libxcb-randr0_1.17.0-2+b1_amd64.deb ...
+#19 5.910 Unpacking libxcb-randr0:amd64 (1.17.0-2+b1) ...
+#19 5.931 Selecting previously unselected package libxcb-sync1:amd64.
+#19 5.932 Preparing to unpack .../24-libxcb-sync1_1.17.0-2+b1_amd64.deb ...
+#19 5.934 Unpacking libxcb-sync1:amd64 (1.17.0-2+b1) ...
+#19 5.955 Selecting previously unselected package libxcb-xfixes0:amd64.
+#19 5.956 Preparing to unpack .../25-libxcb-xfixes0_1.17.0-2+b1_amd64.deb ...
+#19 5.958 Unpacking libxcb-xfixes0:amd64 (1.17.0-2+b1) ...
+#19 6.034 Selecting previously unselected package libxshmfence1:amd64.
+#19 6.034 Preparing to unpack .../26-libxshmfence1_1.3.3-1_amd64.deb ...
+#19 6.083 Unpacking libxshmfence1:amd64 (1.3.3-1) ...
+#19 6.122 Selecting previously unselected package mesa-libgallium:amd64.
+#19 6.123 Preparing to unpack .../27-mesa-libgallium_25.0.7-2+deb13u1_amd64.deb ...
+#19 6.127 Unpacking mesa-libgallium:amd64 (25.0.7-2+deb13u1) ...
+#19 6.532 Selecting previously unselected package libgbm1:amd64.
+#19 6.533 Preparing to unpack .../28-libgbm1_25.0.7-2+deb13u1_amd64.deb ...
+#19 6.536 Unpacking libgbm1:amd64 (25.0.7-2+deb13u1) ...
+#19 6.556 Selecting previously unselected package libglvnd0:amd64.
+#19 6.557 Preparing to unpack .../29-libglvnd0_1.7.0-1+b2_amd64.deb ...
+#19 6.559 Unpacking libglvnd0:amd64 (1.7.0-1+b2) ...
+#19 6.580 Selecting previously unselected package libxcb-glx0:amd64.
+#19 6.581 Preparing to unpack .../30-libxcb-glx0_1.17.0-2+b1_amd64.deb ...
+#19 6.583 Unpacking libxcb-glx0:amd64 (1.17.0-2+b1) ...
+#19 6.604 Selecting previously unselected package libxcb-shm0:amd64.
+#19 6.605 Preparing to unpack .../31-libxcb-shm0_1.17.0-2+b1_amd64.deb ...
+#19 6.607 Unpacking libxcb-shm0:amd64 (1.17.0-2+b1) ...
+#19 6.627 Selecting previously unselected package libxext6:amd64.
+#19 6.627 Preparing to unpack .../32-libxext6_2%3a1.3.4-1+b3_amd64.deb ...
+#19 6.629 Unpacking libxext6:amd64 (2:1.3.4-1+b3) ...
+#19 6.646 Selecting previously unselected package libxxf86vm1:amd64.
+#19 6.647 Preparing to unpack .../33-libxxf86vm1_1%3a1.1.4-1+b4_amd64.deb ...
+#19 6.648 Unpacking libxxf86vm1:amd64 (1:1.1.4-1+b4) ...
+#19 6.666 Selecting previously unselected package libvulkan1:amd64.
+#19 6.667 Preparing to unpack .../34-libvulkan1_1.4.309.0-1_amd64.deb ...
+#19 6.669 Unpacking libvulkan1:amd64 (1.4.309.0-1) ...
+#19 6.694 Selecting previously unselected package libgl1-mesa-dri:amd64.
+#19 6.695 Preparing to unpack .../35-libgl1-mesa-dri_25.0.7-2+deb13u1_amd64.deb ...
+#19 6.700 Unpacking libgl1-mesa-dri:amd64 (25.0.7-2+deb13u1) ...
+#19 6.721 Selecting previously unselected package libglx-mesa0:amd64.
+#19 6.722 Preparing to unpack .../36-libglx-mesa0_25.0.7-2+deb13u1_amd64.deb ...
+#19 6.724 Unpacking libglx-mesa0:amd64 (25.0.7-2+deb13u1) ...
+#19 6.747 Selecting previously unselected package libglx0:amd64.
+#19 6.748 Preparing to unpack .../37-libglx0_1.7.0-1+b2_amd64.deb ...
+#19 6.750 Unpacking libglx0:amd64 (1.7.0-1+b2) ...
+#19 6.771 Selecting previously unselected package libgl1:amd64.
+#19 6.772 Preparing to unpack .../38-libgl1_1.7.0-1+b2_amd64.deb ...
+#19 6.774 Unpacking libgl1:amd64 (1.7.0-1+b2) ...
+#19 6.801 Selecting previously unselected package libglib2.0-0t64:amd64.
+#19 6.802 Preparing to unpack .../39-libglib2.0-0t64_2.84.4-3~deb13u5_amd64.deb ...
+#19 6.808 Unpacking libglib2.0-0t64:amd64 (2.84.4-3~deb13u5) ...
+#19 6.892 Setting up libexpat1:amd64 (2.8.3-1~deb13u1) ...
+#19 6.898 Setting up libwayland-server0:amd64 (1.23.1-3) ...
+#19 6.903 Setting up libpciaccess0:amd64 (0.17-3+b3) ...
+#19 6.908 Setting up libxau6:amd64 (1:1.0.11-1) ...
+#19 6.914 Setting up libxdmcp6:amd64 (1:1.1.5-1) ...
+#19 6.920 Setting up libxcb1:amd64 (1.17.0-2+b1) ...
+#19 6.925 Setting up libxcb-xfixes0:amd64 (1.17.0-2+b1) ...
+#19 6.931 Setting up libglvnd0:amd64 (1.7.0-1+b2) ...
+#19 6.936 Setting up libxcb-glx0:amd64 (1.17.0-2+b1) ...
+#19 6.941 Setting up libedit2:amd64 (3.1-20250104-1) ...
+#19 6.947 Setting up libsensors-config (1:3.6.2-2) ...
+#19 6.956 Setting up libxcb-shm0:amd64 (1.17.0-2+b1) ...
+#19 6.962 Setting up libelf1t64:amd64 (0.192-4) ...
+#19 6.968 Setting up libxcb-present0:amd64 (1.17.0-2+b1) ...
+#19 6.973 Setting up libz3-4:amd64 (4.13.3-1) ...
+#19 6.979 Setting up libx11-data (2:1.8.12-1) ...
+#19 6.985 Setting up libxcb-sync1:amd64 (1.17.0-2+b1) ...
+#19 6.992 Setting up libatomic1:amd64 (14.2.0-19) ...
+#19 6.999 Setting up libsensors5:amd64 (1:3.6.2-2) ...
+#19 7.004 Setting up libvulkan1:amd64 (1.4.309.0-1) ...
+#19 7.010 Setting up libxshmfence1:amd64 (1.3.3-1) ...
+#19 7.015 Setting up libxcb-randr0:amd64 (1.17.0-2+b1) ...
+#19 7.020 Setting up libx11-6:amd64 (2:1.8.12-1) ...
+#19 7.025 Setting up libdrm-common (2.4.124-2) ...
+#19 7.031 Setting up libxml2:amd64 (2.12.7+dfsg+really2.9.14-2.1+deb13u3) ...
+#19 7.037 Setting up libxcb-dri3-0:amd64 (1.17.0-2+b1) ...
+#19 7.043 Setting up libllvm19:amd64 (1:19.1.7-3+b1) ...
+#19 7.049 Setting up libx11-xcb1:amd64 (2:1.8.12-1) ...
+#19 7.054 Setting up libxext6:amd64 (2:1.3.4-1+b3) ...
+#19 7.059 Setting up libxxf86vm1:amd64 (1:1.1.4-1+b4) ...
+#19 7.065 Setting up libglib2.0-0t64:amd64 (2.84.4-3~deb13u5) ...
+#19 7.071 No schema files found: doing nothing.
+#19 7.076 Setting up libdrm2:amd64 (2.4.124-2) ...
+#19 7.081 Setting up libdrm-amdgpu1:amd64 (2.4.124-2) ...
+#19 7.087 Setting up libdrm-intel1:amd64 (2.4.124-2) ...
+#19 7.093 Setting up mesa-libgallium:amd64 (25.0.7-2+deb13u1) ...
+#19 7.099 Setting up libgbm1:amd64 (25.0.7-2+deb13u1) ...
+#19 7.105 Setting up libgl1-mesa-dri:amd64 (25.0.7-2+deb13u1) ...
+#19 7.114 Setting up libglx-mesa0:amd64 (25.0.7-2+deb13u1) ...
+#19 7.121 Setting up libglx0:amd64 (1.7.0-1+b2) ...
+#19 7.126 Setting up libgl1:amd64 (1.7.0-1+b2) ...
+#19 7.131 Processing triggers for libc-bin (2.41-12+deb13u3) ...
+#19 DONE 8.8s
+
+#20 [shadowfit-backend builder 5/5] RUN ./gradlew bootJar -x test --no-daemon
+#20 0.526 Downloading https://services.gradle.org/distributions/gradle-8.14.5-bin.zip
+#20 1.126 .............10%.............20%.............30%.............40%.............50%..............60%.............70%.............80%.............90%.............100%
+#20 2.948 
+#20 2.948 Welcome to Gradle 8.14.5!
+#20 2.948 
+#20 2.948 Here are the highlights of this release:
+#20 2.948  - Java 24 support
+#20 2.948  - GraalVM Native Image toolchain selection
+#20 2.948  - Enhancements to test reporting
+#20 2.949  - Build Authoring improvements
+#20 2.949 
+#20 2.949 For more details see https://docs.gradle.org/8.14.5/release-notes.html
+#20 2.949 
+#20 3.047 To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.14.5/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+#20 3.748 Daemon will be stopped at the end of the build 
+#20 ...
+
+#21 [shadowfit-ai 4/9] COPY requirements.txt .
+#21 DONE 0.0s
+
+#22 [shadowfit-ai 5/9] RUN pip install --no-cache-dir -r requirements.txt
+#22 1.655 Collecting fastapi==0.115.12 (from -r requirements.txt (line 1))
+#22 1.673   Downloading fastapi-0.115.12-py3-none-any.whl.metadata (27 kB)
+#22 1.701 Collecting uvicorn==0.34.3 (from uvicorn[standard]==0.34.3->-r requirements.txt (line 2))
+#22 1.705   Downloading uvicorn-0.34.3-py3-none-any.whl.metadata (6.5 kB)
+#22 1.792 Collecting pydantic==2.11.3 (from -r requirements.txt (line 3))
+#22 1.795   Downloading pydantic-2.11.3-py3-none-any.whl.metadata (65 kB)
+#22 1.807 Collecting pydantic-settings==2.9.1 (from -r requirements.txt (line 4))
+#22 1.811   Downloading pydantic_settings-2.9.1-py3-none-any.whl.metadata (3.8 kB)
+#22 1.994 Collecting orjson==3.10.18 (from -r requirements.txt (line 5))
+#22 1.998   Downloading orjson-3.10.18-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (41 kB)
+#22 2.084 Collecting pybase64==1.5.0 (from -r requirements.txt (line 6))
+#22 2.088   Downloading pybase64-1.5.0-cp312-cp312-manylinux1_x86_64.manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_5_x86_64.whl.metadata (11 kB)
+#22 2.107 Collecting mediapipe==0.10.21 (from -r requirements.txt (line 8))
+#22 2.111   Downloading mediapipe-0.10.21-cp312-cp312-manylinux_2_28_x86_64.whl.metadata (9.7 kB)
+#22 2.151 Collecting opencv-python-headless==4.11.0.86 (from -r requirements.txt (line 9))
+#22 2.154   Downloading opencv_python_headless-4.11.0.86-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (20 kB)
+#22 2.362 Collecting numpy<2 (from -r requirements.txt (line 10))
+#22 2.365   Downloading numpy-1.26.4-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (61 kB)
+#22 2.387 Collecting dtaidistance==2.3.12 (from -r requirements.txt (line 12))
+#22 2.391   Downloading dtaidistance-2.3.12.tar.gz (1.0 MB)
+#22 2.397      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.0/1.0 MB 341.5 MB/s eta 0:00:00
+#22 2.484   Installing build dependencies: started
+#22 6.787   Installing build dependencies: finished with status 'done'
+#22 6.788   Getting requirements to build wheel: started
+#22 10.10   Getting requirements to build wheel: finished with status 'done'
+#22 10.10   Preparing metadata (pyproject.toml): started
+#22 10.68   Preparing metadata (pyproject.toml): finished with status 'done'
+#22 10.70 Collecting python-multipart==0.0.32 (from -r requirements.txt (line 14))
+#22 10.70   Downloading python_multipart-0.0.32-py3-none-any.whl.metadata (2.1 kB)
+#22 11.02 Collecting grpcio>=1.83.0 (from -r requirements.txt (line 16))
+#22 11.03   Downloading grpcio-1.83.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (3.7 kB)
+#22 11.38 Collecting grpcio-tools>=1.62.1 (from -r requirements.txt (line 17))
+#22 11.39   Downloading grpcio_tools-1.83.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (5.3 kB)
+#22 11.49 Collecting protobuf==4.25.8 (from -r requirements.txt (line 18))
+#22 11.50   Downloading protobuf-4.25.8-cp37-abi3-manylinux2014_x86_64.whl.metadata (541 bytes)
+#22 11.51 Collecting httpx==0.28.1 (from -r requirements.txt (line 21))
+#22 11.51   Downloading httpx-0.28.1-py3-none-any.whl.metadata (7.1 kB)
+#22 11.52 Collecting prometheus-client==0.21.1 (from -r requirements.txt (line 25))
+#22 11.52   Downloading prometheus_client-0.21.1-py3-none-any.whl.metadata (1.8 kB)
+#22 11.55 Collecting starlette<0.47.0,>=0.40.0 (from fastapi==0.115.12->-r requirements.txt (line 1))
+#22 11.55   Downloading starlette-0.46.2-py3-none-any.whl.metadata (6.2 kB)
+#22 11.57 Collecting typing-extensions>=4.8.0 (from fastapi==0.115.12->-r requirements.txt (line 1))
+#22 11.57   Downloading typing_extensions-4.16.0-py3-none-any.whl.metadata (3.3 kB)
+#22 11.58 Collecting click>=7.0 (from uvicorn==0.34.3->uvicorn[standard]==0.34.3->-r requirements.txt (line 2))
+#22 11.59   Downloading click-8.5.0-py3-none-any.whl.metadata (2.6 kB)
+#22 11.59 Collecting h11>=0.8 (from uvicorn==0.34.3->uvicorn[standard]==0.34.3->-r requirements.txt (line 2))
+#22 11.60   Downloading h11-0.16.0-py3-none-any.whl.metadata (8.3 kB)
+#22 11.60 Collecting annotated-types>=0.6.0 (from pydantic==2.11.3->-r requirements.txt (line 3))
+#22 11.61   Downloading annotated_types-0.8.0-py3-none-any.whl.metadata (15 kB)
+#22 12.07 Collecting pydantic-core==2.33.1 (from pydantic==2.11.3->-r requirements.txt (line 3))
+#22 12.07   Downloading pydantic_core-2.33.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.8 kB)
+#22 12.08 Collecting typing-inspection>=0.4.0 (from pydantic==2.11.3->-r requirements.txt (line 3))
+#22 12.08   Downloading typing_inspection-0.4.4-py3-none-any.whl.metadata (2.6 kB)
+#22 12.10 Collecting python-dotenv>=0.21.0 (from pydantic-settings==2.9.1->-r requirements.txt (line 4))
+#22 12.11   Downloading python_dotenv-1.2.3-py3-none-any.whl.metadata (29 kB)
+#22 12.12 Collecting absl-py (from mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 12.12   Downloading absl_py-2.5.0-py3-none-any.whl.metadata (3.3 kB)
+#22 12.13 Collecting attrs>=19.1.0 (from mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 12.13   Downloading attrs-26.1.0-py3-none-any.whl.metadata (8.8 kB)
+#22 12.14 Collecting flatbuffers>=2.0 (from mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 12.14   Downloading flatbuffers-25.12.19-py2.py3-none-any.whl.metadata (1.0 kB)
+#22 12.16 Collecting jax (from mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 12.16   Downloading jax-0.11.1-py3-none-any.whl.metadata (13 kB)
+#22 12.20 Collecting jaxlib (from mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 12.20   Downloading jaxlib-0.11.1-cp312-cp312-manylinux_2_27_x86_64.whl.metadata (1.3 kB)
+#22 12.28 Collecting matplotlib (from mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 12.28   Downloading matplotlib-3.11.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (80 kB)
+#22 12.36 Collecting opencv-contrib-python (from mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 12.37   Downloading opencv_contrib_python-5.0.0.93-cp37-abi3-manylinux_2_28_x86_64.whl.metadata (19 kB)
+#22 12.39 Collecting sounddevice>=0.4.4 (from mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 12.39   Downloading sounddevice-0.5.6-py3-none-any.whl.metadata (1.4 kB)
+#22 12.42 Collecting sentencepiece (from mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 12.42   Downloading sentencepiece-0.2.2-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (33 kB)
+#22 12.49 Collecting anyio (from httpx==0.28.1->-r requirements.txt (line 21))
+#22 12.49   Downloading anyio-4.15.1-py3-none-any.whl.metadata (4.7 kB)
+#22 12.50 Collecting certifi (from httpx==0.28.1->-r requirements.txt (line 21))
+#22 12.51   Downloading certifi-2026.7.22-py3-none-any.whl.metadata (2.5 kB)
+#22 12.52 Collecting httpcore==1.* (from httpx==0.28.1->-r requirements.txt (line 21))
+#22 12.52   Downloading httpcore-1.0.9-py3-none-any.whl.metadata (21 kB)
+#22 12.53 Collecting idna (from httpx==0.28.1->-r requirements.txt (line 21))
+#22 12.53   Downloading idna-3.19-py3-none-any.whl.metadata (9.2 kB)
+#22 12.55 Collecting httptools>=0.6.3 (from uvicorn[standard]==0.34.3->-r requirements.txt (line 2))
+#22 12.56   Downloading httptools-0.8.0-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl.metadata (3.5 kB)
+#22 12.58 Collecting pyyaml>=5.1 (from uvicorn[standard]==0.34.3->-r requirements.txt (line 2))
+#22 12.58   Downloading pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.4 kB)
+#22 12.61 Collecting uvloop>=0.15.1 (from uvicorn[standard]==0.34.3->-r requirements.txt (line 2))
+#22 12.61   Downloading uvloop-0.22.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (4.9 kB)
+#22 12.66 Collecting watchfiles>=0.13 (from uvicorn[standard]==0.34.3->-r requirements.txt (line 2))
+#22 12.66   Downloading watchfiles-1.2.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.9 kB)
+#22 12.74 Collecting websockets>=10.4 (from uvicorn[standard]==0.34.3->-r requirements.txt (line 2))
+#22 12.74   Downloading websockets-17.1-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl.metadata (6.3 kB)
+#22 12.76 INFO: pip is looking at multiple versions of grpcio-tools to determine which version is compatible with other requirements. This could take a while.
+#22 12.76 Collecting grpcio-tools>=1.62.1 (from -r requirements.txt (line 17))
+#22 12.77   Downloading grpcio_tools-1.83.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (5.3 kB)
+#22 12.77   Downloading grpcio_tools-1.82.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (5.3 kB)
+#22 12.78   Downloading grpcio_tools-1.82.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (5.3 kB)
+#22 12.78   Downloading grpcio_tools-1.81.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (5.3 kB)
+#22 12.80   Downloading grpcio_tools-1.81.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (5.3 kB)
+#22 12.80   Downloading grpcio_tools-1.80.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (5.3 kB)
+#22 12.81   Downloading grpcio_tools-1.78.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (5.3 kB)
+#22 12.82 INFO: pip is still looking at multiple versions of grpcio-tools to determine which version is compatible with other requirements. This could take a while.
+#22 12.82   Downloading grpcio_tools-1.76.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (5.3 kB)
+#22 12.82   Downloading grpcio_tools-1.75.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (5.3 kB)
+#22 12.83   Downloading grpcio_tools-1.75.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (5.3 kB)
+#22 12.84   Downloading grpcio_tools-1.74.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.3 kB)
+#22 12.84   Downloading grpcio_tools-1.73.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.3 kB)
+#22 12.86 INFO: This is taking longer than usual. You might need to provide the dependency resolver with stricter constraints to reduce runtime. See https://pip.pypa.io/warnings/backtracking for guidance. If you want to abort this run, press Ctrl + C.
+#22 12.86   Downloading grpcio_tools-1.73.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.3 kB)
+#22 12.86   Downloading grpcio_tools-1.72.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.3 kB)
+#22 12.87   Downloading grpcio_tools-1.72.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.3 kB)
+#22 12.87   Downloading grpcio_tools-1.71.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.3 kB)
+#22 12.89   Downloading grpcio_tools-1.71.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.3 kB)
+#22 12.90   Downloading grpcio_tools-1.70.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.3 kB)
+#22 12.90   Downloading grpcio_tools-1.69.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.3 kB)
+#22 12.91   Downloading grpcio_tools-1.68.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.3 kB)
+#22 12.91   Downloading grpcio_tools-1.68.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.3 kB)
+#22 12.92   Downloading grpcio_tools-1.67.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.3 kB)
+#22 12.92   Downloading grpcio_tools-1.67.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.3 kB)
+#22 12.93   Downloading grpcio_tools-1.66.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.3 kB)
+#22 12.93   Downloading grpcio_tools-1.66.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.3 kB)
+#22 12.94   Downloading grpcio_tools-1.66.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.3 kB)
+#22 12.94   Downloading grpcio_tools-1.65.5-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.3 kB)
+#22 12.95   Downloading grpcio_tools-1.65.4-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.3 kB)
+#22 12.95   Downloading grpcio_tools-1.65.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.3 kB)
+#22 12.96   Downloading grpcio_tools-1.65.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.3 kB)
+#22 12.96   Downloading grpcio_tools-1.64.3-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.3 kB)
+#22 12.97   Downloading grpcio_tools-1.64.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.3 kB)
+#22 12.97   Downloading grpcio_tools-1.64.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.3 kB)
+#22 12.98   Downloading grpcio_tools-1.63.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.3 kB)
+#22 12.98   Downloading grpcio_tools-1.63.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.3 kB)
+#22 12.99   Downloading grpcio_tools-1.62.3-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.2 kB)
+#22 13.10 Collecting setuptools (from grpcio-tools>=1.62.1->-r requirements.txt (line 17))
+#22 13.10   Downloading setuptools-84.0.0-py3-none-any.whl.metadata (6.6 kB)
+#22 13.18 Collecting cffi (from sounddevice>=0.4.4->mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 13.18   Downloading cffi-2.1.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (2.5 kB)
+#22 13.23 Collecting ml_dtypes>=0.5.0 (from jax->mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 13.23   Downloading ml_dtypes-0.6.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (8.8 kB)
+#22 13.24 INFO: pip is looking at multiple versions of jax to determine which version is compatible with other requirements. This could take a while.
+#22 13.24 Collecting jax (from mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 13.24   Downloading jax-0.11.0-py3-none-any.whl.metadata (13 kB)
+#22 13.25 Collecting jaxlib (from mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 13.26   Downloading jaxlib-0.11.0-cp312-cp312-manylinux_2_27_x86_64.whl.metadata (1.3 kB)
+#22 13.26 Collecting jax (from mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 13.26   Downloading jax-0.10.2-py3-none-any.whl.metadata (13 kB)
+#22 13.27 Collecting jaxlib (from mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 13.27   Downloading jaxlib-0.10.2-cp312-cp312-manylinux_2_27_x86_64.whl.metadata (1.3 kB)
+#22 13.28 Collecting jax (from mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 13.28   Downloading jax-0.10.1-py3-none-any.whl.metadata (13 kB)
+#22 13.33 Collecting jaxlib (from mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 13.33   Downloading jaxlib-0.10.1-cp312-cp312-manylinux_2_27_x86_64.whl.metadata (1.3 kB)
+#22 13.33 Collecting jax (from mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 13.34   Downloading jax-0.10.0-py3-none-any.whl.metadata (13 kB)
+#22 13.35 Collecting jaxlib (from mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 13.35   Downloading jaxlib-0.10.0-cp312-cp312-manylinux_2_27_x86_64.whl.metadata (1.3 kB)
+#22 13.35 Collecting jax (from mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 13.36   Downloading jax-0.9.2-py3-none-any.whl.metadata (13 kB)
+#22 13.37 Collecting jaxlib (from mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 13.37   Downloading jaxlib-0.9.2-cp312-cp312-manylinux_2_27_x86_64.whl.metadata (1.3 kB)
+#22 13.37 Collecting jax (from mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 13.38   Downloading jax-0.9.1-py3-none-any.whl.metadata (13 kB)
+#22 13.38 Collecting jaxlib (from mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 13.39   Downloading jaxlib-0.9.1-cp312-cp312-manylinux_2_27_x86_64.whl.metadata (1.3 kB)
+#22 13.39 Collecting jax (from mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 13.39   Downloading jax-0.9.0.1-py3-none-any.whl.metadata (13 kB)
+#22 13.40 Collecting jaxlib (from mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 13.40   Downloading jaxlib-0.9.0.1-cp312-cp312-manylinux_2_27_x86_64.whl.metadata (1.3 kB)
+#22 13.40 INFO: pip is still looking at multiple versions of jax to determine which version is compatible with other requirements. This could take a while.
+#22 13.41 Collecting jax (from mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 13.41   Downloading jax-0.9.0-py3-none-any.whl.metadata (13 kB)
+#22 13.41 Collecting jaxlib (from mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 13.42   Downloading jaxlib-0.9.0-cp312-cp312-manylinux_2_27_x86_64.whl.metadata (1.3 kB)
+#22 13.42 Collecting jax (from mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 13.42   Downloading jax-0.8.3-py3-none-any.whl.metadata (13 kB)
+#22 13.43 Collecting jaxlib (from mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 13.43   Downloading jaxlib-0.8.3-cp312-cp312-manylinux_2_27_x86_64.whl.metadata (1.3 kB)
+#22 13.43 Collecting jax (from mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 13.44   Downloading jax-0.8.2-py3-none-any.whl.metadata (13 kB)
+#22 13.44 Collecting jaxlib (from mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 13.45   Downloading jaxlib-0.8.2-cp312-cp312-manylinux_2_27_x86_64.whl.metadata (1.3 kB)
+#22 13.45 Collecting jax (from mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 13.45   Downloading jax-0.8.1-py3-none-any.whl.metadata (13 kB)
+#22 13.46 Collecting jaxlib (from mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 13.46   Downloading jaxlib-0.8.1-cp312-cp312-manylinux_2_27_x86_64.whl.metadata (1.3 kB)
+#22 13.46 Collecting jax (from mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 13.47   Downloading jax-0.8.0-py3-none-any.whl.metadata (13 kB)
+#22 13.47 Collecting jaxlib (from mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 13.48   Downloading jaxlib-0.8.0-cp312-cp312-manylinux_2_27_x86_64.whl.metadata (1.3 kB)
+#22 13.48 INFO: This is taking longer than usual. You might need to provide the dependency resolver with stricter constraints to reduce runtime. See https://pip.pypa.io/warnings/backtracking for guidance. If you want to abort this run, press Ctrl + C.
+#22 13.48 Collecting jax (from mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 13.48   Downloading jax-0.7.2-py3-none-any.whl.metadata (13 kB)
+#22 13.49 Collecting jaxlib (from mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 13.50   Downloading jaxlib-0.7.2-cp312-cp312-manylinux_2_27_x86_64.whl.metadata (1.3 kB)
+#22 13.50 Collecting jax (from mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 13.50   Downloading jax-0.7.1-py3-none-any.whl.metadata (13 kB)
+#22 13.51 Collecting jaxlib (from mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 13.52   Downloading jaxlib-0.7.1-cp312-cp312-manylinux_2_27_x86_64.whl.metadata (1.3 kB)
+#22 13.53 Collecting opt_einsum (from jax->mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 13.53   Downloading opt_einsum-3.4.0-py3-none-any.whl.metadata (6.3 kB)
+#22 13.65 Collecting scipy>=1.12 (from jax->mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 13.65   Downloading scipy-1.18.1-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (62 kB)
+#22 13.74 Collecting contourpy>=1.0.1 (from matplotlib->mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 13.75   Downloading contourpy-1.4.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (3.8 kB)
+#22 13.76 Collecting cycler>=0.10 (from matplotlib->mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 13.76   Downloading cycler-0.12.1-py3-none-any.whl.metadata (3.8 kB)
+#22 13.92 Collecting fonttools>=4.28.2 (from matplotlib->mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 13.93   Downloading fonttools-4.65.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (125 kB)
+#22 13.99 Collecting kiwisolver>=1.3.1 (from matplotlib->mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 14.00   Downloading kiwisolver-1.5.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (5.2 kB)
+#22 14.03 Collecting packaging>=20.0 (from matplotlib->mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 14.03   Downloading packaging-26.3-py3-none-any.whl.metadata (3.5 kB)
+#22 14.18 Collecting pillow>=9 (from matplotlib->mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 14.19   Downloading pillow-12.3.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (9.1 kB)
+#22 14.21 Collecting pyparsing>=3 (from matplotlib->mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 14.22   Downloading pyparsing-3.3.2-py3-none-any.whl.metadata (5.8 kB)
+#22 14.23 Collecting python-dateutil>=2.7 (from matplotlib->mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 14.23   Downloading python_dateutil-2.9.0.post0-py2.py3-none-any.whl.metadata (8.4 kB)
+#22 14.24 INFO: pip is looking at multiple versions of opencv-contrib-python to determine which version is compatible with other requirements. This could take a while.
+#22 14.24 Collecting opencv-contrib-python (from mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 14.24   Downloading opencv_contrib_python-4.14.0.94-cp37-abi3-manylinux_2_28_x86_64.whl.metadata (19 kB)
+#22 14.25   Downloading opencv_contrib_python-4.13.0.92-cp37-abi3-manylinux_2_28_x86_64.whl.metadata (19 kB)
+#22 14.26   Downloading opencv_contrib_python-4.13.0.90-cp37-abi3-manylinux_2_28_x86_64.whl.metadata (19 kB)
+#22 14.27   Downloading opencv_contrib_python-4.12.0.88-cp37-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (19 kB)
+#22 14.28   Downloading opencv_contrib_python-4.11.0.86-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (20 kB)
+#22 14.29 INFO: pip is looking at multiple versions of contourpy to determine which version is compatible with other requirements. This could take a while.
+#22 14.29 Collecting contourpy>=1.0.1 (from matplotlib->mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 14.29   Downloading contourpy-1.3.3-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (5.5 kB)
+#22 14.35 INFO: pip is looking at multiple versions of ml-dtypes to determine which version is compatible with other requirements. This could take a while.
+#22 14.35 Collecting ml_dtypes>=0.5.0 (from jax->mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 14.35   Downloading ml_dtypes-0.5.4-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (8.9 kB)
+#22 14.37 Collecting six>=1.5 (from python-dateutil>=2.7->matplotlib->mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 14.38   Downloading six-1.17.0-py2.py3-none-any.whl.metadata (1.7 kB)
+#22 14.39 INFO: pip is looking at multiple versions of scipy to determine which version is compatible with other requirements. This could take a while.
+#22 14.39 Collecting scipy>=1.12 (from jax->mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 14.39   Downloading scipy-1.18.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (62 kB)
+#22 14.40   Downloading scipy-1.17.1-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (62 kB)
+#22 14.42 Collecting pycparser (from cffi->sounddevice>=0.4.4->mediapipe==0.10.21->-r requirements.txt (line 8))
+#22 14.43   Downloading pycparser-3.0-py3-none-any.whl.metadata (8.2 kB)
+#22 14.44 Downloading fastapi-0.115.12-py3-none-any.whl (95 kB)
+#22 14.44 Downloading uvicorn-0.34.3-py3-none-any.whl (62 kB)
+#22 14.44 Downloading pydantic-2.11.3-py3-none-any.whl (443 kB)
+#22 14.45 Downloading pydantic_settings-2.9.1-py3-none-any.whl (44 kB)
+#22 14.45 Downloading orjson-3.10.18-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (133 kB)
+#22 14.45 Downloading pybase64-1.5.0-cp312-cp312-manylinux1_x86_64.manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_5_x86_64.whl (94 kB)
+#22 14.46 Downloading mediapipe-0.10.21-cp312-cp312-manylinux_2_28_x86_64.whl (35.6 MB)
+#22 14.65    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 35.6/35.6 MB 184.6 MB/s eta 0:00:00
+#22 14.66 Downloading opencv_python_headless-4.11.0.86-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (50.0 MB)
+#22 14.83    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 50.0/50.0 MB 283.4 MB/s eta 0:00:00
+#22 14.84 Downloading python_multipart-0.0.32-py3-none-any.whl (30 kB)
+#22 14.84 Downloading protobuf-4.25.8-cp37-abi3-manylinux2014_x86_64.whl (294 kB)
+#22 14.85 Downloading httpx-0.28.1-py3-none-any.whl (73 kB)
+#22 14.85 Downloading prometheus_client-0.21.1-py3-none-any.whl (54 kB)
+#22 14.85 Downloading httpcore-1.0.9-py3-none-any.whl (78 kB)
+#22 14.85 Downloading pydantic_core-2.33.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (2.0 MB)
+#22 14.86    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.0/2.0 MB 699.6 MB/s eta 0:00:00
+#22 14.86 Downloading numpy-1.26.4-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (18.0 MB)
+#22 14.89    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 18.0/18.0 MB 634.7 MB/s eta 0:00:00
+#22 14.89 Downloading grpcio-1.83.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (7.0 MB)
+#22 14.91    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 7.0/7.0 MB 696.6 MB/s eta 0:00:00
+#22 14.91 Downloading grpcio_tools-1.62.3-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (2.8 MB)
+#22 14.91    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.8/2.8 MB 873.1 MB/s eta 0:00:00
+#22 14.92 Downloading annotated_types-0.8.0-py3-none-any.whl (13 kB)
+#22 14.92 Downloading attrs-26.1.0-py3-none-any.whl (67 kB)
+#22 14.92 Downloading click-8.5.0-py3-none-any.whl (125 kB)
+#22 14.93 Downloading flatbuffers-25.12.19-py2.py3-none-any.whl (26 kB)
+#22 14.93 Downloading h11-0.16.0-py3-none-any.whl (37 kB)
+#22 14.93 Downloading httptools-0.8.0-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl (523 kB)
+#22 14.94 Downloading python_dotenv-1.2.3-py3-none-any.whl (22 kB)
+#22 14.94 Downloading pyyaml-6.0.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (807 kB)
+#22 14.94    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 807.9/807.9 kB 1.3 GB/s eta 0:00:00
+#22 14.94 Downloading sounddevice-0.5.6-py3-none-any.whl (32 kB)
+#22 14.95 Downloading starlette-0.46.2-py3-none-any.whl (72 kB)
+#22 14.95 Downloading anyio-4.15.1-py3-none-any.whl (132 kB)
+#22 14.95 Downloading idna-3.19-py3-none-any.whl (68 kB)
+#22 14.96 Downloading typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+#22 14.96 Downloading typing_inspection-0.4.4-py3-none-any.whl (14 kB)
+#22 14.96 Downloading uvloop-0.22.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (4.4 MB)
+#22 14.97    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.4/4.4 MB 790.7 MB/s eta 0:00:00
+#22 14.97 Downloading watchfiles-1.2.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (456 kB)
+#22 14.98 Downloading websockets-17.1-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl (224 kB)
+#22 14.98 Downloading absl_py-2.5.0-py3-none-any.whl (137 kB)
+#22 14.98 Downloading certifi-2026.7.22-py3-none-any.whl (136 kB)
+#22 14.99 Downloading jax-0.7.1-py3-none-any.whl (2.8 MB)
+#22 15.10    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.8/2.8 MB 41.3 MB/s eta 0:00:00
+#22 15.10 Downloading jaxlib-0.7.1-cp312-cp312-manylinux_2_27_x86_64.whl (81.2 MB)
+#22 16.32    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 81.2/81.2 MB 66.7 MB/s eta 0:00:00
+#22 16.32 Downloading matplotlib-3.11.2-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (9.9 MB)
+#22 16.34    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 9.9/9.9 MB 667.8 MB/s eta 0:00:00
+#22 16.34 Downloading opencv_contrib_python-4.11.0.86-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (69.1 MB)
+#22 16.60    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 69.1/69.1 MB 272.6 MB/s eta 0:00:00
+#22 16.60 Downloading sentencepiece-0.2.2-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (1.4 MB)
+#22 16.61    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.4/1.4 MB 846.9 MB/s eta 0:00:00
+#22 16.61 Downloading setuptools-84.0.0-py3-none-any.whl (818 kB)
+#22 16.61    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 818.2/818.2 kB 1.1 GB/s eta 0:00:00
+#22 16.61 Downloading contourpy-1.3.3-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (362 kB)
+#22 16.62 Downloading cycler-0.12.1-py3-none-any.whl (8.3 kB)
+#22 16.62 Downloading fonttools-4.65.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (5.4 MB)
+#22 16.63    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.4/5.4 MB 602.2 MB/s eta 0:00:00
+#22 16.63 Downloading kiwisolver-1.5.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (1.5 MB)
+#22 16.64    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.5/1.5 MB 1.2 GB/s eta 0:00:00
+#22 16.64 Downloading ml_dtypes-0.5.4-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (5.0 MB)
+#22 16.67    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.0/5.0 MB 169.2 MB/s eta 0:00:00
+#22 16.67 Downloading packaging-26.3-py3-none-any.whl (129 kB)
+#22 16.68 Downloading pillow-12.3.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (6.9 MB)
+#22 16.69    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.9/6.9 MB 708.6 MB/s eta 0:00:00
+#22 16.69 Downloading pyparsing-3.3.2-py3-none-any.whl (122 kB)
+#22 16.69 Downloading python_dateutil-2.9.0.post0-py2.py3-none-any.whl (229 kB)
+#22 16.70 Downloading scipy-1.17.1-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (35.2 MB)
+#22 16.76    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 35.2/35.2 MB 618.2 MB/s eta 0:00:00
+#22 16.76 Downloading cffi-2.1.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (221 kB)
+#22 16.76 Downloading opt_einsum-3.4.0-py3-none-any.whl (71 kB)
+#22 16.77 Downloading six-1.17.0-py2.py3-none-any.whl (11 kB)
+#22 16.77 Downloading pycparser-3.0-py3-none-any.whl (48 kB)
+#22 17.08 Building wheels for collected packages: dtaidistance
+#22 17.08   Building wheel for dtaidistance (pyproject.toml): started
+#22 17.90   Building wheel for dtaidistance (pyproject.toml): finished with status 'done'
+#22 17.90   Created wheel for dtaidistance: filename=dtaidistance-2.3.12-py3-none-any.whl size=823977 sha256=d10d219fd9da5b1144c3cff7f7ddf055b04732fbe4885f295771dc2b52190820
+#22 17.90   Stored in directory: /tmp/pip-ephem-wheel-cache-6wgffz_y/wheels/f7/8f/ab/89fc8b7c4592c22674291fbb6a5b65d7ef655e4f2d2043e285
+#22 17.90 Successfully built dtaidistance
+#22 18.05 Installing collected packages: flatbuffers, websockets, uvloop, typing-extensions, six, setuptools, sentencepiece, pyyaml, python-multipart, python-dotenv, pyparsing, pycparser, pybase64, protobuf, prometheus-client, pillow, packaging, orjson, opt_einsum, numpy, kiwisolver, idna, httptools, h11, fonttools, cycler, click, certifi, attrs, annotated-types, absl-py, uvicorn, typing-inspection, scipy, python-dateutil, pydantic-core, opencv-python-headless, opencv-contrib-python, ml_dtypes, httpcore, grpcio, dtaidistance, contourpy, cffi, anyio, watchfiles, starlette, sounddevice, pydantic, matplotlib, jaxlib, httpx, grpcio-tools, pydantic-settings, jax, fastapi, mediapipe
+#22 ...
+
+#20 [shadowfit-backend builder 5/5] RUN ./gradlew bootJar -x test --no-daemon
+#20 22.55 > Task :protobufDummy UP-TO-DATE
+#20 24.75 > Task :extractIncludeProto
+#20 24.75 > Task :extractProto
+#20 25.05 > Task :generateProto
+#20 33.95 
+#20 33.95 > Task :compileJava
+#20 33.95 Note: /app/src/main/java/com/shadowfit/global/security/jwt/JwtUtil.java uses or overrides a deprecated API.
+#20 33.95 Note: Recompile with -Xlint:deprecation for details.
+#20 ...
+
+#22 [shadowfit-ai 5/9] RUN pip install --no-cache-dir -r requirements.txt
+#22 35.06 Successfully installed absl-py-2.5.0 annotated-types-0.8.0 anyio-4.15.1 attrs-26.1.0 certifi-2026.7.22 cffi-2.1.1 click-8.5.0 contourpy-1.3.3 cycler-0.12.1 dtaidistance-2.3.12 fastapi-0.115.12 flatbuffers-25.12.19 fonttools-4.65.0 grpcio-1.83.1 grpcio-tools-1.62.3 h11-0.16.0 httpcore-1.0.9 httptools-0.8.0 httpx-0.28.1 idna-3.19 jax-0.7.1 jaxlib-0.7.1 kiwisolver-1.5.1 matplotlib-3.11.2 mediapipe-0.10.21 ml_dtypes-0.5.4 numpy-1.26.4 opencv-contrib-python-4.11.0.86 opencv-python-headless-4.11.0.86 opt_einsum-3.4.0 orjson-3.10.18 packaging-26.3 pillow-12.3.0 prometheus-client-0.21.1 protobuf-4.25.8 pybase64-1.5.0 pycparser-3.0 pydantic-2.11.3 pydantic-core-2.33.1 pydantic-settings-2.9.1 pyparsing-3.3.2 python-dateutil-2.9.0.post0 python-dotenv-1.2.3 python-multipart-0.0.32 pyyaml-6.0.3 scipy-1.17.1 sentencepiece-0.2.2 setuptools-84.0.0 six-1.17.0 sounddevice-0.5.6 starlette-0.46.2 typing-extensions-4.16.0 typing-inspection-0.4.4 uvicorn-0.34.3 uvloop-0.22.1 watchfiles-1.2.0 websockets-17.1
+#22 35.06 WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+#22 35.10 
+#22 35.10 [notice] A new release of pip is available: 25.0.1 -> 26.2.1
+#22 35.10 [notice] To update, run: pip install --upgrade pip
+#22 DONE 41.5s
+
+#20 [shadowfit-backend builder 5/5] RUN ./gradlew bootJar -x test --no-daemon
+#20 ...
+
+#23 [shadowfit-ai 6/9] COPY . .
+#23 DONE 0.4s
+
+#20 [shadowfit-backend builder 5/5] RUN ./gradlew bootJar -x test --no-daemon
+#20 ...
+
+#24 [shadowfit-ai 7/9] RUN python -m grpc_tools.protoc -I./app/proto --python_out=. --grpc_python_out=. ./app/proto/exercise.proto
+#24 DONE 0.4s
+
+#20 [shadowfit-backend builder 5/5] RUN ./gradlew bootJar -x test --no-daemon
+#20 ...
+
+#25 [shadowfit-ai 8/9] COPY entrypoint.sh /entrypoint.sh
+#25 DONE 0.0s
+
+#26 [shadowfit-ai 9/9] RUN chmod +x /entrypoint.sh
+#26 DONE 0.6s
+
+#20 [shadowfit-backend builder 5/5] RUN ./gradlew bootJar -x test --no-daemon
+#20 ...
+
+#27 [shadowfit-ai] exporting to image
+#27 exporting layers
+#27 exporting layers 2.5s done
+#27 writing image sha256:4bc6891c4fdb5bcbe047a6cb8c917072fcc9170fa492a96ae140353b5bac85d0 done
+#27 naming to docker.io/library/init-shadowfit-ai done
+#27 DONE 2.5s
+
+#28 [shadowfit-ai] resolving provenance for metadata file
+#28 DONE 0.0s
+
+#20 [shadowfit-backend builder 5/5] RUN ./gradlew bootJar -x test --no-daemon
+#20 134.5 
+#20 134.5 > Task :processProtoResources
+#20 134.5 > Task :processResources
+#20 134.5 > Task :classes
+#20 134.6 > Task :resolveMainClassName
+#20 137.7 > Task :bootJar
+#20 137.7 
+#20 137.7 [Incubating] Problems report is available at: file:///app/build/reports/problems/problems-report.html
+#20 137.7 
+#20 137.7 BUILD SUCCESSFUL in 2m 17s
+#20 137.8 8 actionable tasks: 8 executed
+#20 DONE 138.1s
+
+#29 [shadowfit-backend stage-1 3/3] COPY --from=builder /app/build/libs/*.jar app.jar
+#29 DONE 0.0s
+
+#30 [shadowfit-backend] exporting to image
+#30 exporting layers
+#30 exporting layers 0.5s done
+#30 writing image sha256:303c8c091801adb572b08ede8c39918e9b2f0199c41d703aaec5fb0a89c91ce5 done
+#30 naming to docker.io/library/init-shadowfit-backend done
+#30 DONE 0.5s
+
+#31 [shadowfit-backend] resolving provenance for metadata file
+#31 DONE 0.0s
+ Image init-shadowfit-backend Built 
+ Image init-shadowfit-ai Built 
+
+──── 스택 기동 — mysql · backend · ai · ai-nginx ────
+time="2026-09-14T02:53:21Z" level=warning msg="/root/init/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"
+ Image nginx:1.27-alpine Pulling 
+ f18232174bc9 Pulling fs layer 0B
+ 61ca4f733c80 Pulling fs layer 0B
+ b464cfdf2a63 Pulling fs layer 0B
+ d7e507024086 Pulling fs layer 0B
+ 81bd8ed7ec67 Pulling fs layer 0B
+ 197eb75867ef Pulling fs layer 0B
+ 34a64644b756 Pulling fs layer 0B
+ 39c2ddfd6010 Pulling fs layer 0B
+ 81bd8ed7ec67 Waiting 0B
+ d7e507024086 Waiting 0B
+ 197eb75867ef Waiting 0B
+ 39c2ddfd6010 Waiting 0B
+ 34a64644b756 Waiting 0B
+ f18232174bc9 Downloading 48.51kB
+ b464cfdf2a63 Downloading 629B
+ b464cfdf2a63 Verifying Checksum 0B
+ b464cfdf2a63 Download complete 0B
+ f18232174bc9 Verifying Checksum 0B
+ f18232174bc9 Download complete 0B
+ f18232174bc9 Extracting 65.54kB
+ 61ca4f733c80 Downloading 32.13kB
+ 61ca4f733c80 Downloading 1.791MB
+ 61ca4f733c80 Verifying Checksum 0B
+ 61ca4f733c80 Download complete 0B
+ f18232174bc9 Extracting 3.642MB
+ f18232174bc9 Extracting 3.642MB
+ f18232174bc9 Pull complete 0B
+ 61ca4f733c80 Extracting 32.77kB
+ 61ca4f733c80 Extracting 1.791MB
+ 61ca4f733c80 Extracting 1.791MB
+ 61ca4f733c80 Pull complete 0B
+ b464cfdf2a63 Extracting 629B
+ b464cfdf2a63 Extracting 629B
+ b464cfdf2a63 Pull complete 0B
+ d7e507024086 Downloading 955B
+ d7e507024086 Verifying Checksum 0B
+ d7e507024086 Download complete 0B
+ d7e507024086 Extracting 955B
+ d7e507024086 Extracting 955B
+ d7e507024086 Pull complete 0B
+ 197eb75867ef Downloading 1.209kB
+ 197eb75867ef Verifying Checksum 0B
+ 197eb75867ef Download complete 0B
+ 81bd8ed7ec67 Downloading 402B
+ 81bd8ed7ec67 Verifying Checksum 0B
+ 81bd8ed7ec67 Download complete 0B
+ 81bd8ed7ec67 Extracting 402B
+ 81bd8ed7ec67 Pull complete 0B
+ 197eb75867ef Extracting 1.209kB
+ 197eb75867ef Extracting 1.209kB
+ 197eb75867ef Pull complete 0B
+ 39c2ddfd6010 Downloading 163.2kB
+ 34a64644b756 Downloading 1.397kB
+ 34a64644b756 Verifying Checksum 0B
+ 34a64644b756 Download complete 0B
+ 34a64644b756 Extracting 1.397kB
+ 34a64644b756 Extracting 1.397kB
+ 34a64644b756 Pull complete 0B
+ 39c2ddfd6010 Verifying Checksum 0B
+ 39c2ddfd6010 Download complete 0B
+ 39c2ddfd6010 Extracting 163.8kB
+ 39c2ddfd6010 Extracting 7.373MB
+ 39c2ddfd6010 Extracting 15.52MB
+ 39c2ddfd6010 Pull complete 0B
+ Image nginx:1.27-alpine Pulled 
+ Container shadowfit-mysql Running 
+ Container shadowfit-ai Creating 
+ Container shadowfit-backend Creating 
+ Container shadowfit-backend Created 
+ Container shadowfit-ai Created 
+ Container shadowfit-ai-nginx Creating 
+ Container shadowfit-ai-nginx Created 
+ Container shadowfit-ai Starting 
+ Container shadowfit-mysql Waiting 
+ Container shadowfit-ai Started 
+ Container shadowfit-ai-nginx Starting 
+ Container shadowfit-mysql Healthy 
+ Container shadowfit-backend Starting 
+ Container shadowfit-ai-nginx Started 
+ Container shadowfit-backend Started 
+  백엔드 헬스체크 대기.. — 떴다
+  AI 헬스체크 대기 — 떴다
+  ⚠️ shadowfit.ai.call 지표가 아직 안 보인다 — 호출이 한 번도 없으면 정상이다(첫 사이클 뒤 다시 본다)
+  exercise_references 37행
+
+──── k6 (4차 동시성 축 드라이버) ────
+  k6  → k6 v2.1.0 (commit/83a87a41e2, go1.26.4, linux/amd64)
+
+──── 준비됨 ────
+  작업 디렉터리 : /root/init
+  커밋          : 3de16b9 (3de16b9d25ea42341aec88664da985172f821023)
+  디스크 여유   : 92G
+  MySQL         : 8.0.46
+
+다음:
+  cd /root/init
+  S3_BASE=s3://<버킷>/<프리픽스> nohup bash loadtest/aws/run_all.sh > /root/run_all.log 2>&1 &
+
+  ⚠️ nohup 없이 & 만 붙이면 SSH 가 끊길 때 같이 죽는다.
+bootstrap rc=0

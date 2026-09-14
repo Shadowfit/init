@@ -1,0 +1,95 @@
+Cloud-init v. 22.2.2 running 'init' at Mon, 14 Sep 2026 02:48:57 +0000. Up 6.24 seconds.
+ci-info: +++++++++++++++++++++++++++++++++++++++Net device info+++++++++++++++++++++++++++++++++++++++
+ci-info: +---------+------+-----------------------------+---------------+--------+-------------------+
+ci-info: |  Device |  Up  |           Address           |      Mask     | Scope  |     Hw-Address    |
+ci-info: +---------+------+-----------------------------+---------------+--------+-------------------+
+ci-info: | enp39s0 | True |        172.31.44.231        | 255.255.240.0 | global | 0a:ff:fb:d6:93:79 |
+ci-info: | enp39s0 | True | fe80::8ff:fbff:fed6:9379/64 |       .       |  link  | 0a:ff:fb:d6:93:79 |
+ci-info: |    lo   | True |          127.0.0.1          |   255.0.0.0   |  host  |         .         |
+ci-info: |    lo   | True |           ::1/128           |       .       |  host  |         .         |
+ci-info: +---------+------+-----------------------------+---------------+--------+-------------------+
+ci-info: ++++++++++++++++++++++++++++++Route IPv4 info++++++++++++++++++++++++++++++
+ci-info: +-------+-------------+-------------+-----------------+-----------+-------+
+ci-info: | Route | Destination |   Gateway   |     Genmask     | Interface | Flags |
+ci-info: +-------+-------------+-------------+-----------------+-----------+-------+
+ci-info: |   0   |   0.0.0.0   | 172.31.32.1 |     0.0.0.0     |  enp39s0  |   UG  |
+ci-info: |   1   |  172.31.0.2 | 172.31.32.1 | 255.255.255.255 |  enp39s0  |  UGH  |
+ci-info: |   2   | 172.31.32.0 |   0.0.0.0   |  255.255.240.0  |  enp39s0  |   U   |
+ci-info: |   3   | 172.31.32.1 |   0.0.0.0   | 255.255.255.255 |  enp39s0  |   UH  |
+ci-info: +-------+-------------+-------------+-----------------+-----------+-------+
+ci-info: +++++++++++++++++++Route IPv6 info+++++++++++++++++++
+ci-info: +-------+-------------+---------+-----------+-------+
+ci-info: | Route | Destination | Gateway | Interface | Flags |
+ci-info: +-------+-------------+---------+-----------+-------+
+ci-info: |   0   |  fe80::/64  |    ::   |  enp39s0  |   U   |
+ci-info: |   2   |    local    |    ::   |  enp39s0  |   U   |
+ci-info: |   3   |  multicast  |    ::   |  enp39s0  |   U   |
+ci-info: +-------+-------------+---------+-----------+-------+
+Generating public/private ed25519 key pair.
+Your identification has been saved in /etc/ssh/ssh_host_ed25519_key
+Your public key has been saved in /etc/ssh/ssh_host_ed25519_key.pub
+The key fingerprint is:
+SHA256:3nvWfgT5yaKa3/wnaoocrgKYiafNxIV5xLWym92v8C4 root@ip-172-31-44-231.ap-northeast-2.compute.internal
+The key's randomart image is:
++--[ED25519 256]--+
+|   . ..          |
+|    o  .         |
+|   +. .        . |
+|  o oo        o  |
+|.= o.   S     .o.|
+|= =  + o .   . oo|
+| * .o o + . .... |
+|. o . E= +.o* o o|
+|     ..+B+**.=o+.|
++----[SHA256]-----+
+Generating public/private ecdsa key pair.
+Your identification has been saved in /etc/ssh/ssh_host_ecdsa_key
+Your public key has been saved in /etc/ssh/ssh_host_ecdsa_key.pub
+The key fingerprint is:
+SHA256:jDQyD8WJvPMm/evTHb3FtsUtLBNf0duNdBOQVrDPenQ root@ip-172-31-44-231.ap-northeast-2.compute.internal
+The key's randomart image is:
++---[ECDSA 256]---+
+|   . o..     o=oo|
+|    o.o      oooo|
+|    +.o     .o o*|
+|    o* +    . +.+|
+|     +o S    = BE|
+|    . +     + B O|
+|     o . . . = *o|
+|        o . . o. |
+|       .oo       |
++----[SHA256]-----+
+Cloud-init v. 22.2.2 running 'modules:config' at Mon, 14 Sep 2026 02:48:58 +0000. Up 7.61 seconds.
+Cloud-init v. 22.2.2 running 'modules:final' at Mon, 14 Sep 2026 02:48:59 +0000. Up 7.98 seconds.
++ export ROLE=client-ab
++ ROLE=client-ab
++ export REF=3de16b9d25ea42341aec88664da985172f821023
++ REF=3de16b9d25ea42341aec88664da985172f821023
++ S3=s3://shadowfit-measure-055447613012/shadowfit
+++ date -u +%Y%m%d-%H%M%S
++ export RUN_ID=nativerest-20260914-024859
++ RUN_ID=nativerest-20260914-024859
++ echo nativerest-20260914-024859
++ curl -fsSL https://raw.githubusercontent.com/Shadowfit/init/3de16b9d25ea42341aec88664da985172f821023/loadtest/aws/bootstrap.sh -o /root/bootstrap.sh
++ sleep 4h
++ grep -q ensure_k6 /root/bootstrap.sh
++ bash /root/bootstrap.sh
++ BOOT_RC=0
++ echo 'bootstrap rc=0'
++ '[' 0 -ne 0 ']'
++ cd /root/init
++ grep -q phase_nativerest loadtest/aws/run_all.sh
++ grep -q native-nested ai-server/app/api/endpoints/internal_analysis.py
++ grep -q AI_WEBCLIENT_CONTRACT docker-compose.yml
++ S3_BASE=s3://shadowfit-measure-055447613012/shadowfit
++ RUN_ID=nativerest-20260914-024859
++ PHASES='nativerest ridealong collect'
++ AUTO_SHUTDOWN=0
++ bash loadtest/aws/run_all.sh
++ echo 'run_all rc=0'
++ finish
++ aws s3 cp /root/bootstrap.log s3://shadowfit-measure-055447613012/shadowfit/nativerest-20260914-024859/bootstrap.log
+Completed 79.1 KiB/79.1 KiB (1.2 MiB/s) with 1 file(s) remainingupload: ../bootstrap.log to s3://shadowfit-measure-055447613012/shadowfit/nativerest-20260914-024859/bootstrap.log
++ aws s3 cp /root/run_all.log s3://shadowfit-measure-055447613012/shadowfit/nativerest-20260914-024859/run_all.log
+Completed 6.1 KiB/6.1 KiB (92.6 KiB/s) with 1 file(s) remainingupload: ../run_all.log to s3://shadowfit-measure-055447613012/shadowfit/nativerest-20260914-024859/run_all.log
++ aws s3 cp /var/log/cloud-init-output.log s3://shadowfit-measure-055447613012/shadowfit/nativerest-20260914-024859/cloud-init-output.log
