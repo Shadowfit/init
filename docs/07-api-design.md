@@ -233,6 +233,25 @@ AI = 운동 통계의 단일 진실 원천 원칙. (커밋 143a2e4)
 
 기록이 없어도 **200** 이다 — 「이번 주에 운동을 안 했다」는 정상 상태라 빈 집계와 그 사실을 말하는 문장을 돌려준다.
 
+### GET /reports/weekly-report?week=YYYY-MM-DD — 끝난 주의 리포트 + AI 총평 (2026-09-15, report-generation-llm.md §14)
+
+`weekly-summary` 가 **오늘이 속한 주**에 묶여 있어(위 «기준일 파라미터를 안 받는 이유») 별도 경로다. `week` 는 그 주의 아무 날, 없으면 **지난주**.
+이번 주·미래 주는 **400 R002** — LLM 문장은 «끝난 주» 에만, 한 번만 만든다(같은 주에 문장이 바뀌지 않는다).
+
+**응답** `WeeklyReportResponseDto`
+
+| 필드 | 뜻 |
+|---|---|
+| `periodStart` · `periodEnd`(미포함) | 월요일 ~ 다음 월요일 |
+| `summary` | `weekly-summary.summary` 와 같은 A층 요약 — **항상 있다**(조회 시 계산) |
+| `aiSummary` | Gemini 가 쓴 2~3문장. `aiSummarySource == LLM` 일 때만, 아니면 null |
+| `aiSummarySource` | `PENDING`(처음 조회 — 생성이 걸렸다) · `LLM` · `TEMPLATE_FALLBACK`(검증 실패·한도·거절·기록 없음 — 화면은 `summary.sentences` 를 그대로 쓴다) |
+| `aiGeneratedAt` | 종료 상태가 된 시각 |
+
+**전달**: 첫 조회가 `weekly_reports` 행(PENDING)과 아웃박스 `GENERATE_WEEKLY_REPORT` 를 한 트랜잭션에 만들고 **즉시 템플릿으로 응답**한다 — LLM 을 기다리지 않는다.
+별도 발행기(`WeeklyReportOutboxPublisher`, 5초 tick)가 Gemini 를 부르고, 출력의 숫자를 입력 집계와 대조해 없는 수가 있으면 **버리고 템플릿으로**(재호출 없음). 429·503·타임아웃만 재시도(백오프, 최대 ≈68분) 후 `exhausted` 로 닫는다.
+`GEMINI_API_KEY` 가 없으면 전부 `TEMPLATE_FALLBACK(disabled)` — 서비스는 그대로 선다.
+
 ### GET /reports/monthly - 월간 보고서
 
 ## 사용자 환경설정 API (2026-05 추가)

@@ -41,5 +41,14 @@ public enum OutboxEventType {
      * {@code group_events.source_id} UNIQUE 가 맡는다(social-cheer-and-group-feed.md §4-4).
      * payload: {@code { "sessionId": 42 }}
      */
-    SESSION_COMPLETED
+    SESSION_COMPLETED,
+
+    /**
+     * 주간 리포트 행({@code weekly_reports}, PENDING) → Gemini 로 문장 생성 → 행을 LLM/TEMPLATE_FALLBACK 으로.
+     * <b>네 번째 용처이자 별도 차선</b> — 앞의 넷과 달리 호출이 초 단위(실측 loadtest/results/gemini-latency-2026-09-14)
+     * 라 같은 tick 에 섞이면 다른 타입의 lease 를 잡아먹는다. {@code WeeklyReportOutboxPublisher} 만 집는다
+     * (report-generation-llm.md §5-2 안 A, §14).
+     * payload: {@code { "weeklyReportId": 42 }}
+     */
+    GENERATE_WEEKLY_REPORT
 }

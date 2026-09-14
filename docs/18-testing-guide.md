@@ -96,6 +96,7 @@ testRuntimeOnly 'com.h2database:h2'         // 2026-05-09 추가
 > |---|---|
 > | 서비스 단위 | `SessionServiceTest` · `ExerciseAnalysisServiceTest` · `AdminStatsServiceTest` · `FeedbackLogServiceTest` |
 > | 동시성·정합성 | `DailyLogServiceConcurrencyTest` · 낙관락 충돌 시뮬레이션(§5.3) |
+> | 외부 LLM(Gemini) | `WeeklyReportOutputValidatorTest`(없는 숫자·빈 인용·한국어 아님 → 폐기) · `WeeklyReportGenerationServiceTest`(결말 8경로) · `WeeklyReportLlmOutboxIntegrationTest`(조회 시 lazy 발행 → 별도 차선 발행기 → 검증 → 저장, Gemini 는 mock) — 실 API 응답시간은 테스트가 아니라 `loadtest/llm/measure_gemini_latency.py` 로 잰다 |
 > | gRPC 결합 | `ExerciseGrpcServiceTest` · `GrpcCorrelationInterceptorTest` · `GrpcObservabilityWiringTest` |
 > | 관측성 | `CorrelationIdFilterTest` · `AsyncMdcPropagationTest` · `SessionMetricsRecordingTest` · `SessionMetricsExportNamesTest` |
 > | 보안 | `JwtUtilTest` · `JwtAuthFilterTest` · `CustomUserDetailsServiceTest` · `AdminAuthorizationIntegrationTest` |

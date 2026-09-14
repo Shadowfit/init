@@ -44,7 +44,7 @@ class SessionMetricsExportNamesTest {
         metrics.sessionTransition(Status.COMPLETED, "ai-callback");
         metrics.optimisticLockConflict("timeout-scheduler", "yield");
         metrics.aiStopResult("session-missing");
-        metrics.outboxDispatch("sent");
+        metrics.outboxDispatch("default", "sent");
         metrics.outboxLag(Duration.ofMillis(250));
         metrics.poseBatch(300, 60);
         metrics.poseOrphanWindow(Duration.ofMillis(12));

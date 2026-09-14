@@ -156,6 +156,17 @@ public class OutboxEvent {
                 .build();
     }
 
+    public static OutboxEvent generateWeeklyReport(Long weeklyReportId, String correlationId) {
+        return OutboxEvent.builder()
+                .aggregateType(AGGREGATE_TYPE_WEEKLY_REPORT)
+                .aggregateId(weeklyReportId)
+                .eventType(OutboxEventType.GENERATE_WEEKLY_REPORT)
+                .payload("{\"weeklyReportId\":" + weeklyReportId + "}")
+                .correlationId(correlationId)
+                .build();
+    }
+
     public static final String AGGREGATE_TYPE_SESSION = "SESSION";
     public static final String AGGREGATE_TYPE_NOTIFICATION = "NOTIFICATION";
+    public static final String AGGREGATE_TYPE_WEEKLY_REPORT = "WEEKLY_REPORT";
 }
