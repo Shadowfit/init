@@ -27,7 +27,7 @@ public class GroupSocketHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
-        groupSocketRegistry.register(groupId(session), session);
+        groupSocketRegistry.register(groupId(session), memberId(session), session);
     }
 
     @Override

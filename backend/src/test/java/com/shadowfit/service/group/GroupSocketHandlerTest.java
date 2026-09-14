@@ -50,7 +50,7 @@ class GroupSocketHandlerTest {
 
         handler.afterConnectionEstablished(session);
 
-        verify(groupSocketRegistry).register(GROUP_ID, session);
+        verify(groupSocketRegistry).register(GROUP_ID, MEMBER_ID, session);
     }
 
     @Test
