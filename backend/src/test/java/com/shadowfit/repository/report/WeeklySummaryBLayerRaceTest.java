@@ -109,11 +109,16 @@ class WeeklySummaryBLayerRaceTest extends MySqlContainerSupport {
     /** A층(세션)과 B층({@code reports.detailed_analysis})을 같이 심는다 — B층 쿼리는 이 조합이 있어야 나온다. */
     private void seedWithReport(Member owner, LocalDateTime startTime, WorstSectionDto worstSection,
                                 List<RepSyncRateDto> repTrend) {
+        seedWithReport(owner, startTime, Status.COMPLETED, worstSection, repTrend);
+    }
+
+    private void seedWithReport(Member owner, LocalDateTime startTime, Status status, WorstSectionDto worstSection,
+                                List<RepSyncRateDto> repTrend) {
         Session s = sessionRepository.saveAndFlush(Session.builder()
                 .member(owner)
                 .exercise(exercise)
                 .startTime(startTime)
-                .status(Status.COMPLETED)
+                .status(status)
                 .totalReps(repTrend.size())
                 .avgSyncRate(new BigDecimal("80.00"))
                 .build());
@@ -194,6 +199,25 @@ class WeeklySummaryBLayerRaceTest extends MySqlContainerSupport {
         List<WorstRepFrequencyDto> distribution = repository.worstRepDistributionBetween(member.getId(), FROM, TO);
 
         assertThat(distribution).isEmpty();
+    }
+
+    @Test
+    @DisplayName("COMPLETED 가 아닌 세션에 리포트가 달려 있어도 B층은 세지 않는다 — A층과 같은 행 집합")
+    void 미완료_세션은_리포트가_있어도_제외() {
+        // 운영에서는 리포트가 완료 트랜잭션에서만 생기므로 이 상태는 안 만들어진다. 그런데도 술어를
+        // 거는 이유는 결과가 아니라 실행 계획이다 — status 등치가 있어야 (member_id, status, start_time)
+        // 인덱스가 주간 범위를 타고, 없으면 회원의 전 기간 리포트를 다 읽는다(구현 javadoc·decisions
+        // weekly-json-table-query-tuning.md §7). 이 테스트는 그 술어가 A층(totalsBetween)과 같은
+        // 행 집합을 뜻한다는 것을 값으로 못박는다.
+        seedWithReport(member, FROM.withHour(9), worst(1), List.of(rep(1, 90.0)));
+        seedWithReport(member, FROM.plusDays(1).withHour(9), Status.FAILED, worst(2), List.of(rep(1, 10.0), rep(2, 10.0)));
+
+        List<RepCurvePointDto> curve = repository.repCurveBetween(member.getId(), FROM, TO);
+        List<WorstRepFrequencyDto> distribution = repository.worstRepDistributionBetween(member.getId(), FROM, TO);
+
+        assertThat(curve).hasSize(1);
+        assertThat(curve.get(0).avgSyncRate()).isEqualByComparingTo("90.00");
+        assertThat(distribution).extracting(WorstRepFrequencyDto::repNumber).containsExactly(1);
     }
 
     @Test
