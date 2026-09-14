@@ -16,11 +16,13 @@ from fastapi import APIRouter, HTTPException
 from app.grpc.exercise_servicer import ExerciseServicer
 from app.models.internal_analysis import (
     AnalyzeCommand,
+    AnalyzeNestedCommand,
     AnalyzeResult,
     ExtractCommand,
     ExtractResult,
     PoseRefDto,
     ReattachCommand,
+    ReattachNestedCommand,
     ReattachResult,
     StopCommand,
     StopResult,
@@ -109,3 +111,89 @@ def stop_analysis(command: StopCommand) -> StopResult:
     request = exercise_pb2.StopRequest(session_id=command.session_id)
     response = _servicer.StopAnalysis(request, _FakeContext())
     return StopResult(success=response.success, message=response.message)
+
+
+# ---------------------------------------------------------------------------------------
+# 5차 라운드 — 네이티브 팔 (docs/decisions/grpc-webclient-native-rest-round.md §2-2 방식 (i))
+#
+# 위 미러는 «JSON → pydantic → proto 재조립 → 서비서» 라 gRPC 경로를 감싼 겹이고, 4차의
+# AI 쪽 +1~3 cpu-ms 는 그 겹의 값이다. 여기 두 팔은 proto 재조립을 뺀다 — 서비서는 요청의
+# 속성만 읽으므로(`request.session_id`, `ref.joint_coordinates`) pydantic 객체를 그대로
+# 넘겨도 같은 로직을 탄다. 응답 proto(필드 4개) 조립만 서비서 안에 남는다.
+#
+# 🔴 측정용이다. 채택이 REST 로 나면 서비서 로직을 전송 무관 함수로 뽑는 (ii) 로 가고 이
+# 블록은 통째로 지운다. 프로덕션 코드가 pydantic 객체를 gRPC 서비서에 밀어 넣는 모양으로
+# 남아서는 안 된다.
+#
+#   /native/*         — 계약은 미러와 같다(joint_coordinates 는 JSON 문자열). B−C = 겹의 대가.
+#   /native-nested/*  — joint_coordinates 를 중첩 JSON 으로 받아 두 번째 파싱을 안 한다.
+#                       C−D = 이중 인코딩의 대가. `_parse_reference_poses` 가 list 도 받는다.
+# ---------------------------------------------------------------------------------------
+
+
+def _start_direct(command) -> AnalyzeResult:
+    try:
+        response = _servicer.StartAnalysis(command, _FakeContext())
+    except _AbortSignal as e:
+        raise HTTPException(status_code=400, detail=e.details) from e
+    return AnalyzeResult(session_id=response.session_id)
+
+
+def _reattach_direct(command) -> ReattachResult:
+    response = _servicer.ReattachAnalysis(command, _FakeContext())
+    return ReattachResult(
+        success=response.success,
+        rep_count=response.rep_count,
+        already_active=response.already_active,
+        message=response.message,
+    )
+
+
+def _stop_direct(command: StopCommand) -> StopResult:
+    response = _servicer.StopAnalysis(command, _FakeContext())
+    return StopResult(success=response.success, message=response.message)
+
+
+def _extract_direct(command: ExtractCommand) -> ExtractResult:
+    response = _servicer.ExtractReferenceData(command, _FakeContext())
+    return ExtractResult(success=response.success, exercise_id=response.exercise_id)
+
+
+@router.post("/native/extract-reference", response_model=ExtractResult)
+def extract_reference_data_native(command: ExtractCommand) -> ExtractResult:
+    return _extract_direct(command)
+
+
+@router.post("/native/start", response_model=AnalyzeResult)
+def start_analysis_native(command: AnalyzeCommand) -> AnalyzeResult:
+    return _start_direct(command)
+
+
+@router.post("/native/reattach", response_model=ReattachResult)
+def reattach_analysis_native(command: ReattachCommand) -> ReattachResult:
+    return _reattach_direct(command)
+
+
+@router.post("/native/stop", response_model=StopResult)
+def stop_analysis_native(command: StopCommand) -> StopResult:
+    return _stop_direct(command)
+
+
+@router.post("/native-nested/extract-reference", response_model=ExtractResult)
+def extract_reference_data_nested(command: ExtractCommand) -> ExtractResult:
+    return _extract_direct(command)
+
+
+@router.post("/native-nested/start", response_model=AnalyzeResult)
+def start_analysis_nested(command: AnalyzeNestedCommand) -> AnalyzeResult:
+    return _start_direct(command)
+
+
+@router.post("/native-nested/reattach", response_model=ReattachResult)
+def reattach_analysis_nested(command: ReattachNestedCommand) -> ReattachResult:
+    return _reattach_direct(command)
+
+
+@router.post("/native-nested/stop", response_model=StopResult)
+def stop_analysis_nested(command: StopCommand) -> StopResult:
+    return _stop_direct(command)

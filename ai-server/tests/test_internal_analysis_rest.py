@@ -132,3 +132,90 @@ def test_extract_reference_data_rejects_remote_url():
 
     assert res.status_code == 200
     assert res.json()["success"] is False
+
+
+# --- 5차 라운드 네이티브 팔 (docs/decisions/grpc-webclient-native-rest-round.md §2-2 방식 (i)) ---
+#
+# 검증 대상은 «세 팔(mirror / native / nested)이 같은 요청에 같은 답을 내는가» 다 — native 는
+# pydantic 객체를 서비서에 그대로 밀어 넣으므로 proto 가 주던 기본값(빈 문자열)에 기대는
+# 서비서 코드(`request.persona or "BEGINNER"`)가 pydantic 기본값에서도 같게 도는지, nested 는
+# `_parse_reference_poses` 가 디코드된 list 를 문자열과 같은 각도 시퀀스로 바꾸는지.
+
+
+def _landmarks_33():
+    """extract_angles 가 요구하는 인덱스를 전부 갖춘 랜드마크 33개 — 값은 좌표 모양만 맞춘 것."""
+    return [
+        {"index": i, "x": 0.1 + i * 0.01, "y": 0.2 + i * 0.01, "z": 0.0, "visibility": 1.0}
+        for i in range(33)
+    ]
+
+
+def _reattach_body(session_id: int, joint_coordinates):
+    return {
+        "session_id": session_id,
+        "exercise_id": 1,
+        "persona": "",
+        "initial_rep_count": 4,
+        "elapsed_sec": 1.5,
+        "session_nonce": "",
+        "reference_poses": [
+            {"timestamp_sec": 0.0, "joint_coordinates": joint_coordinates},
+            {"timestamp_sec": 0.5, "joint_coordinates": joint_coordinates},
+        ],
+    }
+
+
+def test_native_and_nested_reattach_match_mirror(monkeypatch):
+    """같은 세션에 mirror → native → nested 순으로 재부착하면 셋 다 success 이고, 둘째부터는
+    already_active 로 상태를 보존한다(rep_count 는 첫 호출의 initial_rep_count 그대로)."""
+    import orjson
+
+    monkeypatch.setattr(servicer_mod, "get_pool", lambda: _FakePool())
+    client = _client()
+    session_id = 424242
+    as_text = orjson.dumps(_landmarks_33()).decode()
+
+    mirror = client.post("/api/v1/internal/analysis/reattach", json=_reattach_body(session_id, as_text))
+    native = client.post("/api/v1/internal/analysis/native/reattach", json=_reattach_body(session_id, as_text))
+    nested = client.post(
+        "/api/v1/internal/analysis/native-nested/reattach", json=_reattach_body(session_id, _landmarks_33())
+    )
+
+    assert mirror.status_code == native.status_code == nested.status_code == 200
+    first, second, third = mirror.json(), native.json(), nested.json()
+    assert first["success"] is True and first["already_active"] is False
+    assert second["success"] is True and second["already_active"] is True
+    assert third == second  # nested 는 native 와 완전히 같은 답(같은 상태를 보존)
+    assert first["rep_count"] == second["rep_count"] == 4
+
+    servicer_mod.get_registry().remove(session_id)
+
+
+def test_nested_reference_poses_decode_to_same_angles_as_text():
+    """nested 팔이 재려는 것 — 문자열을 한 번 더 파싱한 결과와 디코드된 list 를 바로 쓴 결과가 같다."""
+    import orjson
+
+    class _Ref:
+        def __init__(self, jc):
+            self.joint_coordinates = jc
+
+    text = orjson.dumps(_landmarks_33()).decode()
+    from_text = servicer_mod._parse_reference_poses([_Ref(text)], "squat")
+    from_list = servicer_mod._parse_reference_poses([_Ref(_landmarks_33())], "squat")
+
+    assert from_text and from_text == from_list
+
+
+def test_native_start_rejects_unsupported_exercise_as_400_like_mirror():
+    """native 도 StartAnalysis 의 abort 를 400 으로 옮긴다 — _FakeContext 경로가 같다."""
+    client = _client()
+    body = {
+        "exercise_id": 2,
+        "session_id": 1,
+        "reference_source": "x",
+        "reference_poses": [],
+        "persona": "BEGINNER",
+        "session_nonce": "",
+    }
+    assert client.post("/api/v1/internal/analysis/native/start", json=body).status_code == 400
+    assert client.post("/api/v1/internal/analysis/native-nested/start", json=body).status_code == 400

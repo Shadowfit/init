@@ -39,11 +39,66 @@ class WebClientAiAnalysisClientTest {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.start();
 
-        client = new WebClientAiAnalysisClient();
-        ReflectionTestUtils.setField(client, "baseUrl", "http://127.0.0.1:" + server.getAddress().getPort());
-        ReflectionTestUtils.setField(client, "internalToken", "test-internal-token");
-        ReflectionTestUtils.setField(client, "channelPoolSize", 3);
-        ReflectionTestUtils.invokeMethod(client, "initWebClient");
+        client = newClient("mirror");
+    }
+
+    /** 계약 팔(mirror|native|nested)만 다른 클라이언트 — 5차 라운드 §2-1 의 세 REST 팔. */
+    private WebClientAiAnalysisClient newClient(String contract) {
+        WebClientAiAnalysisClient c = new WebClientAiAnalysisClient();
+        ReflectionTestUtils.setField(c, "baseUrl", "http://127.0.0.1:" + server.getAddress().getPort());
+        ReflectionTestUtils.setField(c, "internalToken", "test-internal-token");
+        ReflectionTestUtils.setField(c, "channelPoolSize", 3);
+        ReflectionTestUtils.setField(c, "contractName", contract);
+        ReflectionTestUtils.invokeMethod(c, "initWebClient");
+        return c;
+    }
+
+    /** 경로 하나에서 요청 본문을 잡아 돌려준다 — 계약 팔 테스트 둘이 같이 쓴다. */
+    private AtomicReference<String> captureReattach(String path) {
+        AtomicReference<String> body = new AtomicReference<>();
+        server.createContext(path, exchange -> {
+            body.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            byte[] bytes = "{\"success\":true,\"rep_count\":3,\"already_active\":true,\"message\":\"\"}"
+                    .getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, bytes.length);
+            exchange.getResponseBody().write(bytes);
+            exchange.close();
+        });
+        return body;
+    }
+
+    private static AiAnalysisClient.ReattachCommand reattachWithOneLandmark() {
+        return new AiAnalysisClient.ReattachCommand(
+                9L, 1L, "BEGINNER", 3, 12.5, "nonce-9",
+                List.of(new AiAnalysisClient.PoseRef(0.0, "[{\"index\":0,\"x\":0.1,\"y\":0.2}]")));
+    }
+
+    @Test
+    @DisplayName("native 계약 — 경로만 /native 로 바뀌고 본문은 mirror 와 같다(문자열 안의 문자열)")
+    void native_계약은_경로만_다르다() {
+        AtomicReference<String> body = captureReattach("/api/v1/internal/analysis/native/reattach");
+
+        AiCallOutcome<AiAnalysisClient.ReattachResult> outcome =
+                newClient("native").reattachAnalysis(9L, reattachWithOneLandmark());
+
+        assertThat(outcome).isInstanceOf(AiCallOutcome.Success.class);
+        // joint_coordinates 는 여전히 JSON 문자열 — 따옴표가 이스케이프돼 있다.
+        assertThat(body.get()).contains("\"joint_coordinates\":\"[{\\\"index\\\":0");
+    }
+
+    @Test
+    @DisplayName("nested 계약 — joint_coordinates 가 문자열이 아니라 중첩 JSON 그대로 실린다(@JsonRawValue)")
+    void nested_계약은_중첩JSON을_그대로_싣는다() {
+        AtomicReference<String> body = captureReattach("/api/v1/internal/analysis/native-nested/reattach");
+
+        AiCallOutcome<AiAnalysisClient.ReattachResult> outcome =
+                newClient("nested").reattachAnalysis(9L, reattachWithOneLandmark());
+
+        assertThat(outcome).isInstanceOf(AiCallOutcome.Success.class);
+        assertThat(body.get())
+                .contains("\"joint_coordinates\":[{\"index\":0,\"x\":0.1,\"y\":0.2}]")
+                .doesNotContain("\\\""); // 이스케이프된 따옴표가 하나라도 있으면 문자열로 감싼 것
     }
 
     @AfterEach

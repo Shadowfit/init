@@ -150,6 +150,10 @@ ai:
     # POST /pose 가 이미 쓰는 X-AI-Worker 헤더 기반 라우팅을 그대로 재사용한다(§8.3). 로컬
     # bootRun 은 AI_NGINX_HOST=localhost 로 override(호스트에 8000 포트가 매핑돼 있다).
     base-url: 'http://${AI_NGINX_HOST:ai-nginx}:${AI_NGINX_PORT:8000}'
+    # 5차 라운드(docs/decisions/grpc-webclient-native-rest-round.md §2-1) 의 REST 계약 팔.
+    # mirror(기본, 4차까지의 미러) | native(AI 가 proto 재조립 없이 서비서 직행) |
+    # nested(joint_coordinates 를 중첩 JSON 그대로). 전송 계층은 셋이 같고 경로·직렬화만 다르다.
+    contract: ${AI_WEBCLIENT_CONTRACT:mirror}
 
 # [3] Swagger 및 기타 설정 (최상단 레벨)
 #

@@ -134,6 +134,8 @@ services:
       # WebClient 팔의 대상. 기본은 ai-nginx(검증된 라우팅 재사용). 측정에서 홉을 빼려면
       # shadowfit-ai 를 직접 준다 — 그 뺄셈이 「홉 비용」이다.
       AI_NGINX_HOST: ${AI_NGINX_HOST:-ai-nginx}
+      # WebClient 팔의 REST 계약(mirror|native|nested) — 5차 라운드 측정용, 기본은 4차와 같은 mirror.
+      AI_WEBCLIENT_CONTRACT: ${AI_WEBCLIENT_CONTRACT:-mirror}
       AI_NGINX_PORT: ${AI_NGINX_PORT:-8000}
       # Spring→AI 요청 4개를 gRPC로 보낼지 REST(WebClient)로 보낼지 — 재빌드 없이 바꾸는
       # 측정용 손잡이(grpc-webclient-empirical-comparison.md §9.3). 기본은 application.yml

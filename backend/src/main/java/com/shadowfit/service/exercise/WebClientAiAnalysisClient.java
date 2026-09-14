@@ -1,5 +1,6 @@
 package com.shadowfit.service.exercise;
 
+import com.fasterxml.jackson.annotation.JsonRawValue;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import jakarta.annotation.PostConstruct;
@@ -47,10 +48,40 @@ import java.util.function.Consumer;
 @Slf4j
 public class WebClientAiAnalysisClient implements AiAnalysisClient {
 
-    private static final String EXTRACT_PATH = "/api/v1/internal/analysis/extract-reference";
-    private static final String START_PATH = "/api/v1/internal/analysis/start";
-    private static final String REATTACH_PATH = "/api/v1/internal/analysis/reattach";
-    private static final String STOP_PATH = "/api/v1/internal/analysis/stop";
+    /**
+     * 5차 라운드(docs/decisions/grpc-webclient-native-rest-round.md §2-1)의 세 REST 팔.
+     * 전송 계층(WebClient·풀·타임아웃·인코더)은 셋이 완전히 같고 <b>경로 접두와 직렬화 규칙만</b>
+     * 다르다 — 그래야 B−C(겹)·C−D(이중 인코딩) 뺄셈이 성립한다.
+     * <ul>
+     *   <li>{@code mirror} — 4차까지의 미러. AI 쪽이 JSON→pydantic→proto 재조립→gRPC 서비서.</li>
+     *   <li>{@code native} — 같은 계약, AI 쪽이 pydantic 객체를 서비서에 바로 넘긴다.</li>
+     *   <li>{@code nested} — {@code joint_coordinates} 를 문자열이 아니라 중첩 JSON 그대로 싣는다
+     *       ({@link RawJointCoordinatesMixIn}). AI 쪽은 두 번째 파싱을 안 한다.</li>
+     * </ul>
+     */
+    enum Contract {
+        MIRROR("/api/v1/internal/analysis"),
+        NATIVE("/api/v1/internal/analysis/native"),
+        NESTED("/api/v1/internal/analysis/native-nested");
+
+        final String prefix;
+
+        Contract(String prefix) {
+            this.prefix = prefix;
+        }
+    }
+
+    /**
+     * nested 계약 전용 — {@link AiAnalysisClient.PoseRef#jointCoordinates()} 는 DB 의
+     * {@code pose_data.joint_coordinates} JSON 문자열인데, 기본 직렬화는 그걸 문자열로 한 번 더
+     * 감싼다({@code "[{\"index\":0,...}]"}). {@code @JsonRawValue} 면 파싱 없이 그대로 박히므로
+     * Spring 쪽 CPU 는 오히려 준다. 🔴 문자열이 유효 JSON 이 아니면 본문 전체가 깨진다 — 채택 시
+     * 조건(설계 §2-3).
+     */
+    abstract static class RawJointCoordinatesMixIn {
+        @JsonRawValue
+        abstract String jointCoordinates();
+    }
 
     // gRPC 쪽 GRPC_CALL_TIMEOUT_SECONDS와 같은 값 — 실측 튜닝된 값이 아닌 보수적 기본값이라
     // 두 구현체가 같은 상수를 쓰는 게 공정한 비교의 전제다.
@@ -65,6 +96,10 @@ public class WebClientAiAnalysisClient implements AiAnalysisClient {
     @Value("${ai.channel-pool-size:3}")
     private int channelPoolSize;
 
+    @Value("${ai.webclient.contract:mirror}")
+    private String contractName;
+
+    private Contract contract;
     private WebClient webClient;
 
     // ai-server의 Pydantic 모델(app/models/pose.py 등)이 이미 snake_case + proto 필드명
@@ -72,8 +107,13 @@ public class WebClientAiAnalysisClient implements AiAnalysisClient {
     // 프론트의 camelCase JSON에는 영향 없음, 이 빈 하나에만 적용).
     @PostConstruct
     private void initWebClient() {
+        contract = Contract.valueOf(contractName.trim().toUpperCase());
         ObjectMapper snakeCaseMapper = new ObjectMapper()
                 .setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE);
+        if (contract == Contract.NESTED) {
+            snakeCaseMapper.addMixIn(PoseRef.class, RawJointCoordinatesMixIn.class);
+        }
+        log.info("WebClientAiAnalysisClient contract={} prefix={}", contract, contract.prefix);
 
         ExchangeStrategies strategies = ExchangeStrategies.builder()
                 .codecs(configurer -> {
@@ -111,7 +151,7 @@ public class WebClientAiAnalysisClient implements AiAnalysisClient {
     public void extractReferenceData(long routingKey, ExtractCommand command,
                                       Consumer<AiCallOutcome<ExtractResult>> onResult) {
         webClient.post()
-                .uri(EXTRACT_PATH)
+                .uri(contract.prefix + "/extract-reference")
                 .header("X-AI-Worker", workerHeader(routingKey))
                 .bodyValue(command)
                 .retrieve()
@@ -127,7 +167,7 @@ public class WebClientAiAnalysisClient implements AiAnalysisClient {
     public void startAnalysis(long routingKey, AnalyzeCommand command,
                                Consumer<AiCallOutcome<AnalyzeResult>> onResult) {
         webClient.post()
-                .uri(START_PATH)
+                .uri(contract.prefix + "/start")
                 .header("X-AI-Worker", workerHeader(routingKey))
                 .bodyValue(command)
                 .retrieve()
@@ -143,7 +183,7 @@ public class WebClientAiAnalysisClient implements AiAnalysisClient {
     public AiCallOutcome<ReattachResult> reattachAnalysis(long routingKey, ReattachCommand command) {
         try {
             ReattachResult result = webClient.post()
-                    .uri(REATTACH_PATH)
+                    .uri(contract.prefix + "/reattach")
                     .header("X-AI-Worker", workerHeader(routingKey))
                     .bodyValue(command)
                     .retrieve()
@@ -160,7 +200,7 @@ public class WebClientAiAnalysisClient implements AiAnalysisClient {
     public AiCallOutcome<StopResult> stopAnalysis(long routingKey, StopCommand command) {
         try {
             StopResult result = webClient.post()
-                    .uri(STOP_PATH)
+                    .uri(contract.prefix + "/stop")
                     .header("X-AI-Worker", workerHeader(routingKey))
                     .bodyValue(command)
                     .retrieve()

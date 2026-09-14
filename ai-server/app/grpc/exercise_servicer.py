@@ -33,13 +33,20 @@ logger = logging.getLogger(__name__)
 def _parse_reference_poses(
     reference_poses, exercise_type: str
 ) -> list[list[float]]:
-    """Spring이 보낸 reference PoseDataRequest 리스트 → 각도 시퀀스로 변환."""
+    """Spring이 보낸 reference PoseDataRequest 리스트 → 각도 시퀀스로 변환.
+
+    `joint_coordinates` 는 보통 JSON 문자열(proto·REST mirror/native)이지만, 5차 라운드의
+    nested 계약(docs/decisions/grpc-webclient-native-rest-round.md §2-3)은 이미 디코드된
+    `list` 로 온다 — 그때는 두 번째 파싱을 건너뛴다. 그게 그 팔이 재려는 것이다.
+    """
     sequences: list[list[float]] = []
     for ref in reference_poses:
         if not ref.joint_coordinates:
             continue
         try:
-            raw = orjson.loads(ref.joint_coordinates)
+            raw = ref.joint_coordinates
+            if isinstance(raw, (str, bytes)):
+                raw = orjson.loads(raw)
             landmarks = [
                 Landmark(
                     index=item["index"],
