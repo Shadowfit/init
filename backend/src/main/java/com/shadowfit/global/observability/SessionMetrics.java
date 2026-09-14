@@ -136,8 +136,10 @@ public class SessionMetrics {
      *                {@code retry} 와 반드시 구분해야 한다 — 전자는 사람이 봐야 할 사건이고
      *                후자는 정상 운영 중에도 나온다.
      */
-    public void outboxDispatch(String outcome) {
-        registry.counter(OUTBOX_DISPATCH, "outcome", outcome).increment();
+    public void outboxDispatch(String lane, String outcome) {
+        // lane 태그 — 기본 차선과 주간 리포트(LLM) 차선의 결과를 한 지표에서 가른다. Prometheus 는 같은
+        // 이름의 미터가 같은 태그 키 집합이어야 하므로 모든 호출부가 lane 을 넘긴다.
+        registry.counter(OUTBOX_DISPATCH, "lane", lane, "outcome", outcome).increment();
     }
 
     /**

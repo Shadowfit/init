@@ -335,6 +335,12 @@ resilience4j:
         # ExerciseAnalysisService.isClientRejection 과 같은 판단.
         ignoreExceptions:
           - com.shadowfit.service.notification.push.ExpoPushRejectedException
+      # Spring→Gemini HTTP (report-generation-llm.md §14). default 상속 — 이유는 expoPush 와 같다: 상대가 죽어 있을 때
+      # 5건 × 10s = 50s 를 매 tick 흘리지 않도록 서킷이 즉시 실패로 닫는다. 4xx·규격 밖 응답은 상대 건강 신호가 아니다.
+      gemini:
+        baseConfig: default
+        ignoreExceptions:
+          - com.shadowfit.service.report.llm.GeminiRejectedException
 
 # [8] Expo Push (social-cheer-and-group-feed.md §3-C c 하위 ①, §4-3 ⑥·⑧)
 # 알림 행 → 아웃박스 → 이 URL 로 POST. Expo 가 FCM/APNs 로 중계한다.
@@ -350,6 +356,42 @@ push:
     # 5s 는 그 제약을 만족하는 기존 값(ExerciseAnalysisService.GRPC_CALL_TIMEOUT_SECONDS)이라
     # 새 숫자를 만들지 않았다. Expo 응답 시간 분포는 실측이 없다 — 실기기 테스트 때 outbox_lag 로 본다.
     timeout-seconds: 5
+
+# [9] 주간 리포트 LLM 문장 — Gemini (report-generation-llm.md §7 ③ Gemini 무료 티어, §14, 2026-09-14 사용자 결정)
+# 숫자의 원천은 loadtest/results/gemini-latency-2026-09-14/README.md — 실측(baseline)과 약속(threshold)을 아래에 가른다.
+llm:
+  gemini:
+    # 비어 있으면 LLM 을 안 부르고 주간 리포트는 전부 TEMPLATE_FALLBACK(reason=disabled). 서비스는 그대로 선다(§9).
+    api-key: ${GEMINI_API_KEY:}
+    base-url: https://generativelanguage.googleapis.com/v1beta
+    # 실측: flash-lite p95 1.66s·thinking 없음·검증 3종 10/10 / 3.5-flash p95 26s·max 39s(thinking 2k tok) /
+    # 3.8-flash 11회 전부 503 / 2.5-flash-lite 404(신규 사용자 불가). 이 작업(숫자 십수 개 → 3문장)은 thinking 이
+    # 필요 없다 — flash-lite 로 (사용자 결정 2026-09-14). 모델을 바꾸면 아래 timeout·lease 를 그 모델의 max 로 다시 유도할 것.
+    model: gemini-3.5-flash-lite
+    # 약속(threshold). 실측 max 1.66s 의 6배 — «여유 배수» 자체는 근거 없는 숫자다. 이 값의 실제 의미는 제약 쪽이다:
+    # lease 60s 의 절반(30s) 안에 batch 3 × timeout 10s 가 들어와야 회수·중복 호출이 안 난다(아래 outbox.weekly-report).
+    timeout-seconds: 10
+
+outbox:
+  # 기본 차선(STOP_ANALYSIS·REATTACH·PUSH·SESSION_COMPLETED)은 코드 기본값(lease 60s·batch 20·max-retry 10·backoff ≤300s)
+  # 그대로 — 여기 안 적는 건 값을 안 바꿨다는 뜻이다(OutboxLaneConfig·OutboxPublisher).
+  #
+  # 주간 리포트 차선(GENERATE_WEEKLY_REPORT) — 별도 발행기(§5-2 안 A). 기본 차선과 다른 이유는 호출 1건이 초 단위라서다.
+  weekly-report:
+    # 제약에서 온 값: 한 tick 이 lease 안에 끝나야 한다. tick 한 건 = HTTP(≤timeout) + 집계 조회 + 검증 + 저장이고
+    # HTTP 만 상한이 있다(집계·저장은 실측 없음 — WeeklyReportMetrics.queryLatency 로 본다). 그래서 HTTP 몫을 lease 의
+    # 절반으로 잡는다: 3 × 10s = 30s, 나머지 30s 가 집계·저장 몫. batch 20 이면 lease 를 400s 로 올려야 하고 그만큼
+    # 크래시 후 회수가 늦어진다. 주간 리포트는 tick 당 3건이면 충분하다 — 회원 10명 × 주 1회가 상한이라 «밀리는»
+    # 시나리오 자체가 없다(사용자 테스트 규모, 34-user-test-scenario.md). 모델을 바꾸면 timeout 과 함께 다시 유도할 것.
+    batch-size: 3
+    lock-timeout-seconds: 60
+    # 사용자가 기다리며 블록되는 이벤트가 아니다(첫 조회는 이미 템플릿으로 응답). 1초 tick 을 두 벌 돌릴 이유가 없다.
+    poll-interval-ms: 5000
+    initial-delay-ms: 15000
+    # 약속(threshold): 503 «high demand» 가 얼마나 지속되는지의 baseline 은 없다(실측은 4분간 11회 연속뿐). 1s→2s→…→2048s
+    # 12회 = 누적 ≈68분 — «한 시간 넘게 못 부르면 포기하고 템플릿» 이 이 두 값의 뜻이다. 소진되면 행은 TEMPLATE_FALLBACK(exhausted).
+    max-retry: 12
+    max-backoff-seconds: 3600
 
 jwt:
   secret: ${JWT_SECRET}

@@ -130,6 +130,8 @@ public enum ErrorCode {
 
     //Report
     REPORT_NOT_FOUND(404,"R001","리포트를 찾을 수 없습니다"),
+    // 주간 리포트 LLM 문장은 «끝난 주» 에만 만든다(report-generation-llm.md §14-2 B-a) — 이번 주·미래 주 요청은 여기
+    WEEKLY_REPORT_WEEK_NOT_COMPLETED(400, "R002", "아직 끝나지 않은 주의 리포트는 만들 수 없습니다"),
 
     // --- 트레이너 실시간 모니터링(SSE) ---
     NOT_ASSIGNED_TRAINER(403, "T001", "담당 사용자가 아닙니다."),

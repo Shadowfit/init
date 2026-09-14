@@ -29,6 +29,12 @@ public class WeeklyReportMetrics {
     private static final String SESSIONS_IN_WINDOW = "shadowfit.report.weekly.sessions";
     private static final String RULE_FIRED = "shadowfit.report.weekly.rule.fired";
 
+    // LLM 문장 생성 (report-generation-llm.md §10 «기존 SLO 판정선에 없는 지표들»)
+    private static final String LLM_CALL = "shadowfit.report.weekly.llm.call";
+    private static final String LLM_LATENCY = "shadowfit.report.weekly.llm.latency";
+    private static final String LLM_TOKENS = "shadowfit.report.weekly.llm.tokens";
+    private static final String FALLBACK = "shadowfit.report.weekly.fallback";
+
     private final MeterRegistry registry;
 
     public WeeklyReportMetrics(MeterRegistry registry) {
@@ -55,5 +61,34 @@ public class WeeklyReportMetrics {
     /** @param ruleId 발화한 규칙. tags: rule(규칙 식별자) */
     public void ruleFired(WeeklySentenceRuleId ruleId) {
         registry.counter(RULE_FIRED, "rule", ruleId.name()).increment();
+    }
+
+    /** 호출 1건의 결말 — ok / transport-error / rejected / validation:&lt;이유&gt;. 폴백 비율은 fallback 쪽에서 원인별로. */
+    public void llmCall(String outcome) {
+        registry.counter(LLM_CALL, "outcome", outcome).increment();
+    }
+
+    /** 실패 포함 호출 왕복 시간 — 실측(2026-09-14 flash-lite p95 1.66s)이 운영에서도 유지되는지 본다. */
+    public void llmLatency(Duration duration) {
+        Timer.builder(LLM_LATENCY)
+                .description("Gemini generateContent 왕복 시간")
+                .publishPercentiles(0.5, 0.9, 0.95, 0.99)
+                .register(registry)
+                .record(duration);
+    }
+
+    /** 무료 티어 한도는 토큰이 아니라 요청 수지만, 유료 전환 시 비용의 원천이 이 둘이다. null 은 응답에 usage 가 없던 경우. */
+    public void llmTokens(Integer promptTokens, Integer outputTokens) {
+        if (promptTokens != null) {
+            DistributionSummary.builder(LLM_TOKENS).tag("kind", "prompt").register(registry).record(promptTokens);
+        }
+        if (outputTokens != null) {
+            DistributionSummary.builder(LLM_TOKENS).tag("kind", "output").register(registry).record(outputTokens);
+        }
+    }
+
+    /** 행이 TEMPLATE_FALLBACK 으로 끝난 원인 — no-record / disabled / rejected / validation:&lt;이유&gt; / exhausted. */
+    public void fallback(String reason) {
+        registry.counter(FALLBACK, "reason", reason).increment();
     }
 }
