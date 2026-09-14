@@ -139,7 +139,7 @@ streak 계산 창(지금 100일)은 근거가 문서화돼 있지 않다. 다중
 | 사진 | 오브젝트 스토리지(S3 호환) + presigned URL 업로드 + URL 저장 | **새 인프라**. 로컬/EC2 실측 환경에 스토리지가 없음. 프로필 이미지(`users.profile_image_url`)도 URL 만 있고 업로드 경로가 없음 |
 | 리액션 💗🔥 | `post_reactions(post_id, member_id, kind)` UNIQUE + 카운트 | 카운트를 `COUNT(*)` 로 셀지 컬럼으로 denormalize 할지 — 모임 12명이면 어느 쪽도 문제 없음. **핫 카운터 서사는 이 규모에서 안 선다**(팬아웃과 같은 이유) |
 | 댓글 | `post_comments` | 가볍다 |
-| "오늘 스쿼트 20개 3세트 완료!" 자동 글 | 세션 완료 → 그룹 이벤트 발행 | `SessionCompletionTx` 에서 `group_events` 에 SESSION_COMPLETED 발행. 아웃박스 경로가 이미 그 트랜잭션에 있음 |
+| "오늘 스쿼트 20개 3세트 완료!" 자동 글 | 세션 완료 → 그룹 이벤트 발행 | ~~`SessionCompletionTx` 에서 `group_events` 에 SESSION_COMPLETED 발행. 아웃박스 경로가 이미 그 트랜잭션에 있음~~ → 🔄 09-14 정정: 완료 tx 는 아웃박스 행만 남기고 발행기가 팬아웃(§4-4) |
 
 | 후보 | 트레이드오프 |
 |---|---|
@@ -225,7 +225,7 @@ professor-vision §2 의 "행 단위 접근 제어" 가 여기서 처음 실제�
 | 7 | **1:1 소켓 전달** — 현재 `GroupSocketRegistry` 는 그룹→세션 집합뿐이라 개인에게 밀 수 없음. 회원→세션 레지스트리 추가 + nudge 시 접속 중이면 즉시 전달 | 2~3h | 1.5~2h | 그룹 채널에 실으면 3-C ①의 "전원에게 보임" 문제 재발 — 그래서 별도 레지스트리 |
 | 8 | `push_tokens` 테이블 + `POST /push-tokens`(갱신·삭제 포함) | 1.5~2h | 1~1.5h | 회원당 기기 여러 개 |
 | 9 | 아웃박스 `PUSH_NOTIFICATION` 타입 + Expo Push HTTP 클라이언트 + `OutboxPublisher` 분기 + 응답 분류(RETRY / TERMINAL, `DeviceNotRegistered` 면 토큰 삭제) | 4~5h | 2.5~3h | receipt API 조회는 이 견적 밖(SENT = Expo 수신까지) |
-| 10 | 자동 글 — `SessionCompletionTx` 에서 ACTIVE 그룹마다 `group_events` `SESSION_COMPLETED` INSERT + 회원당 그룹 수 분포 기록 | 1.5~2h | 1~1.5h | ⚠️ `GroupEventService.publish` 가 `workout_groups` 행을 `PESSIMISTIC_WRITE` 로 잠그고 seq 를 채번한다 — 완료 트랜잭션 안에서 그룹 N개를 순서대로 잠그면 소켓 발행 경로와 **잠금 순서가 엇갈릴 수 있음**. group_id 오름차순으로 고정하고 데드락 테스트 1개 |
+| 10 | 자동 글 — ~~`SessionCompletionTx` 에서 ACTIVE 그룹마다 `group_events` `SESSION_COMPLETED` INSERT~~ → 🔄 09-14 정정: 완료 tx 는 아웃박스 `SESSION_COMPLETED` 행 적재, `OutboxPublisher` 가 그룹 전부를 한 tx 로 팬아웃(§4-4) + 회원당 그룹 수 분포 기록 | 1.5~2h | 1~1.5h | ⚠️ `GroupEventService.publish` 가 `workout_groups` 행을 `PESSIMISTIC_WRITE` 로 잠그고 seq 를 채번한다 — 완료 트랜잭션 안에서 그룹 N개를 순서대로 잠그면 소켓 발행 경로와 **잠금 순서가 엇갈릴 수 있음**. group_id 오름차순으로 고정하고 데드락 테스트 1개 |
 | 11 | 리액션 — `event_reactions` + POST/DELETE + 피드 조회 응답에 카운트·내 리액션 | 2.5~3h | 1.5~2h | 카운트는 `COUNT(*)` |
 | 12 | 통합 테스트(코드 참여→완료→자동 글→리액션→재촉→알림 흐름) + API 문서 갱신 | 3~4h | 2~2.5h | |
 | **합계** | | **≈28~38h (중앙값 ≈33h)** | **≈19~25h (중앙값 ≈22h)** | |
