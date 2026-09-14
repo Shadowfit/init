@@ -9,6 +9,7 @@ import com.shadowfit.global.error.BusinessException;
 import com.shadowfit.global.error.ErrorCode;
 import com.shadowfit.model.group.Group;
 import com.shadowfit.model.group.GroupMember;
+import com.shadowfit.model.group.GroupEventTypes;
 import com.shadowfit.model.group.GroupMemberStatus;
 import com.shadowfit.model.group.GroupRole;
 import com.shadowfit.model.group.InvitationStatus;
@@ -141,7 +142,7 @@ public class GroupService {
         ObjectNode payload = objectMapper.createObjectNode();
         payload.put("memberId", member.getId());
         payload.put("username", member.getUsername());
-        groupEventService.publish(group.getId(), null, "MEMBER_JOINED", payload.toString());
+        groupEventService.publish(group.getId(), null, GroupEventTypes.MEMBER_JOINED, payload.toString());
         return membership;
     }
 

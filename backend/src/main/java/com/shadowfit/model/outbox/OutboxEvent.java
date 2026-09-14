@@ -142,6 +142,20 @@ public class OutboxEvent {
                 .build();
     }
 
+    /**
+     * 세션 완료 자동 글 통보 한 건을 만든다 — 완료 트랜잭션({@code SessionCompletionTx.applyComplete}) 안에서,
+     * 상태 전이가 실제로 일어난 경우에만 호출된다. 멱등 가드가 재전송을 앞에서 걸러 주므로 세션당 행은 1개다.
+     */
+    public static OutboxEvent sessionCompleted(Long sessionId, String correlationId) {
+        return OutboxEvent.builder()
+                .aggregateType(AGGREGATE_TYPE_SESSION)
+                .aggregateId(sessionId)
+                .eventType(OutboxEventType.SESSION_COMPLETED)
+                .payload("{\"sessionId\":" + sessionId + "}")
+                .correlationId(correlationId)
+                .build();
+    }
+
     public static final String AGGREGATE_TYPE_SESSION = "SESSION";
     public static final String AGGREGATE_TYPE_NOTIFICATION = "NOTIFICATION";
 }
