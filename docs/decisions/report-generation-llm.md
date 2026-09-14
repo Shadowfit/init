@@ -546,6 +546,11 @@ SELECT JSON_EXTRACT(r.detailed_analysis, '$.worstSection.repNumber') AS worst_re
 ⚠️ **`JSON_TABLE` 은 그 자체로 카드 후보다** — 「JSON 컬럼을 SQL 안에서 펼쳐 집계한다」는
 읽기축에 없던 모양이다. 단 **계획을 재보기 전에는 카드라고 부르지 않는다**(EXPLAIN 선행).
 
+> 🔵 2026-09-15 — 쟀다. [`weekly-json-table-query-tuning.md`](./weekly-json-table-query-tuning.md) §7.
+> 비용은 `JSON_TABLE` 파싱이 아니라 **조인 순서**였다(옵티마이저가 `session_reports` 를 먼저 읽어
+> 회원의 전 기간 리포트를 페치). Q2·Q3 의 WHERE 에 `s.status = 'COMPLETED'` 를 보태
+> `(member_id, status, start_time)` 을 완전 범위로 타게 했다 — 위 SQL 원안은 그대로 두고 구현만 바뀌었다.
+
 ### 13-3. 🔴 문장 규칙 — 임계값을 못 쓴다
 
 규칙은 `조건 → 문장` 쌍이고 우선순위로 정렬해 상위 N개만 낸다. 그런데 여기서 이 프로젝트의
