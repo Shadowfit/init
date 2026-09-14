@@ -148,6 +148,8 @@ public enum ErrorCode {
     INVITATION_ALREADY_PENDING(409, "G006", "이미 초대를 보냈습니다."),
     NOT_GROUP_OWNER(403, "G007", "그룹장만 할 수 있습니다."),
     INVALID_INVITE_CODE(404, "G008", "유효하지 않은 초대 코드입니다."),
+    // 리액션 대상 (groupId, seq) 가 없음 — 그룹은 있는데 그 seq 의 글이 없는 경우(§4-5 ③).
+    GROUP_EVENT_NOT_FOUND(404, "G009", "존재하지 않는 피드 글입니다."),
 
     // --- 알림·재촉 (social-cheer-and-group-feed.md §3-C) ---
     // 남의 알림 id 도 «없음» 과 같게 404 — 세션 삭제(본인 것 아니면 404)와 같은 모양.

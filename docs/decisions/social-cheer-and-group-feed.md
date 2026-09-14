@@ -28,7 +28,7 @@
 | 알림 적재·읽음 | ❌ | `notifications` 없음 |
 | 앱 꺼진 상대에게 도달 | ❌ | FCM/Web Push 없음 — 코드·의존성·문서 어디에도 없음 |
 | 코드로 참여 | ❌ | 초대가 `invitee_id` 기반 — 상대 계정을 알아야 초대 가능 |
-| 피드(글·사진·리액션·댓글) | ❌ → 자동 글만 ✅(09-14) | `group_events` `SESSION_COMPLETED`(#10). 리액션 #11 미착수, 수기 글·사진은 후속(3-D a) |
+| 피드(글·사진·리액션·댓글) | ❌ → 자동 글 + 리액션 ✅(09-14) | `group_events` `SESSION_COMPLETED`(#10) + `event_reactions`(#11, `GET /groups/{id}/feed`·`PUT/DELETE …/reactions/{kind}`). 수기 글·사진·댓글은 후속(3-D a) |
 | Redis | ❌ | 없음 — 그룹 WS 는 단일 인스턴스 전제 |
 
 > `professor-vision-backend-impact.md` §4-1 은 "폐기했던 `friendships`/`activity_feed`/`notifications` 가 그대로 필요" 라고 썼는데, 그 뒤 그룹 4테이블이 채택·구현됐다. **`activity_feed` 자리는 `group_events` 가 이미 차지하고 있고**, 남은 공백은 `friendships`·`notifications` 둘이다.
@@ -315,6 +315,31 @@ professor-vision §2 의 "행 단위 접근 제어" 가 여기서 처음 실제�
 
 **이 견적에 없는 것**: 자동 글의 문구(프론트가 payload 로 조립), 피드 조회 API 의 타입 필터(지금 `GET /groups/{id}/events?afterSeq` 가 전부를 준다 — #11 리액션이 피드 응답을 만질 때 같이 본다), 회원당 그룹 수 분포(⑨ — 1차 사용자 테스트 뒤).
 
+### 4-5. 구현 분기 — #11 리액션 (2026-09-14, 사용자 confirm: 추천 그대로)
+
+사실(코드에서 확인):
+
+- 피드 읽기는 `GET /groups/{id}/events?afterSeq` 하나 — WS 재연결 **백필**용이라 «afterSeq 이후 전부·오름차순·무페이징» 이고, 응답 `GroupEventResponseDto` 가 그대로 WS 브로드캐스트 봉투다. 응답에 `seq`·`groupId` 는 있고 **`id` 는 없다**.
+- 페이징 관례는 둘 — 관리자·알림은 offset `page&size`(`PageResponse`, 기본 20·상한 100), 리포트 히스토리·캘린더는 keyset(모바일 무한 스크롤). `PageResponse` 주석이 «keyset 은 모바일 목록 쪽» 이라고 갈라 둔 상태.
+- 멱등 쓰기 선례 = `POST /push-tokens`(신규든 갱신이든 200), 규칙 위반 409 선례 = 재촉(하루 1회).
+- §3-D 에서 이미 결정된 것: 테이블 `event_reactions(event_id, member_id, kind)` UNIQUE(회원이 💗🔥 둘 다 가능), 카운트는 `COUNT(*)`, **리액션은 알림·WS 발행 없음**.
+
+| | 분기 | 후보 | 추천 | 근거 |
+|:--:|---|---|:--:|---|
+| ① | **피드 읽기** | a. 기존 `events` 응답에 `reactions`·`myReactions` 추가 / b. **새 `GET /groups/{id}/feed`** — 최신순·페이징·리액션 포함, 백필 DTO·WS 봉투는 그대로 | **b** | a 는 백필(전부·오름차순)과 피드(최신·페이지)가 한 API 라 어느 쪽이든 어색하고, WS 봉투에 항상 0 인 카운트가 실린다. b 는 엔드포인트 하나가 늘 뿐 각자 제 일만 한다 |
+| ② | **페이징** | a. offset `page&size` / b. **keyset `beforeSeq&size`** | **b** | `seq` 가 그룹 안 연속 정수라 커서로 자연스럽고 `uk_group_events_group_seq` 를 그대로 탄다. offset 은 새 글이 끼어들면 다음 페이지에 중복이 보인다. size 기본 20·상한 100 은 알림과 같은 값 — 근거는 관례 통일 |
+| ③ | **경로** | a. **`/groups/{groupId}/events/{seq}/reactions/{kind}`** / b. DTO 에 `id` 추가 + `/events/{eventId}/reactions/{kind}` | **a** | 프론트가 가진 식별자가 (groupId, seq) 뿐이고, 권한 검사(같은 그룹 ACTIVE)가 URL 의 groupId 로 바로 된다. b 는 이벤트→그룹 역조회가 필요하고 지금 «그룹 밖 이벤트» 가 없다 |
+| ④ | **쓰기 의미론** | a. **PUT/DELETE 멱등** — 있으면 그대로, 없으면 만듦/지움, 둘 다 200 + 갱신된 카운트 / b. POST 201 / 409 + DELETE 204 | **a** | 리액션은 토글이라 더블탭 뒤 원하는 상태가 «하나 있음» 이다 — 409 는 프론트가 성공으로 다시 해석해야 하는 낭비. 응답에 카운트를 실으면 재조회 없이 그린다. UNIQUE 위반은 «이미 있다» 로 해석(push-tokens 선례) |
+| ⑤ | **대상** | a. **타입 제한 없음** — 같은 그룹 ACTIVE 멤버면 어느 이벤트에든, 자기 글도 허용 / b. `SESSION_COMPLETED` 만 | **a** | `event_type` 이 String 이라 서버가 모르는 타입(소켓 클라이언트 발행)을 막을 근거가 없다. 레퍼런스에 «자기 글 금지» 없음 |
+| ⑥ | **종류·컬럼** | Java enum `ReactionKind{HEART, FIRE}` + `VARCHAR(20)`(DB ENUM 아님 — `notifications.type` 과 같은 결). 경로의 `{kind}` 가 enum 밖이면 400(기존 `MethodArgumentTypeMismatchException` 처리) | — | 💗=HEART, 🔥=FIRE. 이모지 렌더링은 프론트 |
+| ⑦ | **스키마** | `event_reactions(id, event_id FK→group_events CASCADE, member_id FK→users CASCADE, kind, created_at)` · UNIQUE `(event_id, member_id, kind)`. member_id 단독 인덱스는 FK 암묵 인덱스로 충분(회원 기준 조회 없음) | — | 카운트 `GROUP BY event_id, kind` 와 «내 리액션» `event_id IN … AND member_id = ?` 둘 다 UNIQUE 인덱스 선두(event_id)를 탄다 — 피드 한 페이지에 쿼리 2개, N+1 없음 |
+| ⑧ | **탈퇴·삭제** | 그룹 탈퇴(LEFT)해도 남긴 리액션은 유지(글도 남는다). 회원 탈퇴는 CASCADE. 이벤트 삭제 경로는 없음(그룹 삭제 CASCADE 만) | — | «완료 시점엔 멤버였다» 와 같은 판단 |
+| ⑨ | **응답 모양** | 피드 항목 = 백필 DTO 필드 + `reactions {HEART: n, FIRE: m}`(0 도 실음) + `myReactions [..]`. 페이지 = `{items, nextBeforeSeq}` — 마지막 항목 seq, size 미만이면 null | — | 프론트가 종류별 자리를 고정해 그리므로 0 도 키를 준다 |
+
+> ✅ **결정(2026-09-14, 사용자 confirm): 추천 그대로 ①b·②b·③a·④a·⑤a·⑥·⑦·⑧·⑨.**
+>
+> 구현: V20 `event_reactions` · `ReactionKind{HEART,FIRE}` · `EventReaction` · `GroupFeedController`(`GET /groups/{id}/feed?beforeSeq&size`, `PUT/DELETE /groups/{id}/events/{seq}/reactions/{kind}`) · `GroupFeedService`(피드 = 이벤트 keyset + 카운트 GROUP BY + 내 것 IN, 쿼리 3개/페이지) · `EventReactionStore`(INSERT·DELETE 각각 REQUIRES_NEW — push-tokens 와 같은 이유) · `ErrorCode.GROUP_EVENT_NOT_FOUND`(G009). 테스트 `GroupFeedReactionIntegrationTest`(H2, 4건 — keyset 3페이지·멱등 PUT/DELETE·403/404/400·타입 무관·더블탭 UNIQUE→200).
+
 ---
 
 ## 5. 추천 (결정 아님)
@@ -356,6 +381,7 @@ professor-vision §2 의 "행 단위 접근 제어" 가 여기서 처음 실제�
 
 ## 결정 로그
 
+- 2026-09-14 (15): **#11 구현 분기 확정(§4-5).** 새 `GET /groups/{id}/feed`(keyset `beforeSeq&size`), `PUT/DELETE /groups/{id}/events/{seq}/reactions/{kind}` 멱등 200, 타입 제한 없음, `ReactionKind{HEART,FIRE}` + V20 `event_reactions`.
 - 2026-09-14 (14): **#10 구현 분기 확정(§4-4) + 구현.** 추천 그대로 ①a·③b·④c·⑤a. ⑤의 «건너뛰기» 는 catch 가 아니라 스냅샷으로 실현(같은 tx 안 두 조회가 어긋날 수 없음). 다음은 #7 마무리 → #11 리액션 → #12.
 - 2026-09-14 (14): **#9 푸시 발행 분기 확정(§4-3).** 행 = 알림 1건 · 적재는 알림과 같은 트랜잭션(기기 있을 때만) · 결과 분류는 Expo 문서 그대로 + 전부 죽은 토큰이면 FAILED · 서킷 `expoPush` 추가(배치 20 × 5s > lease 60s 창) · 타임아웃 5s 는 제약에서 · 문구 확정. 추천 그대로. 구현 착수 전에 발견한 사실: **AI 채널의 서킷이 없었다면 lease 60초는 배치 20행을 못 버틴다** — 새 외부 호출을 붙일 때마다 같은 장치가 필요하다.
 - 2026-09-12 (13): **#8 push_tokens 분기 확정(§4-2).** UNIQUE(token)+소유자 이동 · 삭제는 로그아웃(계정 단위)+DeviceNotRegistered 두 자리, 별도 DELETE 없음 · 만료·상한 없음 · POST /push-tokens 멱등 200 + 형식 검증. 추천 그대로.
