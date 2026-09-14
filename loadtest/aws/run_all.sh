@@ -1515,10 +1515,14 @@ phase_calibration() {
   } > "$out/box.txt"
   cat "$out/box.txt"
 
-  timeout --kill-after=30 "$TIMEOUT_CALIB" \
-    env SCALING_WORKERS=1 "$FP_VENV" "$CALIB_RIG" "$CORES_RIG/frames.json" scaling \
+  # cwd 는 ai-server/ 여야 한다 — rig 이 `app.core.mediapipe_detector` 를 import 하므로 저장소
+  # 루트에서 부르면 워커가 전부 ModuleNotFoundError 로 죽고 결과가 비어 max() 에서 터진다(#744).
+  # R6 이 손으로 돌릴 때도 거기서 돌렸다.
+  local rc
+  ( cd "$ROOT/ai-server" && timeout --kill-after=30 "$TIMEOUT_CALIB" \
+      env SCALING_WORKERS=1 "$FP_VENV" "$CALIB_RIG" "$CORES_RIG/frames.json" scaling ) \
     > "$out/scaling_raw.txt" 2>&1
-  local rc=$?
+  rc=$?
   cat "$out/scaling_raw.txt"
   [ $rc -eq 0 ] || { note "🔴 보정 측정 실패(rc=$rc) — 위 원문 확인"; return 1; }
 
