@@ -271,6 +271,8 @@ DAU 1,000 가정([[feedback_state_assumption_design_to_it]])에서 **동시에 �
 | HTTP 경로 산술 | **116세션** | 348 RPS ÷ 3fps (이 문서 §3-ㄹ 머리) |
 | **동거 + HTTP 실측** | **89~105세션** | P6 1·2라운드 plateau(267.6 fps = 89.2세션 · 2라운드 105.0) |
 
+⚠️ **보정값 없음**(08-26 이전 라운드) — 라운드 간 **±10% 폭** 안에서만 읽을 것, [인용 규칙 ㉠ §8](./round-to-round-nonreproducibility.md#8--채택--인용-규칙--2026-09-14-사용자-결정). 세 줄 전부 해당한다 — 89↔105 의 폭(+17.7%) 자체가 그 폭이다(축 B 가 같은 박스 stop→start 로 +21.0% 를 재현).
+
 **배포 구성은 세 번째다** — `docker-compose.prod.yml` 이 MySQL·Spring·AI 를 한 호스트에 올린다.
 
 ### 답
