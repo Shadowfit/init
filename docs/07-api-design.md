@@ -328,7 +328,7 @@ AI = 운동 통계의 단일 진실 원천 원칙. (커밋 143a2e4)
 
 ## 모임·소셜 API (2026-08~09 추가)
 
-설계 근거: [`decisions/multiuser-realtime-sync.md`](./decisions/multiuser-realtime-sync.md)(그룹 4테이블·WS 릴레이), [`decisions/social-cheer-and-group-feed.md`](./decisions/social-cheer-and-group-feed.md)(친구=같은 모임 ACTIVE 멤버, 출석=COMPLETED 세션, 재촉·푸시·자동 글·리액션). 전부 JWT 필수. 권한 규칙은 하나 — **같은 모임의 ACTIVE 멤버**(아니면 403 `G002`). 에러 코드 `G001`~`G009`·`N001`~`N003` 은 `ErrorCode` 참고.
+설계 근거: [`decisions/multiuser-realtime-sync.md`](./decisions/multiuser-realtime-sync.md)(그룹 4테이블·WS 릴레이), [`decisions/social-cheer-and-group-feed.md`](./decisions/social-cheer-and-group-feed.md)(친구=같은 모임 ACTIVE 멤버, 출석=COMPLETED 세션, 재촉·푸시·자동 글·리액션). 전부 JWT 필수. 권한 규칙은 하나 — **같은 모임의 ACTIVE 멤버**(아니면 403 `G002`). 에러 코드 `G001`~`G011`·`N001`~`N003` 은 `ErrorCode` 참고.
 
 ### 모임
 
@@ -339,7 +339,8 @@ AI = 운동 통계의 단일 진실 원천 원칙. (커밋 143a2e4)
 | `GET /groups/mine` | 내 모임 목록 | ACTIVE 인 것만 |
 | `GET /groups/{groupId}` | 모임 상세 | `members[]`(memberId·username·role·status·joinedAt) 포함 |
 | `POST /groups/{groupId}/invite-code` | 초대 코드 재발급 | OWNER 만(403 `G007`). 이전 코드 즉시 무효 |
-| `DELETE /groups/{groupId}/members/me` | 탈퇴 | 행은 LEFT 로 남고(재가입 시 되살림), 남긴 글·리액션은 그대로 |
+| `PUT /groups/{groupId}/owner` | 그룹장 양도 | `{memberId}`. OWNER 만(403 `G007`). 대상이 ACTIVE 멤버 아니면 404 `G011`, 자기 자신이면 400. 넘긴 쪽은 MEMBER |
+| `DELETE /groups/{groupId}/members/me` | 탈퇴 | MEMBER: 행은 LEFT 로 남고(재가입 시 되살림), 남긴 글·리액션은 그대로. **OWNER**: 다른 ACTIVE 멤버가 있으면 409 `G010`(양도 먼저), 혼자면 **모임 삭제**(멤버·초대·피드 CASCADE) — #721 |
 | `POST /groups/{groupId}/invitations` | 초대 발송 | `{inviteeId}`. ACTIVE 멤버 누구나. 이미 대기중 409 `G006` |
 | `GET /invitations/mine` | 내게 온 대기중 초대 | |
 | `POST /invitations/{id}/accept` · `/decline` | 수락·거절 | 수락 = 코드 참여와 같은 가입 경로(`MEMBER_JOINED` 발행). 이미 응답 409 `G005` |

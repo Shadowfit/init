@@ -150,6 +150,10 @@ public enum ErrorCode {
     INVALID_INVITE_CODE(404, "G008", "유효하지 않은 초대 코드입니다."),
     // 리액션 대상 (groupId, seq) 가 없음 — 그룹은 있는데 그 seq 의 글이 없는 경우(§4-5 ③).
     GROUP_EVENT_NOT_FOUND(404, "G009", "존재하지 않는 피드 글입니다."),
+    // OWNER 가 다른 ACTIVE 멤버를 두고 탈퇴하려 함 — 양도(PUT /groups/{id}/owner) 뒤에만 된다(#721).
+    OWNER_MUST_TRANSFER_FIRST(409, "G010", "그룹장은 다른 멤버에게 양도한 뒤 탈퇴할 수 있습니다."),
+    // 양도 대상이 이 모임의 ACTIVE 멤버가 아님 — 요청자 본인의 권한 문제(G002/G007)와 구분한다.
+    GROUP_MEMBER_NOT_FOUND(404, "G011", "모임의 멤버가 아닌 회원입니다."),
 
     // --- 알림·재촉 (social-cheer-and-group-feed.md §3-C) ---
     // 남의 알림 id 도 «없음» 과 같게 404 — 세션 삭제(본인 것 아니면 404)와 같은 모양.
