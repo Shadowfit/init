@@ -28,7 +28,7 @@
 | 알림 적재·읽음 | ❌ | `notifications` 없음 |
 | 앱 꺼진 상대에게 도달 | ❌ | FCM/Web Push 없음 — 코드·의존성·문서 어디에도 없음 |
 | 코드로 참여 | ❌ | 초대가 `invitee_id` 기반 — 상대 계정을 알아야 초대 가능 |
-| 피드(글·사진·리액션·댓글) | ❌ | 테이블 없음, 오브젝트 스토리지 없음 |
+| 피드(글·사진·리액션·댓글) | ❌ → 자동 글만 ✅(09-14) | `group_events` `SESSION_COMPLETED`(#10). 리액션 #11 미착수, 수기 글·사진은 후속(3-D a) |
 | Redis | ❌ | 없음 — 그룹 WS 는 단일 인스턴스 전제 |
 
 > `professor-vision-backend-impact.md` §4-1 은 "폐기했던 `friendships`/`activity_feed`/`notifications` 가 그대로 필요" 라고 썼는데, 그 뒤 그룹 4테이블이 채택·구현됐다. **`activity_feed` 자리는 `group_events` 가 이미 차지하고 있고**, 남은 공백은 `friendships`·`notifications` 둘이다.
@@ -139,7 +139,7 @@ streak 계산 창(지금 100일)은 근거가 문서화돼 있지 않다. 다중
 | 사진 | 오브젝트 스토리지(S3 호환) + presigned URL 업로드 + URL 저장 | **새 인프라**. 로컬/EC2 실측 환경에 스토리지가 없음. 프로필 이미지(`users.profile_image_url`)도 URL 만 있고 업로드 경로가 없음 |
 | 리액션 💗🔥 | `post_reactions(post_id, member_id, kind)` UNIQUE + 카운트 | 카운트를 `COUNT(*)` 로 셀지 컬럼으로 denormalize 할지 — 모임 12명이면 어느 쪽도 문제 없음. **핫 카운터 서사는 이 규모에서 안 선다**(팬아웃과 같은 이유) |
 | 댓글 | `post_comments` | 가볍다 |
-| "오늘 스쿼트 20개 3세트 완료!" 자동 글 | 세션 완료 → 그룹 이벤트 발행 | `SessionCompletionTx` 에서 `group_events` 에 SESSION_COMPLETED 발행. 아웃박스 경로가 이미 그 트랜잭션에 있음 |
+| "오늘 스쿼트 20개 3세트 완료!" 자동 글 | 세션 완료 → 그룹 이벤트 발행 | ~~`SessionCompletionTx` 에서 `group_events` 에 SESSION_COMPLETED 발행. 아웃박스 경로가 이미 그 트랜잭션에 있음~~ → 🔄 09-14 정정: 완료 tx 는 아웃박스 행만 남기고 발행기가 팬아웃(§4-4) |
 
 | 후보 | 트레이드오프 |
 |---|---|
@@ -149,6 +149,8 @@ streak 계산 창(지금 100일)은 근거가 문서화돼 있지 않다. 다중
 | a′. 수기 글 + 댓글까지, 사진 제외 | 테이블 2, 인프라 0. SNS 느낌은 나되 스토리지는 안 엶 — 나중에 사진을 얹을 때 payload 의 URL 필드만 채우면 되는 구조 |
 
 > ✅ **결정(2026-09-11, 사용자 confirm): b 로 시작, a 는 후속.** 1차는 **세션 완료 자동 글 + 리액션(💗🔥)**. 자동 글은 `SessionCompletionTx` 안에서 회원이 속한 ACTIVE 그룹마다 `group_events` 에 `SESSION_COMPLETED` 를 INSERT — 같은 DB·같은 트랜잭션이라 아웃박스 불필요. 이건 fan-out-on-write 이고 그룹 수가 한 자릿수라 문제가 아니다 — **"팬아웃이 왜 여기선 문제가 아닌가"를 숫자(회원당 그룹 수 분포)로 적을 자리.** 리액션은 `event_reactions(event_id, member_id, kind)` UNIQUE, 카운트는 `COUNT(*)`(12명 규모에 denormalize 근거 없음). **리액션은 알림을 안 보낸다**(피드에서만 보임) — 3-C 재촉·응원 알림과 역할을 분리. a(수기 글·댓글·사진)는 **별도 결정으로 후속** — 사진은 오브젝트 스토리지(로컬 MinIO + S3) 결정이 선행돼야 하고, 수기 글·댓글은 append-only 로그(`group_events`)에서 삭제를 어떻게 표현할지가 새 질문이다.
+>
+> 🔄 **정정(2026-09-14, 사용자 confirm): 자동 글의 전달 경로를 «같은 트랜잭션 INSERT» 에서 «아웃박스 경유» 로 바꾼다.** 위 «같은 DB·같은 트랜잭션이라 아웃박스 불필요» 는 철회. 이유는 두 가지다. ① **애그리거트 경계** — 세션 완료 트랜잭션이 그룹 애그리거트(행 잠금·`seq` 채번·멤버십 검사)를 직접 바꾸면 세션 쪽이 그룹 쪽 규칙을 알아야 하고, 완료 tx 가 그룹 N행 락을 리포트 계산까지 쥔다. 다른 애그리거트로 넘어가는 변화는 이벤트로 넘기는 것이 원칙이고, 피드 글은 «완료와 어긋나면 안 되는 불변식» 이 아니라 «있어야 하는 결과» 라 1초 늦어도 아무것도 안 깨진다. ② **비용이 내려갔다** — 결정 당시엔 아웃박스가 AI 통보 전용이었는데 #9(§4-3)가 타입 하나로 두 번째 용처를 열어 세 번째는 타입·발행 서비스 추가로 끝난다. 잠금 순서 규약(그룹 오름차순)은 그대로 필요하지만 완료 tx 가 아니라 발행기 쪽 트랜잭션의 일이 된다. 나머지(리액션·알림 안 보냄·a 후속)는 그대로. 상세는 §4-4.
 
 ### 3-E. 출석 캘린더 — 계산 위치
 
@@ -223,7 +225,7 @@ professor-vision §2 의 "행 단위 접근 제어" 가 여기서 처음 실제�
 | 7 | **1:1 소켓 전달** — 현재 `GroupSocketRegistry` 는 그룹→세션 집합뿐이라 개인에게 밀 수 없음. 회원→세션 레지스트리 추가 + nudge 시 접속 중이면 즉시 전달 | 2~3h | 1.5~2h | 그룹 채널에 실으면 3-C ①의 "전원에게 보임" 문제 재발 — 그래서 별도 레지스트리 |
 | 8 | `push_tokens` 테이블 + `POST /push-tokens`(갱신·삭제 포함) | 1.5~2h | 1~1.5h | 회원당 기기 여러 개 |
 | 9 | 아웃박스 `PUSH_NOTIFICATION` 타입 + Expo Push HTTP 클라이언트 + `OutboxPublisher` 분기 + 응답 분류(RETRY / TERMINAL, `DeviceNotRegistered` 면 토큰 삭제) | 4~5h | 2.5~3h | receipt API 조회는 이 견적 밖(SENT = Expo 수신까지) |
-| 10 | 자동 글 — `SessionCompletionTx` 에서 ACTIVE 그룹마다 `group_events` `SESSION_COMPLETED` INSERT + 회원당 그룹 수 분포 기록 | 1.5~2h | 1~1.5h | ⚠️ `GroupEventService.publish` 가 `workout_groups` 행을 `PESSIMISTIC_WRITE` 로 잠그고 seq 를 채번한다 — 완료 트랜잭션 안에서 그룹 N개를 순서대로 잠그면 소켓 발행 경로와 **잠금 순서가 엇갈릴 수 있음**. group_id 오름차순으로 고정하고 데드락 테스트 1개 |
+| 10 | 자동 글 — ~~`SessionCompletionTx` 에서 ACTIVE 그룹마다 `group_events` `SESSION_COMPLETED` INSERT~~ → 🔄 09-14 정정: 완료 tx 는 아웃박스 `SESSION_COMPLETED` 행 적재, `OutboxPublisher` 가 그룹 전부를 한 tx 로 팬아웃(§4-4) + 회원당 그룹 수 분포 기록 | 1.5~2h | 1~1.5h | ⚠️ `GroupEventService.publish` 가 `workout_groups` 행을 `PESSIMISTIC_WRITE` 로 잠그고 seq 를 채번한다 — 완료 트랜잭션 안에서 그룹 N개를 순서대로 잠그면 소켓 발행 경로와 **잠금 순서가 엇갈릴 수 있음**. group_id 오름차순으로 고정하고 데드락 테스트 1개 |
 | 11 | 리액션 — `event_reactions` + POST/DELETE + 피드 조회 응답에 카운트·내 리액션 | 2.5~3h | 1.5~2h | 카운트는 `COUNT(*)` |
 | 12 | 통합 테스트(코드 참여→완료→자동 글→리액션→재촉→알림 흐름) + API 문서 갱신 | 3~4h | 2~2.5h | |
 | **합계** | | **≈28~38h (중앙값 ≈33h)** | **≈19~25h (중앙값 ≈22h)** | |
@@ -281,6 +283,37 @@ professor-vision §2 의 "행 단위 접근 제어" 가 여기서 처음 실제�
 **이 견적에 없는 것**: receipt 조회(§3-C 하위 ①이 범위 밖), 알림 종류별 문구 분기(지금 NUDGE 하나), 프론트 `expo-notifications`(별도 산정).
 
 **#7 과의 접점**: 둘 다 `NotificationWriter.insert` 뒤에 «전달» 을 붙인다. #7 은 트랜잭션 밖 릴레이(커밋 후), #9 는 트랜잭션 안 아웃박스 INSERT — 같은 파일이지만 다른 줄이다. 먼저 머지되는 쪽에 나머지가 리베이스한다.
+---
+
+### 4-4. 구현 분기 — #10 세션 완료 자동 글 (2026-09-14, 사용자 confirm: C 아웃박스 경유)
+
+사실(코드에서 확인):
+
+- `SessionCompletionTx.applyComplete` 는 트랜잭션 하나 — 세션 `complete()`(상태 전이, 멱등 가드) → `daily_logs` 누적 → 리포트 precompute. 바깥 `SessionService.completeSession` 이 낙관적 락 실패를 3회 재시도. AI 콜백 재전송은 `complete()` 가 `false` 를 돌려줘 즉시 빠지므로 **여기에 얹는 아웃박스 행도 저절로 1회다.**
+- `GroupEventService.publish(groupId, senderId, eventType, payload)` — `workout_groups` 행 `PESSIMISTIC_WRITE` 로 `seq` 채번, 커밋 후 소켓 브로드캐스트. 호출자에 트랜잭션이 있으면 합류(REQUIRED). `event_type` 은 String, `MEMBER_JOINED` 리터럴 하나.
+- 그룹 행을 잠그는 경로 셋(발행·코드 참여·소켓 클라이언트 발행)은 모두 **그룹 1개**만 잠근다. 한 트랜잭션이 둘 이상 잠그는 곳은 #10 이 처음.
+- `group_events` 에는 «이 글이 어느 세션에서 왔나» 를 담는 컬럼이 없다(`payload` TEXT 뿐). 아웃박스는 at-least-once 라 **같은 행이 두 번 발행될 수 있고**(lease 상실 뒤 회수), 그때 같은 글이 두 번 생기지 않으려면 (세션, 그룹) 단위의 키가 필요하다 — AI 쪽은 수신자가 멱등했지만 `group_events` 는 아니다.
+- **§3-D 와 §3-G 충돌**: §3-D 예시 문구 «스쿼트 20개 3세트 완료!» vs §3-G «rep 수·칼로리·세션 상세는 노출 항목이 아니다».
+
+| | 분기 | 후보 | 추천 | 근거 |
+|:--:|---|---|:--:|---|
+| ① | **payload** | a. `{sessionId, memberId, username, exerciseName}` — «철수님이 스쿼트를 완료했어요» / b. a + `totalReps`·`durationMinutes` / c. b + `avgSyncRate` | **a** | §3-G 가 결정된 목록. rep 수는 목록 밖이고, 넓히려면 §3-G(b 지표별 동의) 를 먼저 열어야 한다 |
+| ② | **적재** | `applyComplete` 에서 `complete()` 통과 뒤 `OutboxEvent.sessionCompleted(sessionId)` INSERT — 단 회원이 ACTIVE 그룹에 하나도 없으면 행을 안 만든다(§4-3 ④ c 와 같은 규칙: 대상 없음은 실패가 아니다) | — | `aggregate_type="SESSION"`, payload `{"sessionId":n}`. 완료 tx 에 더해지는 것은 INSERT 1행 + exists 1회 |
+| ③ | **발행 단위** | a. 그룹마다 `publish` 를 각자 트랜잭션으로 / b. **그룹 전부를 한 트랜잭션**(`GroupFeedFanoutTx`) — group_id 오름차순으로 잠그며 순서대로 publish, 전부 커밋 or 전부 롤백 | **b** | a 는 중간 실패 시 앞 그룹엔 글이 있고 뒤엔 없는 채로 RETRY → 앞 그룹에 중복. b 는 행 하나의 결과가 원자적이라 RETRY 가 부분 중복을 못 만든다. 잠금 순서 규약은 b 에서 필요하고, 다른 경로는 1개만 잠그므로 오름차순이면 순환 불가 |
+| ④ | **재발행 멱등성** | a. 안 막음 — 회수분(lease 상실)이면 글 중복 허용, 문서화 / b. `payload LIKE '{"sessionId":n,%'` 로 존재 확인 / c. **`group_events.source_id BIGINT NULL` 컬럼(V19) + UNIQUE `(group_id, event_type, source_id)`** — 발행 전 exists 검사, UNIQUE 위반은 «이미 있다» 로 해석 | **c** | a 는 사용자에게 보이는 중복 글. b 는 TEXT 패턴 매칭에 기대는 것이라 payload 순서가 바뀌면 조용히 깨진다. c 는 «어느 세션의 글인가» 를 스키마가 말하고 DB 가 중복을 막는다 — NULL 은 UNIQUE 에서 여러 개 허용되므로 `MEMBER_JOINED`(NULL) 는 영향 없다. #11 리액션의 대상은 `group_events.id` 라 무관 |
+| ⑤ | **sender** | a. 완료한 회원 / b. NULL | **a** | 리액션이 «누구의 글» 인지 행이 말해야 한다. `publish` 의 ACTIVE 재검사는 방금 ACTIVE 로 조회한 그룹이라 통과 — 그새 탈퇴했으면 `NOT_GROUP_MEMBER` 예외 → 그 그룹은 건너뛴다(탈퇴한 모임에 글을 남길 이유가 없다), 예외로 행 전체를 RETRY 하지 않는다 |
+| ⑥ | **결과 분류** | 그룹 0개(적재 뒤 전부 탈퇴) → TERMINAL_FAILED(§4-3 ④ 와 같은 판단) · 세션 없음 → TERMINAL_FAILED · 발행 tx 예외(락 대기·데드락·DB) → RETRY · 정상 → SENT | — | `DispatchOutcome` 3값 그대로 |
+| ⑦ | **타입 이름** | `SESSION_COMPLETED`, 서버가 만드는 타입은 `GroupEventTypes` 상수로 모음(`MEMBER_JOINED` 포함) | — | 컬럼은 String 유지(소켓 클라이언트가 임의 타입을 보내는 채널) |
+| ⑧ | **데드락 테스트** | `race` 프로파일(Testcontainers MySQL): 회원 둘이 같은 그룹 둘 {A, B} 에 ACTIVE, 두 세션의 발행을 동시에 → 둘 다 SENT, `group_events` 4행, 재발행해도 4행 그대로(④) | 위 | Docker 없으면 skip(`disabledWithoutDocker`) |
+| ⑨ | **회원당 그룹 수 분포** | 안 잰다 — 시드가 단일 템플릿이라 분포가 없다. «미실측» 을 박고 1차 사용자 테스트 뒤 채운다 | a | 없는 분포를 재면 숫자만 생긴다 |
+
+> ✅ **결정(2026-09-14, 사용자 confirm): 추천 그대로 ①a·②·③b·④c·⑤a·⑥·⑦·⑧·⑨a.** 구현하며 표와 달라진 곳 하나 — ⑤의 «`NOT_GROUP_MEMBER` 예외 → 그 그룹 건너뛰기» 는 **catch 로 만들지 않았다.** 팬아웃 트랜잭션이 ACTIVE 멤버십을 먼저 읽고 그 목록으로 `publish` 를 부르는데, `publish` 안의 ACTIVE 재검사가 같은 트랜잭션·같은 스냅샷(REPEATABLE READ)이라 둘이 어긋날 수 없다 — 스냅샷 전에 탈퇴한 그룹은 목록에 없고, 스냅샷 뒤 탈퇴는 «완료 시점엔 멤버였다» 와 어긋나지 않는다. 또 `REQUIRED` 로 합류한 안쪽에서 던진 RuntimeException 을 바깥이 catch 하면 rollback-only 표시 때문에 커밋에서 `UnexpectedRollbackException` 이 난다 — catch 로 만들면 오히려 깨진다.
+>
+> 구현: `OutboxEventType.SESSION_COMPLETED` · `SessionCompletionTx.applyComplete` 가 `complete()` 통과 뒤 ACTIVE 그룹이 있을 때만 행 INSERT · V19 `group_events.source_id` + UNIQUE `(group_id, event_type, source_id)` · `GroupEventTypes` 상수(`MEMBER_JOINED` 리터럴도 여기로) · `GroupEventService.publish(…, sourceId)` 오버로드 · `service/group/GroupFeedFanoutTx`(한 트랜잭션, group_id 오름차순, exists 로 회수분 거름) + `SessionCompletedFeedService`(예외 → `DispatchOutcome`) · `OutboxPublisher` switch 한 줄. 테스트: `SessionCompletedFeedOutboxIntegrationTest`(H2, 6건 — 적재 1회·대상 없음·팬아웃·재배달·전부 탈퇴·세션 삭제) + `SessionCompletedFeedFanoutRaceTest`(race 프로파일, ⑧ — 로컬은 Docker 없어 건너뜀, CI 에서 돈다).
+
+**#9 와의 접점**: `OutboxEventType`·`OutboxPublisher` switch 에 한 줄씩 — #741 뒤에 리베이스. ✅ 그대로 됐다.
+
+**이 견적에 없는 것**: 자동 글의 문구(프론트가 payload 로 조립), 피드 조회 API 의 타입 필터(지금 `GET /groups/{id}/events?afterSeq` 가 전부를 준다 — #11 리액션이 피드 응답을 만질 때 같이 본다), 회원당 그룹 수 분포(⑨ — 1차 사용자 테스트 뒤).
 
 ---
 
@@ -323,6 +356,7 @@ professor-vision §2 의 "행 단위 접근 제어" 가 여기서 처음 실제�
 
 ## 결정 로그
 
+- 2026-09-14 (14): **#10 구현 분기 확정(§4-4) + 구현.** 추천 그대로 ①a·③b·④c·⑤a. ⑤의 «건너뛰기» 는 catch 가 아니라 스냅샷으로 실현(같은 tx 안 두 조회가 어긋날 수 없음). 다음은 #7 마무리 → #11 리액션 → #12.
 - 2026-09-14 (14): **#9 푸시 발행 분기 확정(§4-3).** 행 = 알림 1건 · 적재는 알림과 같은 트랜잭션(기기 있을 때만) · 결과 분류는 Expo 문서 그대로 + 전부 죽은 토큰이면 FAILED · 서킷 `expoPush` 추가(배치 20 × 5s > lease 60s 창) · 타임아웃 5s 는 제약에서 · 문구 확정. 추천 그대로. 구현 착수 전에 발견한 사실: **AI 채널의 서킷이 없었다면 lease 60초는 배치 20행을 못 버틴다** — 새 외부 호출을 붙일 때마다 같은 장치가 필요하다.
 - 2026-09-12 (13): **#8 push_tokens 분기 확정(§4-2).** UNIQUE(token)+소유자 이동 · 삭제는 로그아웃(계정 단위)+DeviceNotRegistered 두 자리, 별도 DELETE 없음 · 만료·상한 없음 · POST /push-tokens 멱등 200 + 형식 검증. 추천 그대로.
 - 2026-09-12 (12): **구현 #6 착수 시 하위 결정 5개(사용자 confirm).** ① `notifications.type` 은 **Java enum `NotificationType{NUDGE}` + `VARCHAR(50)`**(DB ENUM 아님 — V16 이 지운 `report_type` 과 같은 함정 회피, `group_events.event_type` 관례). ② 읽음은 **건별 `PATCH /notifications/{id}/read` 만, «모두 읽음» 없음**(레퍼런스 화면에 없음). ③ 3-C 스케치의 `ref` 컬럼은 **지금 안 만듦**(NUDGE 는 가리킬 대상 없음, 필요 시 nullable ADD COLUMN). ④ `sender_id` FK 는 **ON DELETE SET NULL**(알림은 수신자의 기록 — `group_events.sender_id` 와 같은 판단), `recipient_id` 는 CASCADE. ⑤ 재촉 경로는 **`POST /friends/{memberId}/nudge`** — 권한 조건(같은 모임 ACTIVE)이 곧 «친구» 라 URL 과 규칙이 같다. §4-1 표의 `/members/{id}/nudge` 는 견적 표기였다(#4 의 `/feed/friends`→`/friends` 와 같은 정정). 목록은 `GET /notifications?page&size`(관리자 목록과 같은 offset·상한 100). 서버는 «오늘 이미 완료한 상대» 재촉을 막지 않는다(버튼 노출은 프론트).

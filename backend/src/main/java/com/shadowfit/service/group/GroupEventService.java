@@ -42,6 +42,16 @@ public class GroupEventService {
 
     @Transactional
     public GroupEvent publish(Long groupId, Long senderId, String eventType, String payload) {
+        return publish(groupId, senderId, eventType, payload, null);
+    }
+
+    /**
+     * {@code sourceId} 가 있는 발행 — 자동 글(세션 완료 등)처럼 «원천» 이 있는 이벤트용. 같은 (그룹, 타입,
+     * 원천)의 글이 이미 있으면 UNIQUE(V19)에 걸린다 — 호출자가 먼저 exists 로 거르고, 여기 걸리는 건 동시
+     * 재발행뿐이다({@code SessionCompletedFeedService}).
+     */
+    @Transactional
+    public GroupEvent publish(Long groupId, Long senderId, String eventType, String payload, Long sourceId) {
         // Group.allocateNextSeq()가 원자적이려면 이 조회가 행을 잠가야 한다 — 동시에 여러
         // 스레드가 같은 그룹에 publish()해도 seq가 겹치지 않는 이유.
         Group group = groupRepository.findByIdForUpdate(groupId)
@@ -67,6 +77,7 @@ public class GroupEventService {
                 .eventType(eventType)
                 .sender(sender)
                 .payload(payload)
+                .sourceId(sourceId)
                 .build());
 
         registerPostCommitBroadcast(event);

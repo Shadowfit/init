@@ -6,6 +6,7 @@ import com.shadowfit.model.outbox.DispatchOutcome;
 import com.shadowfit.model.outbox.OutboxEvent;
 import com.shadowfit.model.outbox.OutboxStatus;
 import com.shadowfit.repository.outbox.OutboxEventRepository;
+import com.shadowfit.service.group.SessionCompletedFeedService;
 import com.shadowfit.service.notification.push.PushDispatchService;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -22,7 +23,8 @@ import java.util.UUID;
 
 /**
  * 아웃박스 발행기 — {@code PENDING} 행을 집어 실제로 송신하고 결과를 행 상태로 되돌린다.
- * 상대는 타입에 따라 AI(gRPC) 또는 Expo Push(HTTP)다 — 두 번째 용처는 {@link PushDispatchService}.
+ * 상대는 타입에 따라 AI(gRPC)·Expo Push(HTTP)·같은 DB 의 그룹 애그리거트다 — 두 번째 용처는
+ * {@link PushDispatchService}, 세 번째는 {@link SessionCompletedFeedService}.
  *
  * <p>[전체 그림] {@code endSession} 은 세션 변경과 통보 행 INSERT 를 한 트랜잭션에 커밋하고 끝난다
  * (gRPC 없음). 전달 책임은 여기가 진다 — 실패하면 행이 남아 다음 tick 에 다시 시도되므로,
@@ -45,6 +47,7 @@ public class OutboxPublisher {
     private final OutboxEventRepository outboxRepository;
     private final ExerciseAnalysisService analysisService;
     private final PushDispatchService pushDispatchService;
+    private final SessionCompletedFeedService sessionCompletedFeedService;
     private final SessionMetrics sessionMetrics;
     private final OutboxEventStore outboxEventStore;
 
@@ -146,6 +149,9 @@ public class OutboxPublisher {
             // possiblyRedelivered 를 안 쓴다 — 이미 폰에 갔는지 알 길이 없어 구분해도 할 수 있는 게 없다
             // (social-cheer-and-group-feed.md §4-3 ⑨). aggregateId 는 notification id.
             case PUSH_NOTIFICATION -> pushDispatchService.dispatch(event.getAggregateId());
+            // possiblyRedelivered 를 안 쓴다 — 회수분이든 아니든 group_events.source_id 의 exists·UNIQUE 가
+            // 같은 글의 재생성을 막는다(social-cheer-and-group-feed.md §4-4 ④ c). aggregateId 는 session id.
+            case SESSION_COMPLETED -> sessionCompletedFeedService.dispatch(event.getAggregateId());
         };
 
         switch (outcome) {

@@ -32,5 +32,14 @@ public enum OutboxEventType {
      * (docs/decisions/social-cheer-and-group-feed.md §3-C c, §4-3).
      * payload: {@code { "notificationId": 42 }}
      */
-    PUSH_NOTIFICATION
+    PUSH_NOTIFICATION,
+
+    /**
+     * 세션 완료 → 회원이 속한 ACTIVE 그룹마다 {@code group_events} 에 자동 글 하나씩. <b>세 번째 용처</b> —
+     * 상대가 바깥이 아니라 <b>같은 DB 의 다른 애그리거트</b>(그룹)다. 같은 트랜잭션에 직접 INSERT 하지
+     * 않는 이유는 애그리거트 경계(완료 tx 가 그룹 N행 락을 리포트 계산까지 쥐게 된다)이고, 재발행 멱등성은
+     * {@code group_events.source_id} UNIQUE 가 맡는다(social-cheer-and-group-feed.md §4-4).
+     * payload: {@code { "sessionId": 42 }}
+     */
+    SESSION_COMPLETED
 }

@@ -12,4 +12,8 @@ public interface GroupEventRepository extends JpaRepository<GroupEvent, Long> {
     // 재연결 백필 — afterSeq 이후 이벤트를 오름차순으로 전부 반환한다(페이지네이션 없음,
     // 근거 없는 limit을 넣지 않기로 한 설계 결정 — 계획 문서 참고).
     List<GroupEvent> findAllByGroupIdAndSeqGreaterThanOrderBySeqAsc(Long groupId, Long afterSeq);
+
+    // 자동 글 재발행 멱등성 — «이 원천의 글이 이 그룹에 이미 있나». 아웃박스 회수분이 다시 오면 발행 대신
+    // 여기서 걸러진다. 최종 방어선은 uk_group_events_type_source(V19).
+    boolean existsByGroupIdAndEventTypeAndSourceId(Long groupId, String eventType, Long sourceId);
 }

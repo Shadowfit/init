@@ -6,13 +6,18 @@ import com.shadowfit.dto.report.PoseFrameProjection;
 import com.shadowfit.dto.report.detailreport.RepSyncRateDto;
 import com.shadowfit.dto.report.detailreport.SessionDetailedAnalysis;
 import com.shadowfit.dto.report.detailreport.WorstSectionDto;
+import com.shadowfit.global.observability.CorrelationIds;
 import com.shadowfit.global.observability.SessionMetrics;
 import com.shadowfit.model.exercise.Session;
 import com.shadowfit.model.exercise.Status;
 import com.shadowfit.model.exercise.SyncStats;
+import com.shadowfit.model.group.GroupMemberStatus;
+import com.shadowfit.model.outbox.OutboxEvent;
 import com.shadowfit.model.report.Report;
 import com.shadowfit.repository.exercise.PoseDataRepository;
 import com.shadowfit.repository.exercise.SessionRepository;
+import com.shadowfit.repository.group.GroupMemberRepository;
+import com.shadowfit.repository.outbox.OutboxEventRepository;
 import com.shadowfit.repository.report.ReportRepository;
 import com.shadowfit.service.report.SessionAnalysisCalculator;
 import com.shadowfit.global.error.BusinessException;
@@ -45,6 +50,8 @@ public class SessionCompletionTx {
     private final ReportRepository reportRepository;
     private final ObjectMapper objectMapper;
     private final SessionMetrics sessionMetrics;
+    private final GroupMemberRepository groupMemberRepository;
+    private final OutboxEventRepository outboxEventRepository;
 
     @Transactional
     public void applyComplete(SessionCompleteRequest request) {
@@ -75,7 +82,25 @@ public class SessionCompletionTx {
 
         precomputeReport(session);
 
+        enqueueGroupFeed(session);
+
         sessionMetrics.sessionTransition(Status.COMPLETED, "ai-callback");
+    }
+
+    /**
+     * 모임 자동 글은 여기서 쓰지 않고 아웃박스 행만 남긴다(social-cheer-and-group-feed.md §4-4 ②).
+     * 그룹 애그리거트(행 잠금·seq 채번·멤버십 검사)를 완료 트랜잭션이 직접 만지면 세션 쪽이 그룹 쪽 규칙을
+     * 알아야 하고, 그룹 N행 락을 리포트 계산까지 쥐게 된다. 피드 글은 «완료와 어긋나면 안 되는 불변식» 이
+     * 아니라 «있어야 하는 결과» 라 발행기 tick 만큼 늦어도 아무것도 안 깨진다.
+     *
+     * <p>위 멱등 가드({@code complete()} 가 false 면 return)를 지난 뒤라 AI 콜백 재전송에도 행은 세션당
+     * 1개다. 회원이 ACTIVE 그룹에 하나도 없으면 행을 안 만든다 — 대상 없음은 실패가 아니고, 그걸 FAILED 로
+     * 세면 지표가 소음이 된다({@code NotificationWriter} 의 기기 없음과 같은 규칙).
+     */
+    private void enqueueGroupFeed(Session session) {
+        if (groupMemberRepository.existsByMemberIdAndStatus(session.getMember().getId(), GroupMemberStatus.ACTIVE)) {
+            outboxEventRepository.save(OutboxEvent.sessionCompleted(session.getId(), CorrelationIds.current()));
+        }
     }
 
     /**
