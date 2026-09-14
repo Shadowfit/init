@@ -72,8 +72,12 @@ public class GroupFeedService {
             try {
                 eventReactionStore.insert(event, member, kind);
             } catch (DataIntegrityViolationException e) {
-                // 더블탭 — 위 exists 와 INSERT 사이에 같은 요청이 먼저 넣었다. 원하는 상태(«하나 있음»)가 이미
-                // 됐으므로 성공이다.
+                // 무결성 위반은 둘 중 하나다 — 더블탭(UNIQUE: 위 exists 와 INSERT 사이에 같은 요청이 먼저 넣었다)이면
+                // 원하는 상태(«하나 있음»)가 이미 됐으므로 성공이고, FK(그새 그룹 삭제·회원 탈퇴)면 저장이 안 된 것이라
+                // 200 을 주면 거짓이다. 행이 있는지로 가른다.
+                if (!eventReactionRepository.existsByEventIdAndMemberIdAndKind(event.getId(), memberId, kind)) {
+                    throw e;
+                }
                 log.debug("리액션 중복 INSERT — 이미 있음 (eventId={}, memberId={}, kind={})", event.getId(), memberId, kind);
             }
         }

@@ -166,7 +166,10 @@ class GroupFeedReactionIntegrationTest {
         long seq = publish(me, "{}").getSeq();
         // exists 를 항상 false 로 — «검사 직후 상대 요청이 먼저 넣은» 상태를 DB 가 보는 그대로 만든다
         // (SignupUsernameRaceTest 와 같은 방식: 타이밍이 아니라 창을 넓혀 순서를 고정).
-        doReturn(false).when(eventReactionRepository).existsByEventIdAndMemberIdAndKind(anyLong(), anyLong(), any());
+        // 세 번째 호출(catch 안의 재확인)은 «있다» — FK 위반과 가르는 그 검사가 true 를 봐야 200 이다. 첫 INSERT 가
+        // 커밋된 뒤라 실제 DB 답도 true 다(스파이가 인터페이스 프록시라 real method 위임이 안 돼 값으로 준다).
+        doReturn(false, false, true)
+                .when(eventReactionRepository).existsByEventIdAndMemberIdAndKind(anyLong(), anyLong(), any());
 
         react(me, seq, "HEART").andExpect(status().isOk()).andExpect(jsonPath("$.reactions.HEART").value(1));
         react(me, seq, "HEART").andExpect(status().isOk()).andExpect(jsonPath("$.reactions.HEART").value(1));
