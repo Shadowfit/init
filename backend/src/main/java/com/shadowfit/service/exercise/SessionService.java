@@ -27,6 +27,7 @@ import com.shadowfit.repository.exercise.ExercisesRepository;
 import com.shadowfit.repository.exercise.PoseDataRepository;
 import com.shadowfit.repository.member.MemberRepository;
 import com.shadowfit.repository.exercise.SessionRepository;
+import com.shadowfit.service.report.DailyLogService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -50,6 +51,7 @@ public class SessionService {
     private final SessionMetrics sessionMetrics;
     private final OutboxEventRepository outboxRepository;
     private final SessionNonceGenerator sessionNonceGenerator;
+    private final DailyLogService dailyLogService;
     // completeSession의 실제 반영(@Transactional)을 갖는 별도 빈 — self 주입 대신 이걸 부른다
     // (이슈 #175). 자기호출은 AOP 프록시를 우회해 @Transactional이 조용히 무시되는데, 다른 빈으로
     // 옮기면 이 클래스가 자기 프록시를 알아야 할 이유 자체가 없어진다.
@@ -311,6 +313,8 @@ public class SessionService {
      *   session_feedback_logs는 exercise_sessions FK가 ON DELETE CASCADE라 세션 삭제로 자동 정리.
      * - 세션 1건(~750행) 규모라 동기 삭제로 충분 — 회원 탈퇴(대량, PoseDataCleanupService 비동기)와
      *   달리 별도 배치/비동기 불필요.
+     * - daily_logs 는 완료 시 더하기만 하는 집계라 세션이 지워져도 값이 남았다(#718). COMPLETED 를
+     *   지웠으면 그날 합계를 남은 세션으로 다시 센다 — CANCELLED/FAILED 는 애초에 누적된 적이 없다.
      */
     @Transactional
     public void deleteSession(Long sessionId, Long currentMemberId) {
@@ -324,6 +328,11 @@ public class SessionService {
         poseDataRepository.deleteBySessionIdIn(List.of(session.getId()));
         sessionRepository.delete(session);
         sessionRepository.flush();
+
+        if (session.getStatus() == Status.COMPLETED) {
+            // flush 뒤여야 한다 — 재계산 서브쿼리가 지운 세션을 안 세게.
+            dailyLogService.recomputeStats(currentMemberId, session.getStartTime().toLocalDate());
+        }
     }
 
     /**

@@ -61,6 +61,20 @@ public class DailyLogService {
         dailyLogRepository.upsertStats(memberId, logDate, addTime, addCalories);
     }
 
+    /**
+     * 세션이 지워진 날의 누적 분·칼로리를 남은 COMPLETED 세션으로 다시 센다 (#718).
+     * 호출자는 지운 세션을 이미 flush 한 뒤여야 한다 — 같은 트랜잭션 안이라도 flush 전이면
+     * 서브쿼리가 지운 세션을 그대로 센다.
+     */
+    @Transactional
+    public void recomputeStats(Long memberId, LocalDate logDate) {
+        int updated = dailyLogRepository.recomputeStats(memberId, logDate,
+                logDate.atStartOfDay(), logDate.plusDays(1).atStartOfDay());
+        if (updated == 0) {
+            log.warn("일지 재계산 대상 행 없음 - 사용자: {}, 날짜: {}", memberId, logDate);
+        }
+    }
+
     @Transactional(readOnly = true)
     public DailyLogResponseDto getDailyLog(Long memberId, LocalDate date) {
         DailyLog log = dailyLogRepository.findByMemberIdAndLogDate(memberId, date)
