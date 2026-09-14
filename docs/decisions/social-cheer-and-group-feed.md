@@ -222,7 +222,8 @@ professor-vision §2 의 "행 단위 접근 제어" 가 여기서 처음 실제�
 | 4 | `GET /groups/{id}/members/status`(오늘 여부·연속일수) + `GET /feed/friends`(내 모임 사람 distinct) + 권한 가드(같은 ACTIVE 그룹) | 3~4h | 2~2.5h | 3-G 노출 항목 3개만 응답에 싣는지 테스트로 고정 |
 | 5 | `GET /groups/{id}/attendance?year&month` — 날짜별 `COUNT(DISTINCT member_id)` + `activeMemberCount` | 2h | 1~1.5h | 농도 매핑은 프론트 |
 | 6 | `notifications` 테이블·엔티티 + `POST /members/{id}/nudge`(UNIQUE 위반 → 409, 권한 가드) + `GET /notifications` + 읽음 처리 | 3~4h | 2~2.5h | UNIQUE 위반 처리는 `goals` 선례 |
-| 7 | **1:1 소켓 전달** — 현재 `GroupSocketRegistry` 는 그룹→세션 집합뿐이라 개인에게 밀 수 없음. 회원→세션 레지스트리 추가 + nudge 시 접속 중이면 즉시 전달 | 2~3h | 1.5~2h | 그룹 채널에 실으면 3-C ①의 "전원에게 보임" 문제 재발 — 그래서 별도 레지스트리 |
+| 7 | **1:1 소켓 전달** — 현재 `GroupSocketRegistry` 는 그룹→세션 집합뿐이라 개인에게 밀 수 없음. 회원→세션 레지스트리 추가 + nudge 시 접속 중이면 즉시 전달 | 2~3h | 1.5~2h | 그룹 채널에 실으면 3-C ①의 "전원에게 보임" 문제 재발 — 그래서 별도 레지스트리 ✅ 09-14 — `NotificationRelay`·`GroupSocketRegistry.sendToMember`·`NudgeWebSocketRelayIntegrationTest`(결정 로그 (13)·(17)) |
+
 | 8 | `push_tokens` 테이블 + `POST /push-tokens`(갱신·삭제 포함) | 1.5~2h | 1~1.5h | 회원당 기기 여러 개 |
 | 9 | 아웃박스 `PUSH_NOTIFICATION` 타입 + Expo Push HTTP 클라이언트 + `OutboxPublisher` 분기 + 응답 분류(RETRY / TERMINAL, `DeviceNotRegistered` 면 토큰 삭제) | 4~5h | 2.5~3h | receipt API 조회는 이 견적 밖(SENT = Expo 수신까지) |
 | 10 | 자동 글 — ~~`SessionCompletionTx` 에서 ACTIVE 그룹마다 `group_events` `SESSION_COMPLETED` INSERT~~ → 🔄 09-14 정정: 완료 tx 는 아웃박스 `SESSION_COMPLETED` 행 적재, `OutboxPublisher` 가 그룹 전부를 한 tx 로 팬아웃(§4-4) + 회원당 그룹 수 분포 기록 | 1.5~2h | 1~1.5h | ⚠️ `GroupEventService.publish` 가 `workout_groups` 행을 `PESSIMISTIC_WRITE` 로 잠그고 seq 를 채번한다 — 완료 트랜잭션 안에서 그룹 N개를 순서대로 잠그면 소켓 발행 경로와 **잠금 순서가 엇갈릴 수 있음**. group_id 오름차순으로 고정하고 데드락 테스트 1개 |
@@ -381,11 +382,13 @@ professor-vision §2 의 "행 단위 접근 제어" 가 여기서 처음 실제�
 
 ## 결정 로그
 
+- 2026-09-14 (17): **#7 완료.** `NotificationRelay` + `GroupSocketRegistry` 회원 인덱스(아래 (13) 결정 그대로). 다른 세션이 09-12 에 구현·테스트까지 마치고 미커밋으로 둔 것을 main 위로 옮겨 PR. 이로써 §4-1 12개 전부 완료.
 - 2026-09-14 (16): **#12 완료.** 저니 테스트는 «이음새만, 가지는 기능 테스트 몫» 으로 설계(18-testing-guide §5.4). API 문서는 07 에 «모임·소셜 API» 절로. 이로써 §4-1 12개 중 #7 만 남음(다른 세션 진행 중).
 - 2026-09-14 (15): **#11 구현 분기 확정(§4-5).** 새 `GET /groups/{id}/feed`(keyset `beforeSeq&size`), `PUT/DELETE /groups/{id}/events/{seq}/reactions/{kind}` 멱등 200, 타입 제한 없음, `ReactionKind{HEART,FIRE}` + V20 `event_reactions`.
 - 2026-09-14 (14): **#10 구현 분기 확정(§4-4) + 구현.** 추천 그대로 ①a·③b·④c·⑤a. ⑤의 «건너뛰기» 는 catch 가 아니라 스냅샷으로 실현(같은 tx 안 두 조회가 어긋날 수 없음). 다음은 #7 마무리 → #11 리액션 → #12.
 - 2026-09-14 (14): **#9 푸시 발행 분기 확정(§4-3).** 행 = 알림 1건 · 적재는 알림과 같은 트랜잭션(기기 있을 때만) · 결과 분류는 Expo 문서 그대로 + 전부 죽은 토큰이면 FAILED · 서킷 `expoPush` 추가(배치 20 × 5s > lease 60s 창) · 타임아웃 5s 는 제약에서 · 문구 확정. 추천 그대로. 구현 착수 전에 발견한 사실: **AI 채널의 서킷이 없었다면 lease 60초는 배치 20행을 못 버틴다** — 새 외부 호출을 붙일 때마다 같은 장치가 필요하다.
 - 2026-09-12 (13): **#8 push_tokens 분기 확정(§4-2).** UNIQUE(token)+소유자 이동 · 삭제는 로그아웃(계정 단위)+DeviceNotRegistered 두 자리, 별도 DELETE 없음 · 만료·상한 없음 · POST /push-tokens 멱등 200 + 형식 검증. 추천 그대로.
+- 2026-09-12 (13): **구현 #7 — 재촉 1:1 실시간 전달은 새 연결(`/ws/me`) 없이 기존 그룹 WebSocket 을 재사용(A, 사용자 confirm).** `GroupSocketRegistry` 에 `memberId → 세션` 인덱스를 더해 수신자가 붙어 있는 그룹 연결로만 민다(그룹 채널에 실으면 전원에게 보이는 3-C ① 문제 회피). 따라서 «접속 중» = 어느 모임 화면이든 보고 있을 때 — 홈 화면·앱만 켜둔 상태엔 실시간 전달 없음, 그 자리는 푸시(#9). 프레임은 `{"type":"NOTIFICATION","notification":{…NotificationDto}}` 로 그룹 이벤트 봉투(`seq`·`groupId`)와 구분, 재연결 백필 대상 아님(끊긴 동안 온 재촉은 알림함에 있다). 근거: 재촉 대상은 정의상 «오늘 안 한 사람»이라 앱을 안 켠 경우가 대부분 → 어느 안이든 실효는 푸시, 새 연결 종류(회원당 +1 연결, 연결=스레드 1:1 구조)를 열 근거가 아직 없음. 홈 화면 실시간이 필요해지면 그때 B 를 얹는다.
 - 2026-09-12 (12): **구현 #6 착수 시 하위 결정 5개(사용자 confirm).** ① `notifications.type` 은 **Java enum `NotificationType{NUDGE}` + `VARCHAR(50)`**(DB ENUM 아님 — V16 이 지운 `report_type` 과 같은 함정 회피, `group_events.event_type` 관례). ② 읽음은 **건별 `PATCH /notifications/{id}/read` 만, «모두 읽음» 없음**(레퍼런스 화면에 없음). ③ 3-C 스케치의 `ref` 컬럼은 **지금 안 만듦**(NUDGE 는 가리킬 대상 없음, 필요 시 nullable ADD COLUMN). ④ `sender_id` FK 는 **ON DELETE SET NULL**(알림은 수신자의 기록 — `group_events.sender_id` 와 같은 판단), `recipient_id` 는 CASCADE. ⑤ 재촉 경로는 **`POST /friends/{memberId}/nudge`** — 권한 조건(같은 모임 ACTIVE)이 곧 «친구» 라 URL 과 규칙이 같다. §4-1 표의 `/members/{id}/nudge` 는 견적 표기였다(#4 의 `/feed/friends`→`/friends` 와 같은 정정). 목록은 `GET /notifications?page&size`(관리자 목록과 같은 offset·상한 100). 서버는 «오늘 이미 완료한 상대» 재촉을 막지 않는다(버튼 노출은 프론트).
 - 2026-09-11 (11): **3-B 하위 streak 창 — C(커서, 첫 끊김 중단).** 구현 #3 착수 시 streak 구현이 둘(캘린더 100일·status 전부 / 패턴 분석 28일·COMPLETED)임을 확인. 패턴 분석 쪽은 별개 정의라 유지.
 - 2026-09-11 (10): **학기 계획 조정 확정** — 24 문서 실측 점검(기능 축 BE-05~08 전부 완료 확인) 후 BE-09+종목 결합·2차 테스트·cleanup 축소로 22h 확보. 미결 0.
