@@ -1,5 +1,7 @@
 # 4차 라운드(동시성 축) 전용 compose 오버레이 — 측정 조건 넷을 «라운드 동안만» 바꾼다.
 # 설계: docs/decisions/grpc-webclient-concurrency-round.md §5-3
+# 5차(네이티브 REST 팔)도 같은 파일을 얹는다 — 조건 하나(⑧ nginx 본문 버퍼)가 더 붙었다.
+# 설계: docs/decisions/grpc-webclient-native-rest-round.md §5-3 ⑧ · §7 ③
 #
 # 🔴 본 compose 를 안 고치는 이유 — 넷 다 배포 형상의 사실이고, 측정 편의로 형상을 영구히
 #    바꾸면 안 된다(compose.ai-ab.yml 과 같은 원칙). rig 이 COMPOSE_FILE 로 이 파일을 얹고,
@@ -33,3 +35,9 @@ services:
       #    칸에서 드라이버의 요청이 전부 401 로 죽었다(로컬 스모크). 값은 phase 타임아웃(4h)과
       #    같게 — 측정 구간(Spring→AI)과 무관한 자리다.
       JWT_EXPIRATION_TIME: ${JWT_EXPIRATION_TIME:-14400}
+  ai-nginx:
+    volumes:
+      # ⑧ (5차) 114KB 재부착 본문이 요청마다 디스크 임시파일로 버퍼링되던 것(#730)을 라운드
+      #    동안 메모리 버퍼로 바꾼다. 세 REST 팔에 똑같이 걸리므로 B−C·C−D 뺄셈은 안 더럽히고,
+      #    4차의 B 와는 «이 조건이 다르다» 로 기록한다. 값의 근거는 그 파일 주석.
+      - ./loadtest/aws/nginx-ai.body-buffer.conf:/etc/nginx/conf.d/zz-body-buffer.conf:ro

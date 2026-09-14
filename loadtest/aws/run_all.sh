@@ -138,6 +138,7 @@ if [ -z "$OUTDIR" ]; then
       card_a_seed|card_a)                  _r=card-a-write-cost ;;
       clientab)                            _r=ai-call-latency-ab ;;
       clientconc)                          _r=ai-call-concurrency ;;
+      nativerest)                          _r=ai-call-native-rest ;;
       *)                                   continue ;;   # preflight·ridealong·collect 는 라운드를 안 정한다
     esac
     case " $_rounds " in *" $_r "*) ;; *) _rounds="${_rounds:+$_rounds }$_r" ;; esac
@@ -475,6 +476,17 @@ CLIENTCONC_N=${CLIENTCONC_N:-100}                 # VU 당 사이클(칸당 표�
 CLIENTCONC_BLOCKS=${CLIENTCONC_BLOCKS:-5}
 CLIENTCONC_WARMUP=${CLIENTCONC_WARMUP:-10}
 CLIENTCONC_LEVELS=${CLIENTCONC_LEVELS:-"1 4 8 16 32"}   # 구조 문턱(설계 §4-2). 게이트 실측이 다르면 여기서
+
+# ── 네이티브 REST 팔 (nativerest, 5차) — 같은 rig, 팔 4개 · c {1, 8}. 같은 박스(ROLE=client-ab) ──
+# 설계: docs/decisions/grpc-webclient-native-rest-round.md. 재기동 20회 + 칸 40개 ≈ 1.5시간.
+#   PHASES="nativerest ridealong collect"
+#   🔴 clientab·clientconc 와 같은 PHASES 에 넣지 말 것(#358 과 같은 이유).
+TIMEOUT_NATIVEREST=${TIMEOUT_NATIVEREST:-14400}   # 4시간
+NATIVEREST_N=${NATIVEREST_N:-100}
+NATIVEREST_BLOCKS=${NATIVEREST_BLOCKS:-5}
+NATIVEREST_WARMUP=${NATIVEREST_WARMUP:-10}
+NATIVEREST_LEVELS=${NATIVEREST_LEVELS:-"1 8"}     # §7 ② — c=1 기준값 + c=8 포화(4차가 «CPU/호출은 c 무관» 을 답했다)
+NATIVEREST_ARMS=${NATIVEREST_ARMS:-"grpc webclient webclient-native webclient-nested"}   # §7 ①
 
 # 🔴 이름을 **여기서 한 번** 정하고 rig 에 물려준다 (#374).
 #    게이트(위 repl_preflight)와 rig(`repl2_rig.sh:60`)가 각각 이름을 들고 있으면,
@@ -1744,6 +1756,35 @@ phase_clientconc() {
   return 0
 }
 
+# 5차 — 네이티브 REST 팔. 4차 rig 을 팔 4개 · c {1, 8} 로 부른다. 박스 보정(§7 ⑨)은 phase 의
+# 시작·끝에 calibrate_box 로 남긴다 — 인용 규칙 ㉠(절대 수치엔 calib cpu 병기).
+phase_nativerest() {
+  local out=$OUTDIR/nativerest
+  mkdir -p "$out"
+
+  calibrate_box
+  timeout $TIMEOUT_NATIVEREST env \
+      N="$NATIVEREST_N" BLOCKS="$NATIVEREST_BLOCKS" WARMUP="$NATIVEREST_WARMUP" \
+      LEVELS="$NATIVEREST_LEVELS" ARMS="$NATIVEREST_ARMS" \
+      COMPOSE_DIR="$ROOT" OUT="$out" \
+      bash "$ROOT/loadtest/measure_ai_call_concurrency.sh" > "$out/run.log" 2>&1
+  local rc=$?
+  calibrate_box
+
+  # 게이트 결과를 단계 로그에도 — 동등성 스모크·본문 임시파일·contract 가 run.log 안에만 있으면 아무도 안 본다.
+  grep -E "동등성|임시파일|CONTRACT=|req_len|재시작" "$out/run.log" | tail -12 | while read -r l; do note "  $l"; done
+
+  python3 "$ROOT/loadtest/analyze_ai_call_native_rest.py" "$out" > "$out/summary.txt" 2>&1
+  grep -E "^## ★|^   (B−C|C−A|C−D)|c=[0-9]+ +델타" "$out/summary.txt" | head -30 | while read -r l; do note "  $l"; done
+
+  if [ $rc -ne 0 ]; then
+    note "🔴 nativerest rc=$rc — run.log 를 볼 것 (칸 $(( $(wc -l < "$out/cells.tsv" 2>/dev/null || echo 1) - 1 )) 개)"
+    return 1
+  fi
+  note "nativerest 완료 — 팔 [${NATIVEREST_ARMS}] × 블록 ${NATIVEREST_BLOCKS} × c [${NATIVEREST_LEVELS}] × VU당 ${NATIVEREST_N} — $out/summary.txt"
+  return 0
+}
+
 phase_q2() {
   local out=$OUTDIR/q2
   mkdir -p "$out"
@@ -2057,6 +2098,7 @@ for p in $PHASES; do
     q2)          run_phase q2          phase_q2 ;;
     clientab)    run_phase clientab    phase_clientab ;;
     clientconc)  run_phase clientconc  phase_clientconc ;;
+    nativerest)  run_phase nativerest  phase_nativerest ;;
     card_a_seed) run_phase card_a_seed phase_card_a_seed ;;
     card_a)      run_phase card_a      phase_card_a ;;
     ridealong) run_phase ridealong phase_ridealong ;;

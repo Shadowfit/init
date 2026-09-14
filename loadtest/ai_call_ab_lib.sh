@@ -13,10 +13,13 @@
 # 3차 라운드(전송 비용 분해)에서 팔이 셋이 됐다 — 같은 webclient 라도 nginx 를 거치느냐
 # 워커 직결이냐가 다른 팔이다(docs/decisions/grpc-webclient-transport-cost-breakdown.md §2).
 # 4차는 «webclient» 를 webclient-nginx 의 별칭으로 받는다(배포 형상 그대로).
+# 5차(네이티브 REST 팔)는 팔이 넷 — webclient-native · webclient-nested 가 더해졌다. 셋 다
+# client-type 은 webclient 이고 **계약(AI_WEBCLIENT_CONTRACT)만** 다르다
+# (docs/decisions/grpc-webclient-native-rest-round.md §2-1·§7 ⑧).
 arm_client_type() {
   case "$1" in
     grpc) echo grpc ;;
-    webclient|webclient-nginx|webclient-direct) echo webclient ;;
+    webclient|webclient-nginx|webclient-direct|webclient-native|webclient-nested) echo webclient ;;
     *) echo "🔴 모르는 팔: $1" >&2; exit 1 ;;
   esac
 }
@@ -24,22 +27,41 @@ arm_client_type() {
 arm_nginx_host() {
   case "$1" in
     grpc) echo "-" ;;                       # gRPC 는 nginx 를 안 거친다(8585 직결)
-    webclient|webclient-nginx) echo "ai-nginx" ;;
+    webclient|webclient-nginx|webclient-native|webclient-nested) echo "ai-nginx" ;;
     webclient-direct) echo "shadowfit-ai" ;; # 홉 없이 워커 0 직결
+  esac
+}
+
+arm_contract() {
+  case "$1" in
+    webclient-native) echo native ;;
+    webclient-nested) echo nested ;;
+    *) echo mirror ;;                        # grpc 팔에선 안 읽히는 값 — 기본과 같게 둔다
+  esac
+}
+
+# 팔의 REST 경로 접두 — nginx 액세스 로그에서 팔을 가려낼 때(Content-Length 게이트) 쓴다.
+arm_path_prefix() {
+  case "$1" in
+    webclient-native) echo "/api/v1/internal/analysis/native/" ;;
+    webclient-nested) echo "/api/v1/internal/analysis/native-nested/" ;;
+    grpc) echo "-" ;;
+    *) echo "/api/v1/internal/analysis/" ;;
   esac
 }
 
 # 팔 전환 = 백엔드 재기동. 스타트업 프로퍼티(@ConditionalOnProperty)라 달리 방법이 없다.
 switch_arm() {
   local arm=$1
-  local ct host
+  local ct host contract
   ct=$(arm_client_type "$arm")
   host=$(arm_nginx_host "$arm")
-  echo "## 팔 전환 → $arm (client-type=$ct nginx-host=$host) ($(date -u +%T))"
+  contract=$(arm_contract "$arm")
+  echo "## 팔 전환 → $arm (client-type=$ct nginx-host=$host contract=$contract) ($(date -u +%T))"
   # 🔴 출력을 버리지 않는다. 예전엔 >/dev/null 2>&1 이라 compose 가 실패해도 조용했고,
   #    그러면 «옛 팔의 컨테이너가 그대로 살아 있는데 새 팔이라고 믿는» 상태가 된다
   #    (2차 로컬 스모크에서 실제로 났다).
-  ( cd "$COMPOSE_DIR" && AI_CLIENT_TYPE="$ct" AI_NGINX_HOST="${host}" \
+  ( cd "$COMPOSE_DIR" && AI_CLIENT_TYPE="$ct" AI_NGINX_HOST="${host}" AI_WEBCLIENT_CONTRACT="$contract" \
       AI_CHANNEL_POOL_SIZE="$CHANNEL_POOL_SIZE" \
       docker compose up -d --force-recreate shadowfit-backend ) >> "$OUT/compose.log" 2>&1
   local up_rc=$?
@@ -49,16 +71,22 @@ switch_arm() {
 
   # 🔴 게이트 둘. 프로퍼티만 보면 조립 실패를 못 잡고, 팔 B·C 는 client-type 이 같아서
   #    base-url 까지 봐야 «홉을 거치는 팔» 과 «직결 팔» 이 갈린다.
-  local got_ct got_host got_pool
+  local got_ct got_host got_pool got_contract
   got_ct=$(backend_env AI_CLIENT_TYPE)
   got_host=$(backend_env AI_NGINX_HOST)
   got_pool=$(backend_env AI_CHANNEL_POOL_SIZE)
+  got_contract=$(backend_env AI_WEBCLIENT_CONTRACT)
   [ "$got_ct" = "$ct" ] || { echo "🔴 client-type 이 안 바뀌었다(got=$got_ct want=$ct) — 중단"; exit 1; }
   if [ "$ct" = "webclient" ] && [ "$got_host" != "$host" ]; then
     echo "🔴 nginx-host 가 안 바뀌었다(got=$got_host want=$host) — B·C 가 구분이 안 된다, 중단"; exit 1
   fi
+  # 5차: 세 REST 팔은 client-type·host 가 같아서 계약까지 봐야 갈린다. 옛 이미지(프로퍼티 없음)면
+  # 빈 값이 돌아오고, 그러면 세 팔이 전부 미러로 돌아 «차이 없음» 을 재게 된다.
+  if [ "$ct" = "webclient" ] && [ "$got_contract" != "$contract" ]; then
+    echo "🔴 contract 가 안 바뀌었다(got='$got_contract' want=$contract) — B·C·D 가 구분이 안 된다, 중단"; exit 1
+  fi
   [ "$got_pool" = "$CHANNEL_POOL_SIZE" ] || { echo "🔴 채널 풀이 안 바뀌었다(got=$got_pool want=$CHANNEL_POOL_SIZE) — 중단"; exit 1; }
-  echo "   AI_CLIENT_TYPE=$got_ct · AI_NGINX_HOST=$got_host · POOL=$got_pool"
+  echo "   AI_CLIENT_TYPE=$got_ct · AI_NGINX_HOST=$got_host · CONTRACT=$got_contract · POOL=$got_pool"
 }
 
 # 컨테이너 환경변수 하나. Windows 셸에서 돌려도 CR 이 안 섞이게 지운다.

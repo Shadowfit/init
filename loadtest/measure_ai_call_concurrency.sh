@@ -30,6 +30,17 @@
 #   COMPOSE_DIR=/opt/shadowfit N=100 BLOCKS=5 LEVELS="1 4 8 16 32" \
 #   bash loadtest/measure_ai_call_concurrency.sh
 #   로컬 스모크: N=6 BLOCKS=2 LEVELS="1 4" WARMUP=2 AI_CONC_MEM_LIMIT=2800m (워커당 풀 2)
+#
+# ## 5차(네이티브 REST 팔) — 같은 rig, 팔 4개 · c {1, 8}
+#
+#   설계: docs/decisions/grpc-webclient-native-rest-round.md. ARMS="grpc webclient webclient-native
+#   webclient-nested" LEVELS="1 8" 로 부른다(run_all.sh phase_nativerest). 팔 순서는 블록마다 한 칸
+#   회전(rotate)이라 4팔이면 4블록에 한 바퀴, 5번째 블록은 첫 자리 반복(§5-2). 이 라운드가 더한 것:
+#     · 팔 전환 게이트에 AI_WEBCLIENT_CONTRACT (ai_call_ab_lib.sh)
+#     · 세 REST 팔 응답 동등성 스모크(native_rest_parity_smoke.py) — 버림 블록 전에 한 번
+#     · nginx 본문 임시파일 0건 게이트(§5-3 ⑧) · 팔별 재부착 req_len(§5-4)
+#     · 컨테이너 재시작 계수(cells.tsv restarts_*) + docker events 로그 + dmesg 꼬리(#731)
+#   박스 보정(calib, §7 ⑨)은 run_all.sh 의 calibrate_box 가 phase 시작·끝에 남긴다.
 set -uo pipefail
 
 BASE=${BASE:-http://localhost:8080}
@@ -52,6 +63,9 @@ PREP_SLEEP=${PREP_SLEEP:-1.3}   # 가입·로그인 IP당 60초 60건 상한 회
 PREFERRED_URL=${PREFERRED_URL:-https://www.youtube.com/watch?v=q6hBSSis_60}
 EXERCISE_ID=${EXERCISE_ID:-1}
 OUT=${OUT:-loadtest/results/ai-call-concurrency-$(date +%F)}
+PYTHON_BIN=${PYTHON_BIN:-python3}
+AI_URL=${AI_URL:-http://localhost:8000}            # 동등성 스모크가 ai-nginx 를 직접 친다
+SMOKE_SESSION_ID=${SMOKE_SESSION_ID:-900000001}    # 레지스트리에 없어야 하는 값
 
 # 계정 = ROTATION 묶음 × 최대 c. 칸마다 계정 묶음을 교대한다 — 이웃 칸에서 같은 계정으로 다시
 # start 하면 앞 칸 세션의 status 가 아직 IN_PROGRESS(콜백 전)라 409 가 난다(k6/ai_call_cycle.js
@@ -68,6 +82,23 @@ echo "# Spring→AI 동시성 축 — $(date -u +%FT%TZ)"
 echo "BASE=$BASE N=$N BLOCKS=$BLOCKS WARMUP=$WARMUP LEVELS=[$LEVELS] ARMS=[$ARMS] POOL=$CHANNEL_POOL_SIZE"
 
 command -v "$K6_BIN" >/dev/null 2>&1 || { echo "🔴 k6 가 없다($K6_BIN) — bootstrap ROLE=client-ab 가 설치한다"; exit 1; }
+
+# ── 컨테이너 생사 기록 — #731(4차 b2/grpc/c32 의 AI 재시작, 원인 미검증)의 rig 구멍 ──────────
+# docker events 를 라운드 내내 받아 적고(die/oom/restart/start + 종료코드), 칸마다 RestartCount 를
+# cells.tsv 에 남긴다. 재시작 칸은 규칙 3 으로 빠지는데, 이번엔 «왜» 를 볼 수 있게 dmesg 꼬리도 끝에 남긴다.
+docker events --filter type=container --filter event=die --filter event=oom --filter event=restart --filter event=start \
+  --format '{{.Time}} {{.Actor.Attributes.name}} {{.Action}} exit={{.Actor.Attributes.exitCode}}' \
+  > "$OUT/docker-events.log" 2>&1 &
+EVENTS_PID=$!
+finish_logs() {
+  kill "$EVENTS_PID" 2>/dev/null || true
+  { echo "# RestartCount $(date -u +%FT%TZ)"; for c in shadowfit-backend shadowfit-ai shadowfit-ai-nginx shadowfit-mysql; do
+      printf "%s\t%s\n" "$c" "$(docker inspect "$c" --format '{{.RestartCount}}' 2>/dev/null | tr -d '\r')"; done
+  } > "$OUT/restart-counts.txt"
+  # dmesg 는 권한이 없을 수 있다 — 실패해도 라운드를 안 막는다. OOM 킬은 여기 «Out of memory» 로 찍힌다.
+  (dmesg 2>/dev/null || sudo -n dmesg 2>/dev/null) | tail -300 > "$OUT/dmesg-tail.txt" || true
+}
+trap finish_logs EXIT
 
 # ── 오버레이 — 서버 스레드 상한·아웃박스 배치를 라운드 동안만 바꾼다(§5-3 ①③) ──────────
 # COMPOSE_FILE 로 얹는다: 이 셸에서 도는 모든 docker compose(팔 전환 포함)가 같은 조합을 본다.
@@ -132,6 +163,15 @@ cpu_usec() {  # $1=컨테이너
 }
 CONTAINERS="shadowfit-backend shadowfit-ai shadowfit-ai-nginx shadowfit-mysql"
 cpu_row() { local c out=""; for c in $CONTAINERS; do out="$out	$(cpu_usec "$c")"; done; echo "$out"; }
+# 컨테이너 재시작 누계 — «backend=0,ai=1,nginx=0,mysql=0» 한 칸. 전/후가 다르면 그 칸에서 재시작이 났다.
+restart_row() {
+  local c out="" n
+  for c in $CONTAINERS; do
+    n=$(docker inspect "$c" --format '{{.RestartCount}}' 2>/dev/null | tr -d '\r')
+    out="${out:+$out,}${c#shadowfit-}=${n:-na}"
+  done
+  echo "$out"
+}
 
 # 서킷브레이커 상태 — 2차 블록 4 처럼 표본이 줄어든 칸을 사후에 설명하려면 이게 있어야 한다.
 cb_state() {
@@ -140,7 +180,7 @@ cb_state() {
 }
 
 CELLS="$OUT/cells.tsv"
-[ -f "$CELLS" ] || printf "block\tarm\tc\tslot\tstarted_at\twall_s\tk6_rc\tcpu_backend_before\tcpu_ai_before\tcpu_nginx_before\tcpu_mysql_before\tcpu_backend_after\tcpu_ai_after\tcpu_nginx_after\tcpu_mysql_after\tcb_before\tcb_after\n" > "$CELLS"
+[ -f "$CELLS" ] || printf "block\tarm\tc\tslot\tstarted_at\twall_s\tk6_rc\tcpu_backend_before\tcpu_ai_before\tcpu_nginx_before\tcpu_mysql_before\tcpu_backend_after\tcpu_ai_after\tcpu_nginx_after\tcpu_mysql_after\tcb_before\tcb_after\trestarts_before\trestarts_after\n" > "$CELLS"
 
 # k6 한 판 = 칸 하나. VU c 개가 각각 iters 사이클.
 # 경로는 절대경로로 넘긴다 — k6 의 open() 은 스크립트 위치 기준이라 상대경로가 어긋난다.
@@ -164,20 +204,20 @@ run_k6() {  # $1=c $2=VU당 재부착 수 $3=요약 JSON 경로('' 이면 안 �
 run_cell() {  # $1=블록 $2=팔 $3=c $4=회전 자리
   local b=$1 arm=$2 c=$3 slot=$4
   local tag="b${b}_${arm}_c${c}"
-  local cpu_b cpu_a cb_b cb_a t0 t1 rc started wall
+  local cpu_b cpu_a cb_b cb_a rs_b rs_a t0 t1 rc started wall
   scrape "${tag}_before"
-  cpu_b=$(cpu_row); cb_b=$(cb_state)
+  cpu_b=$(cpu_row); cb_b=$(cb_state); rs_b=$(restart_row)
   started=$(date -u +%FT%TZ); t0=$(date +%s.%N)
   run_k6 "$c" "$N" "$OUT/k6/${tag}.json"; rc=$?
   t1=$(date +%s.%N)
   # 🔴 칸 경계마다 배수 — 앞 칸의 stop 이 다음 칸의 AI 부하에 섞이지 않게. 벽시계엔 안 넣는다.
   drain "$tag" || true
   scrape "${tag}_after"
-  cpu_a=$(cpu_row); cb_a=$(cb_state)
+  cpu_a=$(cpu_row); cb_a=$(cb_state); rs_a=$(restart_row)
   wall=$(awk -v a="$t0" -v b="$t1" 'BEGIN { printf "%.3f", b - a }')   # bc 는 박스에 없을 수 있다
-  printf "%s\t%s\t%s\t%s\t%s\t%s\t%s%s%s\t%s\t%s\n" "$b" "$arm" "$c" "$slot" "$started" \
-    "$wall" "$rc" "$cpu_b" "$cpu_a" "${cb_b:-none}" "${cb_a:-none}" >> "$CELLS"
-  echo "   ✅ 칸 $tag 회수 — 벽시계 ${wall}s · k6 rc=$rc"
+  printf "%s\t%s\t%s\t%s\t%s\t%s\t%s%s%s\t%s\t%s\t%s\t%s\n" "$b" "$arm" "$c" "$slot" "$started" \
+    "$wall" "$rc" "$cpu_b" "$cpu_a" "${cb_b:-none}" "${cb_a:-none}" "$rs_b" "$rs_a" >> "$CELLS"
+  echo "   ✅ 칸 $tag 회수 — 벽시계 ${wall}s · k6 rc=$rc$( [ "$rs_b" = "$rs_a" ] || echo " · 🔴 재시작 $rs_b → $rs_a" )"
 }
 
 # ── 구조 확인 게이트 — 설계 §2 의 «기본값» 을 실측한다(§5-4). c 수준의 뜻이 여기 걸려 있다 ──
@@ -193,6 +233,14 @@ structure_gate() {  # $1=팔 — 팔마다 스레드 구성이 다르므로 파�
     echo "## 🔴 comm 은 15자 절단이다 — reactor-http-epoll-N 은 «reactor-http-ep», grpc-default-worker-ELG-N 은 «grpc-default-wo» 로 보인다"
     echo "## AI 컨테이너: GRPC_MAX_WORKERS=$(ai_env GRPC_MAX_WORKERS) AI_WORKER_COUNT=$(ai_env AI_WORKER_COUNT)"
     echo "## 백엔드: AI_CHANNEL_POOL_SIZE=$(backend_env AI_CHANNEL_POOL_SIZE) OUTBOX_PUBLISHER_BATCH_SIZE=$(backend_env OUTBOX_PUBLISHER_BATCH_SIZE)"
+    echo "## 백엔드: AI_CLIENT_TYPE=$(backend_env AI_CLIENT_TYPE) AI_WEBCLIENT_CONTRACT=$(backend_env AI_WEBCLIENT_CONTRACT)"
+    # 5차 §5-4 — 이 팔의 재부착 본문 크기(전선 위, nginx req_len). grpc 팔은 nginx 를 안 거쳐 없다.
+    local prefix; prefix=$(arm_path_prefix "$1")
+    if [ "$prefix" != "-" ]; then
+      echo "## 재부착 req_len (마지막 5건, 경로 ${prefix}reattach):"
+      docker logs shadowfit-ai-nginx 2>/dev/null | grep -F "POST ${prefix}reattach " | grep -oE 'req_len=[0-9]+' | tail -5 | tr '\n' ' '; echo
+    fi
+    echo "## nginx 본문 임시파일 버퍼링 경고 누계: $(nginx_tmpfile_count) (5차 §5-3 ⑧ — 0 이어야 한다)"
   } > "$f" 2>&1
   echo "## 구조 게이트 회수 — $f"
   # 🔴 리눅스 Reactor Netty 는 epoll 이라 스레드 이름이 reactor-http-epoll-N 이다(nio 아님). 15자 절단까지
@@ -204,10 +252,35 @@ structure_gate() {  # $1=팔 — 팔마다 스레드 구성이 다르므로 파�
   echo "   [$1] reactor-http-* 이벤트루프 $loops 개 · grpc-default-worker-ELG $elg 개 · JVM cores $(curl -s -m 10 "$ACTUATOR/actuator/prometheus" | awk '/^system_cpu_count/ {print $2}') (c 수준 [$LEVELS] 이 이 문턱을 끼우는지 볼 것)"
 }
 
+# ── 5차 게이트 둘 ─────────────────────────────────────────────────────────────
+# ⑧ nginx 가 본문을 디스크 임시파일로 내린 횟수 — 오버레이(nginx-ai.body-buffer.conf)가 얹혔으면 0 이다.
+#    0 이 아니면 REST 팔 셋이 디스크 I/O 를 같이 내고 있는 것이라 «4차 조건 그대로» 가 돼 버린다 — 멈춘다.
+nginx_tmpfile_count() {
+  docker logs shadowfit-ai-nginx 2>&1 | grep -c 'buffered to a temporary file' || true
+}
+# 세 REST 팔 응답 동등성(§5-4) — ai-nginx 를 직접 쳐서 mirror→native→nested 가 같은 답을 주는지.
+# 토큰은 compose 의 .env 에서 읽는다(INTERNAL_API_TOKEN). ARMS 에 native 팔이 없으면 건너뛴다.
+parity_smoke() {
+  case " $ARMS " in *" webclient-native "*|*" webclient-nested "*) ;; *) return 0 ;; esac
+  local tok=${INTERNAL_API_TOKEN:-}
+  [ -n "$tok" ] || tok=$(grep -E '^INTERNAL_API_TOKEN=' "$COMPOSE_DIR/.env" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"\r')
+  [ -n "$tok" ] || { echo "🔴 INTERNAL_API_TOKEN 을 못 찾았다($COMPOSE_DIR/.env) — 동등성 스모크 불가, 중단"; exit 1; }
+  echo "## 세 REST 팔 응답 동등성 스모크 ($(date -u +%T))"
+  if "$PYTHON_BIN" "$(dirname "$0")/native_rest_parity_smoke.py" --url "$AI_URL" --token "$tok" \
+       --session-id "$SMOKE_SESSION_ID" > "$OUT/parity_smoke.txt" 2>&1; then
+    sed 's/^/   /' "$OUT/parity_smoke.txt"
+  else
+    sed 's/^/   /' "$OUT/parity_smoke.txt"
+    echo "🔴 세 팔의 답이 다르다(또는 /native 가 없다) — 이 이미지로는 라운드를 시작하면 안 된다, 중단"; exit 1
+  fi
+}
+
 # ── 라운드 ───────────────────────────────────────────────────────────────
 read -r -a LEVEL_ARRAY <<< "$LEVELS"
 read -r -a ARM_ARRAY <<< "$ARMS"
 NL=${#LEVEL_ARRAY[@]}
+
+parity_smoke
 
 # 버림 블록: 팔마다 c 수준 전부를 짧게(VU 당 WARMUP 재부착) 밟는다 — JIT·풀·커넥션이 «큰 c» 도
 # 한 번은 겪게. 기록엔 안 넣는다. 구조 게이트는 두 팔이 다 한 번씩 뜬 뒤에 찍는다.
@@ -221,6 +294,11 @@ for arm in $ARMS; do
   # 다르므로(grpc 팔엔 reactor 루프가 안 뜰 수 있다) 둘 다 남긴다.
   structure_gate "$arm"
 done
+
+# ⑧ 버림 블록이 REST 팔의 본문을 실제로 밟은 뒤에 센다 — 0 이 아니면 오버레이가 안 얹힌 것이다.
+TMPFILES=$(nginx_tmpfile_count)
+[ "$TMPFILES" = "0" ] || { echo "🔴 nginx 본문 임시파일 버퍼링 $TMPFILES 건 — client_body_buffer_size 오버레이가 안 얹혔다(§5-3 ⑧), 중단"; exit 1; }
+echo "## nginx 본문 임시파일 버퍼링 0건 — ⑧ 확인"
 
 slot=0
 for b in $(seq 1 "$BLOCKS"); do
