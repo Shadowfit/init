@@ -326,6 +326,95 @@ AI = 운동 통계의 단일 진실 원천 원칙. (커밋 143a2e4)
 > 🔶 **대시보드는 b(상태별 분포)·e(활성 회원) 둘이 비용의 대부분**이다(실측 각각 ~357ms /
 > ~307ms, 나머지 셋 합쳐 5ms 미만). 캐시·인덱스 도입은 미결(§4-5-1 ④).
 
+## 모임·소셜 API (2026-08~09 추가)
+
+설계 근거: [`decisions/multiuser-realtime-sync.md`](./decisions/multiuser-realtime-sync.md)(그룹 4테이블·WS 릴레이), [`decisions/social-cheer-and-group-feed.md`](./decisions/social-cheer-and-group-feed.md)(친구=같은 모임 ACTIVE 멤버, 출석=COMPLETED 세션, 재촉·푸시·자동 글·리액션). 전부 JWT 필수. 권한 규칙은 하나 — **같은 모임의 ACTIVE 멤버**(아니면 403 `G002`). 에러 코드 `G001`~`G009`·`N001`~`N003` 은 `ErrorCode` 참고.
+
+### 모임
+
+| 메서드·경로 | 요약 | 비고 |
+|---|---|---|
+| `POST /groups` | 모임 생성 | 생성자가 OWNER 로 자동 가입. 응답에 `inviteCode`(8자, 혼동 글자 제외) → 201 |
+| `POST /groups/join` | 코드로 참여 | `{inviteCode}` — 대소문자·공백 무시. 승인 없이 바로 ACTIVE → 201. 코드 없음 404 `G008`, 이미 멤버 409 `G003` |
+| `GET /groups/mine` | 내 모임 목록 | ACTIVE 인 것만 |
+| `GET /groups/{groupId}` | 모임 상세 | `members[]`(memberId·username·role·status·joinedAt) 포함 |
+| `POST /groups/{groupId}/invite-code` | 초대 코드 재발급 | OWNER 만(403 `G007`). 이전 코드 즉시 무효 |
+| `DELETE /groups/{groupId}/members/me` | 탈퇴 | 행은 LEFT 로 남고(재가입 시 되살림), 남긴 글·리액션은 그대로 |
+| `POST /groups/{groupId}/invitations` | 초대 발송 | `{inviteeId}`. ACTIVE 멤버 누구나. 이미 대기중 409 `G006` |
+| `GET /invitations/mine` | 내게 온 대기중 초대 | |
+| `POST /invitations/{id}/accept` · `/decline` | 수락·거절 | 수락 = 코드 참여와 같은 가입 경로(`MEMBER_JOINED` 발행). 이미 응답 409 `G005` |
+
+```json
+// POST /groups  Request
+{ "name": "아침 스쿼트", "description": "매일 7시" }
+// Response 201 — GroupResponseDto
+{ "id": 7, "name": "아침 스쿼트", "description": "매일 7시", "inviteCode": "K7M2P9XW", "createdById": 1, "createdAt": "2026-09-14T09:00:00" }
+```
+
+### 출석·현황 (친구 = 내 모임 사람들)
+
+| 메서드·경로 | 요약 | 비고 |
+|---|---|---|
+| `GET /groups/{groupId}/members/status` | 구성원 운동 현황 | ACTIVE 전원의 `attendedToday`·`streak`. 정렬: 오늘 완료 → 진행 중 → 기록 없음 |
+| `GET /friends` | 친구의 운동 현황 | 내가 속한 모든 모임의 ACTIVE 멤버(나 제외, 중복 제거), 같은 항목·같은 정렬 |
+| `GET /groups/{groupId}/attendance?year&month` | 모임 출석 캘린더 | 그 달의 모든 날 × `attendedCount`(COMPLETED 세션이 있는 현재 ACTIVE 멤버 수) + `activeMemberCount`(분모). 칸 농도 매핑은 프론트 |
+
+«출석» 의 정의는 한 곳 — `AttendanceService`: **COMPLETED 세션이 있는 날**(status 무관이던 예전 캘린더 정의와 다름), streak 은 창 없이 최신순 커서로 첫 끊김에서 중단. 노출 항목은 §3-G 로 고정된 셋(오늘 여부·연속일수·합산 출석)뿐 — rep 수·칼로리·세션 상세는 남에게 안 보인다.
+
+```json
+// GET /friends  Response 200 — List<MemberAttendanceStatusDto>
+[ { "memberId": 2, "username": "철수", "profileImageUrl": null, "attendedToday": true, "streak": 5 },
+  { "memberId": 3, "username": "영희", "profileImageUrl": null, "attendedToday": false, "streak": 0 } ]
+```
+
+### 피드·리액션
+
+| 메서드·경로 | 요약 | 비고 |
+|---|---|---|
+| `GET /groups/{groupId}/feed?beforeSeq&size` | 모임 피드 | 최신순 keyset. `beforeSeq` 생략 = 최신부터, `size` 기본 20·최대 100. 응답 `nextBeforeSeq` 를 다음 요청에(null 이면 끝) |
+| `PUT /groups/{groupId}/events/{seq}/reactions/{kind}` | 리액션 달기 | **멱등** — 이미 있어도 200. `kind` = `HEART` \| `FIRE`(밖이면 400). 같은 글에 둘 다 가능. 글 없음 404 `G009` |
+| `DELETE /groups/{groupId}/events/{seq}/reactions/{kind}` | 리액션 취소 | **멱등** — 없어도 200 |
+| `GET /groups/{groupId}/events?afterSeq` | WS 재연결 백필 | `afterSeq` 이후 **전부·오름차순·무페이징**. 피드 화면용이 아니라 소켓이 끊긴 동안 놓친 것을 채우는 용도 |
+
+피드 항목은 `group_events` 행이다. 서버가 만드는 타입은 `SESSION_COMPLETED`(세션 완료 시 아웃박스를 거쳐 회원의 ACTIVE 모임마다 1건, `senderId` = 완료한 회원, `payload` = `{sessionId, memberId, username, exerciseName}`)와 `MEMBER_JOINED`(`payload` = `{memberId, username}`). 소켓 클라이언트가 보낸 임의 `type` 도 같은 표에 쌓이므로 프론트는 모르는 타입을 무시해야 한다. 리액션은 알림·소켓 발행이 없다 — 재조회로 반영된다.
+
+```json
+// GET /groups/7/feed?size=2  Response 200 — GroupFeedResponseDto
+{ "items": [
+    { "seq": 41, "groupId": 7, "type": "SESSION_COMPLETED", "senderId": 2,
+      "payload": "{\"sessionId\":123,\"memberId\":2,\"username\":\"철수\",\"exerciseName\":\"스쿼트\"}",
+      "occurredAt": "2026-09-14T07:12:30",
+      "reactionSummary": { "reactions": { "HEART": 2, "FIRE": 0 }, "myReactions": ["HEART"] } },
+    { "seq": 40, "groupId": 7, "type": "MEMBER_JOINED", "senderId": null, "payload": "{\"memberId\":3,\"username\":\"영희\"}",
+      "occurredAt": "2026-09-13T21:00:00",
+      "reactionSummary": { "reactions": { "HEART": 0, "FIRE": 0 }, "myReactions": [] } } ],
+  "nextBeforeSeq": 40 }
+
+// PUT /groups/7/events/41/reactions/FIRE  Response 200 — ReactionSummaryDto
+{ "reactions": { "HEART": 2, "FIRE": 1 }, "myReactions": ["HEART", "FIRE"] }
+```
+
+### 재촉·알림·푸시
+
+| 메서드·경로 | 요약 | 비고 |
+|---|---|---|
+| `POST /friends/{memberId}/nudge` | 재촉하기 | 같은 모임 ACTIVE 멤버에게만. **같은 사람에게 하루 1회** — 두 번째는 409 `N002`. 자기 자신 400 `N003`. 응답 = 만든 알림 → 201 |
+| `GET /notifications?page&size` | 내 알림함 | 최신순 offset(`PageResponse`), `size` 기본 20·최대 100. 보낸 사람이 탈퇴했으면 `sender*` null |
+| `PATCH /notifications/{id}/read` | 읽음 처리 | 남의 것·없음 404 `N001`. 이미 읽었으면 처음 시각 그대로 200. «모두 읽음» 없음 |
+| `POST /push-tokens` | 푸시 토큰 등록 | `{token, platform}` — `ExponentPushToken[...]` 형식 아니면 400, `platform` = `IOS`\|`ANDROID`. **멱등 200**(신규든 갱신이든). 다른 계정이 같은 토큰을 등록하면 소유자가 옮겨감. 삭제 API 없음 — 로그아웃이 계정 단위로 지움 |
+
+재촉의 전달은 셋 — 알림 행(원천, 항상) · 접속 중이면 소켓(#7, 진행 중) · 등록된 기기가 있으면 Expo Push(아웃박스 `PUSH_NOTIFICATION` 경유, at-least-once). 서버는 «오늘 이미 완료한 상대» 재촉을 막지 않는다 — 버튼 노출은 프론트.
+
+```json
+// POST /friends/2/nudge  Response 201 — NotificationDto
+{ "id": 55, "type": "NUDGE", "senderId": 1, "senderUsername": "민수", "senderProfileImageUrl": null,
+  "targetDate": "2026-09-14", "read": false, "readAt": null, "createdAt": "2026-09-14T08:00:00" }
+```
+
+### WebSocket `/ws/groups/{groupId}?token={JWT}`
+
+브라우저 핸드셰이크가 `Authorization` 헤더를 못 실어 JWT 는 **쿼리 파라미터**로. ACTIVE 멤버만 업그레이드. 서버→클라이언트 프레임은 `GroupEventResponseDto`(`seq·groupId·type·senderId·payload·occurredAt`) 그대로. 클라이언트→서버는 `{ "type": "...", "payload": {...} }` — 서버가 seq 를 채번해 저장·전원 릴레이. 끊겼다 붙으면 마지막 `seq` 로 `GET /groups/{groupId}/events?afterSeq` 백필. 단일 인스턴스 전제(Redis 없음).
+
 ## 내부 API (AI ↔ Spring, gRPC 단일 채널)
 
 > **2026-05-26 갱신**: AI → Spring 내부 호출은 *전부 gRPC* 로 통일. `Authorization: Bearer {INTERNAL_API_TOKEN}` (metadata) 로 인증. REST `/internal/*` endpoint 는 폐기됨 (기존 `POST /internal/feedback/batch` → `ExerciseService.ReportFeedbackBatch`). proto 정의는 `backend/src/main/proto/exercise.proto`. 박제: [`./decisions/tts-design.md`](./decisions/tts-design.md) 상단 박스.

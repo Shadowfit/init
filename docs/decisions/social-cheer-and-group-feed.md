@@ -227,7 +227,7 @@ professor-vision §2 의 "행 단위 접근 제어" 가 여기서 처음 실제�
 | 9 | 아웃박스 `PUSH_NOTIFICATION` 타입 + Expo Push HTTP 클라이언트 + `OutboxPublisher` 분기 + 응답 분류(RETRY / TERMINAL, `DeviceNotRegistered` 면 토큰 삭제) | 4~5h | 2.5~3h | receipt API 조회는 이 견적 밖(SENT = Expo 수신까지) |
 | 10 | 자동 글 — ~~`SessionCompletionTx` 에서 ACTIVE 그룹마다 `group_events` `SESSION_COMPLETED` INSERT~~ → 🔄 09-14 정정: 완료 tx 는 아웃박스 `SESSION_COMPLETED` 행 적재, `OutboxPublisher` 가 그룹 전부를 한 tx 로 팬아웃(§4-4) + 회원당 그룹 수 분포 기록 | 1.5~2h | 1~1.5h | ⚠️ `GroupEventService.publish` 가 `workout_groups` 행을 `PESSIMISTIC_WRITE` 로 잠그고 seq 를 채번한다 — 완료 트랜잭션 안에서 그룹 N개를 순서대로 잠그면 소켓 발행 경로와 **잠금 순서가 엇갈릴 수 있음**. group_id 오름차순으로 고정하고 데드락 테스트 1개 |
 | 11 | 리액션 — `event_reactions` + POST/DELETE + 피드 조회 응답에 카운트·내 리액션 | 2.5~3h | 1.5~2h | 카운트는 `COUNT(*)` |
-| 12 | 통합 테스트(코드 참여→완료→자동 글→리액션→재촉→알림 흐름) + API 문서 갱신 | 3~4h | 2~2.5h | |
+| 12 | 통합 테스트(코드 참여→완료→자동 글→리액션→재촉→알림 흐름) + API 문서 갱신 | 3~4h | 2~2.5h | ✅ 09-14 — `SocialJourneyIntegrationTest`(저니 1 + 탈퇴 변형 1), `docs/07-api-design.md` «모임·소셜 API» 절, `docs/18-testing-guide.md` §5.4 저니 원칙 |
 | **합계** | | **≈28~38h (중앙값 ≈33h)** | **≈19~25h (중앙값 ≈22h)** | |
 | 프론트(참고) | `expo-notifications` 토큰 등록, 코드 참여 화면 + 동의 문구, 친구 현황·재촉 버튼, 모임 캘린더, 피드 리액션 | — | — | 백엔드 견적에 미포함. 별도 산정 |
 | 비코딩(참고) | Expo 계정·EAS 프로젝트 ID·푸시 자격 증명, 실기기 테스트 | — | — | 코딩 속도와 무관 |
@@ -381,6 +381,7 @@ professor-vision §2 의 "행 단위 접근 제어" 가 여기서 처음 실제�
 
 ## 결정 로그
 
+- 2026-09-14 (16): **#12 완료.** 저니 테스트는 «이음새만, 가지는 기능 테스트 몫» 으로 설계(18-testing-guide §5.4). API 문서는 07 에 «모임·소셜 API» 절로. 이로써 §4-1 12개 중 #7 만 남음(다른 세션 진행 중).
 - 2026-09-14 (15): **#11 구현 분기 확정(§4-5).** 새 `GET /groups/{id}/feed`(keyset `beforeSeq&size`), `PUT/DELETE /groups/{id}/events/{seq}/reactions/{kind}` 멱등 200, 타입 제한 없음, `ReactionKind{HEART,FIRE}` + V20 `event_reactions`.
 - 2026-09-14 (14): **#10 구현 분기 확정(§4-4) + 구현.** 추천 그대로 ①a·③b·④c·⑤a. ⑤의 «건너뛰기» 는 catch 가 아니라 스냅샷으로 실현(같은 tx 안 두 조회가 어긋날 수 없음). 다음은 #7 마무리 → #11 리액션 → #12.
 - 2026-09-14 (14): **#9 푸시 발행 분기 확정(§4-3).** 행 = 알림 1건 · 적재는 알림과 같은 트랜잭션(기기 있을 때만) · 결과 분류는 Expo 문서 그대로 + 전부 죽은 토큰이면 FAILED · 서킷 `expoPush` 추가(배치 20 × 5s > lease 60s 창) · 타임아웃 5s 는 제약에서 · 문구 확정. 추천 그대로. 구현 착수 전에 발견한 사실: **AI 채널의 서킷이 없었다면 lease 60초는 배치 20행을 못 버틴다** — 새 외부 호출을 붙일 때마다 같은 장치가 필요하다.
