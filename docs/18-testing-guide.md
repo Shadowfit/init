@@ -99,7 +99,7 @@ testRuntimeOnly 'com.h2database:h2'         // 2026-05-09 추가
 > | gRPC 결합 | `ExerciseGrpcServiceTest` · `GrpcCorrelationInterceptorTest` · `GrpcObservabilityWiringTest` |
 > | 관측성 | `CorrelationIdFilterTest` · `AsyncMdcPropagationTest` · `SessionMetricsRecordingTest` · `SessionMetricsExportNamesTest` |
 > | 보안 | `JwtUtilTest` · `JwtAuthFilterTest` · `CustomUserDetailsServiceTest` · `AdminAuthorizationIntegrationTest` |
-> | 통합 | `ExerciseSessionFlowIntegrationTest` · `AdminQueryParamBindingErrorTest` |
+> | 통합 | `ExerciseSessionFlowIntegrationTest` · `AdminQueryParamBindingErrorTest` · **저니** `SocialJourneyIntegrationTest`(소셜 L1 여섯 기능의 이음새만 — 가지는 기능별 테스트 몫, 설계 원칙은 §5.4) |
 > | **측정 장치** | `AdminMemberExplainCaptureTest` · `AdminSessionExplainCaptureTest` · `AdminStatsExplainCaptureTest` — 🔴 **테스트가 아니라 `EXPLAIN` 캡처 도구**다. 실행 계획을 문서에 옮기려고 테스트 껍데기를 쓴 것 |
 >
 > 📌 **확장 과정에서 진짜 버그 5건이 나왔다** — `@Async` self-invocation(비동기가 실제로는 동기 실행), `@OnDelete` 누락 2건(entity-schema drift) 등. 커버리지 % 가 아니라 **이 5건이 테스트 확장의 근거**다([`tasks/27-implementation-gaps.md`](./tasks/27-implementation-gaps.md) §3).
@@ -188,6 +188,19 @@ class XxxIntegrationTest {
 
 ### 5.3 낙관적 락 충돌 시뮬레이션
 실제 충돌은 `EntityManager.flush()` 로 강제. `SessionTimeoutSchedulerTest` 의 동시성 테스트 케이스 참조.
+
+### 5.4 저니(user journey) 통합 테스트 — 기능 여러 개의 이음새 (2026-09-14)
+
+기능 하나의 분기(403·409·더블탭·회수분 재배달)는 **기능별 테스트**가 밟는다. 저니 테스트는 그걸 반복하지 않고 **앞 단계가 만든 데이터를 뒷 단계가 그대로 읽는가** 만 본다 — 예: 자동 글 payload 의 `username` 이 피드 응답에 나오는가, 재촉이 만든 알림 행이 알림함에 나오는가. 선례: `SocialJourneyIntegrationTest`(코드 참여→완료→자동 글→리액션→현황→재촉→푸시·알림함).
+
+| 원칙 | 이유 |
+|---|---|
+| 경계는 실제로(HTTP→서비스→H2), **바깥 세계만 가짜로**(AI = gRPC servicer 직접 호출, Expo = `ExpoPushClient` mock) | 내부 서비스를 mock 하면 그 이음새를 검증 안 한 것 |
+| **한 서사 = 메서드 하나**, 이음새마다 단언. `@Order` 로 `@Test` 를 잇지 않는다 | 3번이 깨지면 2번이 남긴 상태 탓인지 3번 탓인지 못 가린다. 변형은 `@Nested` |
+| 관찰 가능한 결과만(HTTP 응답·DB 행). `verify(service)` 안 씀 | 구현을 바꾸면 테스트가 같이 바뀌는 건 이음새 검증이 아니라 구현 복제 |
+| 비동기는 손으로 당긴다 — `scheduling.enabled=false` + `publisher.dispatchPending()` | `sleep` 은 느리고 비결정적 |
+| 전용 H2 이름 + `@AfterEach` 수동 삭제 | REQUIRES_NEW 경로(아웃박스·리액션·토큰)는 테스트 tx 안의 픽스처를 못 본다 — `@Transactional` 롤백에 못 기댄다 |
+| 저니에 **안 넣는 것**: 동시성(race 프로파일), 실패 분기(기능 테스트), 시간 경과(스케줄러 테스트) | 저니가 길어질수록 깨졌을 때 어디가 깨졌는지 안 보인다 |
 
 ---
 
