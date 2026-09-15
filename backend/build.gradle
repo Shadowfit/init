@@ -90,8 +90,8 @@ dependencies {
 	developmentOnly 'org.springframework.boot:spring-boot-devtools'
 
 	// --- gRPC & Protobuf (버전 정합성 해결) ---
-	def grpcVersion = '1.83.1'
-	def protobufVersion = '4.36.0'
+	def grpcVersion = '1.84.0'
+	def protobufVersion = '4.36.1'
 
 	// Starter는 API만 제공하고 실제 구현체는 아래에서 버전 고정
 	implementation 'net.devh:grpc-client-spring-boot-starter:3.1.0.RELEASE'
@@ -128,11 +128,11 @@ dependencies {
 
 protobuf {
 	protoc {
-		artifact = "com.google.protobuf:protoc:4.36.0"
+		artifact = "com.google.protobuf:protoc:4.36.1"
 	}
 	plugins {
 		grpc {
-			artifact = "io.grpc:protoc-gen-grpc-java:1.83.1"
+			artifact = "io.grpc:protoc-gen-grpc-java:1.84.0"
 		}
 	}
 	generateProtoTasks {
