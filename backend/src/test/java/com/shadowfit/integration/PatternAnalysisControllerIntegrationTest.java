@@ -21,12 +21,17 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -44,12 +49,27 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * <p>sufficientData=true 경로를 재현하려면 회원가입 4주(28일) 이상 지난 계정이 필요한데,
  * {@code Member.createdAt} 는 {@code @CreationTimestamp}(updatable=false) 라 JPA 로는 과거
  * 시각을 못 심는다 — {@link JdbcTemplate} 로 저장 직후 직접 UPDATE 해 우회한다.
+ *
+ * <p><b>시각은 고정 {@link Clock} 으로 돈다(#739).</b> 세션을 «지금 - 5분» 에 넣고 조회가 «지금» 이면,
+ * 그 사이에 주 경계(일→월 자정)를 넘는 순간 이번 주 버킷이 비어 실패했다(매주 일요일 23:55~00:00).
+ * 서비스와 테스트가 같은 Clock 을 보면 두 «지금» 이 같은 순간이라 경계를 못 넘는다. 수요일 10시로
+ * 박은 건 어느 경계에서도 먼 시각이라서다 — 값 자체에 의미는 없다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
 @DisplayName("PatternAnalysisController 통합테스트")
 class PatternAnalysisControllerIntegrationTest {
+
+    static final LocalDateTime FIXED_NOW = LocalDateTime.of(2026, 9, 9, 10, 0); // 수요일
+
+    @TestConfiguration
+    static class FixedClockConfig {
+        @Bean @Primary
+        Clock fixedClock() {
+            return Clock.fixed(FIXED_NOW.atZone(ZoneId.systemDefault()).toInstant(), ZoneId.systemDefault());
+        }
+    }
 
     @Autowired private MockMvc mockMvc;
     @Autowired private JwtUtil jwtUtil;
@@ -91,7 +111,7 @@ class PatternAnalysisControllerIntegrationTest {
      */
     private void backdateSignup(Member member, int daysAgo) {
         jdbcTemplate.update("UPDATE users SET created_at = ? WHERE id = ?",
-                LocalDateTime.now().minusDays(daysAgo), member.getId());
+                FIXED_NOW.minusDays(daysAgo), member.getId());
         entityManager.clear();
     }
 
@@ -126,10 +146,8 @@ class PatternAnalysisControllerIntegrationTest {
         Member member = freshMember("pattern-seasoned@test.com");
         String token = tokenFor(member);
 
-        // 고정 시각(예: 19시)을 박으면 실제 실행 시각이 그보다 이르면 "미래" 세션이 돼
-        // periodicity/intensity-trend 의 end=now() 범위에서 빠진다 — 항상 "지금보다 조금
-        // 전"으로 잡고, 기대 시간대는 그 실제 시각에서 역산한다.
-        LocalDateTime start = LocalDateTime.now().minusMinutes(5);
+        // 서비스의 «지금» 이 FIXED_NOW 라 그보다 조금 전이면 항상 창 안·같은 주·같은 날이다.
+        LocalDateTime start = FIXED_NOW.minusMinutes(5);
         TimeBucket expectedBucket = TimeBucket.of(start.toLocalTime());
         sessionRepository.saveAndFlush(Session.builder()
                 .member(member).exercise(exercise)
