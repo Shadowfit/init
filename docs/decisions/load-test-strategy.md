@@ -44,6 +44,7 @@
 > 🔴 **정정 2026-08-23 — 「2.3배 여유」였는데 그 156 은 AI 단독 박스 값이다.** 배포 구성
 >    (MySQL·Spring 동거 + HTTP 경로)의 실측 천장은 **89~105세션**이라 여유는 **1.33~1.57배**다
 >    ([#385](https://github.com/Shadowfit/init/issues/385) · 계산 [`ai-receive-path-scaling.md` §3-ㄹ-1](./ai-receive-path-scaling.md)).
+>    ⚠️ **보정값 없음**(08-26 이전 라운드) — 라운드 간 **±10% 폭** 안에서만 읽을 것, [인용 규칙 ㉠ §8](./round-to-round-nonreproducibility.md#8--채택--인용-규칙--2026-09-14-사용자-결정) — 156.1 · 89~105 둘 다.
 > 결과: [`../../loadtest/results/ai-concurrency-aws-2026-08-14/`](../../loadtest/results/ai-concurrency-aws-2026-08-14/README.md).
 > **코어 2배(4→8)에 세션 2.38배**로 선형 이상 붙는다(기전은 미규명).
 > → **현 시점 AI 수평확장 근거는 없다.** 한 대로 선다.

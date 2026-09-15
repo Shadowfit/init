@@ -34,6 +34,7 @@ R10-b(2대)는 `handler_concurrency` 를 기준 조건에서 재는 판으로 �
 
 R10 이 재현하려는 것은 「346 RPS 에서 AI CPU 9.5 vCPU」인데, 그 판의 무대는 이렇다
 ([coresidency-aws-2026-08-17](../../loadtest/results/coresidency-aws-2026-08-17/README.md) 머리):
+⚠️ **보정값 없음**(08-26 이전 라운드) — 라운드 간 **±10% 폭** 안에서만 읽을 것, [인용 규칙 ㉠ §8](./round-to-round-nonreproducibility.md#8--채택--인용-규칙--2026-09-14-사용자-결정) — 재현 대상은 «346 이라는 수» 가 아니라 «천장에서 9.5 vCPU 만 쓰는 모양» 이다.
 
 | | 값 |
 |---|---|
