@@ -8,6 +8,7 @@ import com.shadowfit.model.group.GroupMemberStatus;
 import com.shadowfit.model.member.Member;
 import com.shadowfit.repository.group.GroupMemberRepository;
 import com.shadowfit.repository.group.GroupRepository;
+import com.shadowfit.service.exercise.AttendanceProperties;
 import com.shadowfit.service.exercise.AttendanceService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -33,7 +34,9 @@ import java.util.Set;
  * → 기록 없음. 즉 attendedToday desc, streak desc, 동률은 username — 두 화면이 같은 순서를 보장한다.
  *
  * <p><b>비용</b>: «오늘 했나»는 멤버 N명을 IN 한 방, streak 는 멤버당 커서 쿼리(각 수 행,
- * {@link AttendanceService}). 12명이면 쿼리 ~13개.
+ * {@link AttendanceService}). 12명이면 쿼리 ~13개. 이 N 왕복이 실제로 얼마인지는
+ * friend-status-streak-fanout-experiment-design.md 가 재고, 그 비교 후보(한 방 쿼리)는
+ * {@link AttendanceProperties#getStreakStrategy()} 로 켠다 — 기본은 지금 그대로.
  */
 @Service
 @RequiredArgsConstructor
@@ -48,6 +51,7 @@ public class MemberAttendanceStatusService {
     private final GroupRepository groupRepository;
     private final GroupMemberRepository groupMemberRepository;
     private final AttendanceService attendanceService;
+    private final AttendanceProperties attendanceProperties;
 
     /** 모임 구성원 현황 — 요청자 포함 ACTIVE 멤버 전원. 요청자가 ACTIVE 멤버가 아니면 403. */
     public List<MemberAttendanceStatusDto> groupMemberStatuses(Long groupId, Long requesterId, LocalDate today) {
@@ -86,14 +90,21 @@ public class MemberAttendanceStatusService {
     }
 
     private List<MemberAttendanceStatusDto> statusesOf(List<Member> members, LocalDate today) {
-        Set<Long> attendedToday = attendanceService.attendedOn(members.stream().map(Member::getId).toList(), today);
+        List<Long> ids = members.stream().map(Member::getId).toList();
+        Set<Long> attendedToday = attendanceService.attendedOn(ids, today);
+        // 후보 b 일 때만 한 방으로 미리 받아 두고, 아니면 멤버마다 단건(현재 구현).
+        Map<Long, Integer> batchStreaks =
+                attendanceProperties.getStreakStrategy() == AttendanceProperties.StreakStrategy.BATCH
+                        ? attendanceService.currentStreaks(ids, today) : null;
         return members.stream()
                 .map(m -> MemberAttendanceStatusDto.builder()
                         .memberId(m.getId())
                         .username(m.getUsername())
                         .profileImageUrl(m.getProfileImageUrl())
                         .attendedToday(attendedToday.contains(m.getId()))
-                        .streak(attendanceService.currentStreak(m.getId(), today))
+                        .streak(batchStreaks != null
+                                ? batchStreaks.getOrDefault(m.getId(), 0)
+                                : attendanceService.currentStreak(m.getId(), today))
                         .build())
                 .sorted(REFERENCE_ORDER)
                 .toList();

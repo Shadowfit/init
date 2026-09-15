@@ -162,6 +162,12 @@ grpc:
 ai:
   channel-pool-size: ${AI_CHANNEL_POOL_SIZE:3}
 
+# 출석·streak 읽기 전략 — friend-status-streak-fanout-experiment-design.md 의 비교 후보.
+# per-member(기본) = 회원마다 커서 쿼리 1회(현재 구현). batch = LATERAL 한 방(MySQL 8.0.14+, H2 불가).
+# batch 는 실험 rig 가 ATTENDANCE_STREAK_STRATEGY 로만 켠다 — 채택은 실측 뒤 별도 결정이라 기본값을 안 바꾼다.
+attendance:
+  streak-strategy: ${ATTENDANCE_STREAK_STRATEGY:per-member}
+
 # [3] Swagger 및 기타 설정 (최상단 레벨)
 #
 # 기본은 꺼짐이고 **env var 로도 못 켠다** — 켜는 건 dev 프로파일(application-dev.yml)뿐이다.

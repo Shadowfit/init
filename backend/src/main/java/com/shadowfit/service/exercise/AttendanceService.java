@@ -9,8 +9,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -86,21 +89,83 @@ public class AttendanceService {
     public int currentStreak(Long memberId, LocalDate today) {
         // 오늘 이후 시각은 보지 않는다 — 미래 start_time 이 들어와도 오늘 기준 streak 에 안 섞이게.
         LocalDateTime cursor = today.plusDays(1).atStartOfDay();
-        LocalDate expected = null; // 다음으로 «있어야 하는» 날. null = 아직 앵커(오늘/어제)를 못 정함
-        int streak = 0;
+        StreakWalk walk = new StreakWalk(today);
 
         while (true) {
             List<LocalDateTime> page = sessionRepository.findCompletedStartTimesBefore(
                     memberId, Status.COMPLETED, cursor, PageRequest.of(0, FETCH_BATCH));
-            if (page.isEmpty()) {
-                return streak;
+            if (page.isEmpty() || walk.consume(page) || page.size() < FETCH_BATCH) {
+                return walk.streak; // 더 읽을 게 없거나(빈 페이지·짧은 페이지) 끊김을 만났다
             }
-            for (LocalDateTime startTime : page) {
+            // 마지막으로 본 시각보다 앞선 것만 다음 페이지로. 같은 시각의 다른 세션이 건너뛰어져도
+            // 그 날은 이미 센 날이라 결과가 안 바뀐다(날짜 단위 계산).
+            cursor = page.get(page.size() - 1);
+        }
+    }
+
+    /**
+     * 여러 회원의 streak 를 <b>왕복 1회</b>로 — 실험용 후보 b
+     * (friend-status-streak-fanout-experiment-design.md §2). 계산 규칙은 {@link #currentStreak} 과
+     * 같은 {@link StreakWalk} 이고, 다른 것은 페이지를 회원마다 따로 받느냐 한 결과 집합에서 갈라 쓰느냐뿐이다.
+     * 한 페이지({@link #FETCH_BATCH})로 끝나지 않는 회원(31일 이상 연속)은 그 회원만 단건 커서로 이어 걷는다 —
+     * 드물고, 그 비용은 «답의 크기 비례» 라는 원래 성질 그대로다.
+     *
+     * <p>입력 순서대로 키가 들어간 맵을 돌려주고, 세션이 없는 회원은 0.
+     */
+    public Map<Long, Integer> currentStreaks(Collection<Long> memberIds, LocalDate today) {
+        Map<Long, Integer> result = new LinkedHashMap<>();
+        if (memberIds.isEmpty()) {
+            return result;
+        }
+        LocalDateTime before = today.plusDays(1).atStartOfDay();
+        Map<Long, List<LocalDateTime>> pages = new HashMap<>();
+        for (Object[] row : sessionRepository.findCompletedStartTimesBeforeBatch(
+                memberIds, Status.COMPLETED.name(), before, FETCH_BATCH)) {
+            pages.computeIfAbsent(((Number) row[0]).longValue(), k -> new ArrayList<>())
+                    .add(((Timestamp) row[1]).toLocalDateTime());
+        }
+        for (Long memberId : memberIds) {
+            List<LocalDateTime> page = pages.getOrDefault(memberId, List.of());
+            StreakWalk walk = new StreakWalk(today);
+            if (page.isEmpty() || walk.consume(page) || page.size() < FETCH_BATCH) {
+                result.put(memberId, walk.streak);
+                continue;
+            }
+            // 한 페이지가 꽉 찼는데 아직 안 끊겼다 — 이 회원만 단건 커서로 이어 걷는다.
+            LocalDateTime cursor = page.get(page.size() - 1);
+            while (true) {
+                List<LocalDateTime> next = sessionRepository.findCompletedStartTimesBefore(
+                        memberId, Status.COMPLETED, cursor, PageRequest.of(0, FETCH_BATCH));
+                if (next.isEmpty() || walk.consume(next) || next.size() < FETCH_BATCH) {
+                    break;
+                }
+                cursor = next.get(next.size() - 1);
+            }
+            result.put(memberId, walk.streak);
+        }
+        return result;
+    }
+
+    /**
+     * 최신순 시작 시각을 받아 연속 일수를 세는 상태 기계 — 단건·배치 두 경로가 같은 규칙을 쓰게 하려고 뺐다.
+     * {@link #consume} 은 «끊김을 만나 더 볼 필요가 없다» 면 true.
+     */
+    private static final class StreakWalk {
+        private final LocalDate today;
+        private LocalDate expected; // 다음으로 «있어야 하는» 날. null = 아직 앵커(오늘/어제)를 못 정함
+        int streak;
+
+        StreakWalk(LocalDate today) {
+            this.today = today;
+        }
+
+        boolean consume(List<LocalDateTime> newestFirst) {
+            for (LocalDateTime startTime : newestFirst) {
                 LocalDate day = startTime.toLocalDate();
                 if (expected == null) {
                     // 최신 출석일이 오늘도 어제도 아니면 이어지는 streak 이 없다.
                     if (!day.equals(today) && !day.equals(today.minusDays(1))) {
-                        return 0;
+                        return true;
                     }
                     expected = day;
                 }
@@ -108,17 +173,12 @@ public class AttendanceService {
                     continue; // 같은 날의 다른 세션 — 이미 센 날
                 }
                 if (day.isBefore(expected)) {
-                    return streak; // 하루 이상 비었다 — 여기서 끝
+                    return true; // 하루 이상 비었다 — 여기서 끝
                 }
                 streak++;
                 expected = expected.minusDays(1);
             }
-            if (page.size() < FETCH_BATCH) {
-                return streak; // 더 읽을 게 없다
-            }
-            // 마지막으로 본 시각보다 앞선 것만 다음 페이지로. 같은 시각의 다른 세션이 건너뛰어져도
-            // 그 날은 이미 센 날이라 결과가 안 바뀐다(날짜 단위 계산).
-            cursor = page.get(page.size() - 1);
+            return false;
         }
     }
 }

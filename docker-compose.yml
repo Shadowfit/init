@@ -118,6 +118,8 @@ services:
       # 시작값(논-힙 영역인 스레드 스택·메타스페이스·다이렉트 버퍼에 나머지를 남겨둔다)이고,
       # 이 프로젝트가 실측해서 고른 값은 아니다 — 실측 후 좁힐 대상이다(#570).
       JAVA_OPTS: ${BACKEND_JAVA_OPTS:--XX:MaxRAMPercentage=75.0}
+      # 실험 스위치(friend-status-streak-fanout-experiment-design.md) — rig 가 per-member/batch 로 바꿔 재기동한다.
+      ATTENDANCE_STREAK_STRATEGY: ${ATTENDANCE_STREAK_STRATEGY:-per-member}
       DB_HOST: shadowfit-mysql
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}

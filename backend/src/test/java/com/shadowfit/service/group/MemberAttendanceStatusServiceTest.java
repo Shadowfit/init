@@ -11,6 +11,7 @@ import com.shadowfit.model.member.Member;
 import com.shadowfit.model.member.UserRole;
 import com.shadowfit.repository.group.GroupMemberRepository;
 import com.shadowfit.repository.group.GroupRepository;
+import com.shadowfit.service.exercise.AttendanceProperties;
 import com.shadowfit.service.exercise.AttendanceService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -47,7 +48,9 @@ class MemberAttendanceStatusServiceTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        service = new MemberAttendanceStatusService(groupRepository, groupMemberRepository, attendanceService);
+        // 기본 전략(per-member) — 이 테스트가 보는 정렬·권한·dedup 규칙은 전략과 무관하다.
+        service = new MemberAttendanceStatusService(groupRepository, groupMemberRepository, attendanceService,
+                new AttendanceProperties());
         me = member(1L, "me");
         done = member(2L, "zed");    // 오늘 완료 — 이름이 뒤여도 맨 위
         alive = member(3L, "amy");   // 오늘 안 함, streak 8
