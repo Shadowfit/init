@@ -1,4 +1,4 @@
--- exercise_feedback_templates 의 persona NULL fallback 행이 UNIQUE 에 안 걸리던 것 (#715, 2026-09-14 사용자 confirm ㄴ)
+-- exercise_feedback_templates 의 persona NULL fallback 행이 UNIQUE 에 안 걸리던 것 (#715, 2026-09-14 사용자 confirm ㄴ — 처음엔 V21 이었는데 #758 의 V21 과 번호가 겹쳐 V22 로 옮김)
 --
 -- uk_exercise_feedback_persona (exercise_id, feedback_type, persona) 는 «종목·결함당 페르소나별 한 줄» 을
 -- 뜻하지만, MySQL 은 UNIQUE 인덱스에서 NULL 을 서로 다른 값으로 본다. 그래서 persona IS NULL 인 fallback 행 —
