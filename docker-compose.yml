@@ -111,15 +111,13 @@ services:
     # 상한일 뿐 — 실측 전까지는 여기서 더 좁히지 않는다.
     cpus: ${BACKEND_CPU_LIMIT:-4}
     environment:
-      SPRING_PROFILES_ACTIVE: prod
+      # dev 프로파일 — Swagger·SQL 로그·DEBUG 로그를 켠다(application-dev.yml). 운영은 docker-compose.prod.yml 의 prod.
+      SPRING_PROFILES_ACTIVE: dev
       TZ: Asia/Seoul
       # 컨테이너 힙 옵션 — 위 mem_limit 과 짝이다(#570). 75% 는 컨테이너 JVM 의 통상적인
       # 시작값(논-힙 영역인 스레드 스택·메타스페이스·다이렉트 버퍼에 나머지를 남겨둔다)이고,
       # 이 프로젝트가 실측해서 고른 값은 아니다 — 실측 후 좁힐 대상이다(#570).
       JAVA_OPTS: ${BACKEND_JAVA_OPTS:--XX:MaxRAMPercentage=75.0}
-      # 로컬 개발 편의 — Swagger UI/OpenAPI 문서. docker-compose.prod.yml 에는 없어서
-      # 기본값(false)이 그대로 적용된다(application.yml [3]).
-      SPRINGDOC_ENABLED: "true"
       DB_HOST: shadowfit-mysql
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
