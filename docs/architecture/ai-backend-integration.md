@@ -155,7 +155,7 @@ Docker 네트워크는 `shadowfit-net` 브리지 한 개. 외부 노출은 backe
    📌 **의도적 삭제였다** — [`../decisions/session-end-trigger.md`](../decisions/session-end-trigger.md) §박힌 코드(2026-05-26)가 *"`ExercisesController.stopSession`(`PUT …/stop`) **삭제**"* 를 기록하고 있다. **ET-H(단일 endpoint 분배자) 확정**의 일부다 — 클라는 `PATCH /sessions/{id}/end` **한 번만** 부르고 Spring 이 AI 통보를 분배한다. 즉 결정 문서는 처음부터 맞았고 **이 현황 문서만 2.5개월 안 따라왔다**
 2. `ExerciseAnalysisService.stopAnalysis` — **gRPC 를 직접 부르지 않는다.** 세션 상태 변경과 **같은 트랜잭션**에서 `outbox_events(type=STOP_ANALYSIS, payload={sessionId})` 를 적재
 3. `OutboxPublisher` — `@Scheduled` 폴링(기본 1초, `outbox.publisher.poll-interval-ms`)으로 `PENDING` 을 집어 gRPC `StopAnalysis` 송신. 실패하면 재시도(기본 상한 10회, `outbox.publisher.max-retry`) 후 `FAILED`
-4. AI: `SessionState` 제거 + 백그라운드 스레드에서 `_send_complete_analysis` 호출
+4. AI: `SessionState` 제거 + **콜백 풀**(`CallbackPool`, 스레드 상한 = `COMPLETE_CALLBACK_WORKERS`, 기본 `GRPC_MAX_WORKERS`)에 `_send_complete_analysis` 를 넣는다. 🔄 **2026-09-14(#614)**: 전엔 호출마다 `threading.Thread` 를 새로 만들었다 — Spring 이 느리면 콜백 하나가 재시도 3회×5초를 붙잡고 스레드가 수백 개로 불어(EC2 실측 90초에 450개 초과) `logging` 전역 락 경합으로 gRPC 워커 전체가 묶였다. 지금은 스레드 수가 고정이고 **넘치는 콜백은 큐에서 기다린다**(큐 깊이 = `shadowfit_ai_complete_callback_pending`)
 5. AI: 누적 통계 계산 → `spring_client.report_complete_analysis` (gRPC `CompleteAnalysis`)
 6. Spring: `ExerciseGrpcService.completeAnalysis` 수신 → `SessionService.completeSession`
 7. Spring: `Session(status=COMPLETED, total_reps=…, avg_sync_rate=…)` 갱신
@@ -202,6 +202,7 @@ AI 컨테이너가 재시작되면 in-memory `SessionState` 가 사라지는데,
 | AI thread-local MediaPipe | `mediapipe_detector` (커밋 `c7657f1`) | 분석기 인스턴스를 thread별로 분리, race 제거 |
 | AI sync 분석 루프 | `pose.py` (커밋 `c7657f1`) | MediaPipe 블로킹을 async 이벤트 루프에서 분리 |
 | AI 콜백 재시도 | `spring_client.report_complete_analysis` | 1초 → 3초 백오프, 최대 3회 |
+| **AI 콜백 스레드 상한** 🆕 (2026-09-14, #614) | `app/grpc/callback_pool.py` · `exercise_servicer.get_complete_callback_pool` | 완료 콜백은 고정 크기 데몬 풀(기본 `GRPC_MAX_WORKERS`)에서 돈다. Spring 이 느려도 AI 의 스레드는 안 는다 — 대신 **큐가 는다**(`shadowfit_ai_complete_callback_pending`·`_in_flight`). 🔴 큐 상한은 없다: 버릴 후보가 없어서(유실 = 세션이 IN_PROGRESS 로 남음). Spring 장애가 AI 서버로 번지던 캐스케이드 경로를 끊는 것이지 전달 보장을 바꾸는 것은 아니다 |
 | Spring 낙관적 락 재시도 | `SessionService.completeSession` | `@Version` 충돌 시 최대 3회 |
 | 타임아웃 양보 | `SessionTimeoutScheduler` | AI 완료 콜백이 늦게 와도 충돌 시 AI 결과 우선 |
 | **아웃박스 (상한 있는 재시도)** 🆕 | `OutboxPublisher` + `outbox_events` 테이블 | 종료 통보를 DB 에 같이 커밋 → 폴링 발행 → **재시도 상한 10회 초과 시 터미널 `FAILED`**(`OutboxPublisher.java:148-149`). 🔴 **무한 재시도가 아니므로 «반드시 전달» 이 아니다** |
@@ -291,6 +292,7 @@ AI 컨테이너가 재시작되면 in-memory `SessionState` 가 사라지는데,
 - **proto 중복 파일** — 양쪽이 손으로 동기화. 한쪽만 바꾸면 런타임에 직렬화 실패까지 잡히지 않음. 실제로 2026-08-07 에 **머지로 계약 불일치 2건이 드러났다**(`e027889`).
 - ⚠️ **`ReportFeedbackBatch` 가 반쪽이다** — proto·Spring 수신부·DB 테이블·시드까지 있는데 **AI 가 안 부른다.** TTS 피드백 기능 전체가 시연용 더미로만 존재한다(§3-1). [`../tasks/30-ai-remaining-work.md`](../tasks/30-ai-remaining-work.md) §1 이 1순위로 잡아둔 항목.
 - ✅ **`user.proto`/`UserService` 는 삭제됐다(2026-08-12, #133)** — 선언만 있고 양쪽 다 구현·호출이 없었다(§3-1). Java 클래스가 계속 생성되던 것도 같이 사라졌다. **어느 문서에도 안 적혀 있던 것**이라 여기 처음 기록했고, 그 기록이 삭제 결정으로 이어졌다.
+- **AI → Spring 완료 콜백은 Spring 이 느리면 «늦어진다»** (2026-09-14, #614) — 콜백 풀이 상한(기본 10)이라 그 이상은 큐에서 기다린다. Spring 이 아예 죽어 있으면 풀 하나가 건당 최대 ~17초(3회×5초+백오프)를 붙잡으므로 큐는 완료율만큼 쌓이고, Spring 이 돌아오면 순서대로 빠진다. 🔴 그동안 Spring 의 `SessionTimeoutScheduler` 가 먼저 세션을 `FAILED` 로 걷어갈 수 있다 — 그 경합의 결말은 §4 «타임아웃» 그대로(AI 결과 우선). 큐가 얼마나 오래 버티는지는 **실측 없음**.
 - **양방향 모두 유실이 가능하다 — 성질이 다를 뿐이다.** AI → Spring 완료 콜백은 3회 실패 시 **흔적이 로그뿐**이고, Spring → AI 종료 통보는 상한 10회 초과 시 **`FAILED` 행으로 남는다**(§6). 🔴 **둘 다 «사람이 보고 재처리하는 절차» 는 없다.** «아웃박스로 닫혔다» 는 서술은 과장이라 걷어냈다(2026-08-08 리뷰).
 - **AI in-memory 세션 상태** — AI 컨테이너 재시작 시 진행 중 세션 소실은 그대로다. ✅ 다만 **복구 경로가 생겼다** — `ReattachAnalysis`(§4 재부착)로 DB 값에서 되살릴 수 있다. ⚠️ **자동은 아니다** — 프론트가 재부착을 호출해야 하고, 아무도 안 부르면 결국 스케줄러가 `FAILED` 처리한다.
 - **단일 AI 인스턴스 가정** — 메모리 `SessionState`가 인스턴스 로컬이라 수평 확장 불가. (재부착은 이 문제를 **줄이지 않는다** — 상태가 여전히 인스턴스 로컬이다.)
