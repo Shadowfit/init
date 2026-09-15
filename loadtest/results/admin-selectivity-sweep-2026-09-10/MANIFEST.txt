@@ -1,0 +1,29 @@
+# 관리자 조회 선택도 스윕 — 측정 조건
+라운드      : admin-selectivity-sweep-2026-09-10
+커밋        : 13b283b3104cd2b9bd2b6dae2fbfc824401e1035
+bootstrap rc: 0
+rig rc      : 0
+시각(UTC)   : 2026-09-10T12:15:12+00:00
+
+## 박스
+인스턴스ID  : 
+타입        : 
+AZ          : 
+AMI         : 
+vCPU        : 4
+MemTotal    : 
+커널        : 6.1.182-227.379.amzn2023.x86_64
+
+## 동거 (이 박스에서 같이 돈 것)
+컨테이너    :
+shadowfit-mysql	mysql:8.0	Up 18 minutes (healthy)
+  → ROLE=db 라 MySQL 하나만 떠 있어야 정상이다. 백엔드·AI·관측스택 없음.
+
+## MySQL
+버전        : 8.0.46
+버퍼풀      : 2048 MB
+flush_method: fsync
+flush_at_trx: 1
+
+## 요금 (하루 이틀 뒤 Cost Explorer 에서 Project=shadowfit-measure 로 채운다)
+실제 청구액 : (미기입)
