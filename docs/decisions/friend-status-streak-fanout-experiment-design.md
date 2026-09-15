@@ -1,0 +1,156 @@
+# 친구 현황 streak 쿼리 팬아웃(N+1) 실측 설계 — `GET /friends` · `GET /groups/{id}/members/status`
+
+작성: 2026-09-15
+상태: 🔧 **rig 작성 완료(2026-09-15), 미실행, 미결정.** §7 은 추천대로 진행하라는 사용자 지시(«rig 만들어»)로 갈음 — ①b 포함·②로컬→EC2·③N 점 그대로·④Q3 는 EC2·⑤streak 보조판 로컬. rig: `loadtest/measure_friend_status_fanout.py`, 후보 b: `AttendanceService.currentStreaks` + `attendance.streak-strategy`(기본 `per-member`, 실험만 `batch`).
+선행: [`social-cheer-and-group-feed.md`](./social-cheer-and-group-feed.md) §3-B(출석·streak 정의)·§3-G(노출 항목), [`recommendation-algorithm.md`](./recommendation-algorithm.md) §10(같은 인덱스 역방향 커서 단건 실측 0.4ms), [`pool-sizing-10-20-experiment-design.md`](./pool-sizing-10-20-experiment-design.md) §3(라틴 방격·버림판), [`slo-baseline.md`](./slo-baseline.md) §5-1(델타 판정 규칙)
+
+---
+
+## 0. 무엇이 N+1 인가 — JPA 지연 로딩이 아니라 서비스 루프다
+
+먼저 오해를 하나 걷어낸다. **이건 JPA 가 엔티티 그래프를 지연 로딩하다 나는 고전적 N+1 이 아니다.** 멤버 목록은 이미 `join fetch` 로 한 방에 가져온다(`GroupMemberRepository.findAllWithMemberBy…`, 주석에 «없으면 멤버 수만큼 N+1» 이라고 박아둔 그것). 남아 있는 N+1 은 **서비스 코드가 명시적으로 멤버마다 streak 쿼리를 한 번씩 부르는 루프**다:
+
+```
+MemberAttendanceStatusService.statusesOf(members, today)
+  ├─ attendanceService.attendedOn(memberIds, today)          ← IN 한 방 (1 쿼리)
+  └─ members.stream().map(m ->
+         attendanceService.currentStreak(m.getId(), today))  ← 멤버당 1 쿼리 (N 쿼리)
+              └─ sessionRepository.findCompletedStartTimesBefore(memberId, COMPLETED, cursor, LIMIT 31)
+                 └─ streak > 31 이면 다음 페이지 (멤버당 +1 쿼리)
+```
+
+요청 하나의 SQL 수 (`GET /groups/{id}/members/status`, 멤버 N명):
+
+| 단계 | SQL | 비고 |
+|---|:--:|---|
+| 그룹 존재·요청자 ACTIVE 확인 | 2 | exists × 2 |
+| ACTIVE 멤버 + Member join fetch | 1 | |
+| 오늘 출석 IN | 1 | |
+| **streak** | **N** (+ streak>31 인 멤버 수) | `idx_session_member_status_start` 역방향 커서, 읽는 행 = streak+1 |
+| 합계 | **N + 4** | `/friends` 는 «내 그룹 목록» 1개가 더 붙어 N + 5 |
+
+이 구조는 **설계된 것**이다 — §3-B 하위 결정 C 가 «창 없이 최신순 커서» 를 고른 이유가 *멤버 한 명의 비용을 계정 나이와 무관한 상수(읽는 행 ≈ streak 길이)로 만드는 것* 이었고, 그 단건 비용은 §10 에서 0.4ms·읽은 행 3 으로 실측됐다. 즉 **쿼리 하나는 싸다는 게 확인됐고, 그걸 N번 왕복하는 비용은 아직 안 쟀다.** 주석이 «12명이면 쿼리 ~13개» 라고 적어둔 것이 이 실험이 답해야 할 문장 전부다.
+
+왜 왕복 수가 별개 질문인가:
+
+1. **왕복 비용은 쿼리 비용과 다른 축이다.** 쿼리 실행이 0.4ms 여도 앱↔DB 왕복(RTT)이 그 위에 곱해진다. 로컬 docker 는 RTT 가 거의 0 이라 이 항이 가려지고, EC2 DB·App 분리 배치에서는 RTT 가 곧 N+1 의 실제 비용이 된다. **N+1 은 로컬에서 안 아프고 배포에서 아픈 종류의 문제**라, 어디서 재느냐가 결론을 바꾼다(§1).
+2. **커넥션 점유 시간이 N 에 비례한다.** `@Transactional(readOnly = true)` 라 요청 하나가 N+4 쿼리 내내 HikariCP 커넥션 하나를 잡고 있다. 풀 사이징 실측(pool 10~20, [`pool-sizing-10-20-experiment-design.md`](./pool-sizing-10-20-experiment-design.md))은 세션 쓰기 페이로드로 했지 «한 요청이 커넥션을 N 왕복 동안 쥐는» 읽기 페이로드로는 안 했다.
+3. **N 에 상한이 없다.** 모임 정원 제한이 없고, `/friends` 는 내가 속한 모든 모임 멤버의 합집합이다. 회원당 그룹 수·그룹당 인원 분포는 §4-4 ⑨ 가 «미실측 — 1차 사용자 테스트 뒤 채운다» 로 박아뒀다. 분포가 없으니 «현실적 N» 을 고를 수 없고, 그래서 이 실험은 **N 스윕**이다 — 특정 N 에서의 절대값이 아니라 **기울기(ms/멤버)** 를 잰다.
+
+**이 실험이 답하는 질문:**
+
+- **Q1** — 응답 지연이 N 에 대해 선형인가, 기울기(ms/멤버)는 얼마인가, 그 기울기 중 «쿼리 실행» 과 «왕복» 의 몫은 각각 얼마인가?
+- **Q2** — 멤버 전원의 streak 를 **SQL 한 방**으로 가져오는 대안(§2)이 있을 때, 그 델타가 반복 간 분산보다 큰가, 어느 N 부터 그런가?
+- **Q3** — 요청 하나의 커넥션 점유 시간이 N 에 따라 얼마나 늘고, 동시성 c 를 걸었을 때 풀 `pending` 이 실제로 생기는가?
+
+### 0-2. rig 를 만들다 나온 것 — 첫 페이지는 «답의 크기» 가 아니라 «계정 크기» 를 읽는다 ([#761](https://github.com/Shadowfit/init/issues/761), 2026-09-15)
+
+rig 가 남기는 `explain.txt` 를 처음 열어 보니, §0 의 «단건 쿼리는 싸다는 게 확인됐다» 는 문장이 **이 쿼리에는 성립하지 않았다.** §10 이 잰 추천 쿼리와 streak 쿼리는 술어 하나가 다르다 — `start_time < :before`. 커서가 «내일 00:00»(첫 페이지, 모든 요청이 반드시 도는 페이지)이면 그 범위가 회원의 모든 행을 덮고, 옵티마이저는 `idx_session_member_status_start` 의 역방향 range scan 대신 `idx_session_member_exercise_status_start (member_id=?)` 프리픽스 + **filesort** 를 고른다. 세션 2,000건 회원에서 2,000행·2.9ms(술어 없으면 31행·0.15ms, FORCE INDEX 면 31행·0.66ms). 두 번째 페이지부터는 커서가 기록 안쪽이라 알아서 range scan 을 탄다.
+
+그래서 이 실험의 «멤버 1명 비용» 은 상수가 아니라 **그 멤버의 COMPLETED 세션 수의 함수**다. 시드는 전원 3건이라 «작은 계정» 조건으로 통제된 채 N 축을 재는 것이고, 계정 크기 축은 §4 보조 판에 넣는다. 고칠지·어떻게 고칠지(술어 제거 후 Java 필터 / FORCE INDEX / 그대로 두고 실측)는 #761 에 후보만 적었다 — 결정 아님. 후보 b(LATERAL)도 같은 술어를 쓰므로 같은 영향을 받는다(계획상 `Index lookup (member_id, status) + Sort`).
+
+**답하지 않는 것**: 모임 정원 상한을 둘지(제품 결정, 분포 나온 뒤), streak 캐싱(원본 비용을 먼저 알아야 캐시 이득을 말할 수 있다 — `recommendation-algorithm.md` §10 이 캐싱을 보류한 것과 같은 순서), WS 경로(이미 별도 실측).
+
+---
+
+## 1. 통제 변수
+
+| 변수 | 값 | 근거 |
+|---|---|---|
+| 배치 | **1차 로컬(docker, 같은 호스트) → 2차 EC2 DB·App 분리** | 로컬은 메커니즘(SQL 수·읽은 행·기울기의 존재)만 믿는다([[project_loadtest_env_constraint]]). §0-1 대로 왕복 항은 RTT 에 비례하므로 **기울기의 절대값은 EC2 분리 배치에서만 의미가 있다.** 로컬 결과로 «안 아프다» 고 닫지 말 것 |
+| 동시성 c | **1** (주 실험) | 이 실험은 «요청 하나의 비용이 N 에 어떻게 비례하나» 다. c 를 올리면 풀 경합이 섞여 기울기가 오염된다. Q3 만 별도 판에서 c 를 건다(§4) |
+| 대상 API | `GET /groups/{id}/members/status` | `/friends` 는 같은 `statusesOf` 에 «그룹 합집합·dedup» 이 얹힌 것이라 메커니즘이 같다. 한 API 로 재고, `/friends` 는 그룹 수 K 축이 열릴 때(⑨ 분포 뒤) 따로 |
+| 멤버당 streak | **전원 동일, 3일** | 읽는 행 = streak+1 이라 streak 가 섞이면 «N 의 효과» 와 «streak 의 효과» 가 분리 안 된다. 3 은 §10 실측(읽은 행 3)과 같은 조건이라 그 값을 재현 판으로 쓸 수 있다. streak 길이 축은 §4 보조 판 |
+| 세션 표 크기 | 기존 시드 그대로(회원당 세션 수는 건드리지 않음) | ~~커서 쿼리가 계정 크기와 무관함은 §10 이 이미 확인 — 이번엔 그걸 전제로 쓴다~~ 🔴 **전제가 틀렸다 — §0-2.** 시드 회원은 세션 3건뿐이라 이 실험에선 «작은 계정» 으로 통제되는 것이고, 계정 크기 축은 §4 보조 판으로 따로 |
+| 앱 코드 | 실험 직전 `origin/main` 과 diff 확인 | `AttendanceService.FETCH_BATCH`·인덱스가 바뀌었으면 비교 불가 |
+| 버퍼풀 | 각 판 앞에 대상 멤버 전원의 streak 를 1회 예열 호출 | 첫 판이 콜드 페이지를 읽는 것과 N 효과를 분리. 예열 자체도 버림판이 흡수한다 |
+
+---
+
+## 2. 비교 대상 — 현재 구현 vs 한 방 쿼리
+
+| | 후보 | 쿼리 수 | 읽는 행 | 비고 |
+|:--:|---|:--:|---|---|
+| a | **현재** — 멤버당 커서 쿼리, Java 에서 날짜 연속 계산 | N (+페이징) | 멤버당 streak+1 | 읽는 행이 답의 크기에 비례(§3-B C 의 성질) |
+| b | **LATERAL 한 방** — `JOIN LATERAL (SELECT start_time FROM exercise_sessions WHERE member_id = m.id AND status='COMPLETED' AND start_time < :cursor ORDER BY start_time DESC LIMIT 31)`, streak 계산은 그대로 Java | **1** | 멤버당 **최대 31** (LIMIT 고정) | MySQL 8.0.14+ LATERAL. 네이티브 쿼리라 JPQL 밖. streak>31 인 멤버는 2페이지째를 개별 커서로(=a 로 폴백) — «답의 크기 비례» 성질은 31 에서 캡 |
+| c | **윈도 함수로 SQL 안에서 streak 까지** — 날짜 DISTINCT → gaps-and-islands | 1 | 멤버당 **전체 COMPLETED 세션** | 상한을 두면 a 와 같은 성질을 잃고, 안 두면 계정 나이에 비례 — §3-B C 가 피하려던 바로 그것. **비교 대상에서 뺀다**, 이유만 남김 |
+
+**b 의 비용 구조**: 왕복 1회 + 멤버당 LIMIT 31 인덱스 역방향 seek. a 대비 왕복 (N−1) 회를 없애는 대신 멤버당 읽는 행이 streak+1 → min(31, 세션 수) 로 늘 수 있다(streak 3 이면 4행 → 최대 31행). **어느 쪽이 이기는지는 RTT 와 행당 비용의 비율에 달렸고, 그게 이 실험이 재는 것**이다. 로컬(RTT≈0)에선 a 가, 분리 배치(RTT>0)에선 b 가 유리할 것이라는 게 예측이지만 예측은 예측이다.
+
+b 는 측정용 브랜치에서 `AttendanceService.currentStreaks(Collection<Long>, today)` 를 하나 더 만들어 `statusesOf` 가 그걸 쓰게 하는 정도(서비스 1곳·리포지토리 네이티브 쿼리 1개). **채택이 아니라 비교용 구현**이고, 결과가 a 를 지지하면 브랜치는 버린다.
+
+---
+
+## 3. 독립 변수 — 멤버 수 N
+
+**N ∈ {1, 5, 12, 30, 100}** — 임계값이 아니라 스윕 점이다.
+
+- 1 = 고정 비용(그룹·요청자 확인 + IN + 멤버 1) — 기울기의 절편
+- 12 = 주석의 «12명이면 ~13 쿼리» 재현 판
+- 5·30·100 = 선형성 판별에 필요한 간격. 100 이 «현실적» 이라는 뜻이 아니다 — 분포(⑨)가 없어서 위쪽을 열어둔 것이고, 기울기는 어느 구간에서 재도 같아야 선형이다
+
+시드: 그룹 5개(N 별 1개), 각 그룹에 N 명 ACTIVE, 전원 streak 3(오늘·어제·그제 COMPLETED 세션 1건씩). 기존 로드테스트 시드 위에 얹는다 — 시드가 단일 템플릿이라 분포가 균일하다는 한계([[project_synthetic_data_distribution_limit]])는 이 실험엔 오히려 통제 조건이다.
+
+---
+
+## 4. 판 순서 — 라틴 방격 + 버림판
+
+- 후보 2(a/b) × N 5수준 = 10 셀, **셀당 3반복 = 30판**, 셀 한 판 = 같은 요청 200회 순차(c=1) 의 분포
+- **라틴 방격**으로 (후보, N) 순서 배치 — 같은 셀이 늘 같은 시간대에 오지 않게
+- **버림판 1** — 라운드 첫 판은 워밍업으로 버림(총 31판)
+- 로컬 1차 → EC2 2차, 같은 순서표
+
+> 🔴 **rig 구현에서 조정한 것 (2026-09-15)**: 후보 전환이 설정값(`ATTENDANCE_STREAK_STRATEGY`)이라 프로세스 재기동이 필요하다. 10셀을 한 라틴 방격으로 섞으면 셀마다 재기동 + JVM 워밍업이 끼어 N 효과를 오염시키므로, **후보를 블록으로 묶고**(블록당 재기동 1회 + 워밍업 100회 버림) **블록 순서를 rep 마다 교대**(a→b, b→a, a→b)해 «후보 = 시간대» 를 끊었다. N 순서는 블록 안에서 라틴 방격 행. 요청 헤더로 후보를 고르는 방식은 운영 코드에 실험 분기를 하나 더 넣는 것이라 택하지 않았다. 후보 b 가 단건과 같은 답을 내는 것은 `AttendanceStreakBatchRaceTest`(race 프로파일, 7가지 회원 구성)가 실험 전에 못박는다.
+
+보조 판(주 실험과 섞지 않음):
+
+| 보조 | 뭘 보나 | 판 |
+|---|---|---|
+| streak 길이 | a 의 «읽는 행 ∝ streak» 이 실제인지, 31 을 넘어 2페이지가 생길 때 꺾이는지 — N=12 고정, streak ∈ {0, 3, 30, 45} | 4 × 3 |
+| 동시성(Q3) | N=12·N=100 에서 c ∈ {1, 10, 30} — HikariCP `pending`·`acquire_seconds` 가 c 와 N 에 따라 생기는지 | 2 × 3 × 3, EC2 만 |
+| **계정 크기**(#761) | N=12 고정, 멤버 1명의 COMPLETED 세션 수 ∈ {3, 100, 1,000, 2,000}(나머지 11명은 3) — 첫 페이지 filesort 가 요청 지연에 얼마나 실리는지. `Handler_read_next`/req 가 그 세션 수만큼 뛰는지로 계획을 확인 | 4 × 3, 로컬 |
+
+---
+
+## 5. 측정 지표
+
+| 지표 | 어디서 | 왜 |
+|---|---|---|
+| 응답 지연 p50·p95 (ms) | 부하기 측(k6 또는 순차 루프) | Q1 주 지표. N 에 대한 회귀 → 기울기·절편 |
+| **SQL 문 수 / 요청** | MySQL `Com_select` 델타(판 전후 `SHOW GLOBAL STATUS`) ÷ 요청 수 | «N+4» 가 실제인지. Hibernate 통계보다 DB 쪽 카운터가 프레임워크 무관 |
+| **읽은 행 / 요청** | `Handler_read_key`·`Handler_read_prev`·`Handler_read_next` 델타 ÷ 요청 수 | a: ≈ N×(streak+1), b: ≈ N×31 예측. 예측과 다르면 실행 계획이 예상과 다른 것 — EXPLAIN 으로 잡는다 |
+| 쿼리 실행 시간 합 / 요청 | `performance_schema.events_statements_summary_by_digest` 의 `SUM_TIMER_WAIT` 델타 | 지연 중 «DB 실행» 몫. 지연 − 이 값 ≈ 왕복 + 앱 처리. Q1 의 «어느 항이 얼마» |
+| 커넥션 점유 시간 | HikariCP `hikaricp_connections_usage_seconds` (Actuator 9090) | Q3. 요청당 커넥션 hold 가 N 에 비례하는지 |
+| `pending`·`acquire_seconds` | 같은 곳 | Q3 보조 판 |
+| DB·App CPU | 기존 rig 의 `docker stats`/`mpstat` | 병목이 어디 있는지 — 절대값엔 calib cpu 병기(설계 §8 인용 규칙 ㉠) |
+
+---
+
+## 6. 판정 규칙 — 임의 기준 없음
+
+- **Q1**: N 에 대한 p50 회귀의 결정계수와 기울기(ms/멤버, 95% CI, 3반복). 절편 대비 기울기의 비를 보고 «N 이 몇이면 절편만큼 든다» 를 **계산 결과로** 적는다(SLO 로 판정하지 않는다 — `slo-baseline.md` 에 이 API 의 목표가 없다).
+- **Q2**: 같은 N 에서 a−b 델타가 3반복 표준편차 밖이면 «차이 있음». 델타 부호가 N 에 따라 바뀌면(작은 N 에선 a, 큰 N 에선 b) 그 교차점을 보고한다 — 교차점이 곧 «b 로 바꾸는 게 의미 있는 N».
+- **채택 조건은 실험이 정하지 않는다.** b 로 바꾸는 결정은 ① 교차점 N 과 ② ⑨ 분포(사용자 테스트 뒤)를 같이 놓고 사용자가 한다. 분포 없이 «100 명에서 b 가 3배 빠르다» 만으로 바꾸면 있지도 않은 N 을 위해 코드를 늘리는 것이다.
+- **로컬 결과는 메커니즘 판정에만**: SQL 수·읽은 행·«기울기가 0 이 아니다» 까지. 기울기의 크기·교차점은 EC2 결과로만 적는다.
+
+---
+
+## 7. 실행 전 확인 필요 (사용자 결정)
+
+| | 질문 | 추천 | 이유 |
+|:--:|---|---|---|
+| ① | 후보 b(LATERAL) 비교 구현을 측정 브랜치에 넣을지, a 단독 스윕만 할지 | **b 포함** | a 만 재면 «N 에 비례한다» 로 끝나고 다음 행동이 없다. b 가 있어야 «바꾸면 얼마» 가 나온다. 구현 면적은 서비스 1곳 + 네이티브 쿼리 1개 |
+| ② | 배치 — 로컬만 / EC2 만 / 로컬→EC2 | **로컬 → EC2** | 로컬에서 시드·rig·지표 수집이 도는지 검증하고 EC2 에 올린다(무인 라운드 결함 전례 #743·#744). 단 §6 대로 로컬 숫자로 닫지 않는다 |
+| ③ | N 스윕 점 {1, 5, 12, 30, 100} | 그대로 | 100 을 빼자는 의견이 있을 수 있다 — 빼면 선형성 판별 구간이 30 까지로 줄고, ⑨ 분포가 없는 지금은 위를 열어두는 게 안전 |
+| ④ | Q3(동시성) 보조 판을 이번 라운드에 넣을지 | **EC2 라운드에만, 겸사겸사** | 같은 인스턴스 위에서 판 18개 더 도는 것이라 비용이 적다. `AWS-RIDE-ALONG.md` 에 등록 |
+| ⑤ | streak 보조 판 | 로컬만 | 읽는 행 수는 RTT 와 무관하므로 로컬로 충분 |
+
+이 다섯이 정해지면 시드 스크립트·rig(`loadtest/measure_friend_status_fanout.py`)·라틴 방격 순서표를 만들고, 결과는 `loadtest/results/friend-status-fanout-<where>-<date>/` 에 둔다.
+
+---
+
+## 8. 연혁
+
+- 2026-09-15: 초안. 소셜 L1 REST 중 실측 0 인 것 가운데 «홈 화면·N 상한 없음·왕복 N 회» 세 조건이 겹치는 이 API 를 1순위로 골라 설계만 올림. 미실행.
+- 2026-09-15: rig·후보 b·동치 테스트 작성(브랜치 `measure/friend-status-streak-fanout`). §4 조정 박스 추가. 아직 미실행.
+- 2026-09-15: rig 스모크(요청 20회, 숫자는 안 믿음)에서 `explain.txt` 로 §0-2 발견 → #761. §1 «세션 표 크기» 전제 취소, §4 계정 크기 보조 판 추가.

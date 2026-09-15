@@ -382,4 +382,30 @@ public interface SessionRepository extends JpaRepository<Session,Long> {
                                                       @Param("status") Status status,
                                                       @Param("before") LocalDateTime before,
                                                       Pageable page);
+
+    /**
+     * 위 {@link #findCompletedStartTimesBefore} 의 <b>여러 회원 한 방</b> 판 — 실험용 후보 b
+     * (friend-status-streak-fanout-experiment-design.md §2). 회원마다 {@code LATERAL} 로 같은 인덱스
+     * 구간을 역방향으로 {@code limit} 행까지만 걷는다 — 왕복 N 회를 1회로 줄이는 대신 회원당 읽는
+     * 행이 «streak+1» 이 아니라 «최대 limit» 로 캡된다. 드라이버는 {@code users} PK(회원당 1행)라 세션 표를
+     * 한 번 더 훑지 않는다. 어느 쪽이 싼지는 RTT 와 행당 비용의 비율에
+     * 달렸고 그게 실험이 재는 것이다. 결과 행은 {@code (member_id, start_time)} 이며 회원별 최신순.
+     *
+     * <p>MySQL 8.0.14+ 문법이라 H2 로는 안 돈다 — 테스트는 {@code race} 프로파일에서만.
+     */
+    @Query(value = """
+            SELECT m.member_id, s.start_time
+            FROM (SELECT id AS member_id FROM users WHERE id IN (:memberIds)) m
+            JOIN LATERAL (
+                SELECT start_time FROM exercise_sessions
+                WHERE member_id = m.member_id AND status = :status AND start_time < :before
+                ORDER BY start_time DESC
+                LIMIT :limit
+            ) s
+            ORDER BY m.member_id, s.start_time DESC
+            """, nativeQuery = true)
+    List<Object[]> findCompletedStartTimesBeforeBatch(@Param("memberIds") Collection<Long> memberIds,
+                                                      @Param("status") String status,
+                                                      @Param("before") LocalDateTime before,
+                                                      @Param("limit") int limit);
 }
