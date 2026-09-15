@@ -509,47 +509,37 @@ PHASES="framepath" \
   bash loadtest/aws/run_all.sh
 ```
 
-### 보정값 (從 R11) — 2026-09-02 부터 `calibration` 단계로 상설화
+### 보정값 (從 R11) — `calibrate_box` 가 모든 라운드에서 자동으로 남긴다
 
 [`round-to-round-nonreproducibility.md`](../../docs/decisions/round-to-round-nonreproducibility.md) §2·§5
 축0. **CPU% 는 시간이지 일의 양이 아니다** — 물리 호스트의 유효 클럭이 라운드마다 다르면
 같은 CPU% 로 다른 처리량이 나온다(08-17 관측: AI CPU 869.3%→869.0%인데 처리량 +17.7%).
-단일 스레드로 고정 프레임 수를 추론해 걸린 시간만 재면 그 박스가 초당 얼마나 일하는지가
-남는다 — R6 이 이미 이 방법으로 79.9fps 를 냈다. **판정에 쓰든 안 쓰든 무조건 기록한다**:
-지금 못 걸으면 그 박스가 사라진 뒤엔 영영 못 잰다(P6 1·2라운드 보정값을 그렇게 잃었다).
+그래서 **이 박스가 초당 얼마나 일하는가**를 앱과 무관한 고정 작업으로 재둔다. **판정에 쓰든
+안 쓰든 무조건 기록한다**: 지금 못 걸으면 그 박스가 사라진 뒤엔 영영 못 잰다(P6 1·2라운드
+보정값을 그렇게 잃었다).
 
-🟢 **ROLE=ai-venv 라운드(R10-a·R10-b)는 `PHASES` 에 `calibration` 만 추가하면 된다**
-(소요 1~2분, 새 인스턴스 0):
+**손댈 것이 없다** — [`loadtest/calibrate_box.py`](../calibrate_box.py) 가 두 자리에서 알아서 돈다:
 
-```bash
-PHASES="framepath calibration collect"
-```
+| 자리 | 산출물 | 비고 |
+|---|---|---|
+| `phase_preflight` 의 `calibrate_box` | `<OUTDIR>/calibration.tsv` | 어느 역할이든. 실패해도 라운드를 안 막고 ⚠️ 한 줄 남긴다 |
+| `bootstrap.sh` ROLE=ai-venv | `/root/calibration.tsv` → `ai_venv_conditions.txt` 에 붙음 | `framepath` phase 가 그 파일을 결과에 복사한다 |
 
-산출물은 `<OUTDIR>/calibration/` — `box.txt`(인스턴스 타입·ID·AZ) · `scaling_raw.txt`(전체
-표) · `scaling_1w.txt`(워커=1 행만, 라운드 간 대조용). 게이트: `FP_VENV` 실행 파일 존재
-(venv 3.12) · `CORES_RIG/frames.json` 존재 — 둘 다 R10 라운드가 이미 요구하는 것이라 추가
-준비가 없다.
+두 축을 낸다 — **`cpu`**(의존성 0 · 고정 반복 루프 · iter/s)와 **`infer`**(mediapipe 1스레드
+100프레임 · fps, venv·`frames.json` 없으면 사유 적고 건너뜀). 🔑 **인용은 `cpu` 축이다** —
+축 A(08-26, 박스 2대 동시)·축 B(09-14, 같은 박스 stop→start 6부팅) 둘 다 `cpu` 축이 처리량비를
+3%p 안에서 설명했고, `infer` 축은 같은 부팅 안 전·후로도 5~12% 흔들려 보정값이 못 된다. 쓰는 법은
+인용 규칙 ㉠([설계 §8](../../docs/decisions/round-to-round-nonreproducibility.md#8--채택--인용-규칙--2026-09-14-사용자-결정)) —
+절대 수치엔 `cpu` 값을 같은 줄에 병기, 라운드 간 비교는 처리량비÷보정비.
 
-🔴 **P6(도커) 대상 박스는 이 phase 로 못 돈다** — mediapipe 가 host venv 가 아니라
-`shadowfit-ai` 컨테이너 안에 있다. 대상 박스에서 손으로 돌린다(부트스트랩 뒤, 측정 전후
-아무 때나 — 판정에 안 섞이므로 순서가 중요하지 않다):
-
-```bash
-# 대상 박스에서 — frames.json 을 컨테이너로 복사하고 그 안에서 돌린다
-docker cp loadtest/results/coresidency-2026-08-15/frames.json shadowfit-ai:/tmp/frames.json
-docker exec -i -e SCALING_WORKERS=1 -w /app shadowfit-ai \
-  python - /tmp/frames.json scaling < loadtest/results/ai-path-profile-2026-08-17/profile_e2e_and_scaling.py \
-  | tee coresidency/calibration_scaling.txt
-```
-
-✅ **2026-09-08 검증 완료** — 별도 `c7i.4xlarge` 1대(ROLE=p6-target 단독, 코레지던시 부하 없이
-box 보정만 목적)에서 위 두 줄을 그대로 돌렸다. `docker cp` rc=0 · `docker exec` rc=0, 출력은
-ai-venv 경로와 동일한 표 형식(1워커 행: **스레드 67.2 fps · 프로세스 66.5 fps**)이라
-`run_all.sh`의 `awk '/^ *1 /{...}'` 추출도 그대로 통과 확인. `tee coresidency/...` 부분은 그
-디렉터리가 미리 있어야 한다(`mkdir -p`) — 원문은 `docker exec` 표준출력 리다이렉트로
-대체해서 확인했다. ⚠️ **이 67.2 fps 는 검증용으로 새로 띄운 별개 인스턴스 값**이라 08-17·09-08
-등 기존 라운드의 박스 보정용으로는 못 쓴다(그 박스들은 이미 종료됨) — 앞으로 P6 라운드를
-띄울 때 **그 라운드의 대상 박스 자신**에서 한 번 더 걸어야 한다.
+> 🔴 **2026-09-14 정정 — `calibration` phase 는 없앴다(#744).** 09-02 에 상설화했다던 그 phase
+> (R6 rig `profile_e2e_and_scaling.py scaling` 의 1워커 판 → `calibration/scaling_1w.txt`)는
+> 저장소 루트 cwd 에서 `app.core` 를 못 찾아 **어느 라운드에서도 값을 낸 적이 없다**(결과
+> 디렉터리 어디에도 `scaling_1w.txt` 가 없다). 고치더라도 내는 값이 `infer` 축과 같은 종류라
+> 보정값이 못 되므로 phase 를 지우고 `calibrate_box` 로 일원화했다. 옛 레시피의 `PHASES` 에
+> `calibration` 이 남아 있어도 ⏭ 한 줄 찍고 건너뛴다. P6(도커) 대상 박스용 `docker exec` 손 명령도
+> 같은 이유로 더는 필요 없다 — `cpu` 축은 host `python3` 로 어디서든 돈다(09-08 검증 때 그 명령이
+> 낸 1워커 67.2 fps 는 별개 인스턴스 값이라 어차피 못 썼다).
 
 ## 설정
 
@@ -572,8 +562,6 @@ ai-venv 경로와 동일한 표 형식(1워커 행: **스레드 67.2 fps · 프�
 | `WRITER_MAX_SEC` | `14400` | ⚠️ rig 기본은 5,400. 아래 참고 |
 | `TIMEOUT_DDL` | `43200` | 12시간 (로컬 추정 5.9시간 × 2) |
 | `REHEARSAL_SESSIONS` | `134` | 10만 행 |
-| `CALIB_RIG` | `results/ai-path-profile-2026-08-17/profile_e2e_and_scaling.py` | 從 R11 보정값 rig 경로 |
-| `TIMEOUT_CALIB` | `300` | 從 R11 — 실측 1~2분의 여유폭 |
 
 ---
 
