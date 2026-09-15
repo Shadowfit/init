@@ -25,8 +25,8 @@ import java.time.LocalDateTime;
 /**
  * 재촉하기·알림함 (social-cheer-and-group-feed.md §3-C c, §4-1 #6).
  *
- * <p><b>저장이 원천</b>이다. 접속 중인 상대에게 소켓으로 밀어주기(#7)와 푸시(#9)는 이 행이 생긴 뒤에
- * 붙는 전달 수단이고, 이 PR 에는 없다.
+ * <p><b>저장이 원천</b>이다. 접속 중인 상대에게 WebSocket 으로 밀어주기({@link NotificationRelay}, #7)와
+ * 푸시(#9)는 이 행이 생긴 뒤에 붙는 전달 수단이다 — 전달이 실패해도 재촉은 성공이다.
  *
  * <p><b>권한</b> (§3-G): 보낸 사람과 받는 사람이 같은 그룹에 둘 다 ACTIVE 여야 한다 — «친구 = 같은 모임
  * 멤버»(§3-A b)라 그 조인 하나가 곧 친구 판정이다. 아니면 403. 자기 자신은 400.
@@ -44,6 +44,7 @@ public class NotificationService {
     private final NotificationWriter notificationWriter;
     private final MemberRepository memberRepository;
     private final GroupMemberRepository groupMemberRepository;
+    private final NotificationRelay notificationRelay;
 
     /**
      * 일부러 트랜잭션이 아니다: 검사(읽기)는 각자 돌고, INSERT 만 {@link NotificationWriter} 의 트랜잭션이다.
@@ -65,12 +66,16 @@ public class NotificationService {
         }
         Member sender = memberRepository.findById(senderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        NotificationDto saved;
         try {
-            return NotificationDto.from(notificationWriter.insert(sender, recipient, NotificationType.NUDGE, today));
+            saved = NotificationDto.from(notificationWriter.insert(sender, recipient, NotificationType.NUDGE, today));
         } catch (DataIntegrityViolationException e) {
             // 존재 확인과 INSERT 사이로 들어온 더블탭 — 제약이 막았고, 첫 요청이 이미 재촉을 남겼다.
             throw new BusinessException(ErrorCode.NUDGE_ALREADY_SENT_TODAY);
         }
+        // writer 의 트랜잭션은 이미 커밋됐다 — 여기서 밀어주는 프레임은 «DB 에 있는 것» 만 가리킨다.
+        notificationRelay.relay(recipientId, saved);
+        return saved;
     }
 
     /** 알림함 — 내 것만, 최신순. 페이지 크기 기본·상한은 관리자 목록과 같은 값(그쪽 주석의 이유 그대로). */

@@ -44,7 +44,7 @@ class SessionMetricsExportNamesTest {
         metrics.sessionTransition(Status.COMPLETED, "ai-callback");
         metrics.optimisticLockConflict("timeout-scheduler", "yield");
         metrics.aiStopResult("session-missing");
-        metrics.outboxDispatch("sent");
+        metrics.outboxDispatch("default", "sent");
         metrics.outboxLag(Duration.ofMillis(250));
         metrics.poseBatch(300, 60);
         metrics.poseOrphanWindow(Duration.ofMillis(12));
@@ -62,6 +62,7 @@ class SessionMetricsExportNamesTest {
                 .contains("shadowfit_session_optimistic_lock_conflicts_total")
                 .contains("shadowfit_ai_stop_result_total")
                 .contains("shadowfit_outbox_dispatch_total")
+                .contains("lane=\"default\"")
                 .contains("shadowfit_outbox_pending")
                 .contains("shadowfit_outbox_lag_seconds_count")
                 .contains("shadowfit_outbox_lag_seconds_sum")

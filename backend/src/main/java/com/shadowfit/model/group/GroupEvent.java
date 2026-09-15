@@ -16,7 +16,10 @@ import java.time.LocalDateTime;
  * 백필(afterSeq 조회)의 유일한 근거가 이 테이블이다.
  */
 @Entity
-@Table(name = "group_events")
+@Table(name = "group_events",
+        // 자동 글 재발행 멱등성의 최종 방어선(V19, social-cheer-and-group-feed.md §4-4 ④ c). NULL 은 여러 개
+        // 허용되므로 source_id 가 없는 타입엔 아무 제약도 안 건다.
+        uniqueConstraints = @UniqueConstraint(columnNames = {"group_id", "event_type", "source_id"}))
 @Getter
 @NoArgsConstructor
 @AllArgsConstructor
@@ -47,6 +50,14 @@ public class GroupEvent {
 
     @Column(nullable = false, columnDefinition = "TEXT")
     private String payload;
+
+    /**
+     * 이 글의 원천 id — {@code SESSION_COMPLETED} 면 {@code exercise_sessions.id}. 아웃박스가 같은 통보를
+     * 두 번 배달해도(at-least-once) 같은 글이 두 번 생기지 않게 하는 키다. 원천이 없는 시스템·클라이언트
+     * 이벤트는 {@code null}. FK 를 걸지 않는다 — 세션이 지워져도 글은 남는다.
+     */
+    @Column(name = "source_id")
+    private Long sourceId;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false, nullable = false)

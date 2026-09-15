@@ -130,6 +130,8 @@ public enum ErrorCode {
 
     //Report
     REPORT_NOT_FOUND(404,"R001","리포트를 찾을 수 없습니다"),
+    // 주간 리포트 LLM 문장은 «끝난 주» 에만 만든다(report-generation-llm.md §14-2 B-a) — 이번 주·미래 주 요청은 여기
+    WEEKLY_REPORT_WEEK_NOT_COMPLETED(400, "R002", "아직 끝나지 않은 주의 리포트는 만들 수 없습니다"),
 
     // --- 트레이너 실시간 모니터링(SSE) ---
     NOT_ASSIGNED_TRAINER(403, "T001", "담당 사용자가 아닙니다."),
@@ -148,6 +150,12 @@ public enum ErrorCode {
     INVITATION_ALREADY_PENDING(409, "G006", "이미 초대를 보냈습니다."),
     NOT_GROUP_OWNER(403, "G007", "그룹장만 할 수 있습니다."),
     INVALID_INVITE_CODE(404, "G008", "유효하지 않은 초대 코드입니다."),
+    // 리액션 대상 (groupId, seq) 가 없음 — 그룹은 있는데 그 seq 의 글이 없는 경우(§4-5 ③).
+    GROUP_EVENT_NOT_FOUND(404, "G009", "존재하지 않는 피드 글입니다."),
+    // OWNER 가 다른 ACTIVE 멤버를 두고 탈퇴하려 함 — 양도(PUT /groups/{id}/owner) 뒤에만 된다(#721).
+    OWNER_MUST_TRANSFER_FIRST(409, "G010", "그룹장은 다른 멤버에게 양도한 뒤 탈퇴할 수 있습니다."),
+    // 양도 대상이 이 모임의 ACTIVE 멤버가 아님 — 요청자 본인의 권한 문제(G002/G007)와 구분한다.
+    GROUP_MEMBER_NOT_FOUND(404, "G011", "모임의 멤버가 아닌 회원입니다."),
 
     // --- 알림·재촉 (social-cheer-and-group-feed.md §3-C) ---
     // 남의 알림 id 도 «없음» 과 같게 404 — 세션 삭제(본인 것 아니면 404)와 같은 모양.

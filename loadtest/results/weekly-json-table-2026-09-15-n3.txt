@@ -1,0 +1,286 @@
+############ 주간 요약 JSON_TABLE 쿼리 — 비용 자리 실측 (MySQL 8.0.46) ############
+
+## [1/5] 스크래치 DB shadowfit_wjt — 셀 8개, 셀당 100000 행
+   _seq 100000 행
+   es_f7_w3 — 회원 14285 × 7 세션 = 99995 (주간 3)
+   sr_f7_w3_r30 — R=30
+   es_f7_w7 — 회원 14285 × 7 세션 = 99995 (주간 7)
+   sr_f7_w7_r30 — R=30
+   es_f50_w3 — 회원 2000 × 50 세션 = 100000 (주간 3)
+   sr_f50_w3_r30 — R=30
+   es_f50_w7 — 회원 2000 × 50 세션 = 100000 (주간 7)
+   sr_f50_w7_r30 — R=30
+   es_f365_w3 — 회원 273 × 365 세션 = 99645 (주간 3)
+   sr_f365_w3_r30 — R=30
+   es_f365_w7 — 회원 273 × 365 세션 = 99645 (주간 7)
+   sr_f365_w7_r30 — R=30
+   sr_f50_w7_r10 — R=10
+   sr_f50_w7_r100 — R=100
+
+## [2/5] 시딩 자기검증 — F·W·R 이 실제로 그 값인가 (대상 member_id=1)
+   셀                         행  F실측  W실측  R실측    JSON(B) 주간전체행
+   F=7 W=3 R=30              99995        7        3       30       1902      42855
+   F=7 W=7 R=30              99995        7        7       30       1902      99995
+   F=50 W=3 R=30            100000       50        3       30       1902       6000
+   F=50 W=7 R=30            100000       50        7       30       1902      14000
+   F=365 W=3 R=30            99645      365        3       30       1902        819
+   F=365 W=7 R=30            99645      365        7       30       1902       1911
+   F=50 W=7 R=10            100000       50        7       10        721      14000
+   F=50 W=7 R=100           100000       50        7      100       6033      14000
+
+## [3/5] 현행 쿼리 — 전 셀 (버림판 1 + 7회, 최소값이 신호)
+   Q2·Q3 = 코드 그대로. s-first = STRAIGHT_JOIN 으로 s 드라이빙 강제(ㄴ-1). ->> = JSON_TABLE 대신 JSON_EXTRACT. +status = ㄴ-3 술어 추가.
+
+── F=7 W=3 R=30 ──
+   쿼리                       min(ms)   med(ms)  Handler   tmp    sort  드라이빙(인덱스)
+   Q2 cur                         0.193     0.278      229     2      30  r(member_id)
+   Q2 s-first                     0.145     0.235      225     2      30  s(idx_session_member_status_start)
+   Q2 +status                     0.149      0.26      221     2      30  s(idx_session_member_status_start)
+   Q3 cur                         0.116     0.161       28     2       3  r(member_id)
+   Q3 ->>                         0.104     0.115       22     1       3  r(member_id)
+   Q3 +status                    0.0826    0.0879       20     2       3  s(idx_session_member_status_start)
+   EXPLAIN TREE — Q2 cur (JSON_TABLE 이 필터 전인가 후인가):
+        -> Sort: jt.rep_number
+            -> Table scan on <temporary>
+                -> Aggregate using temporary table
+                    -> Nested loop inner join
+                        -> Nested loop inner join  (cost=15.3 rows=3.5)
+                            -> Index lookup on r using member_id (member_id=1)  (cost=7.7 rows=7)
+                            -> Filter: ((s.start_time >= TIMESTAMP'2025-10-01 00:00:00') and (s.start_time < TIMESTAMP'2025-10-08 00:00:00'))  (cost=0.994 rows=0.5)
+                                -> Single-row index lookup on s using PRIMARY (id=r.session_id)  (cost=0.994 rows=1)
+                        -> Materialize table function
+        
+   EXPLAIN TREE — Q2 +status (ㄴ-3):
+        -> Sort: jt.rep_number
+            -> Table scan on <temporary>
+                -> Aggregate using temporary table
+                    -> Nested loop inner join
+                        -> Nested loop inner join  (cost=4.91 rows=3)
+                            -> Filter: ((s.`status` = 'COMPLETED') and (s.member_id = 1) and (s.start_time >= TIMESTAMP'2025-10-01 00:00:00') and (s.start_time < TIMESTAMP'2025-10-08 00:00:00'))  (cost=1.61 rows=3)
+                                -> Covering index range scan on s using idx_session_member_status_start over (member_id = 1 AND status = 'COMPLETED' AND '2025-10-01 00:00:00' <= start_time < '2025-10-08 00:00:00')  (cost=1.61 rows=3)
+                            -> Single-row index lookup on r using uk_report_session (session_id=s.id)  (cost=1.03 rows=1)
+                        -> Materialize table function
+        
+
+── F=7 W=7 R=30 ──
+   쿼리                       min(ms)   med(ms)  Handler   tmp    sort  드라이빙(인덱스)
+   Q2 s-first                     0.287     0.365      473     2      30  s(idx_session_member_status_start)
+   Q2 +status                     0.423     0.552      473     2      30  s(idx_session_member_exercise_status_start)
+   Q3 cur                         0.133     0.217       43     2       6  r(member_id)
+   Q3 ->>                         0.127     0.163       29     1       6  r(member_id)
+   Q3 +status                      0.13     0.199       43     2       6  s(idx_session_member_exercise_status_start)
+   Q2 cur                         0.258     0.423      473     2      30  r(member_id)
+   EXPLAIN TREE — Q2 cur (JSON_TABLE 이 필터 전인가 후인가):
+        -> Sort: jt.rep_number
+            -> Table scan on <temporary>
+                -> Aggregate using temporary table
+                    -> Nested loop inner join
+                        -> Nested loop inner join  (cost=15.3 rows=3.5)
+                            -> Index lookup on r using member_id (member_id=1)  (cost=7.7 rows=7)
+                            -> Filter: ((s.start_time >= TIMESTAMP'2025-10-01 00:00:00') and (s.start_time < TIMESTAMP'2025-10-08 00:00:00'))  (cost=0.994 rows=0.5)
+                                -> Single-row index lookup on s using PRIMARY (id=r.session_id)  (cost=0.994 rows=1)
+                        -> Materialize table function
+        
+   EXPLAIN TREE — Q2 +status (ㄴ-3):
+        -> Sort: jt.rep_number
+            -> Table scan on <temporary>
+                -> Aggregate using temporary table
+                    -> Nested loop inner join
+                        -> Nested loop inner join  (cost=5.21 rows=3.5)
+                            -> Filter: ((s.`status` = 'COMPLETED') and (s.start_time >= TIMESTAMP'2025-10-01 00:00:00') and (s.start_time < TIMESTAMP'2025-10-08 00:00:00'))  (cost=1.37 rows=3.5)
+                                -> Covering index lookup on s using idx_session_member_exercise_status_start (member_id=1)  (cost=1.37 rows=7)
+                            -> Single-row index lookup on r using uk_report_session (session_id=s.id)  (cost=1.03 rows=1)
+                        -> Materialize table function
+        
+
+── F=50 W=3 R=30 ──
+   쿼리                       min(ms)   med(ms)  Handler   tmp    sort  드라이빙(인덱스)
+   Q2 +status                     0.177     0.237      221     2      30  s(idx_session_member_status_start)
+   Q3 cur                         0.399     0.426      114     2       3  r(member_id)
+   Q3 ->>                         0.354     0.696      108     1       3  r(member_id)
+   Q3 +status                     0.088    0.0923       20     2       3  s(idx_session_member_status_start)
+   Q2 cur                         0.406     0.419      315     2      30  r(member_id)
+   Q2 s-first                     0.154     0.161      268     2      30  s(idx_session_member_status_start)
+   EXPLAIN TREE — Q2 cur (JSON_TABLE 이 필터 전인가 후인가):
+        -> Sort: jt.rep_number
+            -> Table scan on <temporary>
+                -> Aggregate using temporary table
+                    -> Nested loop inner join
+                        -> Nested loop inner join  (cost=86.8 rows=5.39)
+                            -> Index lookup on r using member_id (member_id=1)  (cost=36.1 rows=50)
+                            -> Filter: ((s.start_time >= TIMESTAMP'2025-10-01 00:00:00') and (s.start_time < TIMESTAMP'2025-10-08 00:00:00'))  (cost=0.913 rows=0.108)
+                                -> Single-row index lookup on s using PRIMARY (id=r.session_id)  (cost=0.913 rows=1)
+                        -> Materialize table function
+        
+   EXPLAIN TREE — Q2 +status (ㄴ-3):
+        -> Sort: jt.rep_number
+            -> Table scan on <temporary>
+                -> Aggregate using temporary table
+                    -> Nested loop inner join
+                        -> Nested loop inner join  (cost=3.78 rows=3)
+                            -> Filter: ((s.`status` = 'COMPLETED') and (s.member_id = 1) and (s.start_time >= TIMESTAMP'2025-10-01 00:00:00') and (s.start_time < TIMESTAMP'2025-10-08 00:00:00'))  (cost=1.61 rows=3)
+                                -> Covering index range scan on s using idx_session_member_status_start over (member_id = 1 AND status = 'COMPLETED' AND '2025-10-01 00:00:00' <= start_time < '2025-10-08 00:00:00')  (cost=1.61 rows=3)
+                            -> Single-row index lookup on r using uk_report_session (session_id=s.id)  (cost=0.656 rows=1)
+                        -> Materialize table function
+        
+
+── F=50 W=7 R=30 ──
+   쿼리                       min(ms)   med(ms)  Handler   tmp    sort  드라이빙(인덱스)
+   Q3 cur                         0.391      0.46      130     2       7  r(member_id)
+   Q3 ->>                         0.495      1.06      116     1       7  r(member_id)
+   Q3 +status                     0.134     0.252       44     2       7  s(idx_session_member_status_start)
+   Q2 cur                         0.501     0.732      559     2      30  r(member_id)
+   Q2 s-first                     0.264       0.3      516     2      30  s(idx_session_member_status_start)
+   Q2 +status                      0.27     0.336      473     2      30  s(idx_session_member_status_start)
+   EXPLAIN TREE — Q2 cur (JSON_TABLE 이 필터 전인가 후인가):
+        -> Sort: jt.rep_number
+            -> Table scan on <temporary>
+                -> Aggregate using temporary table
+                    -> Nested loop inner join
+                        -> Nested loop inner join  (cost=35 rows=12.5)
+                            -> Index lookup on r using member_id (member_id=1)  (cost=17.5 rows=50)
+                            -> Filter: ((s.start_time >= TIMESTAMP'2025-10-01 00:00:00') and (s.start_time < TIMESTAMP'2025-10-08 00:00:00'))  (cost=0.25 rows=0.249)
+                                -> Single-row index lookup on s using PRIMARY (id=r.session_id)  (cost=0.25 rows=1)
+                        -> Materialize table function
+        
+   EXPLAIN TREE — Q2 +status (ㄴ-3):
+        -> Sort: jt.rep_number
+            -> Table scan on <temporary>
+                -> Aggregate using temporary table
+                    -> Nested loop inner join
+                        -> Nested loop inner join  (cost=4.11 rows=7)
+                            -> Filter: ((s.`status` = 'COMPLETED') and (s.member_id = 1) and (s.start_time >= TIMESTAMP'2025-10-01 00:00:00') and (s.start_time < TIMESTAMP'2025-10-08 00:00:00'))  (cost=1.66 rows=7)
+                                -> Covering index range scan on s using idx_session_member_status_start over (member_id = 1 AND status = 'COMPLETED' AND '2025-10-01 00:00:00' <= start_time < '2025-10-08 00:00:00')  (cost=1.66 rows=7)
+                            -> Single-row index lookup on r using uk_report_session (session_id=s.id)  (cost=0.264 rows=1)
+                        -> Materialize table function
+        
+
+── F=365 W=3 R=30 ──
+   쿼리                       min(ms)   med(ms)  Handler   tmp    sort  드라이빙(인덱스)
+   Q3 ->>                           2.2      3.62      738     1       3  r(member_id)
+   Q3 +status                    0.0816    0.0872       20     2       3  s(idx_session_member_status_start)
+   Q2 cur                          1.55      3.18      945     2      30  r(member_id)
+   Q2 s-first                     0.249     0.271      583     2      30  s(idx_session_member_status_start)
+   Q2 +status                     0.137     0.165      221     2      30  s(idx_session_member_status_start)
+   Q3 cur                          1.39      1.43      744     2       3  r(member_id)
+   EXPLAIN TREE — Q2 cur (JSON_TABLE 이 필터 전인가 후인가):
+        -> Sort: jt.rep_number
+            -> Table scan on <temporary>
+                -> Aggregate using temporary table
+                    -> Nested loop inner join
+                        -> Nested loop inner join  (cost=256 rows=18.3)
+                            -> Index lookup on r using member_id (member_id=1)  (cost=128 rows=365)
+                            -> Filter: ((s.start_time >= TIMESTAMP'2025-10-01 00:00:00') and (s.start_time < TIMESTAMP'2025-10-08 00:00:00'))  (cost=0.25 rows=0.05)
+                                -> Single-row index lookup on s using PRIMARY (id=r.session_id)  (cost=0.25 rows=1)
+                        -> Materialize table function
+        
+   EXPLAIN TREE — Q2 +status (ㄴ-3):
+        -> Sort: jt.rep_number
+            -> Table scan on <temporary>
+                -> Aggregate using temporary table
+                    -> Nested loop inner join
+                        -> Nested loop inner join  (cost=1.91 rows=3)
+                            -> Filter: ((s.`status` = 'COMPLETED') and (s.member_id = 1) and (s.start_time >= TIMESTAMP'2025-10-01 00:00:00') and (s.start_time < TIMESTAMP'2025-10-08 00:00:00'))  (cost=0.861 rows=3)
+                                -> Covering index range scan on s using idx_session_member_status_start over (member_id = 1 AND status = 'COMPLETED' AND '2025-10-01 00:00:00' <= start_time < '2025-10-08 00:00:00')  (cost=0.861 rows=3)
+                            -> Single-row index lookup on r using uk_report_session (session_id=s.id)  (cost=0.283 rows=1)
+                        -> Materialize table function
+        
+
+── F=365 W=7 R=30 ──
+   쿼리                       min(ms)   med(ms)  Handler   tmp    sort  드라이빙(인덱스)
+   Q3 +status                     0.135     0.141       44     2       7  s(idx_session_member_status_start)
+   Q2 cur                          2.11      2.38     1189     2      30  r(member_id)
+   Q2 s-first                     0.446     0.966      831     2      30  s(idx_session_member_status_start)
+   Q2 +status                     0.249     0.516      473     2      30  s(idx_session_member_status_start)
+   Q3 cur                          1.39      2.79      760     2       7  r(member_id)
+   Q3 ->>                          1.69      2.49      746     1       7  r(member_id)
+   EXPLAIN TREE — Q2 cur (JSON_TABLE 이 필터 전인가 후인가):
+        -> Sort: jt.rep_number
+            -> Table scan on <temporary>
+                -> Aggregate using temporary table
+                    -> Nested loop inner join
+                        -> Nested loop inner join  (cost=256 rows=18.3)
+                            -> Index lookup on r using member_id (member_id=1)  (cost=128 rows=365)
+                            -> Filter: ((s.start_time >= TIMESTAMP'2025-10-01 00:00:00') and (s.start_time < TIMESTAMP'2025-10-08 00:00:00'))  (cost=0.25 rows=0.05)
+                                -> Single-row index lookup on s using PRIMARY (id=r.session_id)  (cost=0.25 rows=1)
+                        -> Materialize table function
+        
+   EXPLAIN TREE — Q2 +status (ㄴ-3):
+        -> Sort: jt.rep_number
+            -> Table scan on <temporary>
+                -> Aggregate using temporary table
+                    -> Nested loop inner join
+                        -> Nested loop inner join  (cost=4.11 rows=7)
+                            -> Filter: ((s.`status` = 'COMPLETED') and (s.member_id = 1) and (s.start_time >= TIMESTAMP'2025-10-01 00:00:00') and (s.start_time < TIMESTAMP'2025-10-08 00:00:00'))  (cost=1.66 rows=7)
+                                -> Covering index range scan on s using idx_session_member_status_start over (member_id = 1 AND status = 'COMPLETED' AND '2025-10-01 00:00:00' <= start_time < '2025-10-08 00:00:00')  (cost=1.66 rows=7)
+                            -> Single-row index lookup on r using uk_report_session (session_id=s.id)  (cost=0.264 rows=1)
+                        -> Materialize table function
+        
+
+── F=50 W=7 R=10 ──
+   쿼리                       min(ms)   med(ms)  Handler   tmp    sort  드라이빙(인덱스)
+   Q2 cur                         0.514      0.73      259     2      10  r(member_id)
+   Q2 s-first                     0.167     0.213      216     2      10  s(idx_session_member_status_start)
+   Q2 +status                     0.156      0.16      173     2      10  s(idx_session_member_status_start)
+   Q3 cur                         0.293     0.344      127     2       4  r(member_id)
+   Q3 ->>                         0.289     0.331      113     1       4  r(member_id)
+   Q3 +status                     0.114      0.12       41     2       4  s(idx_session_member_status_start)
+   EXPLAIN TREE — Q2 cur (JSON_TABLE 이 필터 전인가 후인가):
+        -> Sort: jt.rep_number
+            -> Table scan on <temporary>
+                -> Aggregate using temporary table
+                    -> Nested loop inner join
+                        -> Nested loop inner join  (cost=35 rows=12.5)
+                            -> Index lookup on r using member_id (member_id=1)  (cost=17.5 rows=50)
+                            -> Filter: ((s.start_time >= TIMESTAMP'2025-10-01 00:00:00') and (s.start_time < TIMESTAMP'2025-10-08 00:00:00'))  (cost=0.25 rows=0.249)
+                                -> Single-row index lookup on s using PRIMARY (id=r.session_id)  (cost=0.25 rows=1)
+                        -> Materialize table function
+        
+   EXPLAIN TREE — Q2 +status (ㄴ-3):
+        -> Sort: jt.rep_number
+            -> Table scan on <temporary>
+                -> Aggregate using temporary table
+                    -> Nested loop inner join
+                        -> Nested loop inner join  (cost=4.11 rows=7)
+                            -> Filter: ((s.`status` = 'COMPLETED') and (s.member_id = 1) and (s.start_time >= TIMESTAMP'2025-10-01 00:00:00') and (s.start_time < TIMESTAMP'2025-10-08 00:00:00'))  (cost=1.66 rows=7)
+                                -> Covering index range scan on s using idx_session_member_status_start over (member_id = 1 AND status = 'COMPLETED' AND '2025-10-01 00:00:00' <= start_time < '2025-10-08 00:00:00')  (cost=1.66 rows=7)
+                            -> Single-row index lookup on r using uk_report_session (session_id=s.id)  (cost=0.264 rows=1)
+                        -> Materialize table function
+        
+
+── F=50 W=7 R=100 ──
+   쿼리                       min(ms)   med(ms)  Handler   tmp    sort  드라이빙(인덱스)
+   Q2 s-first                     0.586     0.664     1566     2     100  s(idx_session_member_status_start)
+   Q2 +status                     0.557     0.669     1523     2     100  s(idx_session_member_status_start)
+   Q3 cur                         0.494     0.611      130     2       7  r(member_id)
+   Q3 ->>                          0.49     0.665      116     1       7  r(member_id)
+   Q3 +status                     0.143     0.157       44     2       7  s(idx_session_member_status_start)
+   Q2 cur                          1.03      1.13     1609     2     100  r(member_id)
+   EXPLAIN TREE — Q2 cur (JSON_TABLE 이 필터 전인가 후인가):
+        -> Sort: jt.rep_number
+            -> Table scan on <temporary>
+                -> Aggregate using temporary table
+                    -> Nested loop inner join
+                        -> Nested loop inner join  (cost=35 rows=12.5)
+                            -> Index lookup on r using member_id (member_id=1)  (cost=17.5 rows=50)
+                            -> Filter: ((s.start_time >= TIMESTAMP'2025-10-01 00:00:00') and (s.start_time < TIMESTAMP'2025-10-08 00:00:00'))  (cost=0.25 rows=0.249)
+                                -> Single-row index lookup on s using PRIMARY (id=r.session_id)  (cost=0.25 rows=1)
+                        -> Materialize table function
+        
+   EXPLAIN TREE — Q2 +status (ㄴ-3):
+        -> Sort: jt.rep_number
+            -> Table scan on <temporary>
+                -> Aggregate using temporary table
+                    -> Nested loop inner join
+                        -> Nested loop inner join  (cost=4.11 rows=7)
+                            -> Filter: ((s.`status` = 'COMPLETED') and (s.member_id = 1) and (s.start_time >= TIMESTAMP'2025-10-01 00:00:00') and (s.start_time < TIMESTAMP'2025-10-08 00:00:00'))  (cost=1.66 rows=7)
+                                -> Covering index range scan on s using idx_session_member_status_start over (member_id = 1 AND status = 'COMPLETED' AND '2025-10-01 00:00:00' <= start_time < '2025-10-08 00:00:00')  (cost=1.66 rows=7)
+                            -> Single-row index lookup on r using uk_report_session (session_id=s.id)  (cost=0.264 rows=1)
+                        -> Materialize table function
+        
+
+############ 완료 — 읽을 때 주의 ############
+  · (a) 는 [3/5] 의 드라이빙 열과 F 축 기울기로 읽는다. 'Q2 cur' 와 'Q2 s-first' 의 Handler 차이가 그 값이다.
+  · (b) 는 [3/5] 축 B(F=50 W=7) 의 R 축 기울기, 그리고 [4/5] 의 before/after 델타로 읽는다.
+  · 절대 시간은 이 장비의 것이다. 셀 간 델타·기울기만 읽고, 인용 시 calib cpu 를 병기한다.
+  · JSON 값은 균일하다. ㄷ 의 인덱스 선택도는 여기서 못 잰다 — 파싱 제거 효과만이다.

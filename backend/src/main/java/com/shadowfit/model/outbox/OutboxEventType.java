@@ -24,5 +24,31 @@ public enum OutboxEventType {
      * 자동으로 재시도한다(docs/decisions/ai-channel-pool-hardening.md §3-1 ㄴ).
      * payload: {@code { "sessionId": 42 }}
      */
-    REATTACH_ANALYSIS
+    REATTACH_ANALYSIS,
+
+    /**
+     * 알림 행 생성 → 수신자의 기기로 푸시(Expo Push HTTP). 아웃박스의 <b>두 번째 용처</b>다 —
+     * 상대가 AI 가 아니라 외부 푸시 서비스이고, 애그리거트는 세션이 아니라 알림이다
+     * (docs/decisions/social-cheer-and-group-feed.md §3-C c, §4-3).
+     * payload: {@code { "notificationId": 42 }}
+     */
+    PUSH_NOTIFICATION,
+
+    /**
+     * 세션 완료 → 회원이 속한 ACTIVE 그룹마다 {@code group_events} 에 자동 글 하나씩. <b>세 번째 용처</b> —
+     * 상대가 바깥이 아니라 <b>같은 DB 의 다른 애그리거트</b>(그룹)다. 같은 트랜잭션에 직접 INSERT 하지
+     * 않는 이유는 애그리거트 경계(완료 tx 가 그룹 N행 락을 리포트 계산까지 쥐게 된다)이고, 재발행 멱등성은
+     * {@code group_events.source_id} UNIQUE 가 맡는다(social-cheer-and-group-feed.md §4-4).
+     * payload: {@code { "sessionId": 42 }}
+     */
+    SESSION_COMPLETED,
+
+    /**
+     * 주간 리포트 행({@code weekly_reports}, PENDING) → Gemini 로 문장 생성 → 행을 LLM/TEMPLATE_FALLBACK 으로.
+     * <b>네 번째 용처이자 별도 차선</b> — 앞의 넷과 달리 호출이 초 단위(실측 loadtest/results/gemini-latency-2026-09-14)
+     * 라 같은 tick 에 섞이면 다른 타입의 lease 를 잡아먹는다. {@code WeeklyReportOutboxPublisher} 만 집는다
+     * (report-generation-llm.md §5-2 안 A, §14).
+     * payload: {@code { "weeklyReportId": 42 }}
+     */
+    GENERATE_WEEKLY_REPORT
 }

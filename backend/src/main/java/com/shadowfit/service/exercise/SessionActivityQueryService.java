@@ -6,6 +6,8 @@ import com.shadowfit.dto.report.record.CalendarMainResponseDto;
 import com.shadowfit.dto.report.record.DailyActivityResponseDto;
 import com.shadowfit.dto.report.record.DailyLogSummaryDto;
 import com.shadowfit.dto.report.record.WeeklyActivityResponseDto;
+import com.shadowfit.global.error.BusinessException;
+import com.shadowfit.global.error.ErrorCode;
 import com.shadowfit.global.util.SetSummaryFormatter;
 import com.shadowfit.model.exercise.Session;
 import com.shadowfit.repository.exercise.SessionRepository;
@@ -94,6 +96,11 @@ public class SessionActivityQueryService {
 
     @Transactional(readOnly = true)
     public CalendarMainResponseDto getCalendarMain(Long memberId, int year, int month) {
+        if (month < 1 || month > 12) {
+            // LocalDate.of 가 DateTimeException 으로 500 을 내기 전에 400 으로 막는다 (#733).
+            // 모임 캘린더(GroupAttendanceCalendarService.monthlyCalendar)와 같은 모양.
+            throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
+        }
         // 1. 해당 월의 모든 세션 조회
         LocalDate startOfMonth = LocalDate.of(year, month, 1);
         LocalDate endOfMonth = startOfMonth.with(java.time.temporal.TemporalAdjusters.lastDayOfMonth());

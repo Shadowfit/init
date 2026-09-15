@@ -1,0 +1,768 @@
+───── arm=A0 status=REHAB window=1d kind=list
+  select_type: SIMPLE
+         type: ALL
+          key: NULL
+         rows: 199319
+     filtered: 8.33
+        Extra: Using where; Using filesort
+
+───── arm=A0 status=REHAB window=1d kind=count
+  select_type: SIMPLE
+         type: ALL
+          key: NULL
+         rows: 199319
+     filtered: 8.33
+        Extra: Using where
+
+───── arm=A0 status=REHAB window=7d kind=list
+  select_type: SIMPLE
+         type: ALL
+          key: NULL
+         rows: 199319
+     filtered: 8.33
+        Extra: Using where; Using filesort
+
+───── arm=A0 status=REHAB window=7d kind=count
+  select_type: SIMPLE
+         type: ALL
+          key: NULL
+         rows: 199319
+     filtered: 8.33
+        Extra: Using where
+
+───── arm=A0 status=REHAB window=30d kind=list
+  select_type: SIMPLE
+         type: ALL
+          key: NULL
+         rows: 199319
+     filtered: 8.33
+        Extra: Using where; Using filesort
+
+───── arm=A0 status=REHAB window=30d kind=count
+  select_type: SIMPLE
+         type: ALL
+          key: NULL
+         rows: 199319
+     filtered: 8.33
+        Extra: Using where
+
+───── arm=A0 status=REHAB window=0d kind=list
+  select_type: SIMPLE
+         type: ALL
+          key: NULL
+         rows: 199319
+     filtered: 25.00
+        Extra: Using where; Using filesort
+
+───── arm=A0 status=REHAB window=0d kind=count
+  select_type: SIMPLE
+         type: ALL
+          key: NULL
+         rows: 199319
+     filtered: 25.00
+        Extra: Using where
+
+───── arm=A0 status=DIET window=1d kind=list
+  select_type: SIMPLE
+         type: ALL
+          key: NULL
+         rows: 199319
+     filtered: 8.33
+        Extra: Using where; Using filesort
+
+───── arm=A0 status=DIET window=1d kind=count
+  select_type: SIMPLE
+         type: ALL
+          key: NULL
+         rows: 199319
+     filtered: 8.33
+        Extra: Using where
+
+───── arm=A0 status=DIET window=7d kind=list
+  select_type: SIMPLE
+         type: ALL
+          key: NULL
+         rows: 199319
+     filtered: 8.33
+        Extra: Using where; Using filesort
+
+───── arm=A0 status=DIET window=7d kind=count
+  select_type: SIMPLE
+         type: ALL
+          key: NULL
+         rows: 199319
+     filtered: 8.33
+        Extra: Using where
+
+───── arm=A0 status=DIET window=30d kind=list
+  select_type: SIMPLE
+         type: ALL
+          key: NULL
+         rows: 199319
+     filtered: 8.33
+        Extra: Using where; Using filesort
+
+───── arm=A0 status=DIET window=30d kind=count
+  select_type: SIMPLE
+         type: ALL
+          key: NULL
+         rows: 199319
+     filtered: 8.33
+        Extra: Using where
+
+───── arm=A0 status=DIET window=0d kind=list
+  select_type: SIMPLE
+         type: ALL
+          key: NULL
+         rows: 199319
+     filtered: 25.00
+        Extra: Using where; Using filesort
+
+───── arm=A0 status=DIET window=0d kind=count
+  select_type: SIMPLE
+         type: ALL
+          key: NULL
+         rows: 199319
+     filtered: 25.00
+        Extra: Using where
+
+───── arm=A0 status=ADVANCED window=1d kind=list
+  select_type: SIMPLE
+         type: ALL
+          key: NULL
+         rows: 199319
+     filtered: 8.33
+        Extra: Using where; Using filesort
+
+───── arm=A0 status=ADVANCED window=1d kind=count
+  select_type: SIMPLE
+         type: ALL
+          key: NULL
+         rows: 199319
+     filtered: 8.33
+        Extra: Using where
+
+───── arm=A0 status=ADVANCED window=7d kind=list
+  select_type: SIMPLE
+         type: ALL
+          key: NULL
+         rows: 199319
+     filtered: 8.33
+        Extra: Using where; Using filesort
+
+───── arm=A0 status=ADVANCED window=7d kind=count
+  select_type: SIMPLE
+         type: ALL
+          key: NULL
+         rows: 199319
+     filtered: 8.33
+        Extra: Using where
+
+───── arm=A0 status=ADVANCED window=30d kind=list
+  select_type: SIMPLE
+         type: ALL
+          key: NULL
+         rows: 199319
+     filtered: 8.33
+        Extra: Using where; Using filesort
+
+───── arm=A0 status=ADVANCED window=30d kind=count
+  select_type: SIMPLE
+         type: ALL
+          key: NULL
+         rows: 199319
+     filtered: 8.33
+        Extra: Using where
+
+───── arm=A0 status=ADVANCED window=0d kind=list
+  select_type: SIMPLE
+         type: ALL
+          key: NULL
+         rows: 199319
+     filtered: 25.00
+        Extra: Using where; Using filesort
+
+───── arm=A0 status=ADVANCED window=0d kind=count
+  select_type: SIMPLE
+         type: ALL
+          key: NULL
+         rows: 199319
+     filtered: 25.00
+        Extra: Using where
+
+───── arm=A0 status=BEGINNER window=1d kind=list
+  select_type: SIMPLE
+         type: ALL
+          key: NULL
+         rows: 199319
+     filtered: 8.33
+        Extra: Using where; Using filesort
+
+───── arm=A0 status=BEGINNER window=1d kind=count
+  select_type: SIMPLE
+         type: ALL
+          key: NULL
+         rows: 199319
+     filtered: 8.33
+        Extra: Using where
+
+───── arm=A0 status=BEGINNER window=7d kind=list
+  select_type: SIMPLE
+         type: ALL
+          key: NULL
+         rows: 199319
+     filtered: 8.33
+        Extra: Using where; Using filesort
+
+───── arm=A0 status=BEGINNER window=7d kind=count
+  select_type: SIMPLE
+         type: ALL
+          key: NULL
+         rows: 199319
+     filtered: 8.33
+        Extra: Using where
+
+───── arm=A0 status=BEGINNER window=30d kind=list
+  select_type: SIMPLE
+         type: ALL
+          key: NULL
+         rows: 199319
+     filtered: 8.33
+        Extra: Using where; Using filesort
+
+───── arm=A0 status=BEGINNER window=30d kind=count
+  select_type: SIMPLE
+         type: ALL
+          key: NULL
+         rows: 199319
+     filtered: 8.33
+        Extra: Using where
+
+───── arm=A0 status=BEGINNER window=0d kind=list
+  select_type: SIMPLE
+         type: ALL
+          key: NULL
+         rows: 199319
+     filtered: 25.00
+        Extra: Using where; Using filesort
+
+───── arm=A0 status=BEGINNER window=0d kind=count
+  select_type: SIMPLE
+         type: ALL
+          key: NULL
+         rows: 199319
+     filtered: 25.00
+        Extra: Using where
+
+───── arm=B status=REHAB window=1d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_users_created_at
+         rows: 548
+     filtered: 25.00
+        Extra: Using index condition; Using where; Backward index scan
+
+───── arm=B status=REHAB window=1d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_users_created_at
+         rows: 548
+     filtered: 25.00
+        Extra: Using index condition; Using where
+
+───── arm=B status=REHAB window=7d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_users_created_at
+         rows: 3778
+     filtered: 25.00
+        Extra: Using index condition; Using where; Backward index scan
+
+───── arm=B status=REHAB window=7d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_users_created_at
+         rows: 3778
+     filtered: 25.00
+        Extra: Using index condition; Using where
+
+───── arm=B status=REHAB window=30d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_users_created_at
+         rows: 30656
+     filtered: 25.00
+        Extra: Using index condition; Using where; Backward index scan
+
+───── arm=B status=REHAB window=30d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_users_created_at
+         rows: 30656
+     filtered: 25.00
+        Extra: Using index condition; Using where
+
+───── arm=B status=REHAB window=0d kind=list
+  select_type: SIMPLE
+         type: index
+          key: idx_users_created_at
+         rows: 20
+     filtered: 25.00
+        Extra: Using where; Backward index scan
+
+───── arm=B status=REHAB window=0d kind=count
+  select_type: SIMPLE
+         type: ALL
+          key: NULL
+         rows: 198986
+     filtered: 25.00
+        Extra: Using where
+
+───── arm=B status=DIET window=1d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_users_created_at
+         rows: 548
+     filtered: 25.00
+        Extra: Using index condition; Using where; Backward index scan
+
+───── arm=B status=DIET window=1d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_users_created_at
+         rows: 548
+     filtered: 25.00
+        Extra: Using index condition; Using where
+
+───── arm=B status=DIET window=7d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_users_created_at
+         rows: 3778
+     filtered: 25.00
+        Extra: Using index condition; Using where; Backward index scan
+
+───── arm=B status=DIET window=7d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_users_created_at
+         rows: 3778
+     filtered: 25.00
+        Extra: Using index condition; Using where
+
+───── arm=B status=DIET window=30d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_users_created_at
+         rows: 30656
+     filtered: 25.00
+        Extra: Using index condition; Using where; Backward index scan
+
+───── arm=B status=DIET window=30d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_users_created_at
+         rows: 30656
+     filtered: 25.00
+        Extra: Using index condition; Using where
+
+───── arm=B status=DIET window=0d kind=list
+  select_type: SIMPLE
+         type: index
+          key: idx_users_created_at
+         rows: 20
+     filtered: 25.00
+        Extra: Using where; Backward index scan
+
+───── arm=B status=DIET window=0d kind=count
+  select_type: SIMPLE
+         type: ALL
+          key: NULL
+         rows: 198986
+     filtered: 25.00
+        Extra: Using where
+
+───── arm=B status=ADVANCED window=1d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_users_created_at
+         rows: 548
+     filtered: 25.00
+        Extra: Using index condition; Using where; Backward index scan
+
+───── arm=B status=ADVANCED window=1d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_users_created_at
+         rows: 548
+     filtered: 25.00
+        Extra: Using index condition; Using where
+
+───── arm=B status=ADVANCED window=7d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_users_created_at
+         rows: 3778
+     filtered: 25.00
+        Extra: Using index condition; Using where; Backward index scan
+
+───── arm=B status=ADVANCED window=7d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_users_created_at
+         rows: 3778
+     filtered: 25.00
+        Extra: Using index condition; Using where
+
+───── arm=B status=ADVANCED window=30d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_users_created_at
+         rows: 30656
+     filtered: 25.00
+        Extra: Using index condition; Using where; Backward index scan
+
+───── arm=B status=ADVANCED window=30d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_users_created_at
+         rows: 30656
+     filtered: 25.00
+        Extra: Using index condition; Using where
+
+───── arm=B status=ADVANCED window=0d kind=list
+  select_type: SIMPLE
+         type: index
+          key: idx_users_created_at
+         rows: 20
+     filtered: 25.00
+        Extra: Using where; Backward index scan
+
+───── arm=B status=ADVANCED window=0d kind=count
+  select_type: SIMPLE
+         type: ALL
+          key: NULL
+         rows: 198986
+     filtered: 25.00
+        Extra: Using where
+
+───── arm=B status=BEGINNER window=1d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_users_created_at
+         rows: 548
+     filtered: 25.00
+        Extra: Using index condition; Using where; Backward index scan
+
+───── arm=B status=BEGINNER window=1d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_users_created_at
+         rows: 548
+     filtered: 25.00
+        Extra: Using index condition; Using where
+
+───── arm=B status=BEGINNER window=7d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_users_created_at
+         rows: 3778
+     filtered: 25.00
+        Extra: Using index condition; Using where; Backward index scan
+
+───── arm=B status=BEGINNER window=7d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_users_created_at
+         rows: 3778
+     filtered: 25.00
+        Extra: Using index condition; Using where
+
+───── arm=B status=BEGINNER window=30d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_users_created_at
+         rows: 30656
+     filtered: 25.00
+        Extra: Using index condition; Using where; Backward index scan
+
+───── arm=B status=BEGINNER window=30d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_users_created_at
+         rows: 30656
+     filtered: 25.00
+        Extra: Using index condition; Using where
+
+───── arm=B status=BEGINNER window=0d kind=list
+  select_type: SIMPLE
+         type: index
+          key: idx_users_created_at
+         rows: 20
+     filtered: 25.00
+        Extra: Using where; Backward index scan
+
+───── arm=B status=BEGINNER window=0d kind=count
+  select_type: SIMPLE
+         type: ALL
+          key: NULL
+         rows: 198986
+     filtered: 25.00
+        Extra: Using where
+
+───── arm=C status=REHAB window=1d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_users_persona_created
+         rows: 13
+     filtered: 100.00
+        Extra: Using index condition; Backward index scan
+
+───── arm=C status=REHAB window=1d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_users_persona_created
+         rows: 13
+     filtered: 100.00
+        Extra: Using where; Using index
+
+───── arm=C status=REHAB window=7d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_users_persona_created
+         rows: 66
+     filtered: 100.00
+        Extra: Using index condition; Backward index scan
+
+───── arm=C status=REHAB window=7d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_users_persona_created
+         rows: 66
+     filtered: 100.00
+        Extra: Using where; Using index
+
+───── arm=C status=REHAB window=30d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_users_persona_created
+         rows: 331
+     filtered: 100.00
+        Extra: Using index condition; Backward index scan
+
+───── arm=C status=REHAB window=30d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_users_persona_created
+         rows: 331
+     filtered: 100.00
+        Extra: Using where; Using index
+
+───── arm=C status=REHAB window=0d kind=list
+  select_type: SIMPLE
+         type: ref
+          key: idx_users_persona_created
+         rows: 3954
+     filtered: 100.00
+        Extra: Using where; Backward index scan
+
+───── arm=C status=REHAB window=0d kind=count
+  select_type: SIMPLE
+         type: ref
+          key: idx_users_persona_created
+         rows: 3954
+     filtered: 100.00
+        Extra: Using where; Using index
+
+───── arm=C status=DIET window=1d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_users_persona_created
+         rows: 47
+     filtered: 100.00
+        Extra: Using index condition; Backward index scan
+
+───── arm=C status=DIET window=1d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_users_persona_created
+         rows: 47
+     filtered: 100.00
+        Extra: Using where; Using index
+
+───── arm=C status=DIET window=7d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_users_persona_created
+         rows: 277
+     filtered: 100.00
+        Extra: Using index condition; Backward index scan
+
+───── arm=C status=DIET window=7d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_users_persona_created
+         rows: 277
+     filtered: 100.00
+        Extra: Using where; Using index
+
+───── arm=C status=DIET window=30d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_users_persona_created
+         rows: 1333
+     filtered: 100.00
+        Extra: Using index condition; Backward index scan
+
+───── arm=C status=DIET window=30d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_users_persona_created
+         rows: 1333
+     filtered: 100.00
+        Extra: Using where; Using index
+
+───── arm=C status=DIET window=0d kind=list
+  select_type: SIMPLE
+         type: ref
+          key: idx_users_persona_created
+         rows: 30212
+     filtered: 100.00
+        Extra: Using where; Backward index scan
+
+───── arm=C status=DIET window=0d kind=count
+  select_type: SIMPLE
+         type: ref
+          key: idx_users_persona_created
+         rows: 30212
+     filtered: 100.00
+        Extra: Using where; Using index
+
+───── arm=C status=ADVANCED window=1d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_users_persona_created
+         rows: 103
+     filtered: 100.00
+        Extra: Using index condition; Backward index scan
+
+───── arm=C status=ADVANCED window=1d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_users_persona_created
+         rows: 103
+     filtered: 100.00
+        Extra: Using where; Using index
+
+───── arm=C status=ADVANCED window=7d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_users_persona_created
+         rows: 785
+     filtered: 100.00
+        Extra: Using index condition; Backward index scan
+
+───── arm=C status=ADVANCED window=7d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_users_persona_created
+         rows: 785
+     filtered: 100.00
+        Extra: Using where; Using index
+
+───── arm=C status=ADVANCED window=30d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_users_persona_created
+         rows: 3383
+     filtered: 100.00
+        Extra: Using index condition; Backward index scan
+
+───── arm=C status=ADVANCED window=30d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_users_persona_created
+         rows: 3383
+     filtered: 100.00
+        Extra: Using where; Using index
+
+───── arm=C status=ADVANCED window=0d kind=list
+  select_type: SIMPLE
+         type: ref
+          key: idx_users_persona_created
+         rows: 76320
+     filtered: 100.00
+        Extra: Using where; Backward index scan
+
+───── arm=C status=ADVANCED window=0d kind=count
+  select_type: SIMPLE
+         type: ref
+          key: idx_users_persona_created
+         rows: 76320
+     filtered: 100.00
+        Extra: Using where; Using index
+
+───── arm=C status=BEGINNER window=1d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_users_persona_created
+         rows: 385
+     filtered: 100.00
+        Extra: Using index condition; Backward index scan
+
+───── arm=C status=BEGINNER window=1d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_users_persona_created
+         rows: 385
+     filtered: 100.00
+        Extra: Using where; Using index
+
+───── arm=C status=BEGINNER window=7d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_users_persona_created
+         rows: 2650
+     filtered: 100.00
+        Extra: Using index condition; Backward index scan
+
+───── arm=C status=BEGINNER window=7d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_users_persona_created
+         rows: 2650
+     filtered: 100.00
+        Extra: Using where; Using index
+
+───── arm=C status=BEGINNER window=30d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_users_persona_created
+         rows: 21024
+     filtered: 100.00
+        Extra: Using index condition; Backward index scan
+
+───── arm=C status=BEGINNER window=30d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_users_persona_created
+         rows: 21024
+     filtered: 100.00
+        Extra: Using where; Using index
+
+───── arm=C status=BEGINNER window=0d kind=list
+  select_type: SIMPLE
+         type: ref
+          key: idx_users_persona_created
+         rows: 99659
+     filtered: 100.00
+        Extra: Using where; Backward index scan
+
+───── arm=C status=BEGINNER window=0d kind=count
+  select_type: SIMPLE
+         type: ref
+          key: idx_users_persona_created
+         rows: 99659
+     filtered: 100.00
+        Extra: Using where; Using index
+

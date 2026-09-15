@@ -107,6 +107,7 @@ services:
       # 폴백 없음 — dev compose 와 의도적으로 다르다 (위 3번)
       JWT_SECRET: ${JWT_SECRET:?운영 배포에는 필수. Base64 32바이트 이상}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      EXPO_ACCESS_TOKEN: ${EXPO_ACCESS_TOKEN:-}
     depends_on:
       mysql:
         condition: service_healthy

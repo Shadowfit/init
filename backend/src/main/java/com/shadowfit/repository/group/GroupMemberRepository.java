@@ -17,6 +17,9 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> 
     // WebSocket 핸드셰이크 인가·그룹 조회 인가 — "이 사용자가 이 그룹의 ACTIVE 멤버인가".
     boolean existsByGroupIdAndMemberIdAndStatus(Long groupId, Long memberId, GroupMemberStatus status);
 
+    // OWNER 탈퇴 판정용 — «나 말고 ACTIVE 가 있는가». 있으면 양도 먼저(409), 없으면 모임 삭제(#721).
+    boolean existsByGroupIdAndStatusAndMemberIdNot(Long groupId, GroupMemberStatus status, Long memberId);
+
     Optional<GroupMember> findByGroupIdAndMemberId(Long groupId, Long memberId);
 
     // GET /groups/{groupId} 의 멤버 목록.
@@ -24,6 +27,13 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> 
 
     // GET /groups/mine.
     List<GroupMember> findAllByMemberIdAndStatus(Long memberId, GroupMemberStatus status);
+
+    // 세션 완료 시 «자동 글을 받을 모임이 하나라도 있나» — 없으면 아웃박스 행을 안 만든다
+    // (social-cheer-and-group-feed.md §4-4 ②). FK 의 암묵 인덱스 (member_id) 를 탄다.
+    boolean existsByMemberIdAndStatus(Long memberId, GroupMemberStatus status);
+
+    // 자동 글 팬아웃 — 그룹 id 오름차순으로 잠가야 하므로 정렬해서 받는다(§4-4 ③ b 잠금 순서 규약).
+    List<GroupMember> findAllByMemberIdAndStatusOrderByGroupIdAsc(Long memberId, GroupMemberStatus status);
 
     // 구성원 현황·친구 현황용 — 회원(닉네임·프로필)까지 한 번에. member 가 LAZY 라 fetch join 이
     // 없으면 멤버 수만큼 N+1 이 난다.

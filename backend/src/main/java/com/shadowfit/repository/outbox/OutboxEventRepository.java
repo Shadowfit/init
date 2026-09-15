@@ -31,6 +31,11 @@ import java.util.List;
  * 제대로 타지 못하는데, {@code PROCESSING} 행이 구조적으로 수십 건을 넘지 않아 감수한다.
  * 자세한 근거는 schema.sql 의 {@code outbox_events} 주석.
  *
+ * <p>[차선별 타입 필터] 두 선점 쿼리 모두 {@code event_type IN (:types)} 로 차선(lane)의 타입만 집는다
+ * (report-generation-llm.md §5-2 안 A). 기본 차선은 {@code idx_outbox_dispatch(status, next_retry_at)} 로
+ * 범위를 잡은 뒤 event_type 은 행 필터다 — 위 실측이 튜닝한 인덱스를 안 건드린다. 주간 리포트 차선은
+ * 타입 하나라 V21 의 {@code idx_outbox_report_dispatch(event_type, status, next_retry_at)} 가 정확히 맞는다.
+ *
  * <p>설계 근거: docs/decisions/outbox-reliable-messaging.md §4-3-1
  */
 @Repository
@@ -47,12 +52,14 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, Long> 
     @Query(value = """
             SELECT * FROM outbox_events
             WHERE status = 'PENDING'
+              AND event_type IN (:types)
               AND (next_retry_at IS NULL OR next_retry_at <= :now)
             ORDER BY id
             LIMIT :limit
             FOR UPDATE SKIP LOCKED
             """, nativeQuery = true)
-    List<OutboxEvent> lockPendingBatch(@Param("now") LocalDateTime now, @Param("limit") int limit);
+    List<OutboxEvent> lockPendingBatch(@Param("types") Collection<String> types,
+                                       @Param("now") LocalDateTime now, @Param("limit") int limit);
 
     /**
      * ② 유실 회수분 선점 — 선점 후 만료된 {@code PROCESSING}.
@@ -64,12 +71,14 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, Long> 
     @Query(value = """
             SELECT * FROM outbox_events
             WHERE status = 'PROCESSING'
+              AND event_type IN (:types)
               AND lock_expires_at <= :now
             ORDER BY id
             LIMIT :limit
             FOR UPDATE SKIP LOCKED
             """, nativeQuery = true)
-    List<OutboxEvent> lockStaleProcessingBatch(@Param("now") LocalDateTime now, @Param("limit") int limit);
+    List<OutboxEvent> lockStaleProcessingBatch(@Param("types") Collection<String> types,
+                                               @Param("now") LocalDateTime now, @Param("limit") int limit);
 
     /** 선점한 행들의 소유권을 넘긴다. 회수분도 같은 메서드로 다시 선점한다(만료 시각 갱신). */
     @Modifying(clearAutomatically = true, flushAutomatically = true)

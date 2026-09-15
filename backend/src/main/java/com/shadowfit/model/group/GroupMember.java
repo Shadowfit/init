@@ -52,9 +52,25 @@ public class GroupMember {
         this.status = GroupMemberStatus.LEFT;
     }
 
-    /** LEFT 상태였던 멤버가 초대를 다시 수락했을 때 — 새 행을 만들지 않고 기존 행을 되살린다. */
+    /**
+     * LEFT 상태였던 멤버가 초대를 다시 수락했을 때 — 새 행을 만들지 않고 기존 행을 되살린다.
+     *
+     * <p>role 을 MEMBER 로 되돌리는 건 의도다: OWNER 는 양도한 뒤에만 나갈 수 있으므로(#721,
+     * {@code GroupService.leaveGroup}) LEFT 행의 role 이 OWNER 인 경우는 이제 생기지 않고,
+     * 예전 데이터에 남아 있더라도 되살아나며 두 번째 OWNER 가 되면 안 된다.
+     */
     public void rejoin() {
         this.status = GroupMemberStatus.ACTIVE;
+        this.role = GroupRole.MEMBER;
+    }
+
+    /** 양도 — 받는 쪽. 호출자({@code GroupService.transferOwnership})가 ACTIVE 인지 확인한다. */
+    public void promoteToOwner() {
+        this.role = GroupRole.OWNER;
+    }
+
+    /** 양도 — 주는 쪽. */
+    public void demoteToMember() {
         this.role = GroupRole.MEMBER;
     }
 }
