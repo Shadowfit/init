@@ -112,15 +112,25 @@ done
 if [ -n "$LOGIN_USER" ]; then
   mkdir -p /root/.ssh
   touch /root/.ssh/authorized_keys
-  cat "/home/$LOGIN_USER/.ssh/authorized_keys" >> /root/.ssh/authorized_keys
-  sort -u /root/.ssh/authorized_keys -o /root/.ssh/authorized_keys
+  # AL2023·Ubuntu 클라우드 이미지는 /root/.ssh/authorized_keys 에 **같은 키를 강제명령 접두**
+  # (`command="echo 'Please login as the user ...';...exit 142" ssh-rsa ...`)로 이미 넣어 둔다.
+  # 뒤에 붙이기만 하면 sshd 가 앞 줄(강제명령)을 먼저 매치해 exit 142 로 끊는다 — 추가가 아니라
+  # 치환이어야 한다(#743, #681). 그 줄만 걷어내고 로그인 사용자의 키를 합친다.
+  grep -v '^command=' /root/.ssh/authorized_keys > /root/.ssh/authorized_keys.new || true
+  cat "/home/$LOGIN_USER/.ssh/authorized_keys" >> /root/.ssh/authorized_keys.new
+  sort -u /root/.ssh/authorized_keys.new -o /root/.ssh/authorized_keys
+  rm -f /root/.ssh/authorized_keys.new
   chmod 700 /root/.ssh
   chmod 600 /root/.ssh/authorized_keys
   sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
   grep -q '^PermitRootLogin' /etc/ssh/sshd_config || echo 'PermitRootLogin prohibit-password' >> /etc/ssh/sshd_config
   systemctl restart sshd 2>/dev/null || systemctl restart ssh 2>/dev/null \
     || echo "  ⚠️ sshd 재시작 실패 — 수동으로 확인할 것"
-  echo "  $LOGIN_USER 의 authorized_keys 를 root 로 복사, PermitRootLogin prohibit-password"
+  if grep -q '^command=' /root/.ssh/authorized_keys; then
+    echo "  🔴 강제명령 줄이 아직 남아 있다 — root SSH 가 exit 142 로 막힌다 (#743)"
+  else
+    echo "  $LOGIN_USER 의 authorized_keys 를 root 로 복사(강제명령 줄 제거), PermitRootLogin prohibit-password"
+  fi
 else
   echo "  ⚠️ ec2-user/ubuntu 의 authorized_keys 를 못 찾았다 — root SSH 는 그대로 막혀 있을 수 있다"
 fi
