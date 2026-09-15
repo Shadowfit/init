@@ -17,6 +17,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import com.shadowfit.dto.report.weekly.WeeklyReportResponseDto;
+import com.shadowfit.service.report.WeeklyReportService;
 import com.shadowfit.service.report.WeeklySummaryService;
 
 import java.time.LocalDate;
@@ -30,6 +32,7 @@ public class ExerciseRecordController {
     private final SessionActivityQueryService sessionActivityQueryService;
     private final DailyLogService dailyLogService;
     private final WeeklySummaryService weeklySummaryService;
+    private final WeeklyReportService weeklyReportService;
 
     /**
      * 주간 요약 — 활동 집계(총 운동시간·칼로리·일별 분)와 <b>A층 요약</b>(세션수·회차·싱크로율·
@@ -54,6 +57,17 @@ public class ExerciseRecordController {
         // A층 요약은 기준일 없이(=오늘이 속한 주) 부른다 — 위 집계와 같은 주를 보게 하려는 것이다.
         response.setSummary(weeklySummaryService.getWeeklySummary(memberId, null));
         return ResponseEntity.ok(response);
+    }
+
+    @Operation(summary="끝난 주의 리포트",
+            description = "week(그 주의 아무 날, 기본 지난주)의 집계·템플릿 문장 + AI 총평. AI 문장은 처음 조회 때 생성이 걸리고(aiSummarySource=PENDING) "
+                    + "다음 조회부터 LLM 또는 TEMPLATE_FALLBACK. 이번 주·미래 주는 400(R002)")
+    @GetMapping("/weekly-report")
+    public ResponseEntity<WeeklyReportResponseDto> getWeeklyReport(
+            @AuthenticationPrincipal CustomUserDetails customUserDetails,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate week) {
+        Long memberId = customUserDetails.getMember().getId();
+        return ResponseEntity.ok(weeklyReportService.getWeeklyReport(memberId, week));
     }
 
     @Operation(summary="메인화면 달력 데이터 조회",description = "메인화면에 달력 api")

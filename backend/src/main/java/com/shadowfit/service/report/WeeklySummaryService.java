@@ -46,8 +46,19 @@ public class WeeklySummaryService {
      * @param memberId  대상 회원
      * @param anyDayOfWeek 기준일. 그 날이 속한 주를 잡는다. null 이면 오늘
      */
+    /** A층 요약 + 그 재료였던 B층 결과. LLM 프롬프트(report-generation-llm.md §14)가 곡선을 그대로 받으려고 나눴다. */
+    public record Computation(WeeklySummaryResponseDto summary,
+                              List<RepCurvePointDto> repCurve,
+                              List<WorstRepFrequencyDto> worstDistribution) {
+    }
+
     @Transactional(readOnly = true)
     public WeeklySummaryResponseDto getWeeklySummary(Long memberId, LocalDate anyDayOfWeek) {
+        return compute(memberId, anyDayOfWeek).summary();
+    }
+
+    @Transactional(readOnly = true)
+    public Computation compute(Long memberId, LocalDate anyDayOfWeek) {
         long callStart = System.nanoTime();
 
         LocalDate baseDate = anyDayOfWeek != null ? anyDayOfWeek : LocalDate.now();
@@ -88,6 +99,7 @@ public class WeeklySummaryService {
         result.firedRules().forEach(weeklyReportMetrics::ruleFired);
         weeklyReportMetrics.queryLatency(Duration.ofNanos(System.nanoTime() - callStart));
 
-        return new WeeklySummaryResponseDto(start, end, thisWeek, lastWeek, result.sentences());
+        return new Computation(new WeeklySummaryResponseDto(start, end, thisWeek, lastWeek, result.sentences()),
+                repCurve, worstDistribution);
     }
 }

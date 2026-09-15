@@ -22,6 +22,14 @@ import java.util.concurrent.TimeUnit;
  * 이 이상의 것(어느 인스턴스가 누굴 들고 있는지)은 필요 없다 — 다중 인스턴스로 갈 때
  * Redis 패턴 구독으로 이 자리를 대체/확장한다.
  *
+ * <p><b>회원 인덱스(1:1 전달, social-cheer-and-group-feed.md §4-1 #7)</b>. 같은 세션들을
+ * {@code memberId} 로도 찾는다 — 재촉처럼 «이 사람에게만» 보내야 하는 프레임을 그 회원이 붙어
+ * 있는 그룹 연결로 밀기 위해서다(그룹 채널에 실으면 전원에게 보이는 §3-C ① 문제). 새 연결
+ * 종류를 만들지 않고 기존 그룹 연결을 재사용하기로 했으므로(2026-09-12 confirm) «접속 중» 은
+ * <b>어느 모임 화면이든 보고 있을 때</b> 다 — 홈 화면·앱만 켜둔 상태엔 실시간 전달이 없고 그
+ * 자리는 푸시(#9)가 맡는다. 세션 하나 = Entry 하나(데코레이터·전용 스레드 공유)이고 두 인덱스가
+ * 같은 Entry 를 가리키므로 순서·상한이 한 곳에서 지켜진다.
+ *
  * <p><b>느린 소비자 격리(#623)</b>. 예전에는 {@code broadcast()}가 그룹 세션을 순차
  * for-loop로 돌며 세션마다 동기 {@code sendMessage()}를 불렀다 — 느린 멤버 하나가
  * OS 수신 버퍼를 못 비우면 그 send가 블록되고, {@code GroupEventService.publish()}가
@@ -68,10 +76,12 @@ public class GroupSocketRegistry {
     // 안 깨는 선에서 여유를 둔 것뿐이다.
     private static final int QUEUE_CAPACITY = 32;
 
-    private record Entry(ConcurrentWebSocketSessionDecorator session, ExecutorService executor) {
+    private record Entry(ConcurrentWebSocketSessionDecorator session, ExecutorService executor,
+                         Long groupId, Long memberId) {
     }
 
     private final Map<Long, Map<String, Entry>> sessionsByGroup = new ConcurrentHashMap<>();
+    private final Map<Long, Map<String, Entry>> sessionsByMember = new ConcurrentHashMap<>();
 
     /**
      * docs/decisions/group-websocket-heartbeat.md §6 — heartbeat 도입 전, "비정상 종료를
@@ -89,11 +99,12 @@ public class GroupSocketRegistry {
         return sessionsByGroup.values().stream().mapToInt(Map::size).sum();
     }
 
-    public void register(Long groupId, WebSocketSession session) {
+    public void register(Long groupId, Long memberId, WebSocketSession session) {
         Entry entry = new Entry(
                 new ConcurrentWebSocketSessionDecorator(session, SEND_TIME_LIMIT_MS, BUFFER_SIZE_LIMIT_BYTES),
-                newBoundedSingleThreadExecutor());
+                newBoundedSingleThreadExecutor(), groupId, memberId);
         sessionsByGroup.computeIfAbsent(groupId, id -> new ConcurrentHashMap<>()).put(session.getId(), entry);
+        sessionsByMember.computeIfAbsent(memberId, id -> new ConcurrentHashMap<>()).put(session.getId(), entry);
     }
 
     // Executors.newSingleThreadExecutor()와 동일(스레드 1개)하되 큐가 무제한이 아니다 — 위 클래스
@@ -109,6 +120,7 @@ public class GroupSocketRegistry {
         }
         Entry entry = sessions.remove(session.getId());
         if (entry != null) {
+            removeFrom(sessionsByMember, entry.memberId(), session.getId(), entry);
             entry.executor().shutdownNow();
         }
         if (sessions.isEmpty()) {
@@ -117,7 +129,18 @@ public class GroupSocketRegistry {
     }
 
     public void broadcast(Long groupId, String json) {
-        Map<String, Entry> sessions = sessionsByGroup.get(groupId);
+        dispatch(sessionsByGroup.get(groupId), json);
+    }
+
+    /**
+     * 이 회원이 붙어 있는 세션 전부(모임 화면을 여러 개 띄웠으면 그 수만큼)에만 보낸다. 안 붙어
+     * 있으면 조용히 끝 — 저장이 원천이라 못 보낸 것은 유실이 아니다(알림함·푸시가 남아 있다).
+     */
+    public void sendToMember(Long memberId, String json) {
+        dispatch(sessionsByMember.get(memberId), json);
+    }
+
+    private void dispatch(Map<String, Entry> sessions, String json) {
         if (sessions == null || sessions.isEmpty()) {
             return;
         }
@@ -128,23 +151,23 @@ public class GroupSocketRegistry {
             String sessionId = e.getKey();
             Entry entry = e.getValue();
             try {
-                entry.executor().execute(() -> send(groupId, sessionId, entry, message));
+                entry.executor().execute(() -> send(sessionId, entry, message));
             } catch (java.util.concurrent.RejectedExecutionException ex) {
                 // 두 경우가 같은 예외로 온다 — ①deregister()가 이미 shutdownNow()를 부른 직후의
                 // 경합(이미 정리된 세션, removeEntry가 안전하게 no-op) ②대기 자리가 없어(§클래스
                 // javadoc) 이번 전송을 못 받은 느린 세션(뒤처짐 신호, 지금 정리해야 하는 세션).
                 // 어느 쪽이든 이 세션에 이 메시지는 못 갔으니 정리하는 게 맞다 — send()가
                 // IOException일 때 하는 것과 같은 정리(레지스트리 제거 + 연결 종료).
-                removeEntry(groupId, sessionId, entry);
+                removeEntry(sessionId, entry);
                 closeQuietly(entry.session());
             }
         }
     }
 
-    private void send(Long groupId, String sessionId, Entry entry, TextMessage message) {
+    private void send(String sessionId, Entry entry, TextMessage message) {
         ConcurrentWebSocketSessionDecorator session = entry.session();
         if (!session.isOpen()) {
-            removeEntry(groupId, sessionId, entry);
+            removeEntry(sessionId, entry);
             return;
         }
         try {
@@ -153,20 +176,27 @@ public class GroupSocketRegistry {
             // 실제 끊김(피어 종료)과 데코레이터의 상한 초과(SessionLimitExceededException,
             // IOException의 하위 타입)를 굳이 구분하지 않는다 — 둘 다 "이 세션은 더 이상
             // 정상 전달을 기대할 수 없다"는 결론은 같다.
-            log.warn("그룹 브로드캐스트 전송 실패, 세션을 정리한다 (groupId={})", groupId, e);
-            removeEntry(groupId, sessionId, entry);
+            log.warn("그룹 WebSocket 전송 실패, 세션을 정리한다 (groupId={}, memberId={})",
+                    entry.groupId(), entry.memberId(), e);
+            removeEntry(sessionId, entry);
             closeQuietly(session);
         }
     }
 
-    private void removeEntry(Long groupId, String sessionId, Entry entry) {
-        Map<String, Entry> sessions = sessionsByGroup.get(groupId);
-        if (sessions != null && sessions.remove(sessionId, entry) && sessions.isEmpty()) {
-            sessionsByGroup.remove(groupId, sessions);
-        }
+    // 두 인덱스에서 같이 뺀다 — 한쪽에만 남으면 닫힌 세션으로 계속 보내려 든다.
+    private void removeEntry(String sessionId, Entry entry) {
+        removeFrom(sessionsByGroup, entry.groupId(), sessionId, entry);
+        removeFrom(sessionsByMember, entry.memberId(), sessionId, entry);
         // executor 자기 자신 위에서 실행 중인 작업이 shutdownNow()를 부르는 것이라 현재
         // 작업을 인터럽트하지는 않는다 — 다음 작업부터 거부되고, 스레드는 곧 종료된다.
         entry.executor().shutdown();
+    }
+
+    private static void removeFrom(Map<Long, Map<String, Entry>> index, Long key, String sessionId, Entry entry) {
+        Map<String, Entry> sessions = index.get(key);
+        if (sessions != null && sessions.remove(sessionId, entry) && sessions.isEmpty()) {
+            index.remove(key, sessions);
+        }
     }
 
     private void closeQuietly(WebSocketSession session) {

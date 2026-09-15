@@ -1,0 +1,49 @@
+boot_k        : 4
+생성          : 2026-09-13T15:49:51+00:00
+boot_id       : 8ee82525-70e2-4861-b596-71dbb1cc02dd
+uptime -s     : 2026-09-13 15:49:23
+instance-id   : i-04962c061c3bd30c1
+instance-type : c7i.4xlarge
+AZ            : ap-northeast-2c
+host-id(IMDS) :    # 전용 호스트가 아니면 비어 있다(404)
+system-uuid   : ec2e2296-ee49-9ba8-8ee7-d140ca74e073
+bios          : 1.0 / 10/16/2017
+cpu model     :  Intel(R) Xeon(R) Platinum 8488C
+cpu family/model/stepping : 6 / 143 / 8
+microcode     : 0x2b000661
+cpu MHz(참고) : 3488.648   # 가상화라 신뢰 안 함(설계 §6)
+nproc         : 16
+kernel        : 6.1.182-227.379.amzn2023.x86_64
+커밋          : 838d816dbc9560a3c3088a7d32da8c12659bc9b7
+== 보정(전) ==
+  INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+  WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+  W0000 00:00:1789314593.417199    3500 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+  W0000 00:00:1789314593.446117    3500 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+  W0000 00:00:1789314593.464327    3500 landmark_projection_calculator.cc:186] Using NORM_RECT without IMAGE_DIMENSIONS is only supported for the square ROI. Provide IMAGE_DIMENSIONS or use PROJECTION_MATRIX.
+  ── 박스 보정 ──
+    박스   : 16 vCPU · 물리 8 · Intel(R) Xeon(R) Platinum 8488C
+    스택   : python 3.12.14 · 커밋 838d816
+    cpu    : 17,862,409.7 iter/s  (0.168s)
+    infer  :       58.5 fps  (1.7098s)
+    🔴 판정에 안 쓰더라도 결과 디렉터리에 남길 것 (#255 축 0)
+== run_all: calibration + framepath(B×5, 버림1) + collect ==
+run_all rc=0
+phase	status	seconds	started_at
+calibration	FAIL(1)	0	2026-09-13T15:49:55+00:00
+framepath	OK	491	2026-09-13T15:49:56+00:00
+collect	OK	2	2026-09-13T15:58:08+00:00
+  자동 정지 꺼짐 — 회수 확인 후 직접 정지할 것. AWS-RIDE-ALONG.md §5 체크리스트를 볼 것
+== 보정(후) ==
+  INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+  WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+  W0000 00:00:1789315092.699913   19361 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+  W0000 00:00:1789315092.728751   19361 inference_feedback_manager.cc:114] Feedback manager requires a model with a single signature inference. Disabling support for feedback tensors.
+  W0000 00:00:1789315092.745479   19361 landmark_projection_calculator.cc:186] Using NORM_RECT without IMAGE_DIMENSIONS is only supported for the square ROI. Provide IMAGE_DIMENSIONS or use PROJECTION_MATRIX.
+  ── 박스 보정 ──
+    박스   : 16 vCPU · 물리 8 · Intel(R) Xeon(R) Platinum 8488C
+    스택   : python 3.12.14 · 커밋 838d816
+    cpu    : 17,797,760.9 iter/s  (0.1686s)
+    infer  :       62.7 fps  (1.594s)
+    🔴 판정에 안 쓰더라도 결과 디렉터리에 남길 것 (#255 축 0)
+S3 OK

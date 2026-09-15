@@ -59,6 +59,40 @@ N_READY=$(wc -l < "$TOKENS" | tr -d '[:space:]')
 echo "  ✅ 계정 $N_READY / $ACCOUNTS 준비됨"
 [ "$N_READY" -ge 1 ] || { echo "🔴 준비된 계정이 0개 — 중단"; exit 1; }
 
+# ── 토큰 수명 게이트 (#689) ───────────────────────────────────────────────
+# 이 rig 은 준비 단계에서 받은 accessToken 을 루프 내내 **재발급 없이** 쓴다. access TTL 이
+# 기본 1800초(30분)이므로 DURATION_SEC 가 그보다 길면 판 도중에 전부 401 이 되고, 워커는
+# START_FAIL 을 찍으며 5초마다 재시도만 한다 — **부하가 사라졌는데 판정 채널은 «장애 0회»를
+# 찍는다.** 08-28 라운드가 90초·10분 만에 죽어서 이 자리를 한 번도 안 밟아 봤다.
+# 여기서 «조용히 무부하» 대신 «시작 전에 중단» 으로 바꾼다.
+TOKEN_MARGIN_SEC=${TOKEN_MARGIN_SEC:-600}   # 모니터의 TAIL_SEC 기본값 — 꼬리 관찰 구간까지 살아 있어야 한다
+b64url_decode() {
+  local s="$1"
+  while [ $(( ${#s} % 4 )) -ne 0 ]; do s="${s}="; done
+  echo "$s" | tr '_-' '/+' | base64 -d 2>/dev/null
+}
+# 🔴 콜론 뒤 공백을 허용한다 — 발급기가 바뀌어 `"exp": 123` 으로 나오면 파싱이 조용히
+#    실패하고, 게이트가 «토큰이 짧다» 가 아니라 «못 읽었다» 로 엉뚱하게 막는다(로컬 검증에서 잡음).
+TOK_EXP=$(b64url_decode "$(head -1 "$TOKENS" | cut -d. -f2)"   | grep -oE '"exp"[[:space:]]*:[[:space:]]*[0-9]+' | grep -oE '[0-9]+')
+if [ -z "$TOK_EXP" ]; then
+  echo "🔴 토큰의 exp 를 못 읽었다 — 게이트를 통과시킬 수 없다(#689). base64/JWT 형식을 확인할 것"; exit 1
+fi
+TOK_REMAIN=$(( TOK_EXP - $(date +%s) ))
+TOK_NEED=$(( DURATION_SEC + TOKEN_MARGIN_SEC ))
+echo "  토큰 수명: 남은 ${TOK_REMAIN}s / 필요 ${TOK_NEED}s (= DURATION_SEC ${DURATION_SEC} + 여유 ${TOKEN_MARGIN_SEC})"
+if [ "$TOK_REMAIN" -lt "$TOK_NEED" ]; then
+  cat <<GATE
+🔴 토큰이 판 전체를 못 덮는다 — 중단한다 (#689)
+   남은 ${TOK_REMAIN}s < 필요 ${TOK_NEED}s
+   그대로 돌리면 약 ${TOK_REMAIN}s 뒤 워커 전부가 401 을 받고, 남은 구간은 부하가 없는데도
+   판정 채널이 「장애 0회」를 찍는다. 결과가 안 나오는 게 아니라 **틀린 결과가 나온다.**
+   처방: 대상 박스 .env 에 JWT_EXPIRATION_TIME 을 올리고 백엔드를 다시 띄운다
+         (하한 = 계정 준비 시간 + DURATION_SEC + TAIL_SEC · 라운드 매니페스트 §4-ㅁ).
+         네 팔 전부 같은 값을 써야 토큰 수명이 새 교락 변수가 되지 않는다.
+GATE
+  exit 1
+fi
+
 # 준비의 마지막 로그인과 워커 루프의 첫 요청이 같은 레이트리밋 창에 들지 않게 비운다.
 echo "  창 비우기 60초"
 sleep 60

@@ -38,14 +38,14 @@ public class OutboxEvent {
     private Long id;
 
     /**
-     * 애그리거트 종류 라벨(현재 {@code "SESSION"}). 조회·디버깅용이라 enum 으로 닫지 않는다
+     * 애그리거트 종류 라벨({@code "SESSION"} 또는 {@code "NOTIFICATION"}). 조회·디버깅용이라 enum 으로 닫지 않는다
      * ({@link OutboxEventType} 주석 참고).
      */
     @Column(nullable = false, length = 50)
     private String aggregateType;
 
     /**
-     * 애그리거트 식별자(현재 session_id). <b>FK 를 걸지 않는다</b> — 걸면 outbox 가 특정 애그리거트에
+     * 애그리거트 식별자(session_id 또는 notification_id). <b>FK 를 걸지 않는다</b> — 걸면 outbox 가 특정 애그리거트에
      * 종속돼 다른 이벤트 타입으로 확장할 수 없고, 세션 삭제 시 CASCADE 로 통보 이력까지 사라진다.
      */
     @Column(nullable = false)
@@ -128,5 +128,45 @@ public class OutboxEvent {
                 .build();
     }
 
+    /**
+     * 푸시 통보 한 건을 만든다 — 알림 INSERT 와 같은 트랜잭션 안에서 호출된다
+     * ({@code NotificationWriter}). {@code stopAnalysis} 와 같은 모양이고, 애그리거트만 알림이다.
+     */
+    public static OutboxEvent pushNotification(Long notificationId, String correlationId) {
+        return OutboxEvent.builder()
+                .aggregateType(AGGREGATE_TYPE_NOTIFICATION)
+                .aggregateId(notificationId)
+                .eventType(OutboxEventType.PUSH_NOTIFICATION)
+                .payload("{\"notificationId\":" + notificationId + "}")
+                .correlationId(correlationId)
+                .build();
+    }
+
+    /**
+     * 세션 완료 자동 글 통보 한 건을 만든다 — 완료 트랜잭션({@code SessionCompletionTx.applyComplete}) 안에서,
+     * 상태 전이가 실제로 일어난 경우에만 호출된다. 멱등 가드가 재전송을 앞에서 걸러 주므로 세션당 행은 1개다.
+     */
+    public static OutboxEvent sessionCompleted(Long sessionId, String correlationId) {
+        return OutboxEvent.builder()
+                .aggregateType(AGGREGATE_TYPE_SESSION)
+                .aggregateId(sessionId)
+                .eventType(OutboxEventType.SESSION_COMPLETED)
+                .payload("{\"sessionId\":" + sessionId + "}")
+                .correlationId(correlationId)
+                .build();
+    }
+
+    public static OutboxEvent generateWeeklyReport(Long weeklyReportId, String correlationId) {
+        return OutboxEvent.builder()
+                .aggregateType(AGGREGATE_TYPE_WEEKLY_REPORT)
+                .aggregateId(weeklyReportId)
+                .eventType(OutboxEventType.GENERATE_WEEKLY_REPORT)
+                .payload("{\"weeklyReportId\":" + weeklyReportId + "}")
+                .correlationId(correlationId)
+                .build();
+    }
+
     public static final String AGGREGATE_TYPE_SESSION = "SESSION";
+    public static final String AGGREGATE_TYPE_NOTIFICATION = "NOTIFICATION";
+    public static final String AGGREGATE_TYPE_WEEKLY_REPORT = "WEEKLY_REPORT";
 }

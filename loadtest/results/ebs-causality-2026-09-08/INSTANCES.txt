@@ -1,0 +1,33 @@
+EBS 처리량 인과 라운드 — 인스턴스 기록 (터미네이트 전까지 이 파일을 지우지 말 것)
+
+시작: 2026-09-08T13:28:51Z UTC
+리전: ap-northeast-2
+매니페스트: loadtest/aws/ROUND-2026-09-08-ebs-causality.md
+REF(측정 커밋): a81480467e993b6b63a4a1ec9147aecda1c57921
+  = origin/main(f560dd4c) + loadtest 스크립트만 추가 → 앱 코드는 main 과 동일
+
+| 이름        | 인스턴스              | 타입          | 사설 IP        | 공인 IP         | 볼륨                  | 볼륨 스펙        |
+|-------------|----------------------|---------------|----------------|-----------------|-----------------------|------------------|
+| armA-target | i-0a063b0452cb3052e  | c7i.2xlarge   | 172.31.42.113  | 3.34.177.251    | vol-0cf8928b0a7608a5e | gp3 3000/125     |
+| armA-loader | i-0383497fc1ef6dca9  | c7i.xlarge    | 172.31.42.40   | 15.164.212.27   | vol-05722163231227892 | gp3 기본         |
+| armB-target | i-037f0dd465abe3c80  | c7i.2xlarge   | 172.31.38.69   | 54.180.32.88    | vol-0ac2c3e8ef1e51389 | gp3 16000/1000   |
+| armB-loader | i-0d2b173bafc4a1c24  | c7i.xlarge    | 172.31.44.32   | 54.180.124.117  | vol-0a2ad8f1ceddb1095 | gp3 기본         |
+
+✅ 볼륨 스펙 실기 확인 (describe-volumes) — 팔 A 3000 IOPS/125 MiB/s · 팔 B 16000/1000.
+   두 팔이 **볼륨 처리량 하나만** 다르다.
+
+워치독: user-data 가 각 박스에서 sleep 14400 후 shutdown -h now.
+  종료 예정(최대): 약 2026-09-08T17:28:51Z UTC — 그전에 사람이 끄는 것이 정상 경로다.
+  --instance-initiated-shutdown-behavior terminate 로 띄웠으므로 shutdown = terminate.
+
+🔴 라운드가 끝나면 반드시:
+  aws ec2 terminate-instances --region ap-northeast-2 --instance-ids     i-0a063b0452cb3052e i-0383497fc1ef6dca9 i-037f0dd465abe3c80 i-0d2b173bafc4a1c24
+  그리고 describe-instances 로 State=terminated 를 눈으로 확인할 것.
+  볼륨은 DeleteOnTermination=true 로 붙였다 — 그래도 describe-volumes 로 확인한다.
+  🔴 팔 B 볼륨은 프로비저닝(16000/1000)이라 남으면 기본 gp3 보다 비싸다.
+
+=== 종료 확인 ===
+2026-09-08T17:13Z terminate-instances 실행 → 4대 전부 State=terminated 확인
+태그(Project=shadowfit-measure)로 남은 볼륨 0개 — 프로비저닝 볼륨(16000/1000) 포함 삭제 확인
+계정 전체 running/pending/stopping/stopped 인스턴스 0대 확인
+요금: (미기입) — Cost Explorer 사후 조회로 채울 것

@@ -30,7 +30,7 @@ docker compose up -d   # mysql + backend + ai-server 전부 기동
 
 ### Backend (`backend/`)
 ```bash
-./gradlew bootRun       # 실행
+./gradlew bootRun --args='--spring.profiles.active=dev'   # 로컬 실행 — dev 가 Swagger·SQL 로그를 켠다. 프로파일 없이 띄우면 «안전 기본»(둘 다 꺼짐)
 ./gradlew test          # 전체 테스트 — 기본 H2 인메모리. 실 MySQL 테스트(race 프로파일)는 Docker 있으면 Testcontainers 로 자동, 없으면 건너뜀
 ./gradlew test --tests "ExerciseSessionFlowIntegrationTest"   # 단일 테스트
 ./gradlew build         # 빌드 + 테스트

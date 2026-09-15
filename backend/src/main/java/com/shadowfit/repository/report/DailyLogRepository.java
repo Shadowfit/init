@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 public interface DailyLogRepository extends JpaRepository<DailyLog,Long> {
@@ -63,4 +64,36 @@ public interface DailyLogRepository extends JpaRepository<DailyLog,Long> {
            nativeQuery = true)
     void upsertMemoAndMood(@Param("memberId") Long memberId, @Param("logDate") LocalDate logDate,
                            @Param("memo") String memo, @Param("mood") String mood);
+
+    /**
+     * 세션 삭제 뒤 그날의 누적 분·칼로리를 <b>남은 COMPLETED 세션에서 다시 구해 덮어쓴다</b> (#718).
+     *
+     * <p>{@code upsertStats} 는 더하기만 하는 집계라 세션이 지워져도 값이 남았다. «지운 세션 몫을
+     * 뺀다» 가 아니라 «다시 센다» 인 이유: 분은 세션마다 {@code toMinutes()} 절삭이라 뺄셈으로는
+     * 정확히 안 되돌아가고, 재계산이면 그동안 쌓인 절삭 오차도 같이 정리된다.
+     *
+     * <p>분 식은 {@code SessionCompletionTx} 의 {@code Duration.toMinutes()} 와 같아야 한다 —
+     * MySQL {@code TIMESTAMPDIFF(MINUTE)} 는 정수 절삭이라 세션별로 같은 값이 나온다.
+     * 대상 세션은 {@code start_time} 의 날짜가 {@code logDate} 인 것 — 누적할 때 쓴 기준
+     * ({@code session.getStartTime().toLocalDate()})과 같다. 인덱스
+     * {@code idx_session_member_status_start (member_id, status, start_time)} 그대로 탄다.
+     *
+     * <p>UPDATE 한 문장인 이유: 서브쿼리가 커밋된 최신 행을 읽고, 같은 날 동시에 완료되는 세션의
+     * {@code upsertStats} 가 잡은 행 락 뒤에 줄을 서므로 «읽고-쓰기» 사이 틈이 없다. 자바에서
+     * 남은 세션을 세어 덮어쓰면 그 틈에 완료된 세션이 사라진다.
+     *
+     * @return 갱신된 행 수 — 그날 daily_logs 행이 없으면 0 (COMPLETED 였다면 있어야 한다)
+     */
+    @Modifying
+    @Query(value = "UPDATE daily_logs SET " +
+                   "total_exercise_time = (SELECT COALESCE(SUM(TIMESTAMPDIFF(MINUTE, s.start_time, s.end_time)), 0) " +
+                   "    FROM exercise_sessions s WHERE s.member_id = :memberId AND s.status = 'COMPLETED' " +
+                   "    AND s.start_time >= :dayStart AND s.start_time < :dayEnd), " +
+                   "total_calories = (SELECT COALESCE(SUM(s.calories_burned), 0) " +
+                   "    FROM exercise_sessions s WHERE s.member_id = :memberId AND s.status = 'COMPLETED' " +
+                   "    AND s.start_time >= :dayStart AND s.start_time < :dayEnd) " +
+                   "WHERE member_id = :memberId AND log_date = :logDate",
+           nativeQuery = true)
+    int recomputeStats(@Param("memberId") Long memberId, @Param("logDate") LocalDate logDate,
+                       @Param("dayStart") LocalDateTime dayStart, @Param("dayEnd") LocalDateTime dayEnd);
 }

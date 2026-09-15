@@ -357,12 +357,13 @@ shadowfit-mysql    Up XX seconds (healthy)   0.0.0.0:3306->3306/tcp
 cd "c:/최지호/상명대학교/4학년 1학기/캡스톤 디자인/shadowfit/backend"
 
 # 서버 실행 (최초 실행 시 라이브러리 다운로드로 1~2분 소요)
-./gradlew bootRun
+# dev 프로파일 = Swagger·SQL 로그 켬. 프로파일 없이 띄우면 안전 기본(둘 다 꺼짐).
+./gradlew bootRun --args='--spring.profiles.active=dev'
 ```
 
 > **Windows에서 `./gradlew`가 안 되면?**
 > ```bash
-> gradlew.bat bootRun
+> gradlew.bat bootRun --args='--spring.profiles.active=dev'
 > ```
 
 실행이 성공하면 터미널에 아래와 비슷한 메시지가 나옵니다:
@@ -650,7 +651,7 @@ docker compose --profile obs stop prometheus grafana    # 끄기 (관측만)
 chmod +x gradlew
 
 # 또는 Windows에서 직접 실행
-gradlew.bat bootRun
+gradlew.bat bootRun --args='--spring.profiles.active=dev'
 ```
 
 ### AI Server 관련

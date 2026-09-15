@@ -1,0 +1,4 @@
+phase	status	seconds	started_at
+calibration	FAIL(1)	0	2026-09-13T15:39:49+00:00
+framepath	OK	490	2026-09-13T15:39:50+00:00
+collect	OK	2	2026-09-13T15:48:01+00:00

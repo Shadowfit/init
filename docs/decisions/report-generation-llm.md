@@ -2,7 +2,7 @@
 
 작성일: 2026-08-22
 상태: **설계 · 미결정 ① 결정됨 (2026-08-22)** — **붙일 자리는 «주간» 으로 확정**(사용자 결정, §12).
-      나머지 실행·채택은 여전히 사용자 confirm 후 박제 ([[feedback_user_decides_not_claude]]) — **§12 미결정 5건.**
+      나머지 실행·채택은 여전히 사용자 confirm 후 박제 ([[feedback_user_decides_not_claude]]) — **§12 미결정 5건.** → **2026-09-15 구현 완료(`feat/weekly-report-llm`) — 모델 flash-lite, 결정 로그 참조.**
       🔴 ① 이 주간으로 닫히면서 **⑤(스키마 변경)가 «선택» 에서 «필수» 가 됐다**(§6).
 대상: `reports.summary` · `reports.improvement_tips` 가 **자리만 잡고 비어 있다.** 그 칸을 무엇으로,
 어디서, 어떤 실패 모드로 채울 것인가. **LLM 을 쓸지 말지가 아니라 «어디에 쓸지» 가 질문이다**
@@ -546,6 +546,11 @@ SELECT JSON_EXTRACT(r.detailed_analysis, '$.worstSection.repNumber') AS worst_re
 ⚠️ **`JSON_TABLE` 은 그 자체로 카드 후보다** — 「JSON 컬럼을 SQL 안에서 펼쳐 집계한다」는
 읽기축에 없던 모양이다. 단 **계획을 재보기 전에는 카드라고 부르지 않는다**(EXPLAIN 선행).
 
+> 🔵 2026-09-15 — 쟀다. [`weekly-json-table-query-tuning.md`](./weekly-json-table-query-tuning.md) §7.
+> 비용은 `JSON_TABLE` 파싱이 아니라 **조인 순서**였다(옵티마이저가 `session_reports` 를 먼저 읽어
+> 회원의 전 기간 리포트를 페치). Q2·Q3 의 WHERE 에 `s.status = 'COMPLETED'` 를 보태
+> `(member_id, status, start_time)` 을 완전 범위로 타게 했다 — 위 SQL 원안은 그대로 두고 구현만 바뀌었다.
+
 ### 13-3. 🔴 문장 규칙 — 임계값을 못 쓴다
 
 규칙은 `조건 → 문장` 쌍이고 우선순위로 정렬해 상위 N개만 낸다. 그런데 여기서 이 프로젝트의
@@ -585,7 +590,90 @@ LLM · 저장 · 스키마 변경 · 조언 · 국면 축. **1단계는 읽기 �
 
 ---
 
+## 14. 착수 계획 (2026-09-14) — 남은 분기 넷, 결정 후 구현
+
+> 배경: 추석(9/25) 전 백엔드가 혼자 밀 수 있는 항목이 이것뿐이라 착수하기로 함(사용자, 09-14). ①③⑥은 결정됐고, ②는 코드가 정했다. 여기서는 **08-27 이후 코드가 바뀌어 전제가 달라진 것**을 먼저 적고, 그 위에서 아직 안 정한 것만 묻는다.
+
+### 14-0. 08-27 이후 달라진 전제 — 문서가 코드보다 뒤처진 곳 셋
+
+| | 그때 | 지금 | 영향 |
+|---|---|---|---|
+| 리포트 표 | `reports` + `report_type ENUM('SESSION','WEEKLY','MONTHLY')` | **V16(09-12)** 이 `session_reports` 로 이름을 바꾸고 `report_type` 을 지웠다 — «이 표는 세션 전용» 을 이름으로 못박음 | §6-1 초안(`session_id` nullable + `report_type` 유니크)은 **폐기**. 주간 행을 `session_reports` 에 넣는 건 V16 의 결정을 되돌리는 일 |
+| 아웃박스 타입 | STOP_ANALYSIS·REATTACH 둘 | **#9·#10** 이 `PUSH_NOTIFICATION`·`SESSION_COMPLETED` 를 **단일 발행기 switch** 에 추가했다 — 별도 발행기 없이 | ⑥ 안 A(별도 발행기)는 그대로 유효 — 그 둘은 호출당 ms 단위라 리스 60초를 위협하지 않지만 LLM 은 5~15초 × batch 20 이라 §5-1 의 문제가 그대로. 다만 «네 번째 타입은 왜 다르게 가나» 를 코드 주석에 남겨야 함 |
+| 외부 HTTP 선례 | 없음 | `ExpoPushClient`(#9) — `RestClient` + 응답 분류(RETRY/TERMINAL) + 타임아웃 설정 주석 | Gemini 클라이언트는 **같은 꼴**로 만든다. SDK 의존성 없이 REST(`generateContent`) — 인터페이스 뒤에 두라는 §7 그대로 |
+
+그리고 `weekly-monthly-stat-preaggregation.md`(PR #735) 가 «주간 통계는 저장 안 함» 이라 못박은 것과 **충돌하지 않는다** — 그 문서는 «같은 입력 → 같은 숫자» 인 집계를 두고 한 말이고, LLM 문장은 같은 입력에도 출력이 다르고 호출이 비싸서 **저장해야 하는 쪽**이다. 저장하는 건 통계가 아니라 «생성된 문장 + 그때 인용한 숫자의 스냅샷» 이다.
+
+### 14-1. 분기 A — 어디에 저장하나
+
+| 후보 | 내용 | 대가 |
+|---|---|---|
+| **a. 새 표 `weekly_reports`** | `(member_id, period_start)` 유니크, `summary`·`cited_metrics JSON`·`summary_source`·`generation_model`·`prompt_version`·`generated_at`. `session_reports` 는 안 건드림 | 표 하나 추가(additive, 무중단 DDL 불필요). 두 표의 «리포트» 가 갈라져 보이지만 V16 이 이미 그 방향 |
+| b. `session_reports` 확장 | §6-1 초안 부활 — `session_id` nullable + 기간 컬럼 | V16 되돌리기 + NOT NULL→NULL 전환의 INPLACE 여부 실측 필요. **V16 결정과 정면충돌** |
+
+**추천 a.** ✅ **결정 — a (2026-09-14, 사용자).** V16 이 «세션 전용» 을 결정한 뒤라 b 는 결정을 두 번 뒤집는 것이고, a 는 DDL 대가가 0 이다.
+
+### 14-2. 분기 B — 어느 주를, 언제 만드나
+
+`GET /reports/weekly-summary` 는 지금 **진행 중인 이번 주**만 낸다(컨트롤러가 `null` → `LocalDate.now()`). LLM 문장을 진행 중인 주에 붙이면 세션이 하나 끝날 때마다 낡는다.
+
+| 후보 | 내용 | 대가 |
+|---|---|---|
+| **a. 완료된 주만, 1회 생성, 불변** | 대상 = 지난주(월~일 끝난 주). 이번 주는 템플릿 문장 그대로. 엔드포인트에 `week=` 파라미터 추가(없으면 이번 주) | 화면에 «지난주 AI 총평» 자리가 하나 생김 — 프론트 변경 있음. 회원×주당 호출 1회 상한이 구조로 보장됨 |
+| b. 이번 주도 생성, 세션 완료마다 재생성 | 즉시성 있음 | 호출 수 = 세션 수(주당 1이 아님), 무료 티어 한도 소진 방향, 같은 주에 문장이 계속 바뀜 |
+
+트리거는 두 가지가 가능하고 **a 를 골라도 따로 정해야** 한다:
+
+| 트리거 | 내용 | 대가 |
+|---|---|---|
+| **a-1. 조회 시 발행(lazy)** | 지난주 리포트를 처음 조회할 때 아웃박스 `GENERATE_WEEKLY_REPORT` 를 멱등 발행(`weekly_reports` 행을 `PENDING` 으로 먼저 INSERT, 유니크 충돌이면 발행 안 함). 응답은 즉시 템플릿, 다음 조회부터 LLM 문장 | 안 본 회원의 주는 호출 0. 스케줄러 없음. 첫 조회는 항상 템플릿 |
+| a-2. 주 경계 스케줄러 | 월요일 새벽에 지난주 활동 회원 전원 발행 | 안 보는 리포트에도 호출. 스케줄러 + 「지난주 활동 회원」 쿼리 추가. 첫 조회부터 LLM 문장 |
+
+**추천 a + a-1.** ✅ **결정 — a + a-1 (2026-09-14, 사용자).** §9 «LLM 은 필수 경로에 없다» 가 곧 a-1 의 모양이고, 사용자 테스트 규모(5~10명)에서 a-2 의 «첫 조회부터 완성» 이점은 작다.
+
+### 14-3. 분기 C — 출력 범위 (④ 조언의 재확인)
+
+§3 이 정한 LLM 몫은 ㄱ(무엇이 달라졌나)·ㄴ(반복 패턴)·ㄷ(다음 주 초점 — 규칙 카탈로그에서 고른 것 문장화). ④ 의 선행 [#217](https://github.com/Shadowfit/init/issues/217)·[#256](https://github.com/Shadowfit/init/issues/256) 은 **아직 둘 다 OPEN** 이라 §11 추천(미룬다)이 그대로다.
+
+| 후보 | 내용 |
+|---|---|
+| **a. ㄱ·ㄴ만** | `summary` 한 칸. `improvement_tips` 는 비워둠. 규칙 카탈로그(ㄷ의 선행)가 없으니 ㄷ 도 이번엔 없음 |
+| b. ㄱ·ㄴ·ㄷ | ㄷ 을 위해 «다음 주 초점 카탈로그»(규칙 + 문구)를 먼저 만들어야 함 — 이건 LLM 이 아니라 규칙 설계 |
+
+**추천 a.** ✅ **결정 — a (2026-09-14, 사용자).** ④ 가 열려 있는 동안 조언은 안 만든다는 §11 결정 상태와 일치.
+
+### 14-4. 분기 D — 발행기 튜닝 숫자를 어떻게 얻나
+
+⑥ 이 «숫자는 ③ 확정 후 실측» 으로 남겨둔 것. ③ 은 Gemini 로 닫혔으니 남은 건 실측 절차다.
+
+- **1단계(구현 전)**: Gemini `generateContent` 를 실제 주간 집계 페이로드로 **N회 호출해 응답시간 분포**를 잰다(스크립트, 저장소에 결과 박제). 이 분포가 `lock-timeout`(= batch × p-max 여유)·`timeout-seconds` 의 근거.
+- **2단계**: `max-retry`·`max-backoff` 는 «무료 티어 분당/일일 한도» 를 읽고 그 안에서 — 한도값 자체를 문서에 인용(출처 날짜 포함).
+- 재려는 N 과 «여유 배수» 는 여기서 안 정한다 — 실측 문서에서 정하고 근거를 같이 적는다([[feedback_no_arbitrary_threshold_values]]).
+
+이건 분기가 아니라 절차라 confirm 대상은 «이 순서로 간다» 하나다.
+
+### 14-5. 이미 정해진 것 — 다시 묻지 않는다
+
+- 프로바이더 Gemini 무료 티어(③). 보내는 데이터는 **집계 숫자만**(A층·B층 출력) — 원본 pose·개인 식별자 없음. ③ 이 감수한 «입력이 학습에 쓰일 수 있음» 리스크의 면적이 이만큼으로 줄어든다는 건 여기 적어둔다
+- 별도 발행기(⑥ 안 A) — 공통 골격 추상화 → `idx_outbox_report_dispatch(event_type, status, next_retry_at)` 추가 → `outbox.weekly-report.*` 프리픽스
+- 출력 계약: JSON `{summary, cited_metrics}` 로 강제(Gemini `responseSchema`), 워커가 `cited_metrics` 의 숫자를 입력 집계와 대조 → 불일치·파싱 실패·한도 초과는 **TERMINAL → `summary_source=TEMPLATE_FALLBACK`** 으로 행을 채운다(§9 합격 조건)
+- 한국어만([[project_korean_only]]), 의학적 조언 금지(§3)
+
+### 14-6. 실행 순서 (A·B·C 결정 후) — ✅ 2026-09-15 전부 완료
+
+1. Gemini 응답시간 실측 스크립트 + 결과 박제 (14-4 1단계) — 다른 것과 독립, 먼저
+2. `V19__weekly_reports.sql` + 엔티티/레포지토리 (A)
+3. 아웃박스 공통 골격 추상화 + `ReportOutboxPublisher` + 인덱스 마이그레이션 (⑥)
+4. `GeminiClient`(RestClient, `ExpoPushClient` 꼴) + 프롬프트 v1 + 출력 검증 + 폴백
+5. `weekly-summary?week=` + lazy 발행 + 응답에 `aiSummary`·`aiSummarySource` (B)
+6. 테스트: 단위(검증·폴백) · 통합(발행→생성→조회, Gemini mock) · 저니 한 줄 추가
+7. 07-api-design·이 문서 결정 로그 갱신
+
 ## 결정 로그
+
+- **2026-09-15: 구현 완료 — 브랜치 `feat/weekly-report-llm`.** 모델 기본값 **gemini-3.5-flash-lite**(사용자, 실측 근거 §14-4) · 발행기 공통 골격은 **추상 클래스**(`AbstractOutboxPublisher`, 사용자 — 기존 발행기가 `@Scheduled`·`@Value` 를 필드로 들고 있어 상속이 변경 면적 최소). 구현 중 국지 선택 셋(되돌리기 쉬움): ① 엔드포인트는 `weekly-summary?week=` 가 아니라 **새 경로 `GET /reports/weekly-report?week=`** — 기존 응답의 절반(`todayDetails`)이 오늘에 묶여 있어 `week` 를 받으면 의미가 깨진다. ② `weekly_reports.fallback_reason` 컬럼 추가 — §10 폴백 비율을 원인별로 가르려면 필요. ③ 차선 숫자는 제약에서 유도(HTTP 몫 = lease 의 절반: batch 3 × timeout 10s = 30s, 나머지 30s 는 집계·저장), max-retry 12·backoff ≤3600s 는 «한 시간 넘게 못 부르면 포기» 라는 약속(threshold) — 근거는 application.yml 주석. 검증은 «인용 목록 + 본문 숫자» 둘 다 입력 집계와 대조(템플릿 문장 속 계산값·기간 날짜 포함). 테스트 854건 통과(race 프로파일 포함 — V21↔엔티티 정합을 실 MySQL 로 확인). 남은 것: 프론트(«지난주 AI 총평» 자리), 실사용에서 폴백 비율·지연 관측(§10 지표 4개 추가됨).
+- **2026-09-14: §14 분기 A·B·C 결정 (사용자) — 추천 그대로.** A-a(새 표 `weekly_reports`, `session_reports` 불변) · B-a+a-1(완료된 주만 1회 생성·불변, 조회 시 lazy 멱등 발행 — 첫 조회는 템플릿) · C-a(ㄱ·ㄴ 요약만, `improvement_tips` 비움, ㄷ 은 #217·#256 뒤). D 는 절차대로 — Gemini 응답시간 실측이 첫 작업. 이로써 §12 ①③⑥ + §14 A·B·C 가 닫혔고, 남은 미결은 ④(조언, 선행 이슈 대기)·⑤(스키마 — A-a 로 «새 표» 로 형태가 정해짐, 적용은 실행 2단계)뿐.
+- **2026-09-14: 착수 결정(사용자) + §14 착수 계획 작성 — 분기 A·B·C 미결, 결정 대기.** 추석 전 백엔드 단독 항목이 이것뿐이라 착수. 코드 확인에서 08-27 이후 전제가 셋 달라졌다(§14-0): V16 이 `reports`→`session_reports` 로 바꾸며 `report_type` 을 지워 §6-1 초안이 폐기됐고, #9·#10 이 아웃박스 타입 둘을 단일 발행기에 넣었으며(⑥ 안 A 는 LLM 지연 때문에 그대로 유효), `ExpoPushClient` 가 외부 HTTP 선례가 됐다. ④(조언)의 선행 #217·#256 은 여전히 OPEN. 추천: A-a(새 표 `weekly_reports`) · B-a+a-1(완료된 주만, 조회 시 lazy 발행) · C-a(ㄱ·ㄴ만). 튜닝 숫자는 Gemini 응답시간 실측(§14-4) 뒤에.
 
 - **2026-08-22: 설계 초안.** 착수 전 코드 확인에서 **질문 자체가 바뀌었다** — `precomputeReport`
   가 이미 있고 비어 있는 것은 `summary`·`improvement_tips` **두 칸**이다(`production-signal-checklist.md`
