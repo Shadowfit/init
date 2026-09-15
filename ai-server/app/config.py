@@ -1,3 +1,4 @@
+from pydantic import Field
 from pydantic_settings import BaseSettings
 
 
@@ -39,7 +40,9 @@ class Settings(BaseSettings):
     # 자릿수로 크다. 그보다 많은 스레드가 «필요» 해지는 건 Spring 이 느릴 때뿐인데, 그때 늘리는
     # 것이 정확히 위 실패 경로다. 넘치는 콜백은 큐에서 기다린다(큐 깊이는 게이지로 노출).
     # ⚠️ 실측으로 고른 수는 아니다 — GRPC_MAX_WORKERS 가 바뀌면 같이 따라간다.
-    COMPLETE_CALLBACK_WORKERS: int = 0
+    # 음수는 기동 시 거부한다 — 안 그러면 첫 StopAnalysis 가 세션을 이미 지운 뒤 CallbackPool(-1) 에서
+    # ValueError 로 죽어 콜백이 제출되지 않는다(CodeRabbit, PR #757).
+    COMPLETE_CALLBACK_WORKERS: int = Field(default=0, ge=0)
 
     def complete_callback_workers(self) -> int:
         return self.COMPLETE_CALLBACK_WORKERS or self.GRPC_MAX_WORKERS
