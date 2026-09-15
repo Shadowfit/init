@@ -86,6 +86,8 @@ class WeeklySummaryMonthlyCostRaceTest extends MySqlContainerSupport {
         exercise = exercisesRepository.findById(1L)
                 .orElseThrow(() -> new IllegalStateException("V2 시드(스쿼트, id=1)가 없다 — 마이그레이션 확인"));
 
+        // day=0 은 start_time == NOW 라 반열린 범위(< NOW)에서 빠진다 — 30일 창이 실제로 보는 세션은 29건이고,
+        // §7 의 「29행」이 그 값이다. 실측을 이미 이 조건으로 했으므로 시딩은 그대로 둔다.
         for (int day = 0; day < HEAVY_USER_DAYS; day++) {
             LocalDateTime startTime = NOW.minusDays(day).withHour(9).withMinute(0).withSecond(0).withNano(0);
             seedWithReport(startTime);
