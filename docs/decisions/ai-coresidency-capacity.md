@@ -45,6 +45,7 @@
 
 🟢 **2026-08-23: 그 조건을 뗀 값이 결국 이 문서의 라운드에서 나왔다.** 동거 실측 천장은
 **89~105세션**이고, 가정 피크 67 대비 여유는 **2.3배가 아니라 1.33~1.57배**다 — 계산은 [§3-ㄹ-1](./ai-receive-path-scaling.md) · 인용처 정정은 [#385](https://github.com/Shadowfit/init/issues/385).
+⚠️ **보정값 없음**(08-26 이전 라운드) — 라운드 간 **±10% 폭** 안에서만 읽을 것, [인용 규칙 ㉠ §8](./round-to-round-nonreproducibility.md#8--채택--인용-규칙--2026-09-14-사용자-결정) — 156 · 89~105 둘 다 그렇다(같은 인스턴스 stop→start 만으로 +21.0%, 축 B 2026-09-14).
 
 실제 배포는 그렇지 않다. `docker-compose.prod.yml` 은 **MySQL·Spring·AI 를 한 호스트**에
 올린다(관측 스택은 profile 로 분리). 그러면 156 은 내려간다. **얼마나 내려가는지는 안 쟀다.**
@@ -535,7 +536,8 @@ H1 은 *「동거하면 내려간다」* 이므로, 내려간 천장이 **40~80 
 | 2 | ~~🔴 **`TARGET_SSH` 에서 `-n` 을 뺀다**~~ → ✅ **완료** (빼고 돌렸고 프로브가 8판 전부 걷혔다) | ~~붙이면 프로브 자산이 0바이트로 간다(rig 이 크기 대조로 잡아 프로브를 끈다)~~ |
 | 3 | ~~🔴 **S3 를 풀 것**~~ → ✅ **풀렸다 (2026-08-17). 관리자도 IAM 수정도 필요 없었다** — 기동 명령에 **`--iam-instance-profile Name=shadowfit-measure`** 한 줄이면 된다. 실증: `t3.micro` 로 EC2→버킷 쓰기 성공(`put_ok.txt`). **`PHASES` 에 `coresidency_preflight`·`collect` 를 다시 넣는다** | 🔴 **1·2차의 「못 붙인다」가 오진이었다.** `iam:GetInstanceProfile` **거절 하나**를 보고 결론냈는데, **조회 권한과 사용 권한은 다른 것**이다. 판별법: `run-instances --dry-run` 을 **진짜 이름과 가짜 이름으로 대조**한다 — 진짜는 `DryRunOperation`(성공했을 요청), 가짜는 `InvalidParameterValue: Invalid IAM Instance Profile name`. 가짜가 거절되므로 AWS 가 존재를 **실제로 검증**한다는 뜻이고, 따라서 진짜 쪽 성공은 신뢰할 수 있다 |
 | 4 | ~~부하기는 **`c7i.xlarge` 이상**으로 띄운다~~ → ✅ **완료** (2차도 `c7i.xlarge`, `ncpu=4`) | ~~2 vCPU 면 §T 가 성립하지 않는다(제한 = 전체)~~ |
-| 5 | ✅ **완료** — CRLF 는 `sed` 가 답이 아니었다: repo 블롭은 LF 이고 바꾸는 건 작업 트리의 `core.autocrlf=true` 다. `git show HEAD:<path>` 로 뽑으면 애초에 안 생긴다. ~~대상 박스 **root SSH 열기** · scp 후 **CRLF 제거** | AL2023 은 root 로그인 차단이 기본 · Windows 작업 트리는 CRLF 라 `$''` 로 죽는다 |
+| 5 | ✅ **완료** — CRLF 는 `sed` 가 답이 아니었다: repo 블롭은 LF 이고 바꾸는 건 작업 트리의 `core.autocrlf=true` 다. `git show HEAD:<path>` 로 뽑으면 애초에 안 생긴다. ~~대상 박스 **root SSH 열기** · scp 후 **CRLF 제거** | AL2023 은 root 로그인 차단이 기본 · Windows 작업 트리는 CRLF 라 `$'
+'` 로 죽는다 |
 
 **2차 리허설 명령** (부하기에서, `-n` 없이) — 아래는 **2차에서 실제로 태운 형태로 고쳐 둔 것**이다([#260](https://github.com/Shadowfit/init/issues/260) · [#261](https://github.com/Shadowfit/init/issues/261)). 물렸던 자리 둘을 남겨 둔다. ⑴ `CORES_ARMS` 에 **`B` 가 없으면 §T 가 안 돈다** — `TASKSET_ARM=B` 가 `ARMS` 에 없으면 실패가 아니라 `note` 경고 한 줄로 조용히 건너뛴다(#260). ⑵ `GHZ_TOKEN` 이 받는 것은 **`INTERNAL_API_TOKEN`** 이고, `AI_PUBLIC_TOKEN` 과 **같은 값을 넣으면 AI 가 아예 안 뜬다**(#230 단언 · #261).
 
@@ -624,7 +626,7 @@ cd /root/init && sudo env   S3_BASE=s3://shadowfit-measure-055447613012/shadowfi
 처리량 차가 **0.3~0.4%** 이고(120세션 345.4~346.1 ↔ 346.2~347.0), 지연도 같다(160세션 p50
 456.8 ↔ 457.1). 부하기 자신의 CPU 는 2코어 팔에서 평균 **47.0%**(상한 200%) — 포화 근처도
 아니다. → **346 RPS 는 대상 박스(서버)의 천장이고, 08-16 의 「부하기가 천장」 판정은 뒤집혔다**
-([08-17 결과 §2-3](../../loadtest/results/coresidency-aws-2026-08-17/README.md)).
+([08-17 결과 §2-3](../../loadtest/results/coresidency-aws-2026-08-17/README.md)). 346 이라는 절대값 자체는 ⚠️ **보정값 없음**(08-26 이전 라운드) — 라운드 간 **±10% 폭** 안에서만 읽을 것, [인용 규칙 ㉠ §8](./round-to-round-nonreproducibility.md#8--채택--인용-규칙--2026-09-14-사용자-결정).
 
 🔴 **남은 몫은 하나다 — §T 와 08-16 스케일업의 폭이 안 맞는다.** 같은 「부하기를 흔든다」인데
 §T(`taskset` 으로 코어만 조임)는 **0.3~0.4%**, 08-16(박스 자체를 `c7i.large`→`xlarge`)은

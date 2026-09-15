@@ -1,0 +1,96 @@
+
+════════ 무인 측정 — boot4 ════════
+  결과   : /root/axisB/boot4/run
+  S3     : s3://shadowfit-measure-055447613012/shadowfit/nonrepro-axisB-2026-09-14/boot4
+  단계   : calibration framepath collect
+  자동정지: 꺼짐
+  S3 주기 동기화 시작 — 300초마다 → s3://shadowfit-measure-055447613012/shadowfit/nonrepro-axisB-2026-09-14/boot4
+
+════════ calibration ════════
+# 박스 보정값 — 2026-09-13T15:49:55+00:00
+인스턴스 타입 : c7i.4xlarge
+인스턴스 ID   : i-04962c061c3bd30c1
+AZ            : ap-northeast-2c
+Exception in thread Thread-1 (run):
+Traceback (most recent call last):
+  File "/usr/lib64/python3.12/threading.py", line 1075, in _bootstrap_inner
+    self.run()
+  File "/usr/lib64/python3.12/threading.py", line 1012, in run
+    self._target(*self._args, **self._kwargs)
+  File "/root/init/loadtest/results/ai-path-profile-2026-08-17/profile_e2e_and_scaling.py", line 123, in run
+    dt = _worker_loop(frames, PER, bar)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/init/loadtest/results/ai-path-profile-2026-08-17/profile_e2e_and_scaling.py", line 52, in _worker_loop
+    from app.core.mediapipe_detector import PoseDetector
+ModuleNotFoundError: No module named 'app'
+
+③ 확장성 — 워커당 100프레임 추론(모델 로드·워밍업 제외), 물리 8코어 / 16 vCPU
+  워커     스레드 fps      배수      프로세스 fps      배수       프로세스/스레드
+--------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/root/init/loadtest/results/ai-path-profile-2026-08-17/profile_e2e_and_scaling.py", line 151, in <module>
+    scaling()
+  File "/root/init/loadtest/results/ai-path-profile-2026-08-17/profile_e2e_and_scaling.py", line 129, in scaling
+    fps_t = nw * PER / max(res)
+                       ^^^^^^^^
+ValueError: max() iterable argument is empty
+  🔴 보정 측정 실패(rc=1) — 위 원문 확인
+  → calibration : FAIL(1) (0초)
+  ⚠️ 보정값 없이 진행한다 — 이 라운드는 다른 라운드와 절대값 비교가 안 될 수 있다
+
+════════ framepath ════════
+  ✅ python 3.12.14
+  격자 5판 · 버림 1 · 세션 160 · 90초 · 풀 201
+  ✅ frames.json 418135 B
+  ✅ /proc — AI·부하기 CPU 를 걷는다
+  rig 이 서버를 팔마다 직접 띄우고 내린다 (재기동이 곧 팔 전환이다)
+  🔴 부하기가 같은 박스에 산다 — 절대 처리량 인용 금지. 이 판이 답하는 것은 팔 사이의 상대 델타다
+인터프리터: /root/init/ai-server/.venv/bin/python
+풀 201개 × 98.7MB(실측) ≈ 19.4GB · 세션 160 · 3.0fps · 판당 90초 · 판 5개
+[1/5] 팔 B r1 (버림) — 기동 중...
+  {"processed_fps": 298.66, "rps": 298.66, "p50_ms": 491.9, "p95_ms": 845.7, "requests": 25411, "error": null}
+[2/5] 팔 B r2 — 기동 중...
+  {"processed_fps": 298.15, "rps": 298.15, "p50_ms": 491.4, "p95_ms": 850.5, "requests": 25369, "error": null}
+[3/5] 팔 B r3 — 기동 중...
+  {"processed_fps": 297.42, "rps": 297.42, "p50_ms": 492.6, "p95_ms": 856.7, "requests": 25312, "error": null}
+[4/5] 팔 B r4 — 기동 중...
+  {"processed_fps": 298.96, "rps": 298.96, "p50_ms": 490.5, "p95_ms": 841.7, "requests": 25452, "error": null}
+[5/5] 팔 B r5 — 기동 중...
+  {"processed_fps": 299.91, "rps": 299.91, "p50_ms": 491.1, "p95_ms": 852.7, "requests": 25524, "error": null}
+
+결과: /root/axisB/boot4/run/framepath/arms_boot4.json
+  본판 4 · 계측 ON 4
+  → framepath : OK (491초)
+
+════════ collect ════════
+# 측정 조건 — boot4
+생성          : 2026-09-13T15:58:08+00:00
+커밋          : 838d816dbc9560a3c3088a7d32da8c12659bc9b7 (HEAD)
+인스턴스 타입 : c7i.4xlarge
+인스턴스 ID   : i-04962c061c3bd30c1
+AZ / 리전     : ap-northeast-2c / ap-northeast-2
+vCPU / RAM    : 16 / 31GB
+커널          : 6.1.182-227.379.amzn2023.x86_64
+디스크        : 30G 여유 26G
+MySQL         : 해당 없음 — 이 박스에 shadowfit-mysql 가 없다(러너가 측정 대상이 아닌 라운드)
+WRITER_MAX_SEC: 14400
+S3 결과       : s3://shadowfit-measure-055447613012/shadowfit/nonrepro-axisB-2026-09-14/boot4
+
+# 단계
+phase	status	seconds	started_at
+calibration	FAIL(1)	0	2026-09-13T15:49:55+00:00
+framepath	OK	491	2026-09-13T15:49:56+00:00
+
+⚠️ 절대 소요 시간을 «운영에서 N분» 으로 인용 금지 — 하드웨어 종속(설계 §5)
+⚠️ rehearsal/ 의 수치는 측정값이 아니다 — 경로 점검용 축소 판
+  → collect : OK (2초)
+
+════════ 최종 업로드 ════════
+  ✅ s3://shadowfit-measure-055447613012/shadowfit/nonrepro-axisB-2026-09-14/boot4
+
+════════ 단계 요약 ════════
+phase	status	seconds	started_at
+calibration	FAIL(1)	0	2026-09-13T15:49:55+00:00
+framepath	OK	491	2026-09-13T15:49:56+00:00
+collect	OK	2	2026-09-13T15:58:08+00:00
+  자동 정지 꺼짐 — 회수 확인 후 직접 정지할 것. AWS-RIDE-ALONG.md §5 체크리스트를 볼 것
