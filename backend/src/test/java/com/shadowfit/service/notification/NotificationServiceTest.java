@@ -39,6 +39,7 @@ class NotificationServiceTest {
     @Mock private NotificationWriter notificationWriter;
     @Mock private MemberRepository memberRepository;
     @Mock private GroupMemberRepository groupMemberRepository;
+    @Mock private NotificationRelay notificationRelay;
 
     private NotificationService service;
     private Member me, friend;
@@ -46,7 +47,8 @@ class NotificationServiceTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        service = new NotificationService(notificationRepository, notificationWriter, memberRepository, groupMemberRepository);
+        service = new NotificationService(notificationRepository, notificationWriter, memberRepository,
+                groupMemberRepository, notificationRelay);
         me = member(1L, "me");
         friend = member(2L, "friend");
         when(memberRepository.findById(1L)).thenReturn(Optional.of(me));
@@ -69,6 +71,8 @@ class NotificationServiceTest {
         assertThat(dto.getSenderId()).isEqualTo(1L);
         assertThat(dto.getSenderUsername()).isEqualTo("me");
         assertThat(dto.isRead()).isFalse();
+        // 저장 뒤에만, 수신자에게만 밀어준다 (#7)
+        verify(notificationRelay).relay(eq(2L), any(NotificationDto.class));
     }
 
     @Test
@@ -114,6 +118,8 @@ class NotificationServiceTest {
                 .thenThrow(new DataIntegrityViolationException("uk_notifications_sender_recipient_type_date"));
 
         assertCode(() -> service.nudge(1L, 2L, TODAY), ErrorCode.NUDGE_ALREADY_SENT_TODAY);
+        // 저장이 안 됐으면 밀어줄 것도 없다
+        verify(notificationRelay, never()).relay(any(), any());
     }
 
     @Test

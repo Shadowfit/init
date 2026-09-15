@@ -40,8 +40,20 @@ import java.util.List;
  *
  * <p><b>B층</b>({@link #repCurveBetween}, {@link #worstRepDistributionBetween}) —
  * {@code reports.detailed_analysis}(JSON) 를 {@code JSON_TABLE} 로 펼친다. QueryDSL 은
- * {@code JSON_TABLE} 을 표현하지 못해 네이티브 쿼리로 내린다. {@code reports} 는 세션 완료 시점에만
- * 만들어지므로({@code SessionService.precomputeReport}) 세션 상태를 따로 거르지 않는다.
+ * {@code JSON_TABLE} 을 표현하지 못해 네이티브 쿼리로 내린다.
+ *
+ * <p>🔴 <b>B층도 {@code s.status = 'COMPLETED'} 를 건다 — 결과 때문이 아니라 인덱스 때문이다.</b>
+ * {@code session_reports} 는 세션 완료 시점에만 만들어지므로({@code SessionCompletionTx}) 이 술어는
+ * 결과를 바꾸지 않는 중복이다. 예전엔 그래서 안 걸었는데, 실측(2026-09-15,
+ * {@code docs/decisions/weekly-json-table-query-tuning.md} §7)에서 그 중복이 정확히 비용이었다:
+ * 술어 없이는 옵티마이저가 {@code session_reports(member_id)} 를 먼저 읽어 회원의 <b>전 기간</b>
+ * 리포트를 전부 페치한 뒤 주간 밖 행을 버린다(읽는 행 = 누적 리포트 수 F, Handler 차이가 정확히
+ * F−W). {@code exercise_sessions} 의 회원 인덱스는 {@code (member_id, status, start_time)} 으로
+ * 통합돼 있어({@code session-index-composition.md} ㄴ안) status 등치가 빠지면 {@code start_time}
+ * 범위를 타지 못한다. 술어를 넣으면 세 컬럼이 전부 걸려 주간 W 행만 읽고, 비용이 F 와 무관해진다
+ * (F=365 셀에서 12분의 1). 회원 조건도 같은 이유로 {@code r} 이 아니라 {@code s} 에 건다.
+ * {@code JSON_TABLE} 파싱은 R=100 급에서만 보이는 부차 비용이었다 — 인덱스도 힌트도 스키마 변경도
+ * 없이 술어 하나로 끝나는 자리라 그 이상은 하지 않는다.
  */
 @Repository
 @RequiredArgsConstructor
@@ -135,7 +147,8 @@ public class WeeklySummaryQueryRepositoryImpl implements WeeklySummaryQueryRepos
                  CROSS JOIN JSON_TABLE(r.detailed_analysis, '$.repTrend[*]'
                         COLUMNS (rep_number INT PATH '$.repNumber',
                                  sync_rate DOUBLE PATH '$.syncRate')) jt
-                 WHERE r.member_id = :memberId
+                 WHERE s.member_id = :memberId
+                   AND s.status = 'COMPLETED'
                    AND s.start_time >= :from AND s.start_time < :to
                  GROUP BY jt.rep_number
                  ORDER BY jt.rep_number
@@ -163,7 +176,8 @@ public class WeeklySummaryQueryRepositoryImpl implements WeeklySummaryQueryRepos
                   JOIN exercise_sessions s ON s.id = r.session_id
                  CROSS JOIN JSON_TABLE(r.detailed_analysis, '$'
                         COLUMNS (worst_rep INT PATH '$.worstSection.repNumber')) jt
-                 WHERE r.member_id = :memberId
+                 WHERE s.member_id = :memberId
+                   AND s.status = 'COMPLETED'
                    AND s.start_time >= :from AND s.start_time < :to
                    AND jt.worst_rep IS NOT NULL
                  GROUP BY jt.worst_rep

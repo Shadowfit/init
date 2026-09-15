@@ -3,6 +3,7 @@ package com.shadowfit.integration;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shadowfit.dto.group.CreateGroupRequestDto;
 import com.shadowfit.dto.group.JoinGroupRequestDto;
+import com.shadowfit.dto.group.TransferOwnershipRequestDto;
 import com.shadowfit.dto.login.CustomUserInfoDto;
 import com.shadowfit.global.error.ErrorCode;
 import com.shadowfit.global.security.jwt.JwtUtil;
@@ -33,6 +34,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -144,16 +146,100 @@ class GroupControllerIntegrationTest {
     }
 
     @Test
-    @DisplayName("그룹 탈퇴 — 200, 이후 상세 조회는 403")
+    @DisplayName("그룹 탈퇴 — MEMBER 는 200, 이후 상세 조회는 403")
     void leaveGroup_thenDetailForbidden() throws Exception {
+        Group group = createGroupWithOwner();
+        groupMemberRepository.saveAndFlush(GroupMember.builder()
+                .group(group).member(outsider).role(GroupRole.MEMBER).status(GroupMemberStatus.ACTIVE).build());
+
+        mockMvc.perform(delete("/groups/" + group.getId() + "/members/me")
+                        .header("Authorization", "Bearer " + outsiderToken))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/groups/" + group.getId()).header("Authorization", "Bearer " + outsiderToken))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("그룹 탈퇴 — OWNER 는 다른 멤버가 있으면 409 G010, 양도한 뒤에는 200 (#721)")
+    void leaveGroup_ownerMustTransferFirst() throws Exception {
+        Group group = createGroupWithOwner();
+        groupMemberRepository.saveAndFlush(GroupMember.builder()
+                .group(group).member(outsider).role(GroupRole.MEMBER).status(GroupMemberStatus.ACTIVE).build());
+
+        mockMvc.perform(delete("/groups/" + group.getId() + "/members/me")
+                        .header("Authorization", "Bearer " + ownerToken))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value(ErrorCode.OWNER_MUST_TRANSFER_FIRST.getMessage()));
+
+        mockMvc.perform(put("/groups/" + group.getId() + "/owner")
+                        .header("Authorization", "Bearer " + ownerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new TransferOwnershipRequestDto(outsider.getId()))))
+                .andExpect(status().isOk());
+
+        groupMemberRepository.flush();
+        assertThat(groupMemberRepository.findByGroupIdAndMemberId(group.getId(), outsider.getId()).orElseThrow().getRole())
+                .isEqualTo(GroupRole.OWNER);
+        assertThat(groupMemberRepository.findByGroupIdAndMemberId(group.getId(), owner.getId()).orElseThrow().getRole())
+                .isEqualTo(GroupRole.MEMBER);
+
+        mockMvc.perform(delete("/groups/" + group.getId() + "/members/me")
+                        .header("Authorization", "Bearer " + ownerToken))
+                .andExpect(status().isOk());
+
+        // 새 그룹장만 남아 OWNER 전용 동작이 계속 된다
+        mockMvc.perform(post("/groups/" + group.getId() + "/invite-code")
+                        .header("Authorization", "Bearer " + outsiderToken))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("그룹 탈퇴 — 혼자 남은 OWNER 가 나가면 모임이 삭제된다(이후 404) (#721)")
+    void leaveGroup_soleOwner_deletesGroup() throws Exception {
         Group group = createGroupWithOwner();
 
         mockMvc.perform(delete("/groups/" + group.getId() + "/members/me")
                         .header("Authorization", "Bearer " + ownerToken))
                 .andExpect(status().isOk());
 
+        groupRepository.flush();
+        assertThat(groupRepository.findById(group.getId())).isEmpty();
         mockMvc.perform(get("/groups/" + group.getId()).header("Authorization", "Bearer " + ownerToken))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("그룹장 양도 — 일반 멤버는 403 G007, 대상이 멤버 아니면 404 G011, 자기 자신이면 400")
+    void transferOwnership_rejections() throws Exception {
+        Group group = createGroupWithOwner();
+        Member plain = memberRepository.saveAndFlush(newMember("plain@test.com", "plain"));
+        groupMemberRepository.saveAndFlush(GroupMember.builder()
+                .group(group).member(plain).role(GroupRole.MEMBER).status(GroupMemberStatus.ACTIVE).build());
+
+        mockMvc.perform(put("/groups/" + group.getId() + "/owner")
+                        .header("Authorization", "Bearer " + tokenFor(plain))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new TransferOwnershipRequestDto(owner.getId()))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value(ErrorCode.NOT_GROUP_OWNER.getMessage()));
+
+        mockMvc.perform(put("/groups/" + group.getId() + "/owner")
+                        .header("Authorization", "Bearer " + ownerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new TransferOwnershipRequestDto(outsider.getId()))))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value(ErrorCode.GROUP_MEMBER_NOT_FOUND.getMessage()));
+
+        mockMvc.perform(put("/groups/" + group.getId() + "/owner")
+                        .header("Authorization", "Bearer " + ownerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new TransferOwnershipRequestDto(owner.getId()))))
+                .andExpect(status().isBadRequest());
+
+        groupMemberRepository.flush();
+        assertThat(groupMemberRepository.findByGroupIdAndMemberId(group.getId(), owner.getId()).orElseThrow().getRole())
+                .isEqualTo(GroupRole.OWNER);
     }
 
     @Test

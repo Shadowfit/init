@@ -438,13 +438,6 @@ FP_VENV=${FP_VENV:-$ROOT/ai-server/.venv/bin/python}
 # 상한은 그 2~3배로 준다 — 걸려서 끊기는 것보다 낫다.
 TIMEOUT_FP=${TIMEOUT_FP:-10800}                          # 3시간
 
-# ── 박스 보정값 (從 R11) ─────────────────────────────────────────────────
-#
-# `round-to-round-nonreproducibility.md` §2·§5 축0. R6 이 이미 쓴 것을 그대로 재사용한다
-# (`FP_VENV`·`CORES_RIG` 도 재사용 — 새 변수를 늘리지 않는다). 소요 1~2분, 새 인스턴스 0.
-CALIB_RIG=${CALIB_RIG:-$ROOT/loadtest/results/ai-path-profile-2026-08-17/profile_e2e_and_scaling.py}
-TIMEOUT_CALIB=${TIMEOUT_CALIB:-300}                       # 설계가 잰 소요의 2~3배
-
 # ── 복제 지연 · 반동기 (主 P4) ───────────────────────────────────────────
 #
 # 🔴 **이 라운드도 2대다.** 다만 P6 와 자리가 반대다 — P6 는 부하기에서 돌며 대상을
@@ -625,9 +618,12 @@ phase_preflight() {
 # 유효 클럭이 다르면 그 서명이 그대로 나온다. 그걸 가르려면 **박스가 초당 얼마나 일하는지**를
 # 앱과 무관하게 재둔 값이 있어야 한다.
 #
-# 🔴 지금 그 값이 **어느 라운드에도 없다.** P6 1·2라운드의 보정값은 영영 못 얻는다 — 그 박스는
+# 🔴 08-26 이전 라운드에는 이 값이 **없다.** P6 1·2라운드의 보정값은 영영 못 얻는다 — 그 박스는
 #    사라졌다. 그래서 처방이 «지금부터 모든 라운드가 들고 다니게» 다
-#    (설계: docs/decisions/round-to-round-nonreproducibility.md §3 축 0).
+#    (설계: docs/decisions/round-to-round-nonreproducibility.md §3 축 0 · 인용 규칙 ㉠ §8).
+#    두 축 중 **cpu 축(iter/s)이 처리량을 설명한다** — 축 A(08-26)·축 B(09-14) 실측. infer 축은
+#    같은 부팅 안에서도 5~12% 흔들려 보정값이 못 된다. 이것과 별개로 있던 `calibration` phase
+#    (R6 rig 의 1워커 판 = infer 축과 같은 종류)는 2026-09-14 에 없앴다(#744).
 #
 # 비용은 라운드당 **10~20초**다. 실패해도 라운드를 막지 않는다 — 값이 없는 것과 라운드가
 # 죽는 것은 다른 일이다.
@@ -1482,59 +1478,6 @@ phase_framepath() {
   return 0
 }
 
-# ── 박스 보정값 (從 R11) ─────────────────────────────────────────────────
-#
-# «CPU% 는 시간이지 일의 양이 아니다» — 물리 호스트의 유효 클럭이 라운드마다 다르면
-# 같은 CPU% 로 다른 처리량이 나온다(08-17 관측: AI CPU 869.3%→869.0%인데 처리량 +17.7%,
-# `round-to-round-nonreproducibility.md`). 단일 스레드로 고정 프레임 수를 추론해 걸린
-# 시간만 재면 동시성·부하기·네트워크가 다 빠지고 **이 박스가 초당 얼마나 일하는가** 만
-# 남는다 — R6 이 이미 이 방법으로 79.9fps 를 냈다. **판정에 쓰든 안 쓰든 무조건 기록한다**
-# (설계 §3 축0) — 지금 못 걸으면 이 박스가 사라진 뒤엔 영영 못 잰다(P6 1·2라운드가 그랬다).
-#
-# 🔴 ROLE=ai-venv 전용이다 — mediapipe 가 host venv 에 바로 있어야 `import` 가 된다.
-#    도커로 띄우는 P6 대상 박스는 이 phase 로 못 돈다 — aws/README.md 의 P6 절
-#    「보정값(從 R11)」에 있는 `docker exec` 한 줄을 손으로 돌릴 것.
-phase_calibration() {
-  local out=$OUTDIR/calibration
-  mkdir -p "$out"
-
-  if [ ! -x "$FP_VENV" ]; then
-    note "🔴 venv 인터프리터가 없다: $FP_VENV — ROLE=ai-venv 부트스트랩을 안 거쳤다. 이 단계는 그 역할 전용이다"
-    return 1
-  fi
-  if [ ! -f "$CORES_RIG/frames.json" ]; then
-    note "🔴 frames.json 이 없다: $CORES_RIG — 이 판이 먹을 프레임이 없다"
-    return 1
-  fi
-
-  {
-    echo "# 박스 보정값 — $(date -Is)"
-    echo "인스턴스 타입 : $(imds instance-type)"
-    echo "인스턴스 ID   : $(imds instance-id)"
-    echo "AZ            : $(imds placement/availability-zone)"
-  } > "$out/box.txt"
-  cat "$out/box.txt"
-
-  # cwd 는 ai-server/ 여야 한다 — rig 이 `app.core.mediapipe_detector` 를 import 하므로 저장소
-  # 루트에서 부르면 워커가 전부 ModuleNotFoundError 로 죽고 결과가 비어 max() 에서 터진다(#744).
-  # R6 이 손으로 돌릴 때도 거기서 돌렸다.
-  local rc
-  ( cd "$ROOT/ai-server" && timeout --kill-after=30 "$TIMEOUT_CALIB" \
-      env SCALING_WORKERS=1 "$FP_VENV" "$CALIB_RIG" "$CORES_RIG/frames.json" scaling ) \
-    > "$out/scaling_raw.txt" 2>&1
-  rc=$?
-  cat "$out/scaling_raw.txt"
-  [ $rc -eq 0 ] || { note "🔴 보정 측정 실패(rc=$rc) — 위 원문 확인"; return 1; }
-
-  # 「   1 <스레드fps> ...」 표에서 워커=1 행만 뽑아 라운드 간 대조용 한 줄로 남긴다.
-  if ! awk '/^ *1 /{print; found=1} END{exit !found}' "$out/scaling_raw.txt" > "$out/scaling_1w.txt"; then
-    note "⚠️ 1워커 행을 못 찾았다 — scaling_raw.txt 를 직접 볼 것"
-  fi
-
-  note "보정 완료 — $out/box.txt + scaling_1w.txt 를 다른 라운드의 같은 파일과 대조할 것"
-  return 0
-}
-
 # #276 — «uk 있음 + 중복 0 + 같은 파티션» 칸을 채운다.
 #
 # 이 단계가 답하는 것은 **정상 트래픽(재전송 없음)도 데드락이 나는가** 하나다. 로컬 라운드의
@@ -1990,10 +1933,13 @@ for p in $PHASES; do
         note "🔴 프레임 경로 라운드 실패 — 게이트가 막았거나 rig 이 죽었다. run_arms.log 를 볼 것"
       } ;;
     calibration)
-      # `break`·`continue` 안 함 — 실패해도 뒤에 오는 본 측정·collect 는 그대로 간다(從 이다).
-      run_phase calibration phase_calibration || {
-        note "⚠️ 보정값 없이 진행한다 — 이 라운드는 다른 라운드와 절대값 비교가 안 될 수 있다"
-      } ;;
+      # 2026-09-14 에 없앴다(#744) — 한 번도 값을 낸 적이 없는 phase 였고(어느 라운드에도
+      # scaling_1w.txt 가 없다), 내던 값(1워커 추론 fps)은 calibrate_box 의 infer 축과 같은
+      # 종류인데 축 A·B 실측에서 그 축은 보정값이 못 된다고 나왔다. 보정값은 preflight 의
+      # calibrate_box 가 calibration.tsv 로 남긴다(cpu 축이 처리량을 설명한다). 옛 레시피가
+      # 이 단계를 적어 놓았어도 라운드는 안 막는다.
+      note "⏭  'calibration' 단계는 없어졌다(2026-09-14, #744) — 보정값은 preflight 의 calibrate_box → calibration.tsv"
+      printf "calibration\tSKIP\t0\t%s\n" "$(date -Is)" >> "$PHASE_LOG" ;;
     r276)      run_phase r276      phase_r276 ;;
     r276app)   run_phase r276app   phase_r276app ;;
     ukbp)      run_phase ukbp      phase_ukbp ;;

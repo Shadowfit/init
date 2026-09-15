@@ -27,6 +27,8 @@ import static org.mockito.Mockito.when;
 class GroupSocketRegistryTest {
 
     private static final Long GROUP_ID = 1L;
+    private static final Long MEMBER_ID = 10L;
+    private static final Long OTHER_MEMBER_ID = 11L;
     private static final long AWAIT_MS = 2000;
 
     private final GroupSocketRegistry registry = new GroupSocketRegistry(new SimpleMeterRegistry());
@@ -36,7 +38,7 @@ class GroupSocketRegistryTest {
     @DisplayName("register 후 broadcast — 등록된 세션에 메시지가 전달된다")
     void broadcast_sendsToRegisteredSession() throws IOException {
         WebSocketSession session = openSession();
-        registry.register(GROUP_ID, session);
+        registry.register(GROUP_ID, MEMBER_ID, session);
 
         registry.broadcast(GROUP_ID, "{\"type\":\"REP_COMPLETED\"}");
 
@@ -48,8 +50,8 @@ class GroupSocketRegistryTest {
     void broadcast_sendsToAllSessionsInGroup() throws IOException {
         WebSocketSession session1 = openSession();
         WebSocketSession session2 = openSession();
-        registry.register(GROUP_ID, session1);
-        registry.register(GROUP_ID, session2);
+        registry.register(GROUP_ID, MEMBER_ID, session1);
+        registry.register(GROUP_ID, MEMBER_ID, session2);
 
         registry.broadcast(GROUP_ID, "payload");
 
@@ -61,7 +63,7 @@ class GroupSocketRegistryTest {
     @DisplayName("broadcast — 다른 그룹의 세션에는 전달되지 않는다")
     void broadcast_doesNotLeakToOtherGroups() throws IOException {
         WebSocketSession session = openSession();
-        registry.register(2L, session);
+        registry.register(2L, MEMBER_ID, session);
 
         registry.broadcast(GROUP_ID, "payload");
 
@@ -83,7 +85,7 @@ class GroupSocketRegistryTest {
     @DisplayName("deregister된 세션은 이후 broadcast에서 제외된다")
     void broadcast_afterDeregister_excludesSession() throws IOException {
         WebSocketSession session = openSession();
-        registry.register(GROUP_ID, session);
+        registry.register(GROUP_ID, MEMBER_ID, session);
         registry.deregister(GROUP_ID, session);
 
         registry.broadcast(GROUP_ID, "payload");
@@ -98,7 +100,7 @@ class GroupSocketRegistryTest {
         WebSocketSession session = mock(WebSocketSession.class);
         when(session.getId()).thenReturn(nextId());
         when(session.isOpen()).thenReturn(false);
-        registry.register(GROUP_ID, session);
+        registry.register(GROUP_ID, MEMBER_ID, session);
 
         registry.broadcast(GROUP_ID, "payload");
 
@@ -111,7 +113,7 @@ class GroupSocketRegistryTest {
     void broadcast_sendFailure_deregistersAndClosesSession() throws IOException {
         WebSocketSession session = openSession();
         org.mockito.Mockito.doThrow(new IOException("broken pipe")).when(session).sendMessage(any(TextMessage.class));
-        registry.register(GROUP_ID, session);
+        registry.register(GROUP_ID, MEMBER_ID, session);
 
         registry.broadcast(GROUP_ID, "payload");
 
@@ -130,7 +132,7 @@ class GroupSocketRegistryTest {
             releaseFirstSend.await();
             return null;
         }).when(session).sendMessage(any(TextMessage.class));
-        registry.register(GROUP_ID, session);
+        registry.register(GROUP_ID, MEMBER_ID, session);
 
         registry.broadcast(GROUP_ID, "in-flight"); // 세션 전용 워커가 이걸 받아 즉시 실행·블록한다
         org.assertj.core.api.Assertions.assertThat(
@@ -153,6 +155,73 @@ class GroupSocketRegistryTest {
         verify(session, timeout(AWAIT_MS)).close(CloseStatus.SERVER_ERROR);
 
         releaseFirstSend.countDown(); // 첫 전송을 마저 끝내 워커 스레드를 정리한다(테스트 정리)
+    }
+
+    // --- 회원 인덱스 / sendToMember (§4-1 #7) ---
+
+    @Test
+    @DisplayName("sendToMember — 그 회원의 세션에만 가고, 같은 그룹의 다른 회원에게는 안 간다")
+    void sendToMember_onlyThatMember() throws IOException {
+        WebSocketSession mine = openSession();
+        WebSocketSession theirs = openSession();
+        registry.register(GROUP_ID, MEMBER_ID, mine);
+        registry.register(GROUP_ID, OTHER_MEMBER_ID, theirs);
+
+        registry.sendToMember(MEMBER_ID, "{\"type\":\"NOTIFICATION\"}");
+
+        verify(mine, timeout(AWAIT_MS)).sendMessage(new TextMessage("{\"type\":\"NOTIFICATION\"}"));
+        // 상대 세션엔 정상 브로드캐스트를 한 번 흘려 "느려서 아직"과 "애초에 안 감"을 가른다
+        registry.broadcast(GROUP_ID, "group-payload");
+        verify(theirs, timeout(AWAIT_MS)).sendMessage(new TextMessage("group-payload"));
+        verify(theirs, never()).sendMessage(new TextMessage("{\"type\":\"NOTIFICATION\"}"));
+    }
+
+    @Test
+    @DisplayName("sendToMember — 회원이 모임 화면을 여러 개 띄웠으면(그룹이 달라도) 그 세션 전부에 간다")
+    void sendToMember_allSessionsOfMemberAcrossGroups() throws IOException {
+        WebSocketSession a = openSession();
+        WebSocketSession b = openSession();
+        registry.register(GROUP_ID, MEMBER_ID, a);
+        registry.register(2L, MEMBER_ID, b);
+
+        registry.sendToMember(MEMBER_ID, "n");
+
+        verify(a, timeout(AWAIT_MS)).sendMessage(new TextMessage("n"));
+        verify(b, timeout(AWAIT_MS)).sendMessage(new TextMessage("n"));
+    }
+
+    @Test
+    @DisplayName("sendToMember — 붙어 있지 않은 회원이면 조용히 아무 일도 안 한다")
+    void sendToMember_offlineMember_isNoop() {
+        registry.sendToMember(999L, "n");
+    }
+
+    @Test
+    @DisplayName("deregister — 회원 인덱스에서도 빠져 이후 sendToMember 가 닫힌 세션을 안 건드린다")
+    void deregister_removesFromMemberIndexToo() throws IOException {
+        WebSocketSession session = openSession();
+        registry.register(GROUP_ID, MEMBER_ID, session);
+        registry.deregister(GROUP_ID, session);
+
+        registry.sendToMember(MEMBER_ID, "n");
+
+        verify(session, never()).sendMessage(any(TextMessage.class));
+    }
+
+    @Test
+    @DisplayName("전송 실패로 정리된 세션은 그룹·회원 두 인덱스에서 같이 빠진다")
+    void sendFailure_cleansBothIndexes() throws IOException {
+        WebSocketSession session = openSession();
+        org.mockito.Mockito.doThrow(new IOException("broken pipe")).when(session).sendMessage(any(TextMessage.class));
+        registry.register(GROUP_ID, MEMBER_ID, session);
+
+        registry.sendToMember(MEMBER_ID, "n");
+        verify(session, timeout(AWAIT_MS)).close(CloseStatus.SERVER_ERROR);
+
+        // 정리 뒤엔 어느 인덱스로도 다시 시도하지 않는다 — sendMessage 호출 수가 1에서 멈춘다
+        registry.broadcast(GROUP_ID, "again");
+        registry.sendToMember(MEMBER_ID, "again");
+        verify(session, timeout(AWAIT_MS).times(1)).sendMessage(any(TextMessage.class));
     }
 
     private WebSocketSession openSession() {

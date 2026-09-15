@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Clock;
 import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.LocalDate;
@@ -40,15 +41,18 @@ public class PatternAnalysisService {
     private static final int MIN_ACCOUNT_AGE_DAYS_FOR_SUFFICIENT_DATA = 28;
 
     private final SessionRepository sessionRepository;
+    // «지금» 은 주입받는다(#739) — 세 endpoint 의 창(4주·이번 주·오늘)이 전부 여기서 갈라지므로,
+    // 테스트가 고정 시각을 넣으면 세션 시각과 조회 시각이 같은 순간에 묶여 주·일 경계를 못 넘는다.
+    private final Clock clock;
 
-    private static boolean hasSufficientData(LocalDateTime memberCreatedAt) {
-        return memberCreatedAt.isBefore(LocalDateTime.now().minusDays(MIN_ACCOUNT_AGE_DAYS_FOR_SUFFICIENT_DATA));
+    private boolean hasSufficientData(LocalDateTime memberCreatedAt) {
+        return memberCreatedAt.isBefore(LocalDateTime.now(clock).minusDays(MIN_ACCOUNT_AGE_DAYS_FOR_SUFFICIENT_DATA));
     }
 
     // 요일·시간대 그룹핑 집계. 최근 4주 고정(2026-08-30 사용자 확인 — intensity-trend와 창을 맞춰
     // 세 endpoint의 "최근 패턴"이라는 취지를 일관되게 유지).
     public PeriodicityResponseDto getPeriodicity(Long memberId, LocalDateTime memberCreatedAt) {
-        LocalDateTime end = LocalDateTime.now();
+        LocalDateTime end = LocalDateTime.now(clock);
         LocalDateTime start = end.minusWeeks(PERIODICITY_WINDOW_WEEKS);
 
         List<LocalDateTime> startTimes = sessionRepository.findStartTimesByMemberAndRange(memberId, start, end);
@@ -74,10 +78,10 @@ public class PatternAnalysisService {
     // 확인) — 진행 중인 이번 주(월~오늘)를 마지막 버킷으로 포함한다. syncRate가 null인 세션(미완료·
     // rep 미측정)은 두 지표 모두에서 제외 — findIntensitySamplesByMemberAndRange가 DB에서 이미 거른다.
     public IntensityTrendResponseDto getIntensityTrend(Long memberId, LocalDateTime memberCreatedAt) {
-        LocalDate thisMonday = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        LocalDate thisMonday = LocalDate.now(clock).with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
         LocalDate windowStartDate = thisMonday.minusWeeks(INTENSITY_TREND_WEEKS - 1L);
         LocalDateTime windowStart = windowStartDate.atStartOfDay();
-        LocalDateTime windowEnd = LocalDateTime.now();
+        LocalDateTime windowEnd = LocalDateTime.now(clock);
 
         List<SessionRepository.IntensitySample> samples =
                 sessionRepository.findIntensitySamplesByMemberAndRange(memberId, windowStart, windowEnd);
@@ -125,10 +129,10 @@ public class PatternAnalysisService {
     // 이어졌어도 이 endpoint에서는 28로 보인다. BE-07 원 문서가 애초에 "최소 4주" 프레임을 전제해
     // 이 endpoint의 다른 두 지표(periodicity·intensity-trend)와 창을 맞췄다.
     public ConsistencyResponseDto getConsistency(Long memberId, LocalDateTime memberCreatedAt) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = LocalDate.now(clock);
         LocalDate windowStartDate = today.minusDays(CONSISTENCY_WINDOW_DAYS - 1L);
         LocalDateTime windowStart = windowStartDate.atStartOfDay();
-        LocalDateTime windowEnd = LocalDateTime.now();
+        LocalDateTime windowEnd = LocalDateTime.now(clock);
 
         List<java.sql.Date> activeDates = sessionRepository.findDistinctActiveDates(
                 memberId, List.of(Status.COMPLETED), windowStart, windowEnd);

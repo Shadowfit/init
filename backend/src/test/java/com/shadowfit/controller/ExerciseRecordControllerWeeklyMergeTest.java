@@ -40,9 +40,11 @@ class ExerciseRecordControllerWeeklyMergeTest {
     private final SessionActivityQueryService sessionActivityQueryService = mock(SessionActivityQueryService.class);
     private final DailyLogService dailyLogService = mock(DailyLogService.class);
     private final WeeklySummaryService weeklySummaryService = mock(WeeklySummaryService.class);
+    private final com.shadowfit.service.report.WeeklyReportService weeklyReportService =
+            mock(com.shadowfit.service.report.WeeklyReportService.class);
 
     private final ExerciseRecordController controller =
-            new ExerciseRecordController(sessionActivityQueryService, dailyLogService, weeklySummaryService);
+            new ExerciseRecordController(sessionActivityQueryService, dailyLogService, weeklySummaryService, weeklyReportService);
 
     @Test
     @DisplayName("#352 /reports/weekly-summary 는 활동 집계와 A층 요약을 «한 응답» 으로 돌려준다")
