@@ -15,7 +15,7 @@ import java.time.LocalDateTime;
  * persona NULL row 는 페르소나 row 없을 때의 fallback (분기 4-A + BE-13).
  *
  * <p>UNIQUE 는 {@code persona} 가 아니라 {@code persona_key}(= {@code COALESCE(persona, '')}) 에 건다 —
- * MySQL 은 UNIQUE 에서 NULL 을 서로 다른 값으로 보므로 fallback 행만 몇 개든 들어갔다(#715, V21).
+ * MySQL 은 UNIQUE 에서 NULL 을 서로 다른 값으로 보므로 fallback 행만 몇 개든 들어갔다(#715, V22).
  */
 @Entity
 @Table(name = "exercise_feedback_templates",

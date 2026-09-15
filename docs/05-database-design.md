@@ -179,7 +179,7 @@ CREATE TABLE exercise_feedback_templates (
     exercise_id BIGINT NOT NULL,
     feedback_type VARCHAR(30) NOT NULL,    -- KNEE_OVER, BACK_BEND, GOOD_FORM, REP_COUNT 등
     persona VARCHAR(10) NULL,              -- 페르소나별 멘트. NULL = 페르소나 행이 없을 때의 공통 fallback
-    persona_key VARCHAR(10) AS (COALESCE(persona, '')) VIRTUAL,   -- V21: UNIQUE 용 투영 (#715)
+    persona_key VARCHAR(10) AS (COALESCE(persona, '')) VIRTUAL,   -- V22: UNIQUE 용 투영 (#715)
     message VARCHAR(200) NOT NULL,         -- 한국어 멘트 (예: "무릎이 발끝을 넘었습니다")
     priority INT NOT NULL DEFAULT 100,     -- 낮을수록 우선
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
