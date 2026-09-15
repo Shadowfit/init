@@ -120,8 +120,8 @@ public class GroupService {
      * ({@code DailyLogRepository} 실측) — 그래서 뒤에서 잡는 대신 앞에서 줄을 세운다.
      *
      * <p>{@code leaveGroup()} 은 행을 LEFT 로만 남기므로 재가입 시 새 행을 넣으면 같은 UNIQUE 에
-     * 걸린다 — 기존 행이 있으면 {@code rejoin()} 으로 되살린다. rejoin 이 role 을 MEMBER 로 덮는
-     * 문제(OWNER 가 나갔다 오면 그룹장이 사라짐)는 #721 로 분리.
+     * 걸린다 — 기존 행이 있으면 {@code rejoin()} 으로 되살린다. rejoin 은 role 을 MEMBER 로 되돌리는데,
+     * OWNER 는 양도한 뒤에만 나갈 수 있어(#721) LEFT 행의 role 이 OWNER 인 경우는 생기지 않는다.
      */
     public GroupMember admit(Group group, Member member) {
         GroupMember membership = groupMemberRepository.findByGroupIdAndMemberId(group.getId(), member.getId())
@@ -182,12 +182,62 @@ public class GroupService {
         return code;
     }
 
+    /**
+     * 탈퇴. MEMBER 는 행을 LEFT 로 남기고 끝. <b>OWNER 는 다르다</b>(#721) —
+     * <ul>
+     *   <li>다른 ACTIVE 멤버가 있으면 409 {@code OWNER_MUST_TRANSFER_FIRST}: 먼저
+     *       {@link #transferOwnership} 로 넘기고 나가야 한다. 예전엔 그냥 나갈 수 있어서
+     *       그룹장 없는 모임(초대 코드 재발급을 아무도 못 함)이 생겼다.</li>
+     *   <li>혼자 남은 OWNER 면 <b>모임을 지운다</b>. 양도할 사람이 없는데 막으면 영영 못 나가고,
+     *       LEFT 로만 남기면 코드를 아는 사람이 들어와 그룹장 없는 모임이 다시 생긴다.
+     *       group_members·group_invitations·group_events(→event_reactions) 는 FK CASCADE 로 같이 진다.</li>
+     * </ul>
+     * 모임 행을 {@code FOR UPDATE} 로 먼저 잡는다 — «나 말고 ACTIVE 가 있는가» 판정과 코드 참여
+     * ({@link #admit}, 같은 잠금)·양도가 섞이면 비어 있다고 보고 지운 모임에 누가 막 들어와 있거나,
+     * 양도받은 직후의 사람을 두고 나가는 일이 생긴다. 잠금은 {@code publish()} 가 쓰는 그 행이라
+     * 새 경합 대상이 아니다.
+     */
     public void leaveGroup(Long groupId, Long memberId) {
+        Group group = groupRepository.findByIdForUpdate(groupId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.GROUP_NOT_FOUND));
         GroupMember membership = groupMemberRepository.findByGroupIdAndMemberId(groupId, memberId)
                 .filter(gm -> gm.getStatus() == GroupMemberStatus.ACTIVE)
                 .orElseThrow(() -> new BusinessException(ErrorCode.NOT_GROUP_MEMBER));
 
+        if (membership.getRole() == GroupRole.OWNER) {
+            if (groupMemberRepository.existsByGroupIdAndStatusAndMemberIdNot(groupId, GroupMemberStatus.ACTIVE, memberId)) {
+                throw new BusinessException(ErrorCode.OWNER_MUST_TRANSFER_FIRST);
+            }
+            groupRepository.delete(group);
+            return;
+        }
+
         membership.leave();
+    }
+
+    /**
+     * 그룹장 양도 — OWNER 가 다른 ACTIVE 멤버에게 넘긴다(#721). 넘긴 쪽은 MEMBER 가 된다.
+     * 자기 자신에게는 400, 대상이 이 모임의 ACTIVE 멤버가 아니면 404 {@code GROUP_MEMBER_NOT_FOUND}
+     * (요청자 본인의 403 G002/G007 과 구분). 잠금은 {@link #leaveGroup} 과 같은 이유로 같은 행.
+     */
+    public void transferOwnership(Long groupId, Long requesterId, Long newOwnerId) {
+        if (requesterId.equals(newOwnerId)) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+        groupRepository.findByIdForUpdate(groupId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.GROUP_NOT_FOUND));
+        GroupMember current = groupMemberRepository.findByGroupIdAndMemberId(groupId, requesterId)
+                .filter(gm -> gm.getStatus() == GroupMemberStatus.ACTIVE)
+                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_GROUP_MEMBER));
+        if (current.getRole() != GroupRole.OWNER) {
+            throw new BusinessException(ErrorCode.NOT_GROUP_OWNER);
+        }
+        GroupMember next = groupMemberRepository.findByGroupIdAndMemberId(groupId, newOwnerId)
+                .filter(gm -> gm.getStatus() == GroupMemberStatus.ACTIVE)
+                .orElseThrow(() -> new BusinessException(ErrorCode.GROUP_MEMBER_NOT_FOUND));
+
+        current.demoteToMember();
+        next.promoteToOwner();
     }
 
     // 백필 등 다른 컨트롤러 엔드포인트에서도 "그룹 멤버만 접근 가능"을 재사용한다.

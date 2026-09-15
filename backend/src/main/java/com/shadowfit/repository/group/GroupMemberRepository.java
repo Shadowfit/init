@@ -17,6 +17,9 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> 
     // WebSocket 핸드셰이크 인가·그룹 조회 인가 — "이 사용자가 이 그룹의 ACTIVE 멤버인가".
     boolean existsByGroupIdAndMemberIdAndStatus(Long groupId, Long memberId, GroupMemberStatus status);
 
+    // OWNER 탈퇴 판정용 — «나 말고 ACTIVE 가 있는가». 있으면 양도 먼저(409), 없으면 모임 삭제(#721).
+    boolean existsByGroupIdAndStatusAndMemberIdNot(Long groupId, GroupMemberStatus status, Long memberId);
+
     Optional<GroupMember> findByGroupIdAndMemberId(Long groupId, Long memberId);
 
     // GET /groups/{groupId} 의 멤버 목록.
