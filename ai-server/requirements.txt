@@ -8,12 +8,12 @@ pybase64==1.5.0
 # 🔴 mediapipe 는 0.10.21 이 «solutions API 가 있는 마지막 버전» 이다 — 0.10.30 부터 휠에
 # mediapipe/python/solutions/ 가 아예 없다(0.10.30·0.10.31·0.10.35 휠 목록으로 확인, 2026-09-15).
 # app/core/mediapipe_detector.py 가 mp.solutions.pose 를 쓰므로 올리면 import 에서 죽는다.
-# 올리려면 Tasks API(PoseLandmarker) 이식이 먼저다(#606 계열) — 그 뒤엔 numpy<2 · protobuf<5
+# 올리려면 Tasks API(PoseLandmarker) 이식이 먼저다(#606 계열) — 그 뒤엔 numpy<3 · protobuf<5
 # 핀도 같이 풀린다(0.10.35 는 둘 다 요구하지 않는다). 그래서 아래 셋은 한 묶음이다:
-#   mediapipe 0.10.21 → numpy<2 (mediapipe 요구) → opencv-python-headless 4.x (5.x 는 numpy>=2)
+#   mediapipe 0.10.21 → numpy<3 (mediapipe 요구) → opencv-python-headless 4.x (5.x 는 numpy>=2)
 mediapipe==0.10.21
 opencv-python-headless==4.11.0.86
-numpy<2
+numpy<3
 
 dtaidistance==2.5.0
 
