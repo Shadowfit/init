@@ -1,7 +1,7 @@
 # 친구 현황 streak 쿼리 팬아웃(N+1) 실측 설계 — `GET /friends` · `GET /groups/{id}/members/status`
 
 작성: 2026-09-15
-상태: 🔧 **rig 작성 완료(2026-09-15), 미실행, 미결정.** §7 은 추천대로 진행하라는 사용자 지시(«rig 만들어»)로 갈음 — ①b 포함·②로컬→EC2·③N 점 그대로·④Q3 는 EC2·⑤streak 보조판 로컬. rig: `loadtest/measure_friend_status_fanout.py`, 후보 b: `AttendanceService.currentStreaks` + `attendance.streak-strategy`(기본 `per-member`, 실험만 `batch`).
+상태: 📊 **로컬 1차 실행 완료(2026-09-15, §9) — EC2 2차 미실행, 채택 미결정.** §7 은 추천대로 진행하라는 사용자 지시(«rig 만들어»)로 갈음 — ①b 포함·②로컬→EC2·③N 점 그대로·④Q3 는 EC2·⑤streak 보조판 로컬. rig: `loadtest/measure_friend_status_fanout.py`, 후보 b: `AttendanceService.currentStreaks` + `attendance.streak-strategy`(기본 `per-member`, 실험만 `batch`).
 선행: [`social-cheer-and-group-feed.md`](./social-cheer-and-group-feed.md) §3-B(출석·streak 정의)·§3-G(노출 항목), [`recommendation-algorithm.md`](./recommendation-algorithm.md) §10(같은 인덱스 역방향 커서 단건 실측 0.4ms), [`pool-sizing-10-20-experiment-design.md`](./pool-sizing-10-20-experiment-design.md) §3(라틴 방격·버림판), [`slo-baseline.md`](./slo-baseline.md) §5-1(델타 판정 규칙)
 
 ---
@@ -149,8 +149,37 @@ b 는 측정용 브랜치에서 `AttendanceService.currentStreaks(Collection<Lon
 
 ---
 
+## 9. 로컬 1차 결과 (2026-09-15) — [`friend-status-fanout-local-2026-09-15`](../../loadtest/results/friend-status-fanout-local-2026-09-15/README.md)
+
+i3-6100 · 같은 호스트 docker(RTT≈0) · c=1 · 요청 200/셀 · 워밍업 100 · 3 rep · 백엔드 `1820abc2`. **메커니즘과 기울기의 존재만 믿는다** — 절대값·교차점은 EC2 로.
+
+| N | a `per-member` p50 (sd) | b `batch` p50 (sd) | a−b | 잡음 밖 | a SQL/req | b SQL/req | a DB exec/req | b DB exec/req |
+|--:|--:|--:|--:|:--:|--:|--:|--:|--:|
+| 1 | 33.4 (3.5) | 35.2 (12.5) | −1.8 | — | 6.1 | 6.2 | 6.3 | 6.5 |
+| 5 | 42.4 (15.8) | 35.7 (7.7) | +6.7 | — | 10.2 | 6.1 | 11.1 | 6.3 |
+| 12 | 86.9 (8.6) | 61.7 (44.6) | +25.2 | — | 17.3 | 6.3 | 21.1 | 8.2 |
+| 30 | 125.7 (14.8) | 67.7 (31.1) | +58.0 | ✅ | 35.4 | 6.3 | 39.7 | 11.0 |
+| 100 | 220.8 (74.3) | 52.3 (17.5) | +168.4 | ✅ | 105.6 | 6.2 | 99.4 | 14.7 |
+
+(ms. DB exec = `performance_schema` digest `SUM_TIMER_WAIT` 델타 ÷ 요청.)
+
+**Q1 — 선형이고, 기울기는 1.80 ms/멤버(R² 0.94), 절편 48 ms.** SQL/req 는 정확히 N + 5.6 — 고정 쿼리는 §0 표의 4개가 아니라 **≈6개**(JWT 필터의 회원 조회 등 서비스 밖 것이 있다). 기울기 1.80 중 DB 실행이 **0.93 ms/멤버**(99.4 ms ÷ 100 − 절편), 나머지 **≈0.87 ms/멤버** 가 왕복·JDBC·Hibernate 몫이다 — RTT 가 0 인 로컬에서도 쿼리당 비-DB 비용이 DB 실행과 같은 크기라는 뜻이고, EC2 분리 배치에선 여기에 RTT 가 더해진다.
+
+**Q2 — b 는 N 에 대해 기울기가 안 보인다**(0.11 ms/멤버, R² 0.09 = 잡음). DB 실행은 0.085 ms/멤버로 오르지만(LATERAL 안쪽 루프) 지연엔 안 실린다. a−b 는 **N=30 부터 반복 잡음 밖**, N=12 는 +25 ms 인데 b 의 한 판(rep 3, 125 ms)이 튀어 sd 44 — 이 박스의 판 간 분산이 그만큼 크다. **교차점은 로컬에선 N≈5~12 사이 어딘가로 보이지만 잡음 안이라 못 박지 않는다.**
+
+**Q3(커넥션 점유) — a 는 요청 내내 커넥션을 쥔다.** Hikari usage/req 가 a: 17.6 → 216 ms(N=1→100, p50 과 같은 크기), b: 20 → 33 ms. checkouts/req 는 둘 다 ≈2.1~2.6 — 요청당 체크아웃이 1이 아니라 **2**(서비스 tx 밖에 회원 조회가 하나 더 있다) + 백그라운드 발행기 tick 분. c>1 판은 EC2 에서.
+
+**부수 확인**: `Handler_read_prev` 는 전 셀 0 — #761 대로 역방향 인덱스 걷기는 한 번도 안 일어났다(시드 회원이 3행이라 비용엔 안 보인다). a 의 읽은 행은 key ≈3N+6·next ≈5N, b 는 key ≈3N+7·next ≈8N — b 가 멤버당 3행을 더 읽는다(users 드라이버 + LATERAL 재료화).
+
+**이 결과로 할 수 있는 말 / 없는 말**
+- 할 수 있는 말: N+1 은 실재하고 선형이며, 이 박스에서도 멤버당 ≈1.8 ms 다. b 는 그 항을 없앤다. 12명 모임 홈이 a 로 ≈87 ms, b 로 ≈62 ms(잡음 안).
+- 없는 말: «N 이 몇이면 b 로 바꿔야 한다» — 교차점이 잡음 안이고(EC2 로), 회원당 그룹·인원 분포(⑨)가 없다. 그리고 #761 이 열려 있어 «a 의 멤버당 비용» 자체가 계정 크기에 따라 달라진다 — 계정 크기 보조 판(§4)을 돌리기 전엔 a 의 기울기 1.8 은 «세션 3건 회원» 조건의 값이다.
+
+다음 라운드 후보(사용자 결정): ① EC2 3대(DB·App 분리)로 같은 순서표 — 교차점·RTT 몫 ② 로컬 계정 크기 보조 판(#761 의 크기) ③ #761 을 먼저 고치고 a 를 다시 정의.
+
 ## 8. 연혁
 
 - 2026-09-15: 초안. 소셜 L1 REST 중 실측 0 인 것 가운데 «홈 화면·N 상한 없음·왕복 N 회» 세 조건이 겹치는 이 API 를 1순위로 골라 설계만 올림. 미실행.
 - 2026-09-15: rig·후보 b·동치 테스트 작성(브랜치 `measure/friend-status-streak-fanout`). §4 조정 박스 추가. 아직 미실행.
 - 2026-09-15: rig 스모크(요청 20회, 숫자는 안 믿음)에서 `explain.txt` 로 §0-2 발견 → #761. §1 «세션 표 크기» 전제 취소, §4 계정 크기 보조 판 추가.
+- 2026-09-15: 로컬 1차 실행(31판, 23분) — §9. 기울기 1.80 ms/멤버(DB 0.93 + 비-DB 0.87), b 는 기울기 없음, a−b 는 N≥30 에서 잡음 밖. 고정 쿼리 ≈6·체크아웃/요청 ≈2 라는 §0 표의 오차 정정.

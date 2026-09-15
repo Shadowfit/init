@@ -1,0 +1,642 @@
+{
+  "by_candidate": {
+    "per-member": {
+      "rows": {
+        "1": {
+          "p50_ms": {
+            "mean": 33.4047,
+            "sd": 3.459,
+            "k": 3
+          },
+          "p95_ms": {
+            "mean": 74.753,
+            "sd": 16.6995,
+            "k": 3
+          },
+          "mean_ms": {
+            "mean": 38.695,
+            "sd": 6.881,
+            "k": 3
+          },
+          "Com_select_per_req": {
+            "mean": 6.1433,
+            "sd": 0.0249,
+            "k": 3
+          },
+          "Handler_read_key_per_req": {
+            "mean": 9.1683,
+            "sd": 0.0249,
+            "k": 3
+          },
+          "Handler_read_prev_per_req": {
+            "mean": 0.0,
+            "sd": 0.0,
+            "k": 3
+          },
+          "Handler_read_next_per_req": {
+            "mean": 5.4,
+            "sd": 0.0,
+            "k": 3
+          },
+          "db_exec_ms_per_req": {
+            "mean": 6.2837,
+            "sd": 0.6589,
+            "k": 3
+          },
+          "hikari_usage_ms_per_req": {
+            "mean": 17.5933,
+            "sd": 3.1937,
+            "k": 3
+          },
+          "hikari_checkouts_per_req": {
+            "mean": 2.1433,
+            "sd": 0.0209,
+            "k": 3
+          },
+          "hikari_acquire_ms_per_req": {
+            "mean": 0.0282,
+            "sd": 0.004,
+            "k": 3
+          }
+        },
+        "5": {
+          "p50_ms": {
+            "mean": 42.3535,
+            "sd": 15.8435,
+            "k": 2
+          },
+          "p95_ms": {
+            "mean": 108.2855,
+            "sd": 44.4235,
+            "k": 2
+          },
+          "mean_ms": {
+            "mean": 52.0525,
+            "sd": 20.2935,
+            "k": 2
+          },
+          "Com_select_per_req": {
+            "mean": 10.1975,
+            "sd": 0.0675,
+            "k": 2
+          },
+          "Handler_read_key_per_req": {
+            "mean": 21.2225,
+            "sd": 0.0675,
+            "k": 2
+          },
+          "Handler_read_prev_per_req": {
+            "mean": 0.0,
+            "sd": 0.0,
+            "k": 2
+          },
+          "Handler_read_next_per_req": {
+            "mean": 25.4,
+            "sd": 0.0,
+            "k": 2
+          },
+          "db_exec_ms_per_req": {
+            "mean": 11.088,
+            "sd": 3.6475,
+            "k": 2
+          },
+          "hikari_usage_ms_per_req": {
+            "mean": 27.9825,
+            "sd": 10.0475,
+            "k": 2
+          },
+          "hikari_checkouts_per_req": {
+            "mean": 2.1825,
+            "sd": 0.0675,
+            "k": 2
+          },
+          "hikari_acquire_ms_per_req": {
+            "mean": 0.1834,
+            "sd": 0.1519,
+            "k": 2
+          }
+        },
+        "12": {
+          "p50_ms": {
+            "mean": 86.8947,
+            "sd": 8.639,
+            "k": 3
+          },
+          "p95_ms": {
+            "mean": 158.1333,
+            "sd": 8.0491,
+            "k": 3
+          },
+          "mean_ms": {
+            "mean": 92.0083,
+            "sd": 5.7633,
+            "k": 3
+          },
+          "Com_select_per_req": {
+            "mean": 17.2783,
+            "sd": 0.0143,
+            "k": 3
+          },
+          "Handler_read_key_per_req": {
+            "mean": 42.3033,
+            "sd": 0.0143,
+            "k": 3
+          },
+          "Handler_read_prev_per_req": {
+            "mean": 0.0,
+            "sd": 0.0,
+            "k": 3
+          },
+          "Handler_read_next_per_req": {
+            "mean": 60.4,
+            "sd": 0.0,
+            "k": 3
+          },
+          "db_exec_ms_per_req": {
+            "mean": 21.0501,
+            "sd": 3.2028,
+            "k": 3
+          },
+          "hikari_usage_ms_per_req": {
+            "mean": 64.5983,
+            "sd": 5.7269,
+            "k": 3
+          },
+          "hikari_checkouts_per_req": {
+            "mean": 2.26,
+            "sd": 0.0147,
+            "k": 3
+          },
+          "hikari_acquire_ms_per_req": {
+            "mean": 0.1736,
+            "sd": 0.0871,
+            "k": 3
+          }
+        },
+        "30": {
+          "p50_ms": {
+            "mean": 125.681,
+            "sd": 14.7633,
+            "k": 3
+          },
+          "p95_ms": {
+            "mean": 241.1027,
+            "sd": 23.0296,
+            "k": 3
+          },
+          "mean_ms": {
+            "mean": 135.0367,
+            "sd": 12.7127,
+            "k": 3
+          },
+          "Com_select_per_req": {
+            "mean": 35.3833,
+            "sd": 0.0143,
+            "k": 3
+          },
+          "Handler_read_key_per_req": {
+            "mean": 96.4083,
+            "sd": 0.0143,
+            "k": 3
+          },
+          "Handler_read_prev_per_req": {
+            "mean": 0.0,
+            "sd": 0.0,
+            "k": 3
+          },
+          "Handler_read_next_per_req": {
+            "mean": 150.4,
+            "sd": 0.0,
+            "k": 3
+          },
+          "db_exec_ms_per_req": {
+            "mean": 39.7031,
+            "sd": 4.4376,
+            "k": 3
+          },
+          "hikari_usage_ms_per_req": {
+            "mean": 110.625,
+            "sd": 12.9544,
+            "k": 3
+          },
+          "hikari_checkouts_per_req": {
+            "mean": 2.3617,
+            "sd": 0.0266,
+            "k": 3
+          },
+          "hikari_acquire_ms_per_req": {
+            "mean": 0.1939,
+            "sd": 0.1093,
+            "k": 3
+          }
+        },
+        "100": {
+          "p50_ms": {
+            "mean": 220.7537,
+            "sd": 74.345,
+            "k": 3
+          },
+          "p95_ms": {
+            "mean": 434.1043,
+            "sd": 127.2552,
+            "k": 3
+          },
+          "mean_ms": {
+            "mean": 242.6673,
+            "sd": 75.2284,
+            "k": 3
+          },
+          "Com_select_per_req": {
+            "mean": 105.63,
+            "sd": 0.182,
+            "k": 3
+          },
+          "Handler_read_key_per_req": {
+            "mean": 306.655,
+            "sd": 0.182,
+            "k": 3
+          },
+          "Handler_read_prev_per_req": {
+            "mean": 0.0,
+            "sd": 0.0,
+            "k": 3
+          },
+          "Handler_read_next_per_req": {
+            "mean": 500.4,
+            "sd": 0.0,
+            "k": 3
+          },
+          "db_exec_ms_per_req": {
+            "mean": 99.4234,
+            "sd": 24.5989,
+            "k": 3
+          },
+          "hikari_usage_ms_per_req": {
+            "mean": 216.3933,
+            "sd": 57.9892,
+            "k": 3
+          },
+          "hikari_checkouts_per_req": {
+            "mean": 2.6117,
+            "sd": 0.1776,
+            "k": 3
+          },
+          "hikari_acquire_ms_per_req": {
+            "mean": 0.365,
+            "sd": 0.2634,
+            "k": 3
+          }
+        }
+      },
+      "p50_fit": {
+        "slope_ms_per_member": 1.8036,
+        "intercept_ms": 48.431,
+        "r2": 0.9398
+      }
+    },
+    "batch": {
+      "rows": {
+        "1": {
+          "p50_ms": {
+            "mean": 35.1707,
+            "sd": 12.5433,
+            "k": 3
+          },
+          "p95_ms": {
+            "mean": 88.2887,
+            "sd": 36.4555,
+            "k": 3
+          },
+          "mean_ms": {
+            "mean": 41.402,
+            "sd": 15.043,
+            "k": 3
+          },
+          "Com_select_per_req": {
+            "mean": 6.1567,
+            "sd": 0.0368,
+            "k": 3
+          },
+          "Handler_read_key_per_req": {
+            "mean": 10.1817,
+            "sd": 0.0368,
+            "k": 3
+          },
+          "Handler_read_prev_per_req": {
+            "mean": 0.0,
+            "sd": 0.0,
+            "k": 3
+          },
+          "Handler_read_next_per_req": {
+            "mean": 5.4,
+            "sd": 0.0,
+            "k": 3
+          },
+          "db_exec_ms_per_req": {
+            "mean": 6.4679,
+            "sd": 1.845,
+            "k": 3
+          },
+          "hikari_usage_ms_per_req": {
+            "mean": 20.43,
+            "sd": 7.3417,
+            "k": 3
+          },
+          "hikari_checkouts_per_req": {
+            "mean": 2.1383,
+            "sd": 0.045,
+            "k": 3
+          },
+          "hikari_acquire_ms_per_req": {
+            "mean": 0.0288,
+            "sd": 0.0068,
+            "k": 3
+          }
+        },
+        "5": {
+          "p50_ms": {
+            "mean": 35.678,
+            "sd": 7.6815,
+            "k": 3
+          },
+          "p95_ms": {
+            "mean": 73.909,
+            "sd": 14.1263,
+            "k": 3
+          },
+          "mean_ms": {
+            "mean": 39.9107,
+            "sd": 8.5588,
+            "k": 3
+          },
+          "Com_select_per_req": {
+            "mean": 6.1433,
+            "sd": 0.0368,
+            "k": 3
+          },
+          "Handler_read_key_per_req": {
+            "mean": 26.1683,
+            "sd": 0.0368,
+            "k": 3
+          },
+          "Handler_read_prev_per_req": {
+            "mean": 0.0,
+            "sd": 0.0,
+            "k": 3
+          },
+          "Handler_read_next_per_req": {
+            "mean": 25.4,
+            "sd": 0.0,
+            "k": 3
+          },
+          "db_exec_ms_per_req": {
+            "mean": 6.3134,
+            "sd": 1.7018,
+            "k": 3
+          },
+          "hikari_usage_ms_per_req": {
+            "mean": 20.325,
+            "sd": 3.9808,
+            "k": 3
+          },
+          "hikari_checkouts_per_req": {
+            "mean": 2.135,
+            "sd": 0.0374,
+            "k": 3
+          },
+          "hikari_acquire_ms_per_req": {
+            "mean": 0.0658,
+            "sd": 0.0302,
+            "k": 3
+          }
+        },
+        "12": {
+          "p50_ms": {
+            "mean": 61.6793,
+            "sd": 44.6432,
+            "k": 3
+          },
+          "p95_ms": {
+            "mean": 146.6817,
+            "sd": 112.7235,
+            "k": 3
+          },
+          "mean_ms": {
+            "mean": 71.771,
+            "sd": 52.3981,
+            "k": 3
+          },
+          "Com_select_per_req": {
+            "mean": 6.2533,
+            "sd": 0.1568,
+            "k": 3
+          },
+          "Handler_read_key_per_req": {
+            "mean": 54.2783,
+            "sd": 0.1568,
+            "k": 3
+          },
+          "Handler_read_prev_per_req": {
+            "mean": 0.0,
+            "sd": 0.0,
+            "k": 3
+          },
+          "Handler_read_next_per_req": {
+            "mean": 60.4,
+            "sd": 0.0,
+            "k": 3
+          },
+          "db_exec_ms_per_req": {
+            "mean": 8.2492,
+            "sd": 2.6138,
+            "k": 3
+          },
+          "hikari_usage_ms_per_req": {
+            "mean": 28.9283,
+            "sd": 13.3248,
+            "k": 3
+          },
+          "hikari_checkouts_per_req": {
+            "mean": 2.2317,
+            "sd": 0.1579,
+            "k": 3
+          },
+          "hikari_acquire_ms_per_req": {
+            "mean": 0.0868,
+            "sd": 0.0301,
+            "k": 3
+          }
+        },
+        "30": {
+          "p50_ms": {
+            "mean": 67.7283,
+            "sd": 31.1428,
+            "k": 3
+          },
+          "p95_ms": {
+            "mean": 152.5613,
+            "sd": 79.4859,
+            "k": 3
+          },
+          "mean_ms": {
+            "mean": 78.6653,
+            "sd": 36.5982,
+            "k": 3
+          },
+          "Com_select_per_req": {
+            "mean": 6.2667,
+            "sd": 0.1247,
+            "k": 3
+          },
+          "Handler_read_key_per_req": {
+            "mean": 126.2917,
+            "sd": 0.1247,
+            "k": 3
+          },
+          "Handler_read_prev_per_req": {
+            "mean": 0.0,
+            "sd": 0.0,
+            "k": 3
+          },
+          "Handler_read_next_per_req": {
+            "mean": 150.4,
+            "sd": 0.0,
+            "k": 3
+          },
+          "db_exec_ms_per_req": {
+            "mean": 10.9862,
+            "sd": 3.8261,
+            "k": 3
+          },
+          "hikari_usage_ms_per_req": {
+            "mean": 36.0917,
+            "sd": 15.3884,
+            "k": 3
+          },
+          "hikari_checkouts_per_req": {
+            "mean": 2.255,
+            "sd": 0.1205,
+            "k": 3
+          },
+          "hikari_acquire_ms_per_req": {
+            "mean": 0.0664,
+            "sd": 0.0367,
+            "k": 3
+          }
+        },
+        "100": {
+          "p50_ms": {
+            "mean": 52.3123,
+            "sd": 17.4598,
+            "k": 3
+          },
+          "p95_ms": {
+            "mean": 158.289,
+            "sd": 113.8539,
+            "k": 3
+          },
+          "mean_ms": {
+            "mean": 68.753,
+            "sd": 35.9003,
+            "k": 3
+          },
+          "Com_select_per_req": {
+            "mean": 6.2367,
+            "sd": 0.1161,
+            "k": 3
+          },
+          "Handler_read_key_per_req": {
+            "mean": 307.2617,
+            "sd": 0.1161,
+            "k": 3
+          },
+          "Handler_read_prev_per_req": {
+            "mean": 0.0,
+            "sd": 0.0,
+            "k": 3
+          },
+          "Handler_read_next_per_req": {
+            "mean": 807.4,
+            "sd": 0.0,
+            "k": 3
+          },
+          "db_exec_ms_per_req": {
+            "mean": 14.686,
+            "sd": 3.6619,
+            "k": 3
+          },
+          "hikari_usage_ms_per_req": {
+            "mean": 33.2367,
+            "sd": 7.8978,
+            "k": 3
+          },
+          "hikari_checkouts_per_req": {
+            "mean": 2.21,
+            "sd": 0.0934,
+            "k": 3
+          },
+          "hikari_acquire_ms_per_req": {
+            "mean": 0.0581,
+            "sd": 0.0276,
+            "k": 3
+          }
+        }
+      },
+      "p50_fit": {
+        "slope_ms_per_member": 0.1107,
+        "intercept_ms": 47.236,
+        "r2": 0.0932
+      }
+    }
+  },
+  "delta_p50": {
+    "a": "per-member",
+    "b": "batch",
+    "by_n": {
+      "1": {
+        "a_minus_b_ms": -1.766,
+        "max_sd_ms": 12.5433,
+        "beyond_noise": false
+      },
+      "5": {
+        "a_minus_b_ms": 6.6755,
+        "max_sd_ms": 15.8435,
+        "beyond_noise": false
+      },
+      "12": {
+        "a_minus_b_ms": 25.2154,
+        "max_sd_ms": 44.6432,
+        "beyond_noise": false
+      },
+      "30": {
+        "a_minus_b_ms": 57.9527,
+        "max_sd_ms": 31.1428,
+        "beyond_noise": true
+      },
+      "100": {
+        "a_minus_b_ms": 168.4414,
+        "max_sd_ms": 74.345,
+        "beyond_noise": true
+      }
+    }
+  },
+  "meta": {
+    "where": "local",
+    "date": "2026-09-15",
+    "git": "1820abc2",
+    "started": "2026-09-15T14:55:07",
+    "finished": "2026-09-15T15:17:52"
+  },
+  "args": {
+    "n_levels": "1,5,12,30,100",
+    "reps": 3,
+    "requests": 200,
+    "warmup": 100,
+    "candidates": "per-member,batch",
+    "out": null,
+    "where": "local",
+    "skip_seed": false,
+    "no_restart": false,
+    "seed": 20260915
+  }
+}
