@@ -1,9 +1,10 @@
 import { Tabs } from 'expo-router';
+import type { ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Home, BarChart3, CirclePlay, User, type LucideIcon } from 'lucide-react-native';
+import { Home, BarChart3, CirclePlay, Users, User, type LucideIcon } from 'lucide-react-native';
 import { COLORS } from '@/constants/Colors';
 
-function TabIcon({ Icon, color }: { Icon: LucideIcon; color: string }) {
+function TabIcon({ Icon, color }: { Icon: LucideIcon; color: ColorValue }) {
   return <Icon size={22} color={color} strokeWidth={2} />;
 }
 
@@ -48,6 +49,13 @@ export default function TabLayout() {
         options={{
           title: '운동',
           tabBarIcon: ({ color }) => <TabIcon Icon={CirclePlay} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="groups"
+        options={{
+          title: '모임',
+          tabBarIcon: ({ color }) => <TabIcon Icon={Users} color={color} />,
         }}
       />
       <Tabs.Screen

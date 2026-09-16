@@ -21,7 +21,8 @@ export function useThemeColor(
   props: { light?: string; dark?: string },
   colorName: keyof typeof Colors.light & keyof typeof Colors.dark
 ) {
-  const theme = useColorScheme() ?? 'light';
+  // RN 0.86 부터 ColorSchemeName 에 'unspecified' 가 있어 null 병합만으론 인덱싱이 안 된다 — dark 가 아니면 전부 light
+  const theme = useColorScheme() === 'dark' ? 'dark' : 'light';
   const colorFromProps = props[theme];
 
   if (colorFromProps) {

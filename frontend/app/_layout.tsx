@@ -1,6 +1,5 @@
-import { DarkTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { DarkTheme, Stack, ThemeProvider, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
@@ -96,6 +95,8 @@ function RootLayoutNav() {
         <Stack.Screen name="(onboarding)" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="report/[id]" />
+        <Stack.Screen name="group/[id]" />
+        <Stack.Screen name="notifications" />
         <Stack.Screen name="board/notice" />
         <Stack.Screen name="board/qna" />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
