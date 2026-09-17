@@ -105,6 +105,12 @@ exercise:
       default-buffer-minutes: 30
       check-interval-minutes: 1
 
+# 기준 영상 업로드 테스트가 실제로 파일을 쓴다 — 저장소 트리가 아니라 build/ 아래로. ai-dir 은 일부러
+# 다르게 둬서 «AI 에 가는 경로 = ai-dir + 상대경로» 를 단언할 수 있게 한다.
+reference-video:
+  dir: build/tmp/reference-videos
+  ai-dir: /data/reference-videos
+
 logging:
   level:
     root: WARN
