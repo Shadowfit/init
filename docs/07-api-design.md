@@ -104,12 +104,26 @@
 ```
 > 내부 흐름: Spring 이 DB에 세션 생성 → 즉시 202 응답 → `@Async` 로 gRPC `StartAnalysis` 송신 (AI 가 기준 좌표 받아 분석 시작). 결합 상세는 [`architecture/ai-backend-integration.md`](./architecture/ai-backend-integration.md).
 
-### POST /exercises/{exerciseId}/reference - 기준 좌표 추출 요청 (관리자)
+### POST /admin/exercises/{exerciseId}/reference-video - 기준 영상(mp4) 업로드 → 기준 좌표 추출 (관리자, 2026-09-17)
 ```
-POST /exercises/1/reference?youtubeUrl=https://youtu.be/xxx
+POST /admin/exercises/1/reference-video
+Content-Type: multipart/form-data; file=<mp4>
+
+// Response 202 — «추출이 시작됐다» 이지 «끝났다» 가 아니다. 좌표는 AI 역호출로 exercise_references 를 교체할 때 바뀐다
+{ "id": 1, "referenceVideoPath": "1/6f9a1c2e-….mp4", ... AdminExerciseDetailDto 전 필드 }
+
+// 400 W016 — 비었거나 .mp4 가 아니거나 파일 머리(ftyp)가 아님 · 413 C007 — 50MB 초과 · 503 W017 — AI 서킷 OPEN(파일·DB 안 건드림)
+```
+> 영상은 공유 볼륨(`/data/reference-videos/{id}/{uuid}.mp4`)에 운동당 1개 보관·교체되고, 경로가 `exercises.reference_video_path` 에 남는다. 결합 상세·트랜잭션 경계는 [`architecture/ai-backend-integration.md` §3-3](./architecture/ai-backend-integration.md).
+
+### POST /exercises/{exerciseId}/reference - 기준 좌표 추출 요청 (관리자) — ⚠️ 유튜브 URL 은 동작하지 않는다
+```
+POST /exercises/1/reference?youtubeUrl=<AI 컨테이너 안 파일 경로>
 
 // Response 202
 "운동 ID [1]에 대한 기준 좌표 추출이 시작되었습니다."
+```
+> 파라미터 이름만 `youtubeUrl` 이다 — AI 가 http(s) 를 거부한다(유튜브 다운로드 ToS 미결정, `decisions/youtube-coordinate-harvest.md` §4-2). 위 mp4 업로드 API 가 실사용 경로다.
 ```
 유튜브 URL → AI 가 MediaPipe로 프레임마다 관절 좌표 추출 → Spring 콜백으로 `exercise_references` 테이블 영속화.
 

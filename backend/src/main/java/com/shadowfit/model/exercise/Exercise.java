@@ -35,6 +35,14 @@ public class Exercise {
     private String preferredUrl;
 
     /**
+     * 기준 좌표를 뽑은 업로드 영상 — 저장 루트({@code reference-video.dir}) 기준 <b>상대 경로</b>
+     * ({@code {id}/{uuid}.mp4}). NULL 이면 업로드로 등록된 영상이 없다(V4 시드 스쿼트가 그렇다).
+     * 절대 경로를 안 박는 이유는 V23 주석 — Spring 이 쓰는 경로와 AI 가 읽는 경로가 문자열로는 다를 수 있다.
+     */
+    @Column(name = "reference_video_path", length = 500)
+    private String referenceVideoPath;
+
+    /**
      * SQL의 JSON 타입을 매핑합니다.
      * 가장 간단하게는 String으로 처리한 뒤,
      * 필요할 때 Jackson ObjectMapper로 파싱하여 사용합니다.
@@ -98,6 +106,18 @@ public class Exercise {
         if (preferredUrl != null) this.preferredUrl = preferredUrl;
         if (targetJoints != null) this.targetJoints = targetJoints;
         if (expectedDurationMinutes != null) this.expectedDurationMinutes = expectedDurationMinutes;
+    }
+
+    /**
+     * 업로드된 기준 영상 경로를 바꾼다.
+     *
+     * @return 바뀌기 <b>전</b> 경로(없으면 null) — 호출자가 커밋 뒤에 이전 파일을 지워야 해서 원값을 준다.
+     *         {@link #changeAnalysisSupport} 와 같은 이유로 판정을 미리 접지 않는다.
+     */
+    public String attachReferenceVideo(String relativePath) {
+        String before = this.referenceVideoPath;
+        this.referenceVideoPath = relativePath;
+        return before;
     }
 
     /** 싱크로율 임계값 4종을 한 번에 바꾼다. beginner&lt;advanced 검증은 호출자(DTO)가 이미 했다. */

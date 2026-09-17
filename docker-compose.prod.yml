@@ -108,6 +108,12 @@ services:
       JWT_SECRET: ${JWT_SECRET:?운영 배포에는 필수. Base64 32바이트 이상}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       EXPO_ACCESS_TOKEN: ${EXPO_ACCESS_TOKEN:-}
+      # 관리자 mp4 업로드 저장 루트 — 아래 volumes 의 컨테이너 쪽 경로와 같아야 한다(dev compose 와 동일).
+      REFERENCE_VIDEO_DIR: /data/reference-videos
+    volumes:
+      # 기준 영상 공유 — Spring 이 쓰고 shadowfit-ai 가 같은 경로로 읽는다(2026-09-17, dev 와 같은 구성).
+      # 이미지가 아니라 호스트 폴더라 재배포해도 영상이 남는다. 전제는 같은 호스트.
+      - ${REFERENCE_VIDEO_HOST_DIR:-./data/reference-videos}:/data/reference-videos
     depends_on:
       mysql:
         condition: service_healthy
@@ -184,6 +190,9 @@ services:
       # 워커 프로세스 수 — entrypoint.sh 가 이 값으로 몇 개를 띄우고 포트를 어떻게 나눌지
       # 정한다. 위 shadowfit-backend 의 AI_CHANNEL_POOL_SIZE 와 같은 소스다.
       AI_WORKER_COUNT: ${AI_WORKER_COUNT:-3}
+    volumes:
+      # 위 shadowfit-backend 와 같은 폴더 — 읽기 전용.
+      - ${REFERENCE_VIDEO_HOST_DIR:-./data/reference-videos}:/data/reference-videos:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s

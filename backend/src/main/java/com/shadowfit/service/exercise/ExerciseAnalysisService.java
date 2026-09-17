@@ -239,22 +239,40 @@ public class ExerciseAnalysisService {
     }
 
     /**
-     * [STEP 1: 기준 데이터 등록]
-     * 사용자가 선택한 유튜브 URL에서 AI가 스켈레톤 좌표를 추출하도록 요청합니다. -- 등록하는건 관리자용
+     * 이 운동의 추출 요청이 갈 AI 채널의 서킷이 닫혀 있나(호출 가능한가).
+     *
+     * <p>mp4 업로드가 파일·DB 를 건드리기 <b>전에</b> 묻는다(2026-09-17 confirm ㄴ) — 서킷이 열려 있으면
+     * {@link #extractReferencePoses} 가 조용히 스킵하므로, 미리 안 물으면 «저장은 됐는데 추출은 안 된»
+     * 상태가 202 뒤에 숨는다. {@code tryAcquirePermission} 이 아니라 상태를 보는 이유는 HALF_OPEN 에서
+     * 허가를 소비하면 실제 호출 없이 돌려줘야 해서다.
      */
-    public void extractReferencePoses(Long exerciseId,String youtubeUrl) {
+    public boolean isAiReachable(long routingKey) {
+        CircuitBreaker.State state = aiCircuitBreaker(routingKey).getState();
+        return state != CircuitBreaker.State.OPEN && state != CircuitBreaker.State.FORCED_OPEN;
+    }
+
+    /**
+     * [STEP 1: 기준 데이터 등록]
+     * 기준 영상에서 AI 가 스켈레톤 좌표를 추출하도록 요청한다 — 관리자용.
+     *
+     * <p>{@code videoSource} 는 proto 필드 이름이 {@code youtube_url} 이지만 <b>AI 컨테이너가 열 수 있는
+     * 파일 경로</b>다. AI 가 http(s) 는 거부한다(유튜브 다운로드는 ToS 미결정,
+     * {@code exercise_servicer.py ExtractReferenceData} · youtube-coordinate-harvest.md §4-2). 관리자 mp4
+     * 업로드({@link ReferenceVideoService})가 공유 볼륨에 쓴 경로를 여기로 넘긴다.
+     */
+    public void extractReferencePoses(Long exerciseId, String videoSource) {
 
         Exercise exercise = exercisesRepository.findByIdCached(exerciseId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.EXERCISE_NOT_FOUND));
 
-        if (youtubeUrl == null || youtubeUrl.isEmpty()) {
-            log.error("전달된 기준 영상 URL이 없습니다.");
+        if (videoSource == null || videoSource.isEmpty()) {
+            log.error("전달된 기준 영상 경로가 없습니다.");
             throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
         }
 
         com.shadowfit.grpc.ExtractRequest request = com.shadowfit.grpc.ExtractRequest.newBuilder()
                 .setExerciseId(exerciseId)
-                .setYoutubeUrl(youtubeUrl) // ✅ 직접 삽입된 URL 사용
+                .setYoutubeUrl(videoSource) // 필드 이름만 youtube_url — 의미는 컨테이너 안 파일 경로
                 .build();
 
         log.info("FastAPI에게 기준 좌표 추출 요청 전송 - 운동 ID: {}", exerciseId);
@@ -276,8 +294,17 @@ public class ExerciseAnalysisService {
         getAuthenticatedStub(exerciseId).extractReferenceData(request, CorrelationIds.preserving(new StreamObserver<com.shadowfit.grpc.ExtractResponse>() {
             @Override
             public void onNext(com.shadowfit.grpc.ExtractResponse value) {
+                // 응답은 «접수» 다 — 추출·저장은 AI 가 끝낸 뒤 역호출(saveReferencePoses)로 온다.
+                // success=false 는 AI 가 시작조차 못 했다는 뜻(원격 URL·파일 없음)이라, 서킷엔 성공으로
+                // 세되(상대는 멀쩡하다) 로그는 ERROR 로 남긴다. 이게 안 남으면 «202 받았는데 좌표가
+                // 안 바뀜» 을 추적할 단서가 Spring 쪽엔 하나도 없다.
                 cb.onSuccess(System.nanoTime() - callStart, TimeUnit.NANOSECONDS);
-                log.info("FastAPI 추출 시작 응답 수신 - 운동 ID: {}", value.getExerciseId());
+                if (value.getSuccess()) {
+                    log.info("FastAPI 추출 접수 응답 수신 - 운동 ID: {}", value.getExerciseId());
+                } else {
+                    log.error("FastAPI 가 기준 좌표 추출을 거부 - 운동 ID: {}, source: {} "
+                            + "(공유 볼륨 마운트·REFERENCE_VIDEO_AI_DIR 확인)", value.getExerciseId(), videoSource);
+                }
             }
             @Override
             public void onError(Throwable t) {

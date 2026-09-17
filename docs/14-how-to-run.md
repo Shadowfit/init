@@ -366,6 +366,15 @@ cd "c:/최지호/상명대학교/4학년 1학기/캡스톤 디자인/shadowfit/b
 > gradlew.bat bootRun --args='--spring.profiles.active=dev'
 > ```
 
+> **관리자 기준 영상(mp4) 업로드를 로컬에서 쓰려면** — Spring 이 쓴 파일을 AI 가 같은 경로로 읽어야 한다(공유 폴더, 2026-09-17).
+> | 실행 조합 | 해야 할 것 |
+> |---|---|
+> | 전부 `docker compose` | 없음 — compose 가 `./backend/data/reference-videos` 를 양쪽에 마운트한다 |
+> | Spring `bootRun` + AI 컨테이너 | `REFERENCE_VIDEO_AI_DIR=/data/reference-videos` 하나만 환경변수로 준다(Spring 은 `backend/data/reference-videos` 에 쓰고, AI 컨테이너는 같은 폴더를 `/data/...` 로 본다) |
+> | 둘 다 호스트(`bootRun` + `uvicorn`) | 없음 — 같은 파일시스템이라 경로가 같다 |
+>
+> 상세: [`architecture/ai-backend-integration.md` §3-3](./architecture/ai-backend-integration.md)
+
 실행이 성공하면 터미널에 아래와 비슷한 메시지가 나옵니다:
 ```
   .   ____          _            __ _ _
