@@ -313,7 +313,7 @@
 | 추적성 | 없음 | **correlation id 양방향** |
 | proto 밖 계약 | 토큰 메타데이터 | **+ `x-request-id` 메타데이터** |
 
-### (PR 미정) — feat(admin): 관리자 mp4 업로드 → 기준 좌표 추출 (2026-09-17) ⭐ proto 밖 계약 + 응답 의미 변경
+### #772 — feat(admin): 관리자 mp4 업로드 → 기준 좌표 추출 (2026-09-17) ⭐ proto 밖 계약 + 응답 의미 변경
 
 - **호출자가 생겼다.** `ExtractReferenceData`(Spring → AI) 는 그때까지 `POST /exercises/{id}/reference?youtubeUrl=` 하나가 불렀는데, AI 가 http(s) 를 거부하도록 좁힌 뒤(#192)로는 **사실상 아무도 못 쓰는 경로**였다. `POST /admin/exercises/{id}/reference-video`(multipart) 가 공유 볼륨에 mp4 를 쓰고 그 경로로 이 RPC 를 부른다 — [integration.md §3-3](./ai-backend-integration.md#3-3-extractreferencedata--proto-밖-계약-두-개--2026-09-17-관리자-mp4-업로드)
 - **proto 밖 계약 ①: 파일시스템.** `youtube_url` 필드에 «AI 컨테이너가 열 수 있는 경로» 가 실리고, 그 경로가 같은 파일을 가리키는 건 compose 의 bind mount(`./backend/data/reference-videos` → 양쪽 `/data/reference-videos`)가 보장한다. 필드 이름·타입은 안 바뀌어서 proto 검사가 이 계약을 못 본다 — 갱신 트리거 3번
