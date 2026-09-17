@@ -28,8 +28,11 @@ on:
       - '.github/workflows/ai-server-test.yml'
 
 # 같은 브랜치에 연속 푸시하면 이전 실행은 취소 — 러너 시간 낭비 방지
+# github.workflow 를 섞는 이유: 이 파일은 CD 가 reusable 로도 호출한다. 호출될 때 github.workflow 는
+# 호출자(CD) 이름이라, 같은 푸시로 뜬 독립 실행과 CD 안의 게이트가 다른 그룹에 들어간다.
+# 안 섞으면 둘이 같은 그룹이라 나중 것이 먼저 것을 취소한다 — main 머지마다 둘 중 하나가 cancelled (#773)
 concurrency:
-  group: ai-server-test-${{ github.ref }}
+  group: ${{ github.workflow }}-ai-server-test-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
