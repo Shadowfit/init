@@ -78,7 +78,7 @@
 - [pattern-analysis-implementation.md](./pattern-analysis-implementation.md) — 패턴 분석 API 구현계획(BE-07) (확정 — 9개 항목 구현 완료, 포폴 카드 연결)
 - [pose-frame-base64-cost.md](./pose-frame-base64-cost.md) — POST /pose 프레임 base64 비용 실측 (보류 — 해상도 캡 도입 여부 미결정, 실기기 촬영본 검증 필요)
 - [recommendation-algorithm.md](./recommendation-algorithm.md) — 운동 추천 알고리즘(BE-08) (미상)
-- [streak-card-api.md](./streak-card-api.md) — 메인 화면 스트릭 카드 API — 최장 기록 계산 방식·응답 계약 (확정 — 4항목 confirm·구현 완료 2026-09-18, EXPLAIN 1회 미측정)
+- [streak-card-api.md](./streak-card-api.md) — 메인 화면 스트릭 카드 API — 최장 기록 계산 방식·응답 계약 (확정 — 4항목 confirm·구현·EXPLAIN 실측 완료 2026-09-18)
 - [reference-freeze.md](./reference-freeze.md) — 정답지를 한 번 뽑고 고정한다(추출 비결정성) (확정 — 원인 규명 완료, 대응 방향 확정, 이슈 닫힘)
 - [reference-score-min-knee-variance.md](./reference-score-min-knee-variance.md) — 정답지 min_knee 판별 변동("지터 3.5°"의 진위, #256) (진행중 — 측정 방법은 이미 구현돼 있음, 입력 자산 확보가 남은 과제)
 - [reference-style-and-caching.md](./reference-style-and-caching.md) — 선택형 스타일 기준 추출·전송·캐싱 설계 (보류 — 스타일 식별자 부재로 막힌 지점 확인, 미구현)

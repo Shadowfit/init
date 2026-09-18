@@ -1,6 +1,6 @@
 # Decision: 운동 스트릭 카드 API — 메인 화면 «내 연속 출석» 한 방 조회
 
-상태: **✅ 확정 (2026-09-18 사용자 confirm)** — §2 b·§3 전 필드·§4 A·§5 `/attendance/mine` 권고안 그대로 채택, 같은 날 구현(§6 면적대로). 남은 것: §4 최장 기록 쿼리 EXPLAIN 1회(미측정)
+상태: **✅ 확정 (2026-09-18 사용자 confirm)** — §2 b·§3 전 필드·§4 A·§5 `/attendance/mine` 권고안 그대로 채택, 같은 날 구현(§6 면적대로). §8 EXPLAIN 실측 완료(2,000행 계정 총 1.2~2.3ms, 커버링 인덱스·디스크 임시 테이블 0)
 작성: 2026-09-18
 배경: 2학기 구현 목록(캡스톤 발표 자료 2p «메인 화면 — 운동 스트릭 기능»)에서 ✔ 이 안 찍힌 항목. 확인해 보니 «연속일수 숫자» 자체는 이미 세 API 로 나가고 있어(§1) 부족한 건 숫자가 아니라 **카드 하나가 필요로 하는 항목 묶음**(오늘 여부·이번 주 7칸·최장 기록)이다. 범위는 «스트릭 카드»로 확정(2026-09-18 사용자 선택 — 마일스톤/배지·프리즈는 제외).
 연관: [`./social-cheer-and-group-feed.md`](./social-cheer-and-group-feed.md) §3-B(출석 정의·streak 창), [`./friend-status-streak-fanout-experiment-design.md`](./friend-status-streak-fanout-experiment-design.md)(다중 회원 streak), [`./recommendation-algorithm.md`](./recommendation-algorithm.md) §10(인덱스 역방향 걷기 실측), [`../07-api-design.md`](../07-api-design.md), [`../tasks/35-frontend-api-handoff.md`](../tasks/35-frontend-api-handoff.md)
@@ -145,11 +145,49 @@ DAU 1,000, 회원당 하루 최대 몇 세션, 기록 나이 최대 2년(2학기
 - [x] **§3** ✅ **전 필드 채택** (2026-09-18) — `today`·`currentStreakStart`·`longestStreakStart/End` 포함, `thisWeek` 월~일 7개 고정
 - [x] **§4** ✅ **A. DISTINCT 날짜를 자바에서 순회** (2026-09-18) — 저장 컬럼(C·D) 안 만듦, 윈도우 함수(B)는 후속 실험 후보로만
 - [x] **§5** ✅ **`GET /attendance/mine`**, 컨트롤러 `AttendanceController` (2026-09-18)
-- [ ] §4 최장 기록 쿼리 `EXPLAIN ANALYZE` 1회 — rig 의 1,680세션 계정. 구현 시점엔 로컬 MySQL 이 안 떠 있어 **미측정**
+- [x] §4 최장 기록 쿼리 `EXPLAIN ANALYZE` — ✅ §8 (2026-09-18, 로컬 MySQL 8.0.46, 계정 4종 × 10회)
 
 ---
+
+## 8. 실측 — 최장 기록 쿼리는 커버링 인덱스 스캔 + 메모리 임시 테이블, 2,000행 계정에서 1~2ms (2026-09-18)
+
+§4 가 «전량 스캔은 미측정» 으로 남겼던 것. 로컬 `shadowfit-mysql`(MySQL 8.0.46, i3-6100 동거 박스 — 절대값이 아니라 **모양과 기울기**만 본다) 의 실 계정으로 Hibernate 가 만드는 SQL 그대로 `EXPLAIN ANALYZE`, 계정 크기별 10회 반복.
+
+**쿼리** (`findDistinctDatesByStatus` 가 생성하는 SQL):
+```sql
+select distinct cast(s1_0.start_time as date) from exercise_sessions s1_0
+where s1_0.member_id=? and s1_0.status='COMPLETED' order by cast(s1_0.start_time as date)
+```
+
+**계획** (member 577, COMPLETED 2,000행 / 203일):
+```
+-> Sort: cast(start_time as date)                          (actual 3.4..3.41  rows=203)
+   -> Table scan on <temporary>                            (actual 3.21..3.24 rows=203)
+      -> Temporary table with deduplication                (actual 3.21       rows=203)
+         -> Covering index lookup on s1_0 using idx_session_member_status_start
+            (member_id=577, status='COMPLETED')            (actual 0.31..2.17 rows=2000)
+Handler_read_key=1  Handler_read_next=2000  Handler_write=2203  Created_tmp_tables=2  Created_tmp_disk_tables=0  Sort_rows=203
+```
+- 읽기는 **커버링 인덱스 한 구간**(`Handler_read_key` 1 + `read_next` 2,000) — 표 본문 접근 0, §4 가정대로.
+- `DISTINCT CAST(...)` 는 표현식이라 **메모리 임시 테이블**(`Handler_write` 2,203 = 2,000 + 203) → 그 203행을 정렬. 디스크 임시 테이블 0.
+
+**계정 크기별** (10회, 총 시간 = Sort 노드 actual 끝):
+
+| 계정 | COMPLETED 행 | 출석일 | 총 median | min~max | 인덱스 스캔 median |
+|---|---:|---:|---:|---|---:|
+| 577 | 2,000 | 203 | **1.21 ms** | 0.99~2.13 | 0.60 |
+| 121 | 2,000 | 181 | **2.25 ms** | 1.99~3.33 | 1.30 |
+| 532 | 1,000 | 103 | 1.20 ms | 0.55~1.58 | 0.65 |
+| 520 | 100 | 13 | 0.09 ms | 0.07~0.16 | 0.05 |
+
+- 행수에 **선형** — 대략 행당 0.5~1 µs. 같은 2,000행인데 121 이 577 의 두 배인 건 121 의 `start_time` 이 무작위(rig 생성)라 리프 페이지가 더 퍼진 것으로 보이나 그 원인은 **미검증**.
+- §4 가정 상한(≤ 2,200행)에서 **한 자릿수 ms**. 요청당 다른 두 쿼리(현재 streak 페이지 ≈ 0.4 ms(§10 재인용)·이번 주 range scan 0.07 ms — 같은 판에서 확인)보다 이 쿼리가 지배적이지만, 슬로우 로그 부류가 아니다.
+- **A → C(저장 컬럼) 전환 조건은 여전히 안 밟혔다** — 이 쿼리가 DB 상위 쿼리로 올라오려면 «회원당 수만 행» 또는 «메인 화면 호출이 초당 수백» 이어야 하고 둘 다 가정 밖. 후보 B(윈도우 함수)는 전송량(203행 → 1행)만 줄이고 스캔·임시 테이블은 같아서, 이 크기에선 잴 델타가 없다 — 실험 후보에서 내린다.
+
+**재는 법** (다음에 같은 부류 쿼리를 잴 때): `docker exec shadowfit-mysql mysql -uroot -p… <db>` 로 들어가 ① Hibernate SQL 을 파라미터만 리터럴로 바꿔 `EXPLAIN ANALYZE …G` ② `FLUSH STATUS` 뒤 실제 실행 → `SHOW SESSION STATUS WHERE Variable_name IN ('Handler_read_key','Handler_read_next','Handler_write','Created_tmp_tables','Created_tmp_disk_tables','Sort_rows')` 로 «몇 행을 어떻게 읽었나»를 계획이 아니라 카운터로 확인 ③ 계정 크기 3~4종 × 10회 반복해 median 과 기울기. 1회 값은 이 박스에서 2~6× 튄다(577 의 1회차 인덱스 스캔 11.4 ms 가 그 예).
 
 ## 이력
 
 - 2026-09-18: 작성. 범위 «스트릭 카드»(현재·오늘·7칸·최장) 로 좁힘(사용자 선택). 마일스톤·프리즈 제외.
-- 2026-09-18: §2·§3·§4·§5 권고안 그대로 확정(사용자 confirm), 같은 날 구현. `AttendanceService.currentStreak` 은 시그니처 유지하고 `currentStreakRun`(구간) 을 옆에 뒀다 — 호출부 3곳 무변경. 새 쿼리는 `findDistinctDatesByStatus` 하나, 이번 주는 기존 `findDistinctActiveDates` 재사용이라 `attendedToday` 의 별도 exists 쿼리 없음(요청당 3쿼리). 테스트 14개(단위 5 + 통합 9). EXPLAIN 은 미측정으로 남김.
+- 2026-09-18: §8 EXPLAIN 실측 — 커버링 인덱스 + 메모리 임시 테이블, 2,000행 계정 1.2~2.3 ms, 행수 선형. B 는 실험 후보에서 내림.
+- 2026-09-18: §2·§3·§4·§5 권고안 그대로 확정(사용자 confirm), 같은 날 구현. `AttendanceService.currentStreak` 은 시그니처 유지하고 `currentStreakRun`(구간) 을 옆에 뒀다 — 호출부 3곳 무변경. 새 쿼리는 `findDistinctDatesByStatus` 하나, 이번 주는 기존 `findDistinctActiveDates` 재사용이라 `attendedToday` 의 별도 exists 쿼리 없음(요청당 3쿼리). 테스트 14개(단위 5 + 통합 9). EXPLAIN 은 같은 날 §8 로 닫음.
