@@ -184,7 +184,7 @@ Handler_read_key=1  Handler_read_next=2000  Handler_write=2203  Created_tmp_tabl
 - §4 가정 상한(≤ 2,200행)에서 **한 자릿수 ms**. 요청당 다른 두 쿼리(현재 streak 페이지 ≈ 0.4 ms(§10 재인용)·이번 주 range scan 0.07 ms — 같은 판에서 확인)보다 이 쿼리가 지배적이지만, 슬로우 로그 부류가 아니다.
 - **A → C(저장 컬럼) 전환 조건은 여전히 안 밟혔다** — 이 쿼리가 DB 상위 쿼리로 올라오려면 «회원당 수만 행» 또는 «메인 화면 호출이 초당 수백» 이어야 하고 둘 다 가정 밖. 후보 B(윈도우 함수)는 전송량(203행 → 1행)만 줄이고 스캔·임시 테이블은 같아서, 이 크기에선 잴 델타가 없다 — 실험 후보에서 내린다.
 
-**재는 법** (다음에 같은 부류 쿼리를 잴 때): `docker exec shadowfit-mysql mysql -uroot -p… <db>` 로 들어가 ① Hibernate SQL 을 파라미터만 리터럴로 바꿔 `EXPLAIN ANALYZE …G` ② `FLUSH STATUS` 뒤 실제 실행 → `SHOW SESSION STATUS WHERE Variable_name IN ('Handler_read_key','Handler_read_next','Handler_write','Created_tmp_tables','Created_tmp_disk_tables','Sort_rows')` 로 «몇 행을 어떻게 읽었나»를 계획이 아니라 카운터로 확인 ③ 계정 크기 3~4종 × 10회 반복해 median 과 기울기. 1회 값은 이 박스에서 2~6× 튄다(577 의 1회차 인덱스 스캔 11.4 ms 가 그 예).
+**재는 법** (다음에 같은 부류 쿼리를 잴 때): `docker exec shadowfit-mysql mysql -uroot -p… <db>` 로 들어가 ① Hibernate SQL 을 파라미터만 리터럴로 바꿔 `EXPLAIN ANALYZE …\G` ② `FLUSH STATUS` 뒤 실제 실행 → `SHOW SESSION STATUS WHERE Variable_name IN ('Handler_read_key','Handler_read_next','Handler_write','Created_tmp_tables','Created_tmp_disk_tables','Sort_rows')` 로 «몇 행을 어떻게 읽었나»를 계획이 아니라 카운터로 확인 ③ 계정 크기 3~4종 × 10회 반복해 median 과 기울기. 1회 값은 이 박스에서 2~6× 튄다(577 의 1회차 인덱스 스캔 11.4 ms 가 그 예).
 
 ## 이력
 
