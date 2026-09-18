@@ -1,7 +1,7 @@
 # `pose_data.joint_coordinates` 로 판정을 재검증하는 쿼리 — 포폴 카드로 만들 것인가, 무엇을 잴 것인가
 
 작성: 2026-09-19
-상태: **✅ 4-1 a · 4-2 a · 4-3 a 채택 (2026-09-19 사용자 confirm)** — 선행 #714 는 PR #777. 카드 위치(§8)는 측정 결과 뒤. §7 은 측정 뒤 채운다.
+상태: **✅ 4-1 a · 4-2 a · 4-3 a 채택 (2026-09-19 사용자 confirm) → 측정 완료 (같은 날, §7)** — 선행 #714 는 PR #777, R=1 손잡이는 PR #782. 남은 미결은 카드 위치(§8)뿐.
 발단: "운동 좌표 JSON 관련해서 만들 수 있는 쿼리가 있나 — 포폴용으로". 쿼리 자체는 여럿 가능하지만(§3), **포폴 카드**가 되려면 «순진한 방법이 숫자로 깨진 곳 + 고친 before/after» 가 있어야 하고([`db-portfolio-roadmap.md`](./db-portfolio-roadmap.md) 기준선), 이미 있는 JSON 카드([`weekly-json-table-query-tuning.md`](./weekly-json-table-query-tuning.md), «파싱이 아니라 조인 순서»)와 **교훈이 달라야** 한다. 그 조건을 통과하는 후보는 하나(§3 ①)뿐이고, 그 하나가 분기점 3개를 안고 있다.
 대상 코드: [`PoseDataRepository.java`](../../backend/src/main/java/com/shadowfit/repository/exercise/PoseDataRepository.java) · [`angle_calculator.py`](../../ai-server/app/core/angle_calculator.py) · [`squat_analyzer.py`](../../ai-server/app/core/squat_analyzer.py)
 연관: 이슈 [#217](https://github.com/Shadowfit/init/issues/217)(무릎각 3D/2D 70° 갈림 — 실영상 미검증) · [`../tasks/32-deferred-items.md`](../tasks/32-deferred-items.md) P5(«좌표가 write-only 다») · [`pose-ingest-downsampling.md`](./pose-ingest-downsampling.md)(R=5 대표추출, TTL 보류) · [`../portfolio/realmysql-experiments.md`](../portfolio/realmysql-experiments.md) §4 ④(off-page JSON I/O 실측 · generated column 미수행 결정) · [`worst-section-rep-resolution.md`](./worst-section-rep-resolution.md)(`smoothed_knee_angle` 컬럼의 출처)
@@ -24,6 +24,9 @@
 | 무릎 3점 | LEFT 23·25·27 / RIGHT 24·26·28 (hip·knee·ankle) | [`constants.py:12-17`](../../ai-server/app/utils/constants.py) |
 | 이미 컬럼으로 빼둔 스칼라 | `sync_rate`(rep 단위 상수) · `smoothed_knee_angle`(좌우 평균 무릎각을 3프레임 평활, **3D**) · `rep_number` | V1 DDL 주석 · [`squat_analyzer.py:148-158`](../../ai-server/app/core/squat_analyzer.py) |
 | 저장 밀도 | R=5 윈도우당 `sync_rate` 최저 프레임 1개만 저장 — **원본 밀도 복구 불가** | pose-ingest-downsampling.md §7 |
+| 저장 단위 | **완성 rep 단위 배치** — rep 0 세션은 한 행도 없다. rep 당 `MAX_REP_FRAMES=60` 트레일링 창 밖 프레임은 밀려난다(R=1 이어도 «판정 프레임 전부» 가 아님) | [`session_state.py:43,128`](../../ai-server/app/grpc/session_state.py) · §7 적재 실측(117 판정 → 83 행) |
+| 실제 행 크기 | **4,110~4,145B** — 합성 rig 의 2.3KB 보다 1.8배(실제 float 정밀도) | §7 |
+| 평활 정의 | 저장 `smoothed_knee_angle` 은 **스트리밍 경로의 트레일링** 3프레임(`recent_raw_knees`). 배치 경로 `analyze_squat_frames` 는 센터드 — 재계산은 트레일링을 따라야 맞는다 | [`squat_analyzer.py:345-348`](../../ai-server/app/core/squat_analyzer.py) · §7 자기검증 |
 | 보존 | 이번 달 + 1개월, 그 뒤 `DROP PARTITION` | `application.yml` `retention-buffer-months: 1` |
 | PK | `(id, created_at)` — `created_at` = 세션 시작 시각 앵커(V9) → 앵커를 조건에 넣어야 프루닝 | `PoseDataRepository` 클래스 주석 |
 
@@ -190,9 +193,36 @@ ORDER BY timestamp_sec;
 
 ---
 
-## 7. 결과
+## 7. 결과 (2026-09-19)
 
-(측정 뒤 기록)
+원본: [`loadtest/results/pose-json-backfill-2026-09-19/`](../../loadtest/results/pose-json-backfill-2026-09-19/README.md) · 장치: [`measure_pose_json_angle_axis.py`](../../loadtest/measure_pose_json_angle_axis.py)
+표본: 스톡 9편 → E1 통주행(PR #777) → R=1 적재(PR #782) → **6세션 239행**(3편은 rep 0 이라 행 없음). RATE_LIMITED 0.
+
+### 7-1. 자기검증 — 둘 다 통과
+
+- SQL 3D 재계산 → 좌우 평균 → 트레일링 3프레임 평활 vs 저장값: 5세션 max **0.01°**, 108198 은 81/83(예외 2건은 60개 창 밀림 자리). `->'$[i]'` 경로·수식·평활 정의가 코드와 일치.
+- 저장 랜드마크를 `StreamingSquatAnalyzer` 에 그대로 재생(z 그대로): **6세션 전부 저장 rep 재현.** 저장 JSON 만으로 판정을 재현할 수 있다 — backfill 경로의 원형이 실제로 돈다.
+
+### 7-2. #217 판정축
+
+| 지표 | 결과 |
+|---|---|
+| 3D−2D 차, 무릎별 | 가려진 무릎(vis<0.55) p90 30~91°, **보이는 무릎도 p90 9~48°**. «가림이 원인» 가설은 이 표본에서 성립 안 함 — z 발산은 가림과 별개로 있다 |
+| 문턱 뒤집힘(평활 3D vs 2D, 100/150) | **55/239 = 23%**(BOTTOM 23 · STANDING 32), 108198 에 41건 집중 |
+| rep 카운트(z 그대로 / z=0 재생) | **6세션 중 3세션이 달라짐**(1→0, 3→2, 2→3) — 방향 불일정 |
+| 좌우 비대칭 L−R 3D | 양쪽 보여도 p50 11~28°. 저장 각도가 좌우 평균이라 이 폭이 판정에 섞임 |
+
+**이 측정이 정하는 것**: 문턱 100/150 을 두고 자(3D↔2D)만 바꾸면 rep 카운트가 흔들린다(3/6) — #217 의 «문턱과 측정이 다른 자를 쓰는가» 가 실영상에서도 실재한다. **못 정하는 것**: 어느 자가 맞는가(정답지 없음, #256 과 같은 층). 그 다음 분기(문턱을 2D 로 다시 정하나)는 AI 축이다.
+
+### 7-3. DB 축 — 로컬 333행이라 EXPLAIN 만
+
+앵커 없이 `session_id` 만이면 partitions 7개 전부(로컬; 운영 DDL 은 14), `+ created_at` 이면 1개. `JSON_TABLE` 33행 펼침은 같은 프루닝에 `Table function; Using temporary` 가 하나 더 붙는다. 크기·cold/warm 셀은 합성 rig 가 로컬에 없어 **미수행** — 돌릴 땐 행 크기를 4.1KB 로.
+
+### 7-4. §6 한계에 추가된 것
+
+- 표본이 «스톡 영상 6세션 239행» 이다. 실사용 수치 주장 금지. 10월 사용자 테스트 뒤 같은 스크립트 재실행.
+- «가림이 원인» 이라는 09-19 초기 관측(1세션 18행)은 6세션에서 **기각에 가깝다** — 보이는 무릎도 갈린다.
+
 
 ---
 
@@ -203,4 +233,5 @@ ORDER BY timestamp_sec;
 - [x] 4-3 승격 — **a(측정 1회 + 문서)** 채택 2026-09-19. b 는 #217 답 뒤
 - [ ] 카드 위치 — one-pager «그 외 실측» vs 별도 카드 (측정 결과 보고 정한다)
 - [ ] 32 문서 P5 «Tier 0 없음» 정정 — 이 문서 §1-2 로 링크
-- [ ] PR #777 머지 → 풀스택 통주행으로 «전송 = 판정» 확인 → 9편 적재(R=1) → §5 측정 → §7
+- [x] PR #777 머지 → 통주행 «전송 = 판정» 확인(11/7 → 11/11, PR 코멘트) → 9편 적재(R=1, PR #782) → §5 측정 → §7 (2026-09-19)
+- [ ] #217 에 §7-2 코멘트 · 10월 사용자 테스트 뒤 재실행
