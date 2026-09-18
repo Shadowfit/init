@@ -91,6 +91,36 @@ class AttendanceServiceIntegrationTest {
         assertThat(attendanceService.currentStreak(member.getId(), today)).isEqualTo(days);
     }
 
+    @Test
+    @DisplayName("longestStreakRun — COMPLETED 만, 같은 날 여러 세션은 하루, 남의 출석 무관. 오래된 5일 구간이 최근 2일보다 길다")
+    void longestStreak_realQuery() {
+        for (int i = 60; i >= 56; i--) {
+            sessionOn(member, today.minusDays(i), Status.COMPLETED);
+        }
+        sessionOn(member, today.minusDays(58), Status.COMPLETED); // 같은 날 두 번째 세션
+        sessionOn(member, today.minusDays(55), Status.FAILED);    // 실패는 구간을 안 잇는다
+        sessionOn(member, today.minusDays(1), Status.COMPLETED);
+        sessionOn(member, today, Status.COMPLETED);
+        sessionOn(other, today.minusDays(55), Status.COMPLETED);   // 남의 출석이 내 구간을 안 잇는다
+
+        AttendanceService.StreakRun run = attendanceService.longestStreakRun(member.getId());
+        assertThat(run.length()).isEqualTo(5);
+        assertThat(run.start()).isEqualTo(today.minusDays(60));
+        assertThat(run.end()).isEqualTo(today.minusDays(56));
+    }
+
+    @Test
+    @DisplayName("attendedDays — 양 끝 포함, COMPLETED 만, 기간 밖은 제외")
+    void attendedDays_inclusiveRange() {
+        sessionOn(member, today.minusDays(7), Status.COMPLETED); // 기간 밖
+        sessionOn(member, today.minusDays(6), Status.COMPLETED); // from
+        sessionOn(member, today.minusDays(3), Status.CANCELLED);
+        sessionOn(member, today, Status.COMPLETED);              // to
+
+        assertThat(attendanceService.attendedDays(member.getId(), today.minusDays(6), today))
+                .containsExactlyInAnyOrder(today.minusDays(6), today);
+    }
+
     private void sessionOn(Member m, LocalDate date, Status status) {
         sessionRepository.saveAndFlush(Session.builder()
                 .member(m).exercise(exercise)

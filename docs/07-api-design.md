@@ -392,6 +392,7 @@ AI = 운동 통계의 단일 진실 원천 원칙. (커밋 143a2e4)
 | `GET /groups/{groupId}/members/status` | 구성원 운동 현황 | ACTIVE 전원의 `attendedToday`·`streak`. 정렬: 오늘 완료 → 진행 중 → 기록 없음 |
 | `GET /friends` | 친구의 운동 현황 | 내가 속한 모든 모임의 ACTIVE 멤버(나 제외, 중복 제거), 같은 항목·같은 정렬 |
 | `GET /groups/{groupId}/attendance?year&month` | 모임 출석 캘린더 | 그 달의 모든 날 × `attendedCount`(COMPLETED 세션이 있는 현재 ACTIVE 멤버 수) + `activeMemberCount`(분모). 칸 농도 매핑은 프론트 |
+| `GET /attendance/mine` | 내 스트릭 카드 (2026-09-18, streak-card-api.md) | `today`·`attendedToday`·`currentStreak(+Start)`·`longestStreak(+Start/End)`·`thisWeek`(월~일 7개 고정). 최장 기록 동률이면 최근 구간. 문구(«오늘 하면 N일째», «갱신 중» = `currentStreak == longestStreak && longestStreakEnd ≥ 어제`)는 프론트 파생 |
 
 «출석» 의 정의는 한 곳 — `AttendanceService`: **COMPLETED 세션이 있는 날**(status 무관이던 예전 캘린더 정의와 다름), streak 은 창 없이 최신순 커서로 첫 끊김에서 중단. 노출 항목은 §3-G 로 고정된 셋(오늘 여부·연속일수·합산 출석)뿐 — rep 수·칼로리·세션 상세는 남에게 안 보인다.
 
@@ -399,6 +400,17 @@ AI = 운동 통계의 단일 진실 원천 원칙. (커밋 143a2e4)
 // GET /friends  Response 200 — List<MemberAttendanceStatusDto>
 [ { "memberId": 2, "username": "철수", "profileImageUrl": null, "attendedToday": true, "streak": 5 },
   { "memberId": 3, "username": "영희", "profileImageUrl": null, "attendedToday": false, "streak": 0 } ]
+```
+
+```json
+// GET /attendance/mine  Response 200 — MyAttendanceResponseDto (기록 없으면 0·null, thisWeek 는 전부 false)
+{ "today": "2026-09-18", "attendedToday": false,
+  "currentStreak": 5, "currentStreakStart": "2026-09-13",
+  "longestStreak": 12, "longestStreakStart": "2026-07-01", "longestStreakEnd": "2026-07-12",
+  "thisWeek": [ { "date": "2026-09-14", "attended": true }, { "date": "2026-09-15", "attended": true },
+                { "date": "2026-09-16", "attended": true }, { "date": "2026-09-17", "attended": true },
+                { "date": "2026-09-18", "attended": false }, { "date": "2026-09-19", "attended": false },
+                { "date": "2026-09-20", "attended": false } ] }
 ```
 
 ### 피드·리액션
