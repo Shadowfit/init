@@ -166,6 +166,20 @@ SELECT DATE(start_time) AS d, COUNT(DISTINCT member_id) FROM exercise_sessions
 
 > ✅ **결정(2026-09-11, 사용자 confirm): a — 분모·분자 모두 현재 ACTIVE 멤버.** 농도 = 그날 COMPLETED 세션이 있는 현재 ACTIVE 멤버 수 / 현재 ACTIVE 멤버 수. LEFT 멤버의 과거 출석은 안 센다(IN 리스트에 ACTIVE 만). 정의가 "지금 모임 사람들이 그날 몇 명 했나" 하나로 닫힌다. 시점 분모(b)는 `left_at` 이력 설계가 따라오는데 그 정확도를 요구하는 화면이 없어 택하지 않음.
 >
+> 📐 **실측(2026-09-19, 로컬 MySQL 8.0.46 — 모양·기울기만)** — 위 «seek 는 회원별, 그룹핑은 걸러진 행 위» 가 실제 계획과 같은지 `countDistinctMembersByDay` 의 Hibernate SQL 그대로 `EXPLAIN ANALYZE` + 핸들러 카운터, 모임 모양 4종 × 10회.
+>
+> | 모임 | 인원 | 그 달 COMPLETED 행 | 총 median | min~max | `Handler_read_key` | `Handler_read_next` | `Sort_rows` |
+> |---|---:|---:|---:|---|---:|---:|---:|
+> | fsf-N12 · 9월 | 12 | 36 | 0.16 ms | 0.09~0.30 | 12 | 36 | 36 |
+> | fsf-acct100 · 9월 | 12 | 133 | 0.46 ms | 0.23~0.54 | 12 | 133 | 133 |
+> | fsf-N100 · 9월 | 100 | 300 | 1.14 ms | 0.50~1.43 | 100 | 300 | 300 |
+> | 합성(큰 계정 6 + 6) · 8월 | 12 | 1,622 | **4.30 ms** | 3.29~9.97 | 12 | 1,622 | 1,622 |
+>
+> 계획: `Index range scan on idx_session_member_status_start over (member_id=a AND status AND start_time 구간) OR (member_id=b …) OR (N more)` → `Filter` → `Sort: cast(start_time as date)` → `Group aggregate: count(distinct member_id)`. `Extra: Using where; Using index; Using filesort`.
+> - **seek 수 = 인원**(`read_key`), **읽는 행 = 인원 × 그 달 완료 세션**(`read_next`) — 설계대로. 커버링(`Using index`)이라 표 본문 0, 디스크 임시 테이블 0.
+> - 다만 «그룹핑은 걸러진 행 위» 의 실체는 **filesort** 다 — 걸러진 행 전부를 `CAST` 값으로 정렬한 뒤 집계(`Sort_rows` = 읽은 행). 비용이 두 번째로 큰 곳이고 행수에 선형(합성 1,622행에서 정렬+집계가 총 4.3 ms 중 ~1.3 ms, 인덱스 스캔 ~1.2 ms, 나머지 Filter).
+> - 100명 모임에서도 1 ms 대인 건 9월 데이터가 얕아서(300행)다. 인원 100 × 하루 1세션 × 30일 = 3,000행이면 합성 판 기울기로 **~8 ms** 추정(미측정). 사전집계 판단(근거 없음)은 이 크기에서 그대로 — 바뀌는 조건은 «인원 × 월 세션이 수만 행».
+>
 > ⚠️ **레퍼런스 칸 농도(진함/연함/흰색)의 의미는 추정이다** — 3번 화면에 설명이 없다. 인원 비율 / 전원 여부 / 나 기준 세 해석이 가능하고, 셋 다 서버 응답(날짜별 출석 인원수 + 멤버 수)은 같고 프론트 매핑만 다르다. 서버는 날짜별 `count` 와 `activeMemberCount` 를 주고 농도 매핑은 프론트 몫으로 둔다. 이 캘린더는 **모임 상세 화면**의 것이다(내 개인 달력은 `getCalendarMain` 으로 별도 존재).
 
 ### 3-F. 코드로 참여
@@ -382,6 +396,7 @@ professor-vision §2 의 "행 단위 접근 제어" 가 여기서 처음 실제�
 
 ## 결정 로그
 
+- 2026-09-19: **3-E 쿼리 EXPLAIN 실측** — seek = 인원, 읽는 행 = 인원 × 월 세션(커버링), 그룹핑 실체는 filesort. 1,622행 4.3 ms. 사전집계 판단 불변.
 - 2026-09-14 (17): **#7 완료.** `NotificationRelay` + `GroupSocketRegistry` 회원 인덱스(아래 (13) 결정 그대로). 다른 세션이 09-12 에 구현·테스트까지 마치고 미커밋으로 둔 것을 main 위로 옮겨 PR. 이로써 §4-1 12개 전부 완료.
 - 2026-09-14 (16): **#12 완료.** 저니 테스트는 «이음새만, 가지는 기능 테스트 몫» 으로 설계(18-testing-guide §5.4). API 문서는 07 에 «모임·소셜 API» 절로. 이로써 §4-1 12개 중 #7 만 남음(다른 세션 진행 중).
 - 2026-09-14 (15): **#11 구현 분기 확정(§4-5).** 새 `GET /groups/{id}/feed`(keyset `beforeSeq&size`), `PUT/DELETE /groups/{id}/events/{seq}/reactions/{kind}` 멱등 200, 타입 제한 없음, `ReactionKind{HEART,FIRE}` + V20 `event_reactions`.
