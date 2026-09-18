@@ -107,6 +107,67 @@ class AttendanceServiceTest {
         assertThat(service.currentStreak(MEMBER, TODAY)).isEqualTo(batch);
     }
 
+    @Test
+    @DisplayName("currentStreakRun — 길이와 함께 시작일·끝(앵커)을 준다, 시작일은 걷기가 멈춘 자리")
+    void streakRun_carriesStartAndAnchor() {
+        when(repo.findCompletedStartTimesBefore(eq(MEMBER), eq(Status.COMPLETED), any(), any()))
+                .thenReturn(daysAgo(TODAY, 1, 2, 3, 6));
+
+        AttendanceService.StreakRun run = service.currentStreakRun(MEMBER, TODAY);
+        assertThat(run.length()).isEqualTo(3);
+        assertThat(run.start()).isEqualTo(TODAY.minusDays(3));
+        assertThat(run.end()).isEqualTo(TODAY.minusDays(1)); // 오늘 안 했으니 앵커는 어제
+    }
+
+    @Test
+    @DisplayName("currentStreakRun — 기록이 없으면 NONE(0, null, null)")
+    void streakRun_noneWhenEmpty() {
+        when(repo.findCompletedStartTimesBefore(eq(MEMBER), eq(Status.COMPLETED), any(), any()))
+                .thenReturn(List.of());
+
+        assertThat(service.currentStreakRun(MEMBER, TODAY)).isEqualTo(AttendanceService.StreakRun.NONE);
+    }
+
+    @Test
+    @DisplayName("longestStreakRun — 구간이 여럿이면 가장 긴 것, 현재 streak 과 무관하게 과거 것도 잡는다")
+    void longest_picksLongestRunAnywhereInHistory() {
+        when(repo.findDistinctDatesByStatus(MEMBER, Status.COMPLETED))
+                .thenReturn(dates(TODAY, 40, 39, 38, 37, 36, 20, 19, 1, 0)); // 5 / 2 / 2
+
+        AttendanceService.StreakRun run = service.longestStreakRun(MEMBER);
+        assertThat(run.length()).isEqualTo(5);
+        assertThat(run.start()).isEqualTo(TODAY.minusDays(40));
+        assertThat(run.end()).isEqualTo(TODAY.minusDays(36));
+    }
+
+    @Test
+    @DisplayName("longestStreakRun — 동률이면 가장 최근 구간 («갱신 중» 판정이 되게)")
+    void longest_tieGoesToMostRecent() {
+        when(repo.findDistinctDatesByStatus(MEMBER, Status.COMPLETED))
+                .thenReturn(dates(TODAY, 30, 29, 28, 2, 1, 0)); // 3 / 3
+
+        AttendanceService.StreakRun run = service.longestStreakRun(MEMBER);
+        assertThat(run.length()).isEqualTo(3);
+        assertThat(run.start()).isEqualTo(TODAY.minusDays(2));
+        assertThat(run.end()).isEqualTo(TODAY);
+    }
+
+    @Test
+    @DisplayName("longestStreakRun — 기록이 없으면 NONE, 하루뿐이면 1")
+    void longest_noneAndSingleDay() {
+        when(repo.findDistinctDatesByStatus(MEMBER, Status.COMPLETED)).thenReturn(List.of());
+        assertThat(service.longestStreakRun(MEMBER)).isEqualTo(AttendanceService.StreakRun.NONE);
+
+        when(repo.findDistinctDatesByStatus(MEMBER, Status.COMPLETED)).thenReturn(dates(TODAY, 7));
+        assertThat(service.longestStreakRun(MEMBER))
+                .isEqualTo(new AttendanceService.StreakRun(1, TODAY.minusDays(7), TODAY.minusDays(7)));
+    }
+
+    /** 오늘 기준 «n일 전» 들의 날짜(오름차순으로 넘길 것 — 쿼리가 ORDER BY 로 보장하는 순서). */
+    private static List<java.sql.Date> dates(LocalDate today, int... offsetsDescending) {
+        return IntStream.of(offsetsDescending).mapToObj(d -> java.sql.Date.valueOf(today.minusDays(d))).toList();
+    }
+
     /** 오늘 기준 «n일 전» 들의 시작 시각(최신순). */
     private static List<LocalDateTime> daysAgo(LocalDate today, int... offsets) {
         return IntStream.of(offsets).mapToObj(d -> today.minusDays(d).atTime(12, 0)).toList();
