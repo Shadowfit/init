@@ -103,7 +103,7 @@ class AttendanceServiceIntegrationTest {
         sessionOn(member, today, Status.COMPLETED);
         sessionOn(other, today.minusDays(55), Status.COMPLETED);   // 남의 출석이 내 구간을 안 잇는다
 
-        AttendanceService.StreakRun run = attendanceService.longestStreakRun(member.getId());
+        AttendanceService.StreakRun run = attendanceService.longestStreakRun(member.getId(), today);
         assertThat(run.length()).isEqualTo(5);
         assertThat(run.start()).isEqualTo(today.minusDays(60));
         assertThat(run.end()).isEqualTo(today.minusDays(56));

@@ -189,5 +189,6 @@ Handler_read_key=1  Handler_read_next=2000  Handler_write=2203  Created_tmp_tabl
 ## 이력
 
 - 2026-09-18: 작성. 범위 «스트릭 카드»(현재·오늘·7칸·최장) 로 좁힘(사용자 선택). 마일스톤·프리즈 제외.
+- 2026-09-19: 머지 후 자체 리뷰에서 결함 — 최장 기록 쿼리에 상한이 없어 미래 start_time 이 들어갔다(현재 streak 은 제외). `findDistinctDatesBefore(today+1)` 로 경계를 맞춤(#780).
 - 2026-09-18: §8 EXPLAIN 실측 — 커버링 인덱스 + 메모리 임시 테이블, 2,000행 계정 1.2~2.3 ms, 행수 선형. B 는 실험 후보에서 내림.
-- 2026-09-18: §2·§3·§4·§5 권고안 그대로 확정(사용자 confirm), 같은 날 구현. `AttendanceService.currentStreak` 은 시그니처 유지하고 `currentStreakRun`(구간) 을 옆에 뒀다 — 호출부 3곳 무변경. 새 쿼리는 `findDistinctDatesByStatus` 하나, 이번 주는 기존 `findDistinctActiveDates` 재사용이라 `attendedToday` 의 별도 exists 쿼리 없음(요청당 3쿼리). 테스트 14개(단위 5 + 통합 9). EXPLAIN 은 같은 날 §8 로 닫음.
+- 2026-09-18: §2·§3·§4·§5 권고안 그대로 확정(사용자 confirm), 같은 날 구현. `AttendanceService.currentStreak` 은 시그니처 유지하고 `currentStreakRun`(구간) 을 옆에 뒀다 — 호출부 3곳 무변경. 새 쿼리는 `findDistinctDatesByStatus` 하나, 이번 주는 기존 `findDistinctActiveDates` 재사용이라 `attendedToday` 의 별도 exists 쿼리 없음(요청당 3쿼리). 테스트 12개(단위 5 + 통합 7 — 처음엔 14개로 잘못 셌다). EXPLAIN 은 같은 날 §8 로 닫음.

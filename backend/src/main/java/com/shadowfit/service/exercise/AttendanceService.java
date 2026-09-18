@@ -125,14 +125,15 @@ public class AttendanceService {
      * 오름차순으로 받아 한 번 훑는다. 현재 streak 과 달리 «답의 크기» 가 아니라 <b>회원의 출석일 수</b>만큼
      * 읽고 나른다 — 정의상 이력 전체를 봐야 해서 창을 둘 수 없고, 저장 컬럼은 세션 삭제에 드리프트한다
      * (#718 과 같은 모양)고 봐서 택하지 않았다. 동률이면 <b>가장 최근</b> 구간(«갱신 중» 판정용).
-     * 출석일이 없으면 {@link StreakRun#NONE}.
+     * 출석일이 없으면 {@link StreakRun#NONE}. 오늘 이후는 현재 streak 과 같은 이유로 보지 않는다(#780).
      */
-    public StreakRun longestStreakRun(Long memberId) {
+    public StreakRun longestStreakRun(Long memberId, LocalDate today) {
         StreakRun best = StreakRun.NONE;
         LocalDate runStart = null;
         LocalDate prev = null;
         int length = 0;
-        for (java.sql.Date sqlDate : sessionRepository.findDistinctDatesByStatus(memberId, Status.COMPLETED)) {
+        for (java.sql.Date sqlDate : sessionRepository.findDistinctDatesBefore(
+                memberId, Status.COMPLETED, today.plusDays(1).atStartOfDay())) {
             LocalDate day = sqlDate.toLocalDate();
             if (prev != null && day.equals(prev.plusDays(1))) {
                 length++;

@@ -73,7 +73,8 @@ class MyAttendanceIntegrationTest {
         session(LocalDate.of(2026, 9, 28), Status.COMPLETED);
         session(LocalDate.of(2026, 9, 30), Status.COMPLETED);
         session(today, Status.COMPLETED);
-        session(LocalDate.of(2026, 10, 3), Status.COMPLETED); // 미래(시계 어긋남 등) — 카드에 안 보인다
+        session(LocalDate.of(2026, 10, 2), Status.COMPLETED); // 미래(시계 어긋남 등) — 카드에 안 보인다
+        session(LocalDate.of(2026, 10, 3), Status.COMPLETED); // 미래 — 위와 함께 9/30~10/3 «4일 구간» 이 될 수 있는 배치
 
         MyAttendanceResponseDto card = myAttendanceService.myAttendance(me.getId(), today);
 
@@ -81,6 +82,9 @@ class MyAttendanceIntegrationTest {
         assertThat(card.isAttendedToday()).isTrue();
         assertThat(card.getCurrentStreak()).isEqualTo(2); // 9/30·10/1 — 9/29 가 비어 9/28 은 안 이어진다
         assertThat(card.getCurrentStreakStart()).isEqualTo(LocalDate.of(2026, 9, 30));
+        // 최장도 같은 «오늘» — 상한이 없으면 9/30~10/3 이 4일 구간으로 잡혀 현재(2)와 어긋난다(#780)
+        assertThat(card.getLongestStreak()).isEqualTo(2);
+        assertThat(card.getLongestStreakEnd()).isEqualTo(today);
         assertThat(card.getThisWeek()).hasSize(7);
         assertThat(card.getThisWeek().get(0).getDate()).isEqualTo(LocalDate.of(2026, 9, 28));
         assertThat(card.getThisWeek().get(6).getDate()).isEqualTo(LocalDate.of(2026, 10, 4));
