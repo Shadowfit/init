@@ -30,7 +30,7 @@ public class MyAttendanceService {
 
     public MyAttendanceResponseDto myAttendance(Long memberId, LocalDate today) {
         AttendanceService.StreakRun current = attendanceService.currentStreakRun(memberId, today);
-        AttendanceService.StreakRun longest = attendanceService.longestStreakRun(memberId);
+        AttendanceService.StreakRun longest = attendanceService.longestStreakRun(memberId, today);
 
         // 월~일 7칸 고정 — 미래 날을 빼고 주면 요일마다 칸 수가 달라져 프론트가 채워야 한다(§3).
         LocalDate monday = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
