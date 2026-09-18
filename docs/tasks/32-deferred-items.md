@@ -184,7 +184,7 @@ fsync 레버는 안 먹었고(다세션에서 3.47배 → **1.03배**), 커밋 �
 
 | 층 | 내용 | JSON 질의 필요? |
 |---|---|:--:|
-| **Tier 0** ⭐ | **worst rep 의 자세를 앱에 그려주기.** 대표 프레임 고르는 로직(`pickRepresentative`)과 그 근거는 **이미 있다.** 없는 건 «고른 1프레임의 JSON 을 꺼내는 쿼리 하나 + 응답 필드 하나» | ❌ PK 로 한 행 |
+| **Tier 0** ⭐ | **worst rep 의 자세를 앱에 그려주기.** 대표 프레임 고르는 로직(`pickRepresentative`)과 그 근거는 **이미 있다.** ~~없는 건 «고른 1프레임의 JSON 을 꺼내는 쿼리 하나 + 응답 필드 하나»~~ → 🔄 **2026-09-19 정정: 이미 있다** — `PoseDataRepository.findJointCoordinatesById` + `WorstSectionDto.jointCoordinates`. 이 표가 낡았고, P5 의 남은 본질은 «JSON 안의 값으로 계산하는 쿼리 0개» 였다 → [`pose-json-backfill-query.md`](../decisions/pose-json-backfill-query.md) 가 그 자리를 채움(§7) | ❌ PK 로 한 행 |
 | **Tier 1** | rep 재생(애니메이션) · 기준 자세와 겹쳐 보기 · **과거 세션 재채점(backfill)** | ❌ 통째 읽기 |
 | **Tier 2** | 교차 세션 집계(«무릎이 무너진 프레임 비율», 데이터 품질) · 코호트 분석 | ✅ |
 
