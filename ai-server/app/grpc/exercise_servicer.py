@@ -34,6 +34,8 @@ def _parse_reference_poses(
     reference_poses, exercise_type: str
 ) -> list[list[float]]:
     """Spring이 보낸 reference PoseDataRequest 리스트 → 각도 시퀀스로 변환."""
+    if exercise_type == "lunge":
+        return []  # Count-only: no validated lunge reference scorer yet.
     sequences: list[list[float]] = []
     for ref in reference_poses:
         if not ref.joint_coordinates:
@@ -117,11 +119,19 @@ class ExerciseServicer(exercise_pb2_grpc.ExerciseServiceServicer):
         session_id = request.session_id
         exercise_id = request.exercise_id
         persona = request.persona or "BEGINNER"
+        depth_mode = request.depth_mode or "FULL"
+        if depth_mode not in ("FULL", "HALF"):
+            logger.warning(
+                "세션 %s — 알 수 없는 depth_mode %r, FULL로 대체", session_id, depth_mode,
+            )
+            depth_mode = "FULL"
         logger.info(
-            "[Spring → AI] StartAnalysis 수신 (session=%s, exercise=%s, persona=%s, reference_frames=%d)",
+            "[Spring → AI] StartAnalysis 수신 (session=%s, exercise=%s, persona=%s, "
+            "depth_mode=%s, reference_frames=%d)",
             session_id,
             exercise_id,
             persona,
+            depth_mode,
             len(request.reference_poses),
         )
 
@@ -129,7 +139,7 @@ class ExerciseServicer(exercise_pb2_grpc.ExerciseServiceServicer):
         #
         # 예전에는 exercise_type = "squat" 이 못박혀 있었다. 그러면 런지로 세션을 시작해도
         # 스쿼트 분석기가 돌아 **조용히 틀린 점수**가 나온다 — rep 카운팅이 무릎 각도를
-        # 하드코딩해 세기 때문이다(squat_analyzer._extract_raw_metrics).
+        # 스쿼트 고유의 무릎·고관절 규칙으로 세기 때문이다.
         exercise_type = resolve_exercise_type(exercise_id)
         if exercise_type is None:
             # abort 인 이유: Spring 의 onNext 는 success 필드를 보지 않고 세션 id 만 로깅한다
@@ -151,7 +161,7 @@ class ExerciseServicer(exercise_pb2_grpc.ExerciseServiceServicer):
             request.reference_poses, exercise_type
         )
 
-        if not reference_angles:
+        if not reference_angles and exercise_type != "lunge":
             logger.warning(
                 "세션 %s에 reference 각도 시퀀스가 비어 있음 — sync_rate는 0으로 계산됨",
                 session_id,
@@ -167,11 +177,12 @@ class ExerciseServicer(exercise_pb2_grpc.ExerciseServiceServicer):
                 "더 받으려면 컨테이너 메모리 한도(AI_MEM_LIMIT)를 올릴 것.",
                 session_id, used, cap,
             )
-            return exercise_pb2.AnalyzeResponse(
-                success=False,
-                session_id=session_id,
-                exercise_id=exercise_id,
-                status=exercise_pb2.SessionStatus.FAILED,
+            # Spring 의 StartAnalysis onNext 는 success 필드를 읽지 않는다. success=False 를
+            # 정상 응답으로 보내면 세션이 IN_PROGRESS 에 남아 클라는 SESSION_NOT_FOUND 만
+            # 반복해서 받는다. onError 경로가 세션을 FAILED 로 정리하도록 명시적으로 거절한다.
+            context.abort(
+                grpc.StatusCode.RESOURCE_EXHAUSTED,
+                "동시 분석 세션 상한에 도달했습니다.",
             )
 
         # 소유권 비밀값을 세션 상태에 보관한다 (#187 안 (d)). POST /pose 가 동봉한 값과
@@ -184,6 +195,7 @@ class ExerciseServicer(exercise_pb2_grpc.ExerciseServiceServicer):
             exercise_type=exercise_type,
             persona=persona,
             session_nonce=request.session_nonce or None,
+            depth_mode=depth_mode,
         )
 
         now = Timestamp()
@@ -241,7 +253,7 @@ class ExerciseServicer(exercise_pb2_grpc.ExerciseServiceServicer):
 
         reference_angles = _parse_reference_poses(request.reference_poses, exercise_type)
 
-        if not reference_angles:
+        if not reference_angles and exercise_type != "lunge":
             # 시작 경로는 경고만 하고 진행한다(sync_rate 0). 재부착은 다르게 취급한다 — 이미 rep 을
             # 쌓아둔 세션을 sync_rate 가 전부 0 으로 나오는 상태로 이어붙이면, 사용자는 이어진 줄
             # 알지만 뒷부분 기록만 조용히 망가진다. 차라리 실패로 돌려 새로 시작하게 한다.
@@ -262,6 +274,13 @@ class ExerciseServicer(exercise_pb2_grpc.ExerciseServiceServicer):
                 message="동시 세션 상한에 걸렸습니다.",
             )
 
+        depth_mode = request.depth_mode or "FULL"
+        if depth_mode not in ("FULL", "HALF"):
+            logger.warning(
+                "세션 %s 재부착 — 알 수 없는 depth_mode %r, FULL로 대체", session_id, depth_mode,
+            )
+            depth_mode = "FULL"
+
         state, already_active = get_registry().create_if_absent(
             session_id=session_id,
             exercise_id=request.exercise_id,
@@ -270,6 +289,7 @@ class ExerciseServicer(exercise_pb2_grpc.ExerciseServiceServicer):
             persona=request.persona or "BEGINNER",
             initial_rep_count=request.initial_rep_count,
             session_nonce=request.session_nonce or None,
+            depth_mode=depth_mode,
         )
 
         if already_active:

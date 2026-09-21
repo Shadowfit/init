@@ -1,0 +1,26 @@
+{
+  "sample_fps": 3.0,
+  "clips": [
+    {
+      "name": "normal-01",
+      "video": "samples/validation/2026-09-21/squat_normal_01.mp4",
+      "expected_reps": 5,
+      "expected_complete_events": 5,
+      "expected_partial_events": 0
+    },
+    {
+      "name": "normal-02",
+      "video": "samples/validation/2026-09-21/squat_normal_02.mp4",
+      "expected_reps": 5,
+      "expected_complete_events": 5,
+      "expected_partial_events": 0
+    },
+    {
+      "name": "negative-01",
+      "video": "samples/validation/2026-09-21/squat_negative_01.mp4",
+      "expected_reps": 0,
+      "expected_complete_events": 0,
+      "expected_partial_events": 0
+    }
+  ]
+}
