@@ -130,6 +130,32 @@
 
 ---
 
+### 모임/소셜 (G00x)
+| 코드 | HTTP | 메시지 |
+|------|------|--------|
+| `G001` `GROUP_NOT_FOUND` | 404 | 존재하지 않는 그룹입니다. |
+| `G002` `NOT_GROUP_MEMBER` | 403 | 그룹 멤버만 접근할 수 있습니다. |
+| `G003` `ALREADY_GROUP_MEMBER` | 409 | 이미 그룹에 가입되어 있습니다. |
+| `G004` `INVITATION_NOT_FOUND` | 404 | 존재하지 않는 초대입니다. |
+| `G005` `INVITATION_ALREADY_RESPONDED` | 409 | 이미 응답한 초대입니다. |
+| `G006` `INVITATION_ALREADY_PENDING` | 409 | 이미 초대를 보냈습니다. |
+| `G007` `NOT_GROUP_OWNER` | 403 | 그룹장만 할 수 있습니다. |
+| `G008` `INVALID_INVITE_CODE` | 404 | 유효하지 않은 초대 코드입니다. |
+| `G009` `GROUP_EVENT_NOT_FOUND` | 404 | 존재하지 않는 피드 글입니다. |
+| `G010` `OWNER_MUST_TRANSFER_FIRST` | 409 | 그룹장은 다른 멤버에게 양도한 뒤 탈퇴할 수 있습니다. |
+| `G011` `GROUP_MEMBER_NOT_FOUND` | 404 | 모임의 멤버가 아닌 회원입니다. |
+
+### 알림/재촉/응원 (N00x)
+| 코드 | HTTP | 메시지 |
+|------|------|--------|
+| `N001` `NOTIFICATION_NOT_FOUND` | 404 | 존재하지 않는 알림입니다. (남의 알림도 «없음» 과 같게) |
+| `N002` `NUDGE_ALREADY_SENT_TODAY` | 409 | 오늘은 이미 재촉했습니다. |
+| `N003` `NUDGE_SELF_NOT_ALLOWED` | 400 | 자기 자신은 재촉할 수 없습니다. |
+| `N004` `CHEER_ALREADY_SENT_TODAY` | 409 | 오늘은 이미 응원했습니다. (재촉과 별개로 센다) |
+| `N005` `CHEER_SELF_NOT_ALLOWED` | 400 | 자기 자신에게는 응원을 보낼 수 없습니다. |
+
+---
+
 ## 3. 코드에서 던지는 방법
 
 ```java

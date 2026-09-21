@@ -127,11 +127,12 @@ public class PushDispatchService {
         return DispatchOutcome.SENT;
     }
 
-    /** 문구(⑦). 알림 종류가 늘면 여기서 갈린다 — 지금은 NUDGE 하나라 switch 가 한 갈래다. */
+    /** 문구(⑦). 알림 종류별로 갈린다 — CHEER 는 사용자가 쓴 본문을 그대로 싣는다. */
     static String body(PushTarget target) {
         String who = target.senderName() == null ? "모임 친구가" : target.senderName() + "님이";
         return switch (target.type()) {
             case NUDGE -> who + " 오늘 운동을 재촉했어요";
+            case CHEER -> who + " 응원을 보냈어요: " + target.message();
         };
     }
 

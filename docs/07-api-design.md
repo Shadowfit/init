@@ -419,16 +419,21 @@ AI = 운동 통계의 단일 진실 원천 원칙. (커밋 143a2e4)
 | 메서드·경로 | 요약 | 비고 |
 |---|---|---|
 | `POST /friends/{memberId}/nudge` | 재촉하기 | 같은 모임 ACTIVE 멤버에게만. **같은 사람에게 하루 1회** — 두 번째는 409 `N002`. 자기 자신 400 `N003`. 응답 = 만든 알림 → 201 |
+| `POST /friends/{memberId}/cheer` | 응원 보내기 | `{message}` 1~100자(앞뒤 공백 제거, 빈 문자열 400). 같은 모임 ACTIVE 멤버에게만. **같은 사람에게 하루 1회 — 재촉과 별개로 센다**(두 번째 409 `N004`). 자기 자신 400 `N005`. 응답 = 만든 알림(`type=CHEER`, `message` 채움) → 201. 완료한 상대에게 보내는 것이 정상 경로라 서버는 아무 조건도 안 본다 |
 | `GET /notifications?page&size` | 내 알림함 | 최신순 offset(`PageResponse`), `size` 기본 20·최대 100. 보낸 사람이 탈퇴했으면 `sender*` null |
 | `PATCH /notifications/{id}/read` | 읽음 처리 | 남의 것·없음 404 `N001`. 이미 읽었으면 처음 시각 그대로 200. «모두 읽음» 없음 |
 | `POST /push-tokens` | 푸시 토큰 등록 | `{token, platform}` — `ExponentPushToken[...]` 형식 아니면 400, `platform` = `IOS`\|`ANDROID`. **멱등 200**(신규든 갱신이든). 다른 계정이 같은 토큰을 등록하면 소유자가 옮겨감. 삭제 API 없음 — 로그아웃이 계정 단위로 지움 |
 
-재촉의 전달은 셋 — 알림 행(원천, 항상) · 접속 중이면 소켓(#7, 진행 중) · 등록된 기기가 있으면 Expo Push(아웃박스 `PUSH_NOTIFICATION` 경유, at-least-once). 서버는 «오늘 이미 완료한 상대» 재촉을 막지 않는다 — 버튼 노출은 프론트.
+재촉·응원의 전달은 셋 — 알림 행(원천, 항상) · 접속 중이면 소켓(#7, 진행 중) · 등록된 기기가 있으면 Expo Push(아웃박스 `PUSH_NOTIFICATION` 경유, at-least-once). 서버는 «오늘 이미 완료한 상대» 재촉을 막지 않는다 — 버튼 노출은 프론트.
 
 ```json
 // POST /friends/2/nudge  Response 201 — NotificationDto
 { "id": 55, "type": "NUDGE", "senderId": 1, "senderUsername": "민수", "senderProfileImageUrl": null,
   "targetDate": "2026-09-14", "read": false, "readAt": null, "createdAt": "2026-09-14T08:00:00" }
+
+// POST /friends/2/cheer  {"message":"오늘도 힘내!"}  Response 201 — NotificationDto (재촉은 message=null)
+{ "id": 56, "type": "CHEER", "senderId": 1, "senderUsername": "민수", "senderProfileImageUrl": null,
+  "targetDate": "2026-09-17", "message": "오늘도 힘내!", "read": false, "readAt": null, "createdAt": "2026-09-17T08:05:00" }
 ```
 
 ### WebSocket `/ws/groups/{groupId}?token={JWT}`

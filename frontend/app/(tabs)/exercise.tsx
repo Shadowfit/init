@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, Alert, AppState, type AppStateStatus } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, AppState, type AppStateStatus } from 'react-native';
+import { Alert } from '@/utils/alert';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useFocusEffect } from 'expo-router';

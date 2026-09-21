@@ -7,8 +7,8 @@ import {
   TouchableOpacity,
   TextInput,
   Modal,
-  Alert,
-} from 'react-native';
+  } from 'react-native';
+import { Alert } from '@/utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ChevronLeft, Plus, Clock, Lock, Unlock } from 'lucide-react-native';

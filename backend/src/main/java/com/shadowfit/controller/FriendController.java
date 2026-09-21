@@ -1,12 +1,14 @@
 package com.shadowfit.controller;
 
 import com.shadowfit.dto.group.MemberAttendanceStatusDto;
+import com.shadowfit.dto.notification.CheerRequestDto;
 import com.shadowfit.dto.notification.NotificationDto;
 import com.shadowfit.global.security.auth.CustomUserDetails;
 import com.shadowfit.service.group.MemberAttendanceStatusService;
 import com.shadowfit.service.notification.NotificationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -14,6 +16,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -52,7 +55,7 @@ public class FriendController {
             description = "같은 모임의 ACTIVE 멤버에게 재촉 알림을 남긴다(social-cheer-and-group-feed.md §3-C). "
                     + "같은 사람에게 하루 1회 — 두 번째는 409(N002). 같은 모임이 아니면 403, 없는 회원이면 404, "
                     + "자기 자신은 400. 상대가 오늘 이미 완료했는지는 서버가 보지 않는다(버튼 노출은 프론트). "
-                    + "소켓·푸시 전달은 후속(#7·#9) — 지금은 저장만.")
+                    + "전달은 알림함(항상)·소켓(접속 중)·Expo 푸시(기기 등록 시).")
     @PostMapping("/{memberId}/nudge")
     public ResponseEntity<NotificationDto> nudge(
             @PathVariable Long memberId,
@@ -60,5 +63,21 @@ public class FriendController {
     ) {
         return ResponseEntity.status(HttpStatus.CREATED).body(
                 notificationService.nudge(userDetails.getMember().getId(), memberId, LocalDate.now()));
+    }
+
+    // 재촉과 별개 종류(CHEER)라 하루 1회 제한도 따로 센다 — 같은 사람에게 재촉 한 번 + 응원 한 번이 같은 날 가능하다.
+    // 완료한 친구에게 보내는 것이 정상 경로라 attendedToday 로 버튼을 숨기지 않는다(재촉과 반대).
+    @Operation(summary = "응원 보내기",
+            description = "같은 모임의 ACTIVE 멤버에게 응원 문구(1~100자)를 남긴다. 같은 사람에게 하루 1회 — "
+                    + "두 번째는 409(N004). 같은 모임이 아니면 403, 없는 회원이면 404, 자기 자신은 400(N005). "
+                    + "전달 경로(알림함·소켓·푸시)는 재촉과 같다.")
+    @PostMapping("/{memberId}/cheer")
+    public ResponseEntity<NotificationDto> cheer(
+            @PathVariable Long memberId,
+            @Valid @RequestBody CheerRequestDto request,
+            @AuthenticationPrincipal CustomUserDetails userDetails
+    ) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(
+                notificationService.cheer(userDetails.getMember().getId(), memberId, request.getMessage(), LocalDate.now()));
     }
 }

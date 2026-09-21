@@ -162,7 +162,9 @@ public enum ErrorCode {
     NOTIFICATION_NOT_FOUND(404, "N001", "존재하지 않는 알림입니다."),
     // uk_notifications_sender_recipient_type_date(V17) 위반 — 같은 사람에게 같은 날 1회. goals 의 GL002 와 같은 결.
     NUDGE_ALREADY_SENT_TODAY(409, "N002", "오늘은 이미 재촉했습니다."),
-    NUDGE_SELF_NOT_ALLOWED(400, "N003", "자기 자신은 재촉할 수 없습니다.");
+    NUDGE_SELF_NOT_ALLOWED(400, "N003", "자기 자신은 재촉할 수 없습니다."),
+    CHEER_ALREADY_SENT_TODAY(409, "N004", "오늘은 이미 응원했습니다."),
+    CHEER_SELF_NOT_ALLOWED(400, "N005", "자기 자신에게는 응원을 보낼 수 없습니다.");
 
     private final int status;
     private final String code;

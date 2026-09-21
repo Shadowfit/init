@@ -35,7 +35,7 @@ public class PushDispatchStore {
                 .map(PushToken::getToken)
                 .toList();
         String senderName = n.getSender() == null ? null : n.getSender().getUsername();
-        return new PushTarget(n.getId(), n.getType(), senderName, tokens);
+        return new PushTarget(n.getId(), n.getType(), senderName, n.getMessage(), tokens);
     }
 
     /** Expo 가 {@code DeviceNotRegistered} 로 답한 토큰을 지운다(§4-2 ②). */

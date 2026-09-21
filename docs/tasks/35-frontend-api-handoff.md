@@ -9,14 +9,15 @@
 - Swagger: `http://localhost:8080/swagger-ui/index.html` — compose 가 `dev` 프로파일로 띄워서 그냥 뜬다(`application-dev.yml`). `./gradlew bootRun` 으로 띄우면 `--args='--spring.profiles.active=dev'` 필요.
 - 인증: `POST /member/login` → `accessToken` 을 `Authorization: Bearer <token>` 으로. 아래 API 는 전부 JWT 필수.
 - 소셜 권한 규칙은 하나 — **같은 모임의 ACTIVE 멤버**(아니면 403 `G002`).
-- 에러 응답은 `{status, code, message}` 형식(`ErrorResponseDto`).
+- 에러 응답은 `{status, message, timestamp}` 형식(`ErrorResponseDto`) — **`code` 필드는 없다**(2026-09-17 실측). 분기는 HTTP status 로 하고 문장은 `message`(한국어)를 그대로 쓰면 된다.
 
 ## 1회차 — 친구 운동 응원 UI
 
 | 화면 | API | 비고 |
 |---|---|---|
 | 친구 목록(오늘 했는지·연속일수) | `GET /friends` | 내 모임들의 ACTIVE 멤버(나 제외·중복 제거). 응답 `[{memberId, username, profileImageUrl, attendedToday, streak}]`. 정렬: 오늘 완료 → 진행 중 → 기록 없음 |
-| 응원(재촉) 버튼 | `POST /friends/{memberId}/nudge` | 201 + 만든 알림. **같은 사람 하루 1회**(2번째 409 `N002`), 자기 자신 400 `N003`. 서버는 «오늘 이미 완료한 상대» 재촉을 안 막는다 — 버튼 숨김은 프론트 |
+| 재촉 버튼 | `POST /friends/{memberId}/nudge` | 201 + 만든 알림. **같은 사람 하루 1회**(2번째 409 `N002`), 자기 자신 400 `N003`. 서버는 «오늘 이미 완료한 상대» 재촉을 안 막는다 — 버튼 숨김은 프론트 |
+| 응원 보내기(메시지 칩·직접 입력) | `POST /friends/{memberId}/cheer` `{message}` | 2026-09-17 추가. 1~100자. 201 + 만든 알림(`type=CHEER`, `message`). **재촉과 별개로 같은 사람 하루 1회**(2번째 409 `N004`), 자기 자신 400 `N005`. 완료한 친구에게 보내는 게 정상 경로라 버튼을 숨기지 않는다 |
 | 알림함 | `GET /notifications?page&size` | 최신순 offset, `size` 기본 20·최대 100. 보낸 사람 탈퇴 시 `sender*` null |
 | 읽음 처리 | `PATCH /notifications/{id}/read` | 남의 것·없음 404 `N001`. «모두 읽음» 없음 |
 | 푸시 토큰 등록 | `POST /push-tokens` | `{token:"ExponentPushToken[...]", platform:"IOS"\|"ANDROID"}`. 멱등 200. 로그인 직후 1회. 삭제 API 없음 — 로그아웃이 지움 |

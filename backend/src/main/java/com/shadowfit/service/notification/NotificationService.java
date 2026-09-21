@@ -23,7 +23,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * 재촉하기·알림함 (social-cheer-and-group-feed.md §3-C c, §4-1 #6).
+ * 재촉하기·응원 보내기·알림함 (social-cheer-and-group-feed.md §3-C c, §4-1 #6).
  *
  * <p><b>저장이 원천</b>이다. 접속 중인 상대에게 WebSocket 으로 밀어주기({@link NotificationRelay}, #7)와
  * 푸시(#9)는 이 행이 생긴 뒤에 붙는 전달 수단이다 — 전달이 실패해도 재촉은 성공이다.
@@ -33,8 +33,9 @@ import java.time.LocalDateTime;
  *
  * <p><b>하루 1회</b> (§3-C 하위 ②): 존재 확인 → 409 가 1차, 그 틈을 뚫은 더블탭은
  * {@code uk_notifications_sender_recipient_type_date} 가 막고 그 위반을 트랜잭션 밖에서 409 로 옮긴다
- * ({@link NotificationWriter}). 서버는 «상대가 오늘 이미 완료했는가» 는 안 본다 — 재촉 버튼 노출은
- * 프론트 규칙({@code MemberAttendanceStatusDto} 주석).
+ * ({@link NotificationWriter}). 제한은 <b>종류별</b>이라 재촉 한 번과 응원 한 번은 같은 날 둘 다 된다.
+ * 서버는 «상대가 오늘 이미 완료했는가» 는 안 본다 — 재촉 버튼 노출은 프론트 규칙
+ * ({@code MemberAttendanceStatusDto} 주석). 응원은 완료한 상대에게 보내는 것이 오히려 정상 경로다.
  */
 @Service
 @RequiredArgsConstructor
@@ -46,14 +47,27 @@ public class NotificationService {
     private final GroupMemberRepository groupMemberRepository;
     private final NotificationRelay notificationRelay;
 
+    /** 재촉하기 — 본문 없음. */
+    public NotificationDto nudge(Long senderId, Long recipientId, LocalDate today) {
+        return send(senderId, recipientId, NotificationType.NUDGE, null, today,
+                ErrorCode.NUDGE_SELF_NOT_ALLOWED, ErrorCode.NUDGE_ALREADY_SENT_TODAY);
+    }
+
+    /** 응원 보내기 — 본문 필수(빈 문자열은 컨트롤러의 {@code @NotBlank} 가 막고, 여기선 앞뒤 공백만 지운다). */
+    public NotificationDto cheer(Long senderId, Long recipientId, String message, LocalDate today) {
+        return send(senderId, recipientId, NotificationType.CHEER, message.strip(), today,
+                ErrorCode.CHEER_SELF_NOT_ALLOWED, ErrorCode.CHEER_ALREADY_SENT_TODAY);
+    }
+
     /**
      * 일부러 트랜잭션이 아니다: 검사(읽기)는 각자 돌고, INSERT 만 {@link NotificationWriter} 의 트랜잭션이다.
      * 여기에 {@code @Transactional} 을 붙이면 writer 가 이 트랜잭션에 합류해 UNIQUE 위반이 커밋 시점에
      * 터지고 아래 catch 에 안 걸린다.
      */
-    public NotificationDto nudge(Long senderId, Long recipientId, LocalDate today) {
+    private NotificationDto send(Long senderId, Long recipientId, NotificationType type, String message,
+                                 LocalDate today, ErrorCode selfCode, ErrorCode duplicateCode) {
         if (senderId.equals(recipientId)) {
-            throw new BusinessException(ErrorCode.NUDGE_SELF_NOT_ALLOWED);
+            throw new BusinessException(selfCode);
         }
         Member recipient = memberRepository.findById(recipientId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
@@ -61,17 +75,17 @@ public class NotificationService {
             throw new BusinessException(ErrorCode.NOT_GROUP_MEMBER);
         }
         if (notificationRepository.existsBySenderIdAndRecipientIdAndTypeAndTargetDate(
-                senderId, recipientId, NotificationType.NUDGE, today)) {
-            throw new BusinessException(ErrorCode.NUDGE_ALREADY_SENT_TODAY);
+                senderId, recipientId, type, today)) {
+            throw new BusinessException(duplicateCode);
         }
         Member sender = memberRepository.findById(senderId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
         NotificationDto saved;
         try {
-            saved = NotificationDto.from(notificationWriter.insert(sender, recipient, NotificationType.NUDGE, today));
+            saved = NotificationDto.from(notificationWriter.insert(sender, recipient, type, today, message));
         } catch (DataIntegrityViolationException e) {
-            // 존재 확인과 INSERT 사이로 들어온 더블탭 — 제약이 막았고, 첫 요청이 이미 재촉을 남겼다.
-            throw new BusinessException(ErrorCode.NUDGE_ALREADY_SENT_TODAY);
+            // 존재 확인과 INSERT 사이로 들어온 더블탭 — 제약이 막았고, 첫 요청이 이미 알림을 남겼다.
+            throw new BusinessException(duplicateCode);
         }
         // writer 의 트랜잭션은 이미 커밋됐다 — 여기서 밀어주는 프레임은 «DB 에 있는 것» 만 가리킨다.
         notificationRelay.relay(recipientId, saved);

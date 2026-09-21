@@ -382,6 +382,7 @@ professor-vision §2 의 "행 단위 접근 제어" 가 여기서 처음 실제�
 
 ## 결정 로그
 
+- 2026-09-17 (18): **응원 보내기(CHEER) 추가 — 프론트 1회차 착수 시.** 레퍼런스 «응원 보내기» 모달(정형 문구 칩 + 직접 입력)이 재촉과 다른 행위라 `NotificationType.CHEER` + `notifications.message VARCHAR(100)`(V23) + `POST /friends/{id}/cheer {message}`. 하루 1회 제한은 기존 UNIQUE 가 종류별로 그대로 센다(재촉 1 + 응원 1). 푸시 문구 «{username}님이 응원을 보냈어요: {message}». 피드 글 단위 응원(글 아래 «채린 😝 …» 표시)은 안 한다 — 알림은 1:1 이고 피드 반응은 리액션(HEART·FIRE)이 맡는다.
 - 2026-09-14 (17): **#7 완료.** `NotificationRelay` + `GroupSocketRegistry` 회원 인덱스(아래 (13) 결정 그대로). 다른 세션이 09-12 에 구현·테스트까지 마치고 미커밋으로 둔 것을 main 위로 옮겨 PR. 이로써 §4-1 12개 전부 완료.
 - 2026-09-14 (16): **#12 완료.** 저니 테스트는 «이음새만, 가지는 기능 테스트 몫» 으로 설계(18-testing-guide §5.4). API 문서는 07 에 «모임·소셜 API» 절로. 이로써 §4-1 12개 중 #7 만 남음(다른 세션 진행 중).
 - 2026-09-14 (15): **#11 구현 분기 확정(§4-5).** 새 `GET /groups/{id}/feed`(keyset `beforeSeq&size`), `PUT/DELETE /groups/{id}/events/{seq}/reactions/{kind}` 멱등 200, 타입 제한 없음, `ReactionKind{HEART,FIRE}` + V20 `event_reactions`.

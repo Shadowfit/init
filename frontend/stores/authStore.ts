@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from '@/services/secureStorage';
 import { authService } from '@/services/authService';
 import { memberService } from '@/services/memberService';
 import { bumpSessionVersion } from '@/services/sessionVersion';
