@@ -76,6 +76,22 @@ public interface SessionRepository extends JpaRepository<Session,Long> {
                                        @Param("end") LocalDateTime end);
 
     /**
+     * 회원의 <b>전 기간</b> 출석일 — 최장 연속 기록(streak-card-api.md §4 후보 A) 전용. 위와 달리 기간 조건이
+     * 없다: 최장 기록은 정의상 이력 전체를 봐야 해서 창을 둘 수 없고, 창 없는 대신 읽는 것이
+     * {@code idx_session_member_status_start} 의 {@code (member_id, status)} 등치 구간 전부(커버링, 표 본문 안 읽음)
+     * 라 비용 상한이 «회원의 COMPLETED 세션 수»다. 오름차순은 호출부가 한 번 훑으며 연속 구간을 찾기 위해.
+     * 상한 {@code before} 는 «오늘 이후를 보지 않는다» 는 현재 streak({@code findCompletedStartTimesBefore})
+     * 과 같은 경계 — 없으면 미래 start_time 이 최장 구간에 섞여 현재와 최장의 «오늘» 이 어긋난다(#780).
+     * 반환형이 {@code java.sql.Date} 인 이유는 위 {@link #findDistinctActiveDates} 와 같다.
+     */
+    @Query("SELECT DISTINCT CAST(s.startTime AS date) FROM Session s " +
+           "WHERE s.member.id = :memberId AND s.status = :status AND s.startTime < :before " +
+           "ORDER BY CAST(s.startTime AS date)")
+    List<Date> findDistinctDatesBefore(@Param("memberId") Long memberId,
+                                       @Param("status") Status status,
+                                       @Param("before") LocalDateTime before);
+
+    /**
      * {@code SessionTimeoutScheduler} 의 타임아웃 판정에 필요한 컬럼만 싣는 프로젝션 (#207).
      *
      * <p>예전엔 {@code findByStatus} 가 {@code IN_PROGRESS} 세션 전부를 {@code JOIN FETCH exercise}

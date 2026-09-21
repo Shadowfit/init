@@ -26,7 +26,11 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
+
+import java.util.function.Consumer;
 
 @Slf4j
 @Service
@@ -137,6 +141,38 @@ public class AdminExerciseService {
                 dto.preferredUrl(), dto.targetJoints(), dto.expectedDurationMinutes());
 
         log.info("운동 종목 수정: id={}, name={}", exerciseId, exercise.getName());
+        return AdminExerciseDetailDto.fromEntity(exercise);
+    }
+
+    /**
+     * 업로드된 기준 영상 경로를 행에 붙인다 — mp4 업로드 흐름의 <b>트랜잭션 구간</b>이다
+     * ({@link ReferenceVideoService#upload} 가 앞뒤를 맡는다).
+     *
+     * <p>여기엔 파일 I/O 도 gRPC 도 없다. 커밋 뒤에 해야 할 일(AI 에 추출 요청, 이전 파일 삭제)은 호출자가
+     * {@code afterCommit} 으로 넘기고, 이 메서드는 그것을 {@code TransactionSynchronization.afterCommit}
+     * 에 건다 — {@code ExerciseAnalysisService.startAnalysis} 와 같은 패턴이다. 트랜잭션 안에서 발사하면
+     * ① 커넥션을 쥔 채 네트워크를 기다리고 ② 롤백돼도 AI 는 이미 추출을 시작해 되돌아온 콜백이
+     * 없는 경로로 정답지를 덮는다.
+     *
+     * <p>{@code findById}(캐시 미적용)·{@code @CacheEvict} 는 {@link #updateExercise} 와 같은 이유다.
+     *
+     * @param afterCommit 커밋 <b>뒤에</b> 이전 경로(없으면 null)를 받아 실행된다. 롤백되면 안 불린다
+     */
+    @Transactional
+    @CacheEvict(cacheNames = "exercises", key = "#exerciseId")
+    public AdminExerciseDetailDto attachReferenceVideo(Long exerciseId, String relativePath,
+                                                       Consumer<String> afterCommit) {
+        Exercise exercise = findOrThrow(exerciseId);
+        String previous = exercise.attachReferenceVideo(relativePath);
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                afterCommit.accept(previous);
+            }
+        });
+
+        log.info("기준 영상 경로 갱신: exerciseId={}, {} -> {}", exerciseId, previous, relativePath);
         return AdminExerciseDetailDto.fromEntity(exercise);
     }
 

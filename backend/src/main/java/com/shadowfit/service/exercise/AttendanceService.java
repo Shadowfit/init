@@ -13,6 +13,7 @@ import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -84,9 +85,25 @@ public class AttendanceService {
     }
 
     /**
+     * 연속 출석 구간 — 길이와 양 끝. 없으면 {@link #NONE}(0, null, null).
+     * 현재 streak 의 {@code end} 는 오늘 또는 어제(앵커), 최장 기록의 {@code end} 는 그 구간의 마지막 날.
+     */
+    public record StreakRun(int length, LocalDate start, LocalDate end) {
+        public static final StreakRun NONE = new StreakRun(0, null, null);
+    }
+
+    /**
      * 오늘(또는 오늘 아직 안 했으면 어제)을 끝으로 하는 연속 출석 일수. 없으면 0.
      */
     public int currentStreak(Long memberId, LocalDate today) {
+        return currentStreakRun(memberId, today).length();
+    }
+
+    /**
+     * {@link #currentStreak} 와 같은 걷기의 결과를 구간으로 — 시작일은 걷기가 멈춘 자리라 추가 조회가 없다
+     * (streak-card-api.md §4 «현재 streak 시작일»).
+     */
+    public StreakRun currentStreakRun(Long memberId, LocalDate today) {
         // 오늘 이후 시각은 보지 않는다 — 미래 start_time 이 들어와도 오늘 기준 streak 에 안 섞이게.
         LocalDateTime cursor = today.plusDays(1).atStartOfDay();
         StreakWalk walk = new StreakWalk(today);
@@ -95,12 +112,51 @@ public class AttendanceService {
             List<LocalDateTime> page = sessionRepository.findCompletedStartTimesBefore(
                     memberId, Status.COMPLETED, cursor, PageRequest.of(0, FETCH_BATCH));
             if (page.isEmpty() || walk.consume(page) || page.size() < FETCH_BATCH) {
-                return walk.streak; // 더 읽을 게 없거나(빈 페이지·짧은 페이지) 끊김을 만났다
+                return walk.run(); // 더 읽을 게 없거나(빈 페이지·짧은 페이지) 끊김을 만났다
             }
             // 마지막으로 본 시각보다 앞선 것만 다음 페이지로. 같은 시각의 다른 세션이 건너뛰어져도
             // 그 날은 이미 센 날이라 결과가 안 바뀐다(날짜 단위 계산).
             cursor = page.get(page.size() - 1);
         }
+    }
+
+    /**
+     * 전 기간 최장 연속 출석 구간 — streak-card-api.md §4 후보 A(2026-09-18 confirm): DISTINCT 출석일을
+     * 오름차순으로 받아 한 번 훑는다. 현재 streak 과 달리 «답의 크기» 가 아니라 <b>회원의 출석일 수</b>만큼
+     * 읽고 나른다 — 정의상 이력 전체를 봐야 해서 창을 둘 수 없고, 저장 컬럼은 세션 삭제에 드리프트한다
+     * (#718 과 같은 모양)고 봐서 택하지 않았다. 동률이면 <b>가장 최근</b> 구간(«갱신 중» 판정용).
+     * 출석일이 없으면 {@link StreakRun#NONE}. 오늘 이후는 현재 streak 과 같은 이유로 보지 않는다(#780).
+     */
+    public StreakRun longestStreakRun(Long memberId, LocalDate today) {
+        StreakRun best = StreakRun.NONE;
+        LocalDate runStart = null;
+        LocalDate prev = null;
+        int length = 0;
+        for (java.sql.Date sqlDate : sessionRepository.findDistinctDatesBefore(
+                memberId, Status.COMPLETED, today.plusDays(1).atStartOfDay())) {
+            LocalDate day = sqlDate.toLocalDate();
+            if (prev != null && day.equals(prev.plusDays(1))) {
+                length++;
+            } else {
+                runStart = day;
+                length = 1;
+            }
+            if (length >= best.length()) { // >= : 같은 길이면 뒤(최근) 구간이 이긴다
+                best = new StreakRun(length, runStart, day);
+            }
+            prev = day;
+        }
+        return best;
+    }
+
+    /** 기간 안 출석일 집합(양 끝 포함). 스트릭 카드의 «이번 주 7칸» 이 쓴다 — 오늘 여부도 여기서 나온다. */
+    public Set<LocalDate> attendedDays(Long memberId, LocalDate from, LocalDate to) {
+        Set<LocalDate> days = new HashSet<>();
+        for (java.sql.Date sqlDate : sessionRepository.findDistinctActiveDates(
+                memberId, List.of(Status.COMPLETED), from.atStartOfDay(), to.atTime(23, 59, 59))) {
+            days.add(sqlDate.toLocalDate());
+        }
+        return days;
     }
 
     /**
@@ -128,7 +184,7 @@ public class AttendanceService {
             List<LocalDateTime> page = pages.getOrDefault(memberId, List.of());
             StreakWalk walk = new StreakWalk(today);
             if (page.isEmpty() || walk.consume(page) || page.size() < FETCH_BATCH) {
-                result.put(memberId, walk.streak);
+                result.put(memberId, walk.run().length());
                 continue;
             }
             // 한 페이지가 꽉 찼는데 아직 안 끊겼다 — 이 회원만 단건 커서로 이어 걷는다.
@@ -141,7 +197,7 @@ public class AttendanceService {
                 }
                 cursor = next.get(next.size() - 1);
             }
-            result.put(memberId, walk.streak);
+            result.put(memberId, walk.run().length());
         }
         return result;
     }
@@ -152,11 +208,17 @@ public class AttendanceService {
      */
     private static final class StreakWalk {
         private final LocalDate today;
+        private LocalDate anchor;   // 구간의 끝(오늘/어제). null = 아직 못 정함
         private LocalDate expected; // 다음으로 «있어야 하는» 날. null = 아직 앵커(오늘/어제)를 못 정함
         int streak;
 
         StreakWalk(LocalDate today) {
             this.today = today;
+        }
+
+        /** 지금까지 센 구간. 시작일 = 마지막으로 센 날 = {@code expected + 1}. */
+        StreakRun run() {
+            return streak == 0 ? StreakRun.NONE : new StreakRun(streak, expected.plusDays(1), anchor);
         }
 
         boolean consume(List<LocalDateTime> newestFirst) {
@@ -167,6 +229,7 @@ public class AttendanceService {
                     if (!day.equals(today) && !day.equals(today.minusDays(1))) {
                         return true;
                     }
+                    anchor = day;
                     expected = day;
                 }
                 if (day.isAfter(expected)) {

@@ -18,6 +18,18 @@ spring:
     serialization:
       write-dates-as-timestamps: false
 
+  # 관리자 기준 영상(mp4) 업로드 상한 — POST /admin/exercises/{id}/reference-video 가 유일한 multipart 경로다.
+  # 기본값 1MB 는 데모 영상(2.56MB)도 막는다.
+  #
+  # 50MB 는 «약속» 이다(2026-09-17 confirm). 근거 — baseline: ai-server/scripts/demo_videos/demo_squat.mp4 실측
+  # 10.3초·640×480·2.56MB(≈250KB/s). 가정 ①: 스마트폰 1080p 촬영 = 480p 의 6.75배 픽셀 → 같은 코덱 효율이면
+  # ≈1.7MB/s. 가정 ②: 기준 영상은 rep 1회를 고르는 용도(exercise_servicer._extract_reference_poses_from_video)라
+  # 30초면 충분. → 1.7MB/s × 30초 ≈ 52MB 를 50 으로 내림. 넘으면 413(C007).
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+
   # [1] 데이터베이스 및 JPA 설정 (spring 하위로 정렬)
   datasource:
     # rewriteBatchedStatements=true: JDBC 드라이버가 batch INSERT 를 multi-row SQL 한 방으로 재작성.
@@ -167,6 +179,14 @@ ai:
 # batch 는 실험 rig 가 ATTENDANCE_STREAK_STRATEGY 로만 켠다 — 채택은 실측 뒤 별도 결정이라 기본값을 안 바꾼다.
 attendance:
   streak-strategy: ${ATTENDANCE_STREAK_STRATEGY:per-member}
+
+# 관리자 기준 영상(mp4) 저장 루트 (ReferenceVideoProperties, 2026-09-17 confirm — 공유 볼륨 전달).
+# dir    = Spring 이 쓰는 곳. compose 는 /data/reference-videos 로 넘기고 같은 폴더를 AI 에 ro 로 마운트한다.
+# ai-dir = AI 컨테이너가 같은 폴더를 보는 경로. 비면 dir 과 같다 — 전부 compose 이거나 둘 다 호스트일 때.
+#          호스트 bootRun + AI 컨테이너 조합에서만 /data/reference-videos 를 준다.
+reference-video:
+  dir: ${REFERENCE_VIDEO_DIR:./data/reference-videos}
+  ai-dir: ${REFERENCE_VIDEO_AI_DIR:}
 
 # [3] Swagger 및 기타 설정 (최상단 레벨)
 #

@@ -10,6 +10,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.time.LocalDateTime;
@@ -164,6 +165,19 @@ public class GlobalExceptionHandler {
         log.warn("Malformed request body on {} {} ({})", request.getMethod(), request.getRequestURI(),
                 e.getMostSpecificCause().getClass().getSimpleName());
         return buildResponse(ErrorCode.INVALID_INPUT_VALUE);
+    }
+
+    /**
+     * multipart 크기 상한 초과({@code spring.servlet.multipart.max-file-size}, 관리자 mp4 업로드가 유일한
+     * 경로). 핸들러가 없으면 아래 {@code handleUnexpectedException} 이 받아 <b>413 대신 500</b> 이 나간다 —
+     * #180 과 같은 결이다. WARN 인 이유도 같다: 큰 파일을 보낸 것이지 서버 결함이 아니다.
+     */
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponseDto> handleMaxUploadSize(MaxUploadSizeExceededException e,
+                                                                HttpServletRequest request) {
+        log.warn("Upload too large on {} {} (max={})", request.getMethod(), request.getRequestURI(),
+                e.getMaxUploadSize());
+        return buildResponse(ErrorCode.FILE_TOO_LARGE);
     }
 
     @ExceptionHandler(Exception.class)

@@ -11,14 +11,17 @@ import com.shadowfit.dto.admin.ExerciseUpdateDto;
 import com.shadowfit.dto.admin.ThresholdUpdateDto;
 import com.shadowfit.dto.common.PageResponse;
 import com.shadowfit.service.exercise.AdminExerciseService;
+import com.shadowfit.service.exercise.ReferenceVideoService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.util.UriComponentsBuilder;
 
 @Tag(name = "관리자 - 운동 종목", description = "운동 종목 CRUD · 임계값 등 운영자 전용")
@@ -28,6 +31,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 @PreAuthorize("hasRole('ADMIN')")
 public class AdminExerciseController {
     private final AdminExerciseService adminExerciseService;
+    private final ReferenceVideoService referenceVideoService;
 
     @Operation(summary = "운동 종목 목록 조회",
                description = "필터 2종(검색어·카테고리)의 임의 조합으로 조회한다. "
@@ -85,6 +89,21 @@ public class AdminExerciseController {
             @PathVariable Long exerciseId,
             @Valid @RequestBody ExerciseUpdateDto dto) {
         return ResponseEntity.ok(adminExerciseService.updateExercise(exerciseId, dto));
+    }
+
+    @Operation(summary = "기준 영상(mp4) 업로드 → 기준 좌표 추출",
+               description = "multipart 필드 `file` 로 mp4 를 올리면 공유 볼륨에 저장하고 ai-server 에 기준 좌표 추출을 "
+                       + "요청한다. **202 는 «추출이 시작됐다» 이지 «끝났다» 가 아니다** — 좌표는 AI 가 역호출로 "
+                       + "`exercise_references` 를 교체(#220)할 때 바뀌며, 그때까지 상세의 임계값·분석 지원 여부는 "
+                       + "그대로다. 재업로드는 이전 영상을 교체한다(운동당 1개 보관).\n\n"
+                       + "- 400(W016): 비었거나 .mp4 가 아니거나 mp4 파일 머리(ftyp)가 아니다\n"
+                       + "- 413(C007): 크기 상한 초과(application.yml `spring.servlet.multipart.max-file-size`)\n"
+                       + "- 503(W017): AI 서킷브레이커 OPEN — 파일·DB 를 건드리기 전에 거부한다")
+    @PostMapping(value = "/{exerciseId}/reference-video", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<AdminExerciseDetailDto> uploadReferenceVideo(
+            @PathVariable Long exerciseId,
+            @Parameter(description = "기준 영상 mp4") @RequestPart("file") MultipartFile file) {
+        return ResponseEntity.accepted().body(referenceVideoService.upload(exerciseId, file));
     }
 
     @Operation(summary = "운동 싱크로율 임계값 변경",

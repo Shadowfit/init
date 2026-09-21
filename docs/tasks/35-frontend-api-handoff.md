@@ -44,6 +44,14 @@
 
 피드 항목 `type` 은 서버가 만드는 `SESSION_COMPLETED`(payload `{sessionId, memberId, username, exerciseName}`)·`MEMBER_JOINED`(`{memberId, username}`) 둘. `payload` 는 **JSON 문자열**이라 파싱 필요. 소켓으로 보낸 임의 type 도 같은 표에 쌓이므로 **모르는 type 은 무시**할 것. 리액션은 소켓 발행 없음 — 재조회로 반영.
 
+## 메인 화면 — 스트릭 카드 (2026-09-18 추가, PR 머지 후 유효)
+
+| 화면 | API | 비고 |
+|---|---|---|
+| 스트릭 카드 | `GET /attendance/mine` | 파라미터 없음(서버 오늘 기준). 응답 `{today, attendedToday, currentStreak, currentStreakStart, longestStreak, longestStreakStart, longestStreakEnd, thisWeek:[{date, attended}×7]}`. `thisWeek` 는 월~일 7개 고정, 오늘 이후는 `false`. 기록 없으면 0·null |
+
+문구는 프론트 파생 — «오늘 운동하면 N+1일째» = `!attendedToday && currentStreak>0`, «최고 기록 갱신 중» = `currentStreak == longestStreak && longestStreakEnd ≥ 어제`. 달력 `GET /reports/calendar` 의 `consecutiveDays` 는 같은 값(같은 계산기)이라 그대로 써도 된다.
+
 ## 2회차 — AI 리포트
 
 | 화면 | API | 비고 |

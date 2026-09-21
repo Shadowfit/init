@@ -90,7 +90,7 @@ Docker 네트워크는 `shadowfit-net` 브리지 한 개. 외부 노출은 backe
 
 | RPC | 방향 | 호출자 | 수신자 | 용도 |
 |-----|------|--------|--------|------|
-| `ExtractReferenceData` | Spring → AI | `ExerciseAnalysisService.extractReferencePoses` | `ExerciseServicer.ExtractReferenceData` | YouTube URL에서 기준 포즈 추출 |
+| `ExtractReferenceData` | Spring → AI | `ExerciseAnalysisService.extractReferencePoses` ← `ReferenceVideoService.upload`(관리자 mp4 업로드) | `ExerciseServicer.ExtractReferenceData` | **공유 볼륨의 영상 파일 경로**에서 기준 포즈 추출을 **접수**(§3-3). ~~YouTube URL~~ — 필드 이름만 `youtube_url` 이고 AI 는 http(s) 를 거부한다 |
 | `StartAnalysis` | Spring → AI | `ExerciseAnalysisService.sendAnalysisRequestToFastApi` | `ExerciseServicer.StartAnalysis` | 세션 시작 + 기준 좌표 전달 |
 | **`ReattachAnalysis`** 🆕 | Spring → AI | `ExerciseAnalysisService.reattachSession` | `ExerciseServicer.ReattachAnalysis` | **이미 `IN_PROGRESS` 인 세션의 AI 상태를 DB 값으로 되살린다.** 2026-07-31 신설(#59 2단계) |
 | `StopAnalysis` | Spring → AI | **아웃박스 발행기**(`OutboxPublisher`) ← `ExerciseAnalysisService.stopAnalysis` 가 이벤트만 적재 | `ExerciseServicer.StopAnalysis` | 사용자 중단 신호. **호출자가 바뀌었다** — §4 중단 |
@@ -122,6 +122,21 @@ Docker 네트워크는 `shadowfit-net` 브리지 한 개. 외부 노출은 backe
 | `StopAnalysis` | **동기** (blocking stub — 2026-07-29 아웃박스 도입 시 async 스텁에서 전환) | [`../decisions/outbox-reliable-messaging.md`](../decisions/outbox-reliable-messaging.md) §4-2-1 | `OutboxPublisher`가 SENT/RETRY/FAILED 3분류를 판단하려면 결과를 반환값으로 받아야 한다. 발행기는 `@Scheduled` 전용 스레드라 블로킹돼도 요청 처리량에 영향이 없다 |
 
 > 🔴 **정정 — "Spring → AI 호출은 전부 비동기"가 아니다.** 이전 판(§1 옛 서술)의 "Spring → AI: 비동기(`@Async`, 202 Accepted)"는 `StartAnalysis`(세션 시작) 하나만 정확히 설명한다. `@Async`는 **REST 응답을 막지 않는다**는 뜻이지 **그 안에서 나가는 gRPC 호출이 비동기 스텁**이라는 뜻이 아니다 — 실제로 `ReattachAnalysis`는 REST 요청 스레드가 gRPC 응답을 동기로 기다리고, `StopAnalysis`는 아웃박스 발행기 스레드가 동기로 기다린다. §1 "호출 패턴" 행은 이 절을 가리키도록 고쳤다.
+
+### 3-3. `ExtractReferenceData` — proto 밖 계약 두 개 🆕 (2026-09-17, 관리자 mp4 업로드)
+
+`POST /admin/exercises/{id}/reference-video` 가 이 RPC 의 실사용 호출자다. 계약 중 proto 에 없는 것이 둘이다 — 둘 다 컴파일·CI 가 못 지키므로 여기 적는다.
+
+| 계약 | 내용 | 어긋나면 |
+|---|---|---|
+| **① 경로 = 공유 bind mount** | Spring 이 `reference-video.dir`(compose: `/data/reference-videos`) 아래 `{exerciseId}/{uuid}.mp4` 로 쓰고, gRPC 에는 `reference-video.ai-dir + 상대경로` 를 `youtube_url` 에 실어 보낸다. AI 는 그 문자열을 **그대로 열고** 없으면 즉시 `success=false`. compose 는 같은 호스트 폴더 `./backend/data/reference-videos` 를 backend(rw)·ai(ro) 에 마운트한다. 호스트 `bootRun` + AI 컨테이너 조합은 `REFERENCE_VIDEO_AI_DIR=/data/reference-videos` 하나만 주면 된다 | AI 로그 «기준 영상 파일이 없다». Spring 은 «접수 실패» 로그만 남기고 DB 경로는 이미 커밋된 상태 |
+| **② 응답 = 접수, 저장 = 역호출** | AI 는 원격 URL·파일 존재만 검사하고 **즉시** 반환한다(`extracted_poses` 항상 빈 값). 추출은 프로세스당 1스레드 FIFO 풀(`reference-extraction`)에서 돌고, 끝나면 AI → Spring `ExtractReferenceData`(같은 이름, 역방향) 로 `saveReferencePoses` 가 정답지를 **교체**(#220)한다. 예전엔 추출을 끝내고 응답했는데 Spring 의 5초 데드라인(`GRPC_CALL_TIMEOUT_SECONDS`)에 걸려 **성공한 추출이 서킷브레이커 실패로 집계**됐다(윈도 10·최소 5·50% — 업로드 5번이면 그 채널의 라이브 세션까지 거부) | 202 를 받았는데 좌표가 안 바뀐다 → AI 로그의 `[#192]` 추출 실패 줄을 볼 것. Spring 쪽에 완료 신호는 없다 |
+
+**전제 — 같은 호스트.** ①은 Spring 과 AI 가 한 머신에 있을 때만 성립한다(현 compose·EC2 측정 구성 모두 동거). 호스트를 나누면 gRPC bytes 가 아니라 **오브젝트 스토리지**로 바꿔야 한다 — 영상은 «보관·교체» 대상이라(`exercises.reference_video_path`, V23) 전달만 해결하는 방식으로는 부족하다.
+
+**알려진 한계 — 비용은 바이트가 아니라 프레임 수.** 크기 상한 50MB(`spring.servlet.multipart.max-file-size`, 근거는 application.yml 주석)는 1080p 30초 가정이지만 480p 저비트레이트면 같은 50MB 가 ~200초·6,000프레임이다. 추출은 라이브 세션과 **같은 프로세스**(라우팅 키 = exerciseId → 항상 같은 워커)에서 돌아 GIL 을 나눠 쓴다 — 그 워커에 붙은 세션은 추출 동안 느려진다. 영상 길이 상한은 없다.
+
+Spring 쪽 트랜잭션 경계(`ReferenceVideoService`): 서킷 확인 → 파일 저장(tx 밖) → `attachReferenceVideo`(tx: 경로 갱신 + `@CacheEvict`) → **afterCommit** 에서 gRPC 발사·이전 파일 삭제 → tx 실패 시 새 파일 삭제(보상). gRPC 를 tx 안에서 쏘지 않는 이유는 `startAnalysis` 와 같다(커넥션 점유·롤백 뒤 콜백).
 
 핵심 메시지:
 - `AnalyzeRequest`: `exercise_id(int64)`, `session_id(int64)`, `reference_poses(PoseDataRequest[])`
@@ -245,6 +260,8 @@ AI 컨테이너가 재시작되면 in-memory `SessionState` 가 사라지는데,
 | `shadowfit-mysql` | 내부 3306 | `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD` | `mysqladmin ping` |
 | `shadowfit-backend` | 외부 8080, 내부 6565 | `DB_HOST`, `INTERNAL_API_TOKEN`, `AI_SERVER_HOST=shadowfit-ai`, `AI_SERVER_GRPC_PORT=8585`, `JWT_SECRET`, `OPENAI_API_KEY` | (별도 정의 시 추가) |
 | `shadowfit-ai` | expose만 8000/8585 | `INTERNAL_API_TOKEN`, `POSE_MODEL_COMPLEXITY=1`, `BACKEND_URL=http://shadowfit-backend:8080/api/v1` | `urllib.request.urlopen('http://localhost:8000/health')` |
+
+- 공유 bind mount `./backend/data/reference-videos` → backend `/data/reference-videos`(rw) · ai 같은 경로(ro). 관리자 기준 영상 전달 통로(§3-3 ①). prod compose 는 `REFERENCE_VIDEO_HOST_DIR` 로 호스트 쪽을 바꿀 수 있다
 
 - 컨테이너간 DNS: `shadowfit-mysql`, `shadowfit-backend`, `shadowfit-ai`
 - gRPC 주소 설정:

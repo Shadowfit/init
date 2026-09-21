@@ -104,12 +104,26 @@
 ```
 > 내부 흐름: Spring 이 DB에 세션 생성 → 즉시 202 응답 → `@Async` 로 gRPC `StartAnalysis` 송신 (AI 가 기준 좌표 받아 분석 시작). 결합 상세는 [`architecture/ai-backend-integration.md`](./architecture/ai-backend-integration.md).
 
-### POST /exercises/{exerciseId}/reference - 기준 좌표 추출 요청 (관리자)
+### POST /admin/exercises/{exerciseId}/reference-video - 기준 영상(mp4) 업로드 → 기준 좌표 추출 (관리자, 2026-09-17)
 ```
-POST /exercises/1/reference?youtubeUrl=https://youtu.be/xxx
+POST /admin/exercises/1/reference-video
+Content-Type: multipart/form-data; file=<mp4>
+
+// Response 202 — «추출이 시작됐다» 이지 «끝났다» 가 아니다. 좌표는 AI 역호출로 exercise_references 를 교체할 때 바뀐다
+{ "id": 1, "referenceVideoPath": "1/6f9a1c2e-….mp4", ... AdminExerciseDetailDto 전 필드 }
+
+// 400 W016 — 비었거나 .mp4 가 아니거나 파일 머리(ftyp)가 아님 · 413 C007 — 50MB 초과 · 503 W017 — AI 서킷 OPEN(파일·DB 안 건드림)
+```
+> 영상은 공유 볼륨(`/data/reference-videos/{id}/{uuid}.mp4`)에 운동당 1개 보관·교체되고, 경로가 `exercises.reference_video_path` 에 남는다. 결합 상세·트랜잭션 경계는 [`architecture/ai-backend-integration.md` §3-3](./architecture/ai-backend-integration.md).
+
+### POST /exercises/{exerciseId}/reference - 기준 좌표 추출 요청 (관리자) — ⚠️ 유튜브 URL 은 동작하지 않는다
+```
+POST /exercises/1/reference?youtubeUrl=<AI 컨테이너 안 파일 경로>
 
 // Response 202
 "운동 ID [1]에 대한 기준 좌표 추출이 시작되었습니다."
+```
+> 파라미터 이름만 `youtubeUrl` 이다 — AI 가 http(s) 를 거부한다(유튜브 다운로드 ToS 미결정, `decisions/youtube-coordinate-harvest.md` §4-2). 위 mp4 업로드 API 가 실사용 경로다.
 ```
 유튜브 URL → AI 가 MediaPipe로 프레임마다 관절 좌표 추출 → Spring 콜백으로 `exercise_references` 테이블 영속화.
 
@@ -378,6 +392,7 @@ AI = 운동 통계의 단일 진실 원천 원칙. (커밋 143a2e4)
 | `GET /groups/{groupId}/members/status` | 구성원 운동 현황 | ACTIVE 전원의 `attendedToday`·`streak`. 정렬: 오늘 완료 → 진행 중 → 기록 없음 |
 | `GET /friends` | 친구의 운동 현황 | 내가 속한 모든 모임의 ACTIVE 멤버(나 제외, 중복 제거), 같은 항목·같은 정렬 |
 | `GET /groups/{groupId}/attendance?year&month` | 모임 출석 캘린더 | 그 달의 모든 날 × `attendedCount`(COMPLETED 세션이 있는 현재 ACTIVE 멤버 수) + `activeMemberCount`(분모). 칸 농도 매핑은 프론트 |
+| `GET /attendance/mine` | 내 스트릭 카드 (2026-09-18, streak-card-api.md) | `today`·`attendedToday`·`currentStreak(+Start)`·`longestStreak(+Start/End)`·`thisWeek`(월~일 7개 고정). 최장 기록 동률이면 최근 구간. 문구(«오늘 하면 N일째», «갱신 중» = `currentStreak == longestStreak && longestStreakEnd ≥ 어제`)는 프론트 파생 |
 
 «출석» 의 정의는 한 곳 — `AttendanceService`: **COMPLETED 세션이 있는 날**(status 무관이던 예전 캘린더 정의와 다름), streak 은 창 없이 최신순 커서로 첫 끊김에서 중단. 노출 항목은 §3-G 로 고정된 셋(오늘 여부·연속일수·합산 출석)뿐 — rep 수·칼로리·세션 상세는 남에게 안 보인다.
 
@@ -385,6 +400,17 @@ AI = 운동 통계의 단일 진실 원천 원칙. (커밋 143a2e4)
 // GET /friends  Response 200 — List<MemberAttendanceStatusDto>
 [ { "memberId": 2, "username": "철수", "profileImageUrl": null, "attendedToday": true, "streak": 5 },
   { "memberId": 3, "username": "영희", "profileImageUrl": null, "attendedToday": false, "streak": 0 } ]
+```
+
+```json
+// GET /attendance/mine  Response 200 — MyAttendanceResponseDto (기록 없으면 0·null, thisWeek 는 전부 false)
+{ "today": "2026-09-18", "attendedToday": false,
+  "currentStreak": 5, "currentStreakStart": "2026-09-13",
+  "longestStreak": 12, "longestStreakStart": "2026-07-01", "longestStreakEnd": "2026-07-12",
+  "thisWeek": [ { "date": "2026-09-14", "attended": true }, { "date": "2026-09-15", "attended": true },
+                { "date": "2026-09-16", "attended": true }, { "date": "2026-09-17", "attended": true },
+                { "date": "2026-09-18", "attended": false }, { "date": "2026-09-19", "attended": false },
+                { "date": "2026-09-20", "attended": false } ] }
 ```
 
 ### 피드·리액션

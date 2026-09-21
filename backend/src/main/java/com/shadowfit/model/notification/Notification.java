@@ -51,7 +51,7 @@ public class Notification {
     @Column(name = "target_date", nullable = false)
     private LocalDate targetDate;
 
-    /** 응원 본문(CHEER). 재촉(NUDGE)은 null — V23. */
+    /** 응원 본문(CHEER). 재촉(NUDGE)은 null — V24. */
     @Column(length = 100)
     private String message;
 
