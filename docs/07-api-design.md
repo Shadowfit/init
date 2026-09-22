@@ -249,7 +249,7 @@ AI = 운동 통계의 단일 진실 원천 원칙. (커밋 143a2e4)
     "syncRateChange": +5.2,
     "repChange": +3
   },
-  "syncRateTimeline": [82.5, 80.1, 75.0, ...],
+  "repTrend": [{ "repNumber": 1, "syncRate": 82.5, "timeStamp": "00:05" }, ...],   // 회차 추이 — 예전 문서의 syncRateTimeline 은 오기
   "syncRateDetails": [{ "exerciseId": 1, "name": "스쿼트", "setInfo": "3세트 x 12회 (마지막 7회)", "syncRate": 78.5 }],
   "sets": [                              // 2026-09-22, V26. 세트 도입 전 세션은 []
     { "setNo": 1, "reps": 12, "avgSyncRate": 80.1, "startedSec": 3.2, "endedSec": 41.0 },
