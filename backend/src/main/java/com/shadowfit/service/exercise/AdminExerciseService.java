@@ -105,7 +105,7 @@ public class AdminExerciseService {
         // 덮어써 NOT NULL 위반이 되므로, 값이 있을 때만 설정한다.
         exercise.applyExpectedDuration(dto.expectedDurationMinutes());
 
-        Exercise saved = exercisesRepository.save(exercise);
+        Exercise saved = flushOrCodeDuplication(() -> exercisesRepository.saveAndFlush(exercise), dto.code());
         log.info("운동 종목 등록: id={}, name={}, code={}, category={} (analysisSupported=false 고정)",
                 saved.getId(), saved.getName(), saved.getCode(), category.getName());
 
@@ -141,7 +141,11 @@ public class AdminExerciseService {
 
         exercise.applyUpdate(dto.name(), category, dto.description(),
                 dto.preferredUrl(), dto.targetJoints(), dto.expectedDurationMinutes());
-        applyCodeChange(exercise, dto.code());
+        if (applyCodeChange(exercise, dto.code())) {
+            // dirty-checking 은 커밋 때 flush 하는데, 그때 터지는 UNIQUE 위반은 이 메서드 밖이라 잡을 수 없다.
+            // 코드가 바뀐 경우만 여기서 flush 해 경합을 W018 로 접는다.
+            flushOrCodeDuplication(() -> { exercisesRepository.flush(); return exercise; }, dto.code());
+        }
 
         log.info("운동 종목 수정: id={}, name={}", exerciseId, exercise.getName());
         return AdminExerciseDetailDto.fromEntity(exercise);
@@ -327,8 +331,9 @@ public class AdminExerciseService {
      * 코드 중복 검사 — UNIQUE(uk_exercises_code) 가 어차피 막지만 500 대신 W018 로 이유를 준다
      * ({@code AdminCategoryService} 의 이름 중복과 같은 결). null 코드는 «분석기 없음» 이라 검사 대상이 아니다.
      *
-     * <p>검사와 저장 사이의 레이스는 남는다 — 그때는 UNIQUE 가 잡아 {@code DataIntegrityViolationException}
-     * 이 되는데, 종목 등록은 관리자 한 명이 하는 일이라 그 틈을 잠금으로 막지 않는다(삭제 경로의 판단과 같다).
+     * <p>검사와 저장 사이의 레이스는 잠금으로 막지 않는다(삭제 경로의 판단과 같다) — 그때 UNIQUE 가 던지는
+     * 위반은 {@link #flushOrCodeDuplication} 이 같은 W018 로 접는다. 사전 검사를 그래도 두는 이유는 정상 경로에서
+     * INSERT 를 시도조차 안 하고 이유를 주기 위해서다.
      *
      * @param selfId 수정 중인 행의 id — 자기 코드를 다시 보내는 것은 중복이 아니다. 등록이면 null
      */
@@ -350,8 +355,8 @@ public class AdminExerciseService {
      * 그 순간부터 시작되는 세션이 다른 분석기 기준으로 채점된다 — 그리고 «기준 좌표는 옛 종목 것» 인 상태다.
      * 끄고(세션 시작 차단) → 바꾸고 → 기준 영상을 다시 올려 → 켜는 순서를 강제한다.
      */
-    private void applyCodeChange(Exercise exercise, String newCode) {
-        if (newCode == null || newCode.equals(exercise.getCode())) return;
+    private boolean applyCodeChange(Exercise exercise, String newCode) {
+        if (newCode == null || newCode.equals(exercise.getCode())) return false;
         if (Boolean.TRUE.equals(exercise.getAnalysisSupported())) {
             log.warn("종목 코드 변경 거부 — 분석 활성 상태: id={}, {} -> {}", exercise.getId(), exercise.getCode(), newCode);
             throw new BusinessException(ErrorCode.EXERCISE_CODE_LOCKED);
@@ -359,6 +364,28 @@ public class AdminExerciseService {
         rejectDuplicateCode(newCode, exercise.getId());
         log.info("종목 코드 변경: id={}, {} -> {}", exercise.getId(), exercise.getCode(), newCode);
         exercise.changeCode(newCode);
+        return true;
+    }
+
+    /**
+     * 저장/flush 를 실행하고, {@code uk_exercises_code} 위반만 W018 로 바꾼다 — 사전 검사와 INSERT 사이에 같은
+     * 코드가 먼저 들어온 경합. 그 외 무결성 위반(FK·NOT NULL·JSON)은 클라 잘못이 아니라 서버 결함이 대부분이라
+     * 그대로 던진다({@code MemberService.duplicationOf} 와 같은 규칙 — 이름을 확인한 제약만 4xx 로).
+     *
+     * <p>flush 를 여기서 하는 이유: 위반은 SQL 이 나갈 때 터지는데, 그 시점이 커밋이면 이 메서드 밖이라 잡을 수 없다.
+     */
+    private <T> T flushOrCodeDuplication(java.util.function.Supplier<T> action, String code) {
+        try {
+            return action.get();
+        } catch (DataIntegrityViolationException e) {
+            String constraint = (e.getCause() instanceof org.hibernate.exception.ConstraintViolationException cve)
+                    ? cve.getConstraintName() : null;
+            if (constraint != null && constraint.toLowerCase(java.util.Locale.ROOT).contains("uk_exercises_code")) {
+                log.warn("종목 코드 경합 — 사전검사 후 선점됨: code={} (constraint={})", code, constraint);
+                throw new BusinessException(ErrorCode.EXERCISE_CODE_DUPLICATION);
+            }
+            throw e;
+        }
     }
 
     private Exercise findOrThrow(Long exerciseId) {

@@ -132,7 +132,7 @@ class AdminExerciseServiceTest {
         @Test
         @DisplayName("analysisSupported 는 요청과 무관하게 false 로 저장된다")
         void create_analysisSupportedIsAlwaysFalse() {
-            when(exercisesRepository.save(any(Exercise.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(exercisesRepository.saveAndFlush(any(Exercise.class))).thenAnswer(inv -> inv.getArgument(0));
             ExerciseCreateDto dto = new ExerciseCreateDto(
                     "데드리프트", null, categoryBack.getId(), "설명", "https://y.com/x", null, null);
 
@@ -144,7 +144,7 @@ class AdminExerciseServiceTest {
         @Test
         @DisplayName("예상 운동시간을 생략하면 엔티티 기본값 15 가 남는다")
         void create_nullDuration_keepsEntityDefault() {
-            when(exercisesRepository.save(any(Exercise.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(exercisesRepository.saveAndFlush(any(Exercise.class))).thenAnswer(inv -> inv.getArgument(0));
             ExerciseCreateDto dto = new ExerciseCreateDto(
                     "데드리프트", null, categoryBack.getId(), null, null, null, null);
 
@@ -158,7 +158,7 @@ class AdminExerciseServiceTest {
         @Test
         @DisplayName("임계값 4종은 엔티티 기본값에서 시작한다")
         void create_thresholdsStartFromDefaults() {
-            when(exercisesRepository.save(any(Exercise.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(exercisesRepository.saveAndFlush(any(Exercise.class))).thenAnswer(inv -> inv.getArgument(0));
             ExerciseCreateDto dto = new ExerciseCreateDto(
                     "데드리프트", null, categoryBack.getId(), null, null, null, 20);
 
@@ -172,7 +172,7 @@ class AdminExerciseServiceTest {
         @Test
         @DisplayName("code 를 보내면 그대로 저장되고, 생략하면 null(분석기 없는 종목)")
         void create_codeIsOptional() {
-            when(exercisesRepository.save(any(Exercise.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(exercisesRepository.saveAndFlush(any(Exercise.class))).thenAnswer(inv -> inv.getArgument(0));
             when(exercisesRepository.existsByCode("DEADLIFT")).thenReturn(false);
 
             AdminExerciseDetailDto withCode = service.createExercise(new ExerciseCreateDto(
@@ -202,7 +202,34 @@ class AdminExerciseServiceTest {
                     .extracting(e -> ((BusinessException) e).getErrorCode())
                     .isEqualTo(ErrorCode.EXERCISE_CODE_DUPLICATION);
 
-            verify(exercisesRepository, never()).save(any());
+            verify(exercisesRepository, never()).saveAndFlush(any());
+        }
+
+        /**
+         * [왜] 사전 검사와 INSERT 사이에 같은 코드가 먼저 들어오면 UNIQUE 가 던진다 — 그걸 500 으로 흘리면
+         * 관리자는 «뭐가 틀렸는지」 를 못 본다. 이름을 확인한 제약(uk_exercises_code)만 W018 로 접고,
+         * 다른 무결성 위반은 서버 결함일 수 있어 그대로 던진다.
+         */
+        @Test
+        @DisplayName("사전검사 뒤 UNIQUE(uk_exercises_code) 경합이면 W018 — 다른 제약 위반은 그대로")
+        void create_uniqueRace_translatesOnlyCodeConstraint() {
+            when(exercisesRepository.existsByCode("SQUAT")).thenReturn(false);
+            ExerciseCreateDto dto = new ExerciseCreateDto(
+                    "스쿼트2", "SQUAT", categoryBack.getId(), null, null, null, null);
+
+            when(exercisesRepository.saveAndFlush(any(Exercise.class))).thenThrow(
+                    new org.springframework.dao.DataIntegrityViolationException("dup",
+                            new org.hibernate.exception.ConstraintViolationException("dup", null, "uk_exercises_code")));
+            assertThatThrownBy(() -> service.createExercise(dto))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getErrorCode())
+                    .isEqualTo(ErrorCode.EXERCISE_CODE_DUPLICATION);
+
+            when(exercisesRepository.saveAndFlush(any(Exercise.class))).thenThrow(
+                    new org.springframework.dao.DataIntegrityViolationException("fk",
+                            new org.hibernate.exception.ConstraintViolationException("fk", null, "fk_exercises_category")));
+            assertThatThrownBy(() -> service.createExercise(dto))
+                    .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
         }
 
         /**
@@ -220,7 +247,7 @@ class AdminExerciseServiceTest {
                     .extracting(e -> ((BusinessException) e).getErrorCode())
                     .isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
 
-            verify(exercisesRepository, never()).save(any());
+            verify(exercisesRepository, never()).saveAndFlush(any());
         }
     }
 

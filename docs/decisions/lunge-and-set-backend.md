@@ -78,7 +78,7 @@ PDF 가 횟수 측정을 백엔드 열에 둔 게 의도인지 배치 편의인�
 
 | 안 | 내용 | 비고 |
 |---|---|---|
-| **C-1** `GET /exercises` 신설 | `id, code, name, category, analysisSupported, hasReferenceVideo, description, expectedDurationMinutes`. `analysisSupported=false` 도 내려서 화면이 «준비 중» 을 그림 | `findByIdCached` 가 이미 있어 목록도 같은 Caffeine 캐시. 관리자 PATCH 시 evict 는 기존 경로 확인 필요 |
+| **C-1** `GET /exercises` 신설 | `id, code, name, categoryId, categoryName, description, preferredUrl, expectedDurationMinutes, analysisSupported`(구현 기준으로 정정 — `hasReferenceVideo` 는 회원 화면에 쓸 값이 아니라 뺐다). `analysisSupported=false` 도 내려서 화면이 «준비 중» 을 그림 | 캐시하지 않는다 — 관리자 쓰기 5곳에 evict 를 빠짐없이 걸어야 하는 비용 대비 행 수가 한 자리(`ExerciseCatalogService` 주석) |
 | C-2 프론트가 `/admin/exercises` 재사용 | — | ADMIN 권한 필요. 불가 |
 
 지원 안 되는 종목을 목록에서 **빼는 것과 «준비 중» 으로 보이는 것** 중 어느 쪽인지는 프론트 결정 — API 는 플래그를 내리고 프론트가 고른다.
