@@ -172,6 +172,40 @@ class ReattachFailurePathTest {
     }
 
     /**
+     * ② (lunge-and-set-backend.md §4) — 재부착에도 시작 때와 같은 종목 코드·세트 목표가 실린다. AI 는
+     * initial_rep_count 와 target_reps_per_set 로 세트 cue 를 잇는다. proto3 라 «없음» 은 빈 문자열·0 이다 —
+     * 코드 없는 종목·세트 도입 전 세션이 그 경우고, 여기 픽스처가 정확히 그것이다.
+     */
+    @Test
+    @DisplayName("종목 코드·세트 목표가 재부착 요청에 실린다 — 없으면 빈 문자열·0")
+    void 종목코드와_세트목표가_요청에_실린다() {
+        when(blockingStub.reattachAnalysis(any(ReattachRequest.class)))
+                .thenReturn(ReattachResponse.newBuilder().setSuccess(true).setSessionId(SESSION_ID).build());
+        org.mockito.ArgumentCaptor<ReattachRequest> captor =
+                org.mockito.ArgumentCaptor.forClass(ReattachRequest.class);
+
+        service.reattachSession(SESSION_ID, MEMBER_ID);
+        verify(blockingStub).reattachAnalysis(captor.capture());
+        assertThat(captor.getValue().getExerciseCode()).isEmpty();
+        assertThat(captor.getValue().getTargetRepsPerSet()).isZero();
+        assertThat(captor.getValue().getTargetSets()).isZero();
+
+        Session withTargets = Session.builder()
+                .id(SESSION_ID).member(session().getMember())
+                .exercise(Exercise.builder().id(2L).code("LUNGE").expectedDurationMinutes(15).build())
+                .targetRepsPerSet(12).targetSets(3)
+                .startTime(LocalDateTime.now()).build();
+        when(sessionService.findReattachableSession(SESSION_ID, MEMBER_ID)).thenReturn(withTargets);
+        org.mockito.Mockito.clearInvocations(blockingStub);
+
+        service.reattachSession(SESSION_ID, MEMBER_ID);
+        verify(blockingStub).reattachAnalysis(captor.capture());
+        assertThat(captor.getValue().getExerciseCode()).isEqualTo("LUNGE");
+        assertThat(captor.getValue().getTargetRepsPerSet()).isEqualTo(12);
+        assertThat(captor.getValue().getTargetSets()).isEqualTo(3);
+    }
+
+    /**
      * 시간 축도 rep 축처럼 이어붙여 보내는가 (이슈 #156).
      *
      * <p>AI 는 프레임 시각을 «첫 프레임 도착부터의 경과» 로 만든다. 재부착으로 AI 상태를 새로

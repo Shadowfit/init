@@ -3,8 +3,8 @@
 작성: 2026-09-22 · 대상: **ai-server 담당자** · 배경: [`../decisions/lunge-and-set-backend.md`](../decisions/lunge-and-set-backend.md) §7(박제)·§3-E(합의 안건)
 출처: 캡스톤 디자인 I 1회차 보고 — [AI] *런지 피드백 / 운동 세트 / TTS*, [백엔드] *운동 종목 선택 / 운동 세트(AI 연동) / 런지 횟수 측정*
 
-> **상태**: 🟡 proto 초안. 아래 필드 이름·번호는 Spring 쪽 제안이고, AI 담당자 답을 받아 **한 PR** 로 양쪽을 바꾼다
-> (`proto/exercise.proto` 한 벌 + `cd ai-server && ./scripts/gen_proto.sh` 재생성 커밋 — CI 가 원본과 다르면 막는다).
+> **상태**: 🟡 **Spring 쪽 먼저 반영됨(2026-09-22)** — 아래 §1 필드가 `proto/exercise.proto` 에 들어갔고 Spring 이 채워 보낸다(pb2 재생성 커밋 포함).
+> AI 는 아직 안 읽는다. 필드 이름·번호를 바꾸고 싶으면 **AI 가 읽기 시작하기 전에** 말해 달라 — 그때는 Spring 이 맞춘다.
 
 ## 0. 한 줄 요약
 
@@ -86,11 +86,11 @@ rep 완성 시:
 - ✅ V26 `exercise_sessions.target_reps_per_set`·`target_sets` + `exercise_session_sets`
 - ✅ `SessionCompletionTx` 가 `pose_data` rep 집계로 세트 행 저장, `SetSummaryFormatter` 세트 표 기반, 리포트 `sets`
 - ✅ `Session.difficultyLevel` 에 추천 level
-- ⏳ ② 뒤: `ExerciseAnalysisService`·`ReattachRequestBuilder` 가 `exercise_code`·세트 목표를 proto 로 실어 보내기
+- ✅ ② Spring 쪽(2026-09-22): `ExerciseAnalysisService`·`ReattachRequestBuilder`·`extractReferencePoses` 가 `exercise_code`·세트 목표를 실어 보낸다. 남은 것은 AI 가 읽는 §2-1·2-2
 
 ## 4. 순서
 
-1. 이 문서로 §1 필드 이름·번호 + §2-4 질문에 답 → proto PR (양쪽 pb2/Java 스텁 동시)
-2. AI: §2-1·2-2 → 스쿼트로 먼저 세트가 도는지 확인(런지 분석기 전에 끝낼 수 있다)
-3. Spring: §3
-4. AI: 런지 분석기 → 관리자가 런지 mp4 업로드 → `PATCH /admin/exercises/2/analysis-support`
+1. ~~proto PR~~ → Spring 쪽 먼저 들어감. §1 필드 이름·번호에 이의 있으면 지금 말해 달라
+2. AI: §2-1·2-2 → 스쿼트로 먼저 세트 cue 가 도는지 확인(런지 분석기 전에 끝낼 수 있다)
+3. ~~Spring: §3~~ 완료(#786)
+4. AI: §2-4 질문에 답 → 런지 분석기 → 관리자가 런지 mp4 업로드 → `PATCH /admin/exercises/2/analysis-support`

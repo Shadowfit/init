@@ -438,6 +438,19 @@ proto의 `int64`와 Spring DTO 타입 정렬 + REST 시대 잔재 제거.
 
 ---
 
+### 런지·세트 ② — proto 에 exercise_code·target_reps_per_set·target_sets (2026-09-22)
+
+| 축 | 변경 |
+|---|---|
+| **proto** | `AnalyzeRequest` +`exercise_code(7)`·`target_reps_per_set(8)`·`target_sets(9)` · `ReattachRequest` +`exercise_code(8)`·`target_reps_per_set(9)`·`target_sets(10)` · `ExtractRequest` +`exercise_code(4)`. 삭제·의미 변경 없음 |
+| **Spring** | `ExerciseAnalysisService.SessionTargets.of(session)` — NULL→`""`/`0` 변환 한 곳. `startAnalysis` 가 커밋 전에 확정해 `sendAnalysisRequestToFastApi(…, targets)` 로 넘김(nonce 와 같은 이유), `ReattachRequestBuilder`·`extractReferencePoses` 도 같은 값 |
+| **AI** | `exercise_pb2.py` 재생성만(`scripts/gen_proto.sh`). 필드를 읽는 코드 없음 — 핸드오프 §2-1·2-2 가 AI 몫 |
+| **Infra** | 없음 |
+
+선행: #785(V25 `exercises.code`), #786(V26 세션 목표·세트 표). 설계: `docs/decisions/lunge-and-set-backend.md` §4 ②.
+
+---
+
 ## 보조 그룹: 직접 영향 적은 잡정리
 
 ### 0fe056e — fix: MySQL 클라이언트 charset 을 utf8mb4 로 강제 (2026-05-16)

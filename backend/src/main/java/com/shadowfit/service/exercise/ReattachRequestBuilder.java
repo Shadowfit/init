@@ -77,13 +77,20 @@ public class ReattachRequestBuilder {
         // 배포 전에 시작된 세션은 여기가 null 이고, 빈 문자열로 나가 compat 통과가 된다.
         String sessionNonce = session.getSessionNonce();
 
+        // 시작 때와 같은 값을 다시 실어준다(② — AnalyzeRequest 7·8·9 와 동일). AI 는 initial_rep_count 와
+        // target_reps_per_set 로 «몇 세트째 몇 번째 rep» 을 역산해 세트 cue 를 잇는다(핸드오프 §2-3).
+        ExerciseAnalysisService.SessionTargets targets = ExerciseAnalysisService.SessionTargets.of(session);
+
         ReattachRequest.Builder requestBuilder = ReattachRequest.newBuilder()
                 .setSessionId(sessionId)
                 .setExerciseId(exerciseId)
                 .setPersona(session.getMember().getSelectedPersona().name())
                 .setInitialRepCount(restoredRepCount)
                 .setElapsedSec(elapsedSec)
-                .setSessionNonce(sessionNonce == null ? "" : sessionNonce);
+                .setSessionNonce(sessionNonce == null ? "" : sessionNonce)
+                .setExerciseCode(targets.exerciseCode())
+                .setTargetRepsPerSet(targets.targetRepsPerSet())
+                .setTargetSets(targets.targetSets());
 
         // 기준 좌표는 AI 가 보관하지 않는다 — 시작 때와 똑같이 Spring 이 DB 에서 읽어 실어 보낸다.
         for (ExerciseReference ref : referenceRepository.findByExerciseId(exerciseId)) {

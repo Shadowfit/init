@@ -121,7 +121,7 @@ PDF 에 없다. 플랭크는 rep 이 아니라 **시간 유지** 종목이라 `t
 | 단계 | 내용 | AI 의존 | 비고 |
 |---|---|---|---|
 | ① | C-1 `GET /exercises` + B-1 `exercises.code`(V25) + 프론트 하드코딩 제거 | 없음(proto 제외) | 스쿼트만 있어도 «종목 선택」 화면이 성립. proto 의 `exercise_code` 는 ② 로. **백엔드 몫은 이 문서와 같은 PR 에서 구현**(V25·`GET /exercises`·관리자 `code` CRUD·W018~W020). 프론트 하드코딩 제거는 프론트 트랙(35-frontend-api-handoff.md) |
-| ② | proto 확장 한 PR — `exercise_code`(3메시지), `target_reps_per_set`·`target_sets`(`AnalyzeRequest`·`ReattachRequest`), `SetResult`(`SessionCompleteRequest`). 초안: [`../handoff/ai-lunge-and-sets-proto.md`](../handoff/ai-lunge-and-sets-proto.md) | **AI 담당자와 동시** | `gen_proto.sh` 재생성 커밋 + CI proto 검사. AI 는 필드를 «받아서 무시」 부터 시작해도 됨(proto3 기본값) |
+| ② | proto 확장 — `exercise_code`(3메시지), `target_reps_per_set`·`target_sets`(`AnalyzeRequest`·`ReattachRequest`). ~~`SetResult`~~ 는 ③ 에서 취소. **Spring 쪽은 2026-09-22 구현**(proto·pb2 재생성·송신부), AI 가 읽는 부분은 [`../handoff/ai-lunge-and-sets-proto.md`](../handoff/ai-lunge-and-sets-proto.md) §2-1·2-2 | AI 가 읽는 부분만 | `gen_proto.sh` 재생성 커밋 + CI proto 검사. AI 는 필드를 «받아서 무시」 부터 시작해도 됨(proto3 기본값) |
 | ③ | 세트 표(V26) + `SessionSetAssembler` + `SetSummaryFormatter` 교체 + 리포트 `sets` + 세션 시작 body `targetRepsPerSet`·`targetSets` + 추천 폴백 + `difficultyLevel` 채움 | **없음** — 세트 요약을 Spring 이 `pose_data` 로 만들기로 해서(§7 3-D-ⅱ) ②·AI 를 안 기다린다. 2026-09-22 구현(PR 별도) | 세트 도입 전 세션은 세트 행 없음 → «1세트 x N회」 폴백 |
 | ④ | 런지 활성화 절차 — 관리자 mp4 업로드 → 추출(종목 코드 반영) → `PATCH /analysis-support`. 템플릿 시드·`FeedbackType` 확장 | AI 런지 분석기 머지 뒤 | 그 전엔 W007 그대로. 3-E 안건 합의가 선행 |
 
@@ -156,4 +156,5 @@ PDF 에 없다. 플랭크는 rep 이 아니라 **시간 유지** 종목이라 `t
 - 2026-09-22: 신설. §2 는 이 시점 `origin/main`(#784 포함) 실측.
 - 2026-09-22: 사용자 confirm → §7 박제. §2-2 의 «공식이 코드에 없다」 는 오기를 정정(`RecommendationService` 에 있음).
 - 2026-09-22: ① 백엔드 구현 — `code` 는 NULL 허용(사용자 confirm, 관리자 종목엔 분석기가 없으므로), 관리자 생성·수정에서 받되 분석이 켜진 종목은 잠금(추천값, 미응답).
+- 2026-09-22: ② Spring 쪽 구현(사용자 지시 «AI 답 전에 Spring 먼저») — proto 필드 7·8·9 / 8·9·10 / 4, 값은 저장값 그대로·NULL 은 빈 문자열/0. AI 담당자가 이름·번호를 바꾸자면 AI 가 읽기 전에 맞춘다.
 - 2026-09-22: ③ 착수 — 세트 요약 출처를 «AI `SetResult`」 에서 «Spring 이 `pose_data` 로 집계」 로 변경(사용자 confirm). ② proto 에서 `SetResult` 가 빠지고 `target_reps_per_set`·`target_sets` 는 TTS cue 용으로만 남는다. 세트 설정 API 는 따로 두지 않는다 — 목표는 세션 시작 body 에 실리고 도중 변경은 없다(`ceil(rep/T)` 역산이 흔들리므로).
