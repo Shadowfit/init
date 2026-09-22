@@ -343,6 +343,8 @@ SessionMetricsRecordingTest {
                     metrics,
                     mock(com.shadowfit.repository.outbox.OutboxEventRepository.class),
                     new com.shadowfit.global.security.SessionNonceGenerator(),
+                    mock(com.shadowfit.repository.exercise.SessionSetRepository.class),
+                    mock(com.shadowfit.service.recommendation.RecommendationService.class),
                     mock(com.shadowfit.service.report.DailyLogService.class),
                     sessionCompletionTx);
         }

@@ -8,7 +8,9 @@
 
 ## 0. 한 줄 요약
 
-Spring 이 세션 시작 때 **종목 코드와 세트 목표**를 실어 보내고, AI 는 **rep 이 목표에 닿으면 세트를 닫고** 종료 때 **세트별 요약**을 돌려준다. 세트 경계는 «목표 도달» 하나뿐이라 휴식 시간 임계값 같은 상수가 필요 없다.
+Spring 이 세션 시작 때 **종목 코드와 세트 목표**를 실어 보내고, AI 는 **rep 이 목표에 닿으면 «n세트 완료» cue 를 낸다**. 세트 경계는 «목표 도달» 하나뿐이라 휴식 시간 임계값 같은 상수가 필요 없다.
+
+> **2026-09-22 갱신(③ 착수)**: 세트별 요약(횟수·평균 싱크·시각)은 **Spring 이 완료 시점에 `pose_data` 로 만든다** — AI 가 보낼 `SetResult` 는 **필요 없어졌다**. AI 몫은 §2-1 종목 코드와 §2-2 의 cue·`ReportFeedbackBatch(set_no)` 뿐이다. 초안의 `SetResult`·`SessionCompleteRequest.sets` 는 취소선으로 남긴다.
 
 ## 1. proto 초안 (`proto/exercise.proto`)
 
@@ -35,23 +37,12 @@ message ExtractRequest {
   string exercise_code = 4;          // 기준 영상 rep 분절에 어느 분석기를 쓰나. 지금은 analyze_video(path, "squat") 하드코딩
 }
 
-// 세트별 요약 — CompleteAnalysis 에 실린다. 마지막 세트는 목표 미달이어도 그대로.
-message SetResult {
-  int32 set_no = 1;                  // 1-based
-  int32 reps = 2;
-  double avg_sync_rate = 3;
-  double started_sec = 4;            // 세트 첫 rep 의 timestamp_sec 기준 (pose_data 와 같은 원점)
-  double ended_sec = 5;              // 세트 마지막 rep 의 timestamp_sec
-}
-
-message SessionCompleteRequest {
-  // … 기존 1~7 그대로 …
-  repeated SetResult sets = 8;       // 비어 있으면 구버전 AI: Spring 이 «1세트 x total_reps» 로 폴백
-}
+// ~~message SetResult { … }~~  ← 취소(2026-09-22). 세트 요약은 Spring 이 pose_data 로 만든다.
+// ~~SessionCompleteRequest.sets~~ 도 같이 취소 — CompleteAnalysis 는 지금 그대로.
 ```
 
 - `FeedbackBatchRequest.set_no`·`is_final` 은 **이미 있다** — 세트가 닫힐 때 `set_no=n, is_final=false`, 세션 종료 때 `is_final=true` 로 보내면 된다(BT-SET, [`tts-design.md`](../decisions/tts-design.md) §2.A.BT).
-- `PoseDataRequest` 는 **안 바뀐다**. 프레임의 세트는 `ceil(rep_number / target_reps_per_set)` 로 Spring 이 역산한다 — `set_index` 컬럼을 파티션 표(`pose_data`)에 더하지 않기 위해서다.
+- `PoseDataRequest` 는 **안 바뀐다**. 프레임의 세트는 `ceil(rep_number / target_reps_per_set)` 로 Spring 이 역산한다 — `set_index` 컬럼을 파티션 표(`pose_data`)에 더하지 않기 위해서다. 세트별 요약도 같은 식으로 Spring 이 완료 시점에 만든다(`SessionSetAssembler`, V26).
 - 전부 proto3 기본값(0·"") 이 «없음» 이라 **한쪽만 먼저 배포돼도 지금 동작이 유지**된다.
 
 ## 2. AI 쪽 작업 목록
@@ -60,26 +51,26 @@ message SessionCompleteRequest {
 - `analyzer_registry.py`: `_EXERCISE_ID_TO_TYPE` 대신 `exercise_code` 로 찾는다(`"LUNGE"` → `"lunge"`). 빈 문자열이면 지금처럼 id 표 폴백(한 릴리스만 유지 후 제거).
 - `ExtractReferenceData`·`reference_builder.build_reference_sequence`: `"squat"` 하드코딩을 `exercise_code` 로.
 
-### 2-2. 세트 카운터 (`session_state.py`)
+### 2-2. 세트 카운터 (`session_state.py`) — cue 용
 ```
-current_set_no = 1, reps_in_set = 0, set_results: list[SetResult]
+current_set_no = 1, reps_in_set = 0
 rep 완성 시:
   reps_in_set += 1
   if target_reps_per_set > 0 and reps_in_set == target_reps_per_set:
-      set_results.append(요약)                       # reps·avg_sync·started/ended_sec
-      report_feedback_batch(set_no=current_set_no, is_final=False)
+      report_feedback_batch(set_no=current_set_no, is_final=False)   # 이미 있는 RPC·필드
       /pose 응답 cue 에 «n세트 완료» (target_sets 에 닿으면 «마지막 세트 완료»)
       current_set_no += 1; reps_in_set = 0
-세션 종료(Stop/Complete) 시:
-  reps_in_set > 0 이면 미완 세트도 set_results 에 넣고, CompleteAnalysis.sets 로 전송
+세션 종료 시: 지금처럼 CompleteAnalysis — 세트 요약은 안 보낸다(Spring 이 만든다)
 ```
 - 세트 경계 = «목표 도달» 하나. 휴식 시간으로 자르지 않는다(근거 있는 초 값이 없다).
 - 휴식 구간(세트 닫힘 ~ 다음 rep 시작)은 이 카운터로 알 수 있다 → [#92](https://github.com/Shadowfit/init/issues/92)(휴식 중 프레임 낭비) 의 선행이 같이 풀린다. 이번 범위엔 안 넣어도 된다.
 
 ### 2-3. 재부착
-- `ReattachRequest.initial_rep_count` 와 `target_reps_per_set` 으로 `current_set_no = initial // T + 1`, `reps_in_set = initial % T`. 이미 닫힌 세트의 요약은 Spring 이 세트 표에 갖고 있으므로 AI 는 **재부착 이후 세트만** `sets` 에 실어도 된다(Spring 이 set_no 로 병합).
+- `ReattachRequest.initial_rep_count` 와 `target_reps_per_set` 으로 `current_set_no = initial // T + 1`, `reps_in_set = initial % T` — cue 가 이어지게. 저장은 Spring 몫이라 AI 가 세트를 기억할 필요는 없다.
 
 ### 2-4. 런지 분석기 (§3-E 합의 안건 — 답을 주면 Spring 이 맞춘다)
+
+#784 의 `SquatCounter`(시간축 FSM — 각도 임계 + 체류 «초» + 끊김 리셋)는 관절·각도 표만 앞무릎·뒷무릎으로 바꾸면 런지에도 그대로 쓸 수 있는 골격이다. 새 FSM 을 짜기보다 `SquatThresholds` 같은 프리셋을 종목별로 두는 쪽을 권한다.
 
 | 질문 | 왜 Spring 이 알아야 하나 |
 |---|---|
@@ -89,13 +80,13 @@ rep 완성 시:
 | 런지 기준 영상의 rep 분절 방식 | `reference_builder` 가 스쿼트 cycle_stage 기반. 런지용이 따로 필요한지 |
 | 런지 `sync_rate` 분포 | `exercises` 의 페르소나 임계값 4컬럼이 런지는 시드 기본값(60/85/70/50) 그대로인데 근거가 없다. 실측 전엔 «스쿼트와 같다고 가정» 으로 명시 |
 
-## 3. Spring 쪽이 할 일 (③, ② 계약이 잡히면 AI 구현을 안 기다린다)
+## 3. Spring 쪽 — ③ 은 2026-09-22 구현됨(② 와 무관)
 
-- `POST /exercises/sessions` body: `targetRepsPerSet?`·`targetSets?` — 없으면 `RecommendationService` 공식으로 `targetRepsPerSet` 채움, `targetSets` 는 null(열린 세트)
-- `exercise_sessions.target_reps_per_set`·`target_sets`(NULL 허용) + `exercise_session_sets(session_id, set_no, reps, avg_sync_rate, started_sec, ended_sec)` — V26
-- `ExerciseAnalysisService`·`ReattachRequestBuilder`: `exercise_code`·세트 목표 실어 보내기
-- `SessionCompletionTx`: `sets` 저장(비면 폴백), `SetSummaryFormatter.FIXED_SET_COUNT` 교체, 리포트·주간 집계 세트 반영
-- `Session.difficultyLevel` 에 추천 level 채우기(죽어 있던 컬럼)
+- ✅ `POST /exercises/sessions` body `targetRepsPerSet?`·`targetSets?`, 없으면 `RecommendationService` 공식. 응답·`GET /sessions/active` 에 확정값 실림
+- ✅ V26 `exercise_sessions.target_reps_per_set`·`target_sets` + `exercise_session_sets`
+- ✅ `SessionCompletionTx` 가 `pose_data` rep 집계로 세트 행 저장, `SetSummaryFormatter` 세트 표 기반, 리포트 `sets`
+- ✅ `Session.difficultyLevel` 에 추천 level
+- ⏳ ② 뒤: `ExerciseAnalysisService`·`ReattachRequestBuilder` 가 `exercise_code`·세트 목표를 proto 로 실어 보내기
 
 ## 4. 순서
 

@@ -5,6 +5,7 @@ import com.shadowfit.model.exercise.Exercise;
 import com.shadowfit.model.exercise.Category;
 import com.shadowfit.model.exercise.PoseData;
 import com.shadowfit.model.exercise.Session;
+import com.shadowfit.model.exercise.SessionSet;
 import com.shadowfit.model.exercise.Status;
 import com.shadowfit.model.member.Member;
 import com.shadowfit.model.member.SelectedPersona;
@@ -23,6 +24,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -50,7 +52,9 @@ class SessionSyncStatsTest {
     @Autowired private ExercisesRepository exercisesRepository;
     @Autowired private com.shadowfit.repository.exercise.CategoryRepository categoryRepository;
     @Autowired private PoseDataRepository poseDataRepository;
+    @Autowired private com.shadowfit.repository.exercise.SessionSetRepository sessionSetRepository;
     @Autowired private JdbcTemplate jdbcTemplate;
+    @Autowired private jakarta.persistence.EntityManager em;
     // 발행기가 테스트 도중 돌면 검증이 흔들린다 (SessionServiceTest 와 같은 이유).
     @MockitoBean private OutboxPublisher outboxPublisher;
 
@@ -154,6 +158,74 @@ class SessionSyncStatsTest {
         assertThat(saved.getAvgSyncRate()).isEqualByComparingTo("70.00");  // (90+90+30)/3
         assertThat(saved.getMaxSyncRate()).isEqualByComparingTo("90.00");
         assertThat(saved.getMinSyncRate()).isEqualByComparingTo("30.00");
+    }
+
+    // ─── 세트 (V26, lunge-and-set-backend.md §7) ─────────────────────────────────────────
+
+    private void setTarget(Integer targetRepsPerSet) {
+        jdbcTemplate.update("UPDATE exercise_sessions SET target_reps_per_set = ? WHERE id = ?",
+                targetRepsPerSet, session.getId());
+        // JDBC 로 바꿨으니 1차 캐시의 엔티티는 낡았다 — 비우고 다시 읽어야 applyComplete 가 새 값을 본다.
+        em.clear();
+        session = sessionRepository.findById(session.getId()).orElseThrow();
+    }
+
+    /**
+     * 세트 경계는 «rep 이 목표에 닿는 순간» 하나뿐이다 — T=2 에 rep 5개면 [1,2]·[3,4]·[5]. 마지막만 미달.
+     * 세트 평균은 rep 가중이라 프레임 수(rep1 은 4개)가 안 끼어든다. 시각은 그 세트 첫 rep 의 첫 프레임 ~
+     * 마지막 rep 의 마지막 프레임.
+     */
+    @Test
+    @DisplayName("세트 행이 목표 도달 경계로 잘려 저장된다 — 마지막 세트만 미달, 평균은 rep 가중")
+    void 세트_저장() {
+        setTarget(2);
+        saveRep(1, 50.0, 4);   // t = 10..13
+        saveRep(2, 100.0, 1);  // t = 20
+        saveRep(3, 60.0, 1);   // t = 30
+        saveRep(4, 80.0, 1);   // t = 40
+        saveRep(5, 90.0, 2);   // t = 50..51
+
+        completeWithAiReported(0.0);
+
+        List<SessionSet> sets = sessionSetRepository.findBySessionIdOrderBySetNo(session.getId());
+        assertThat(sets).extracting(SessionSet::getSetNo).containsExactly(1, 2, 3);
+        assertThat(sets).extracting(SessionSet::getReps).containsExactly(2, 2, 1);
+        assertThat(sets.get(0).getAvgSyncRate()).as("(50+100)/2 — 프레임 가중이면 60").isEqualByComparingTo("75.00");
+        assertThat(sets.get(1).getAvgSyncRate()).isEqualByComparingTo("70.00");
+        assertThat(sets.get(2).getAvgSyncRate()).isEqualByComparingTo("90.00");
+        assertThat(sets.get(0).getStartedSec()).isEqualTo(10.0);
+        assertThat(sets.get(0).getEndedSec()).isEqualTo(20.0);
+        assertThat(sets.get(2).getStartedSec()).isEqualTo(50.0);
+        assertThat(sets.get(2).getEndedSec()).isEqualTo(51.0);
+    }
+
+    @Test
+    @DisplayName("세트 도입 전 세션(target 없음)은 세트 행이 생기지 않는다 — 화면은 1세트 x N회 폴백")
+    void 세트_없는세션() {
+        saveRep(1, 50.0, 1);
+        saveRep(2, 60.0, 1);
+
+        completeWithAiReported(0.0);
+
+        assertThat(sessionSetRepository.findBySessionIdOrderBySetNo(session.getId())).isEmpty();
+        assertThat(reload().getAvgSyncRate()).as("싱크 통계는 세트와 무관하게 남는다").isEqualByComparingTo("55.00");
+    }
+
+    /**
+     * 완료 콜백 재전송(응답 유실)에서 세트가 두 번 INSERT 되면 PK(session_id, set_no) 위반으로 500 이 되고
+     * AI 가 영영 재시도한다. 멱등 가드 뒤에 있어야 하는 이유.
+     */
+    @Test
+    @DisplayName("완료 재전송에도 세트 행은 한 벌이다")
+    void 세트_멱등() {
+        setTarget(3);
+        saveRep(1, 50.0, 1);
+        saveRep(2, 50.0, 1);
+
+        completeWithAiReported(0.0);
+        completeWithAiReported(0.0);
+
+        assertThat(sessionSetRepository.findBySessionIdOrderBySetNo(session.getId())).hasSize(1);
     }
 
     /**

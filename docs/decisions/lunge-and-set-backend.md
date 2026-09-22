@@ -122,7 +122,7 @@ PDF 에 없다. 플랭크는 rep 이 아니라 **시간 유지** 종목이라 `t
 |---|---|---|---|
 | ① | C-1 `GET /exercises` + B-1 `exercises.code`(V25) + 프론트 하드코딩 제거 | 없음(proto 제외) | 스쿼트만 있어도 «종목 선택」 화면이 성립. proto 의 `exercise_code` 는 ② 로. **백엔드 몫은 이 문서와 같은 PR 에서 구현**(V25·`GET /exercises`·관리자 `code` CRUD·W018~W020). 프론트 하드코딩 제거는 프론트 트랙(35-frontend-api-handoff.md) |
 | ② | proto 확장 한 PR — `exercise_code`(3메시지), `target_reps_per_set`·`target_sets`(`AnalyzeRequest`·`ReattachRequest`), `SetResult`(`SessionCompleteRequest`). 초안: [`../handoff/ai-lunge-and-sets-proto.md`](../handoff/ai-lunge-and-sets-proto.md) | **AI 담당자와 동시** | `gen_proto.sh` 재생성 커밋 + CI proto 검사. AI 는 필드를 «받아서 무시」 부터 시작해도 됨(proto3 기본값) |
-| ③ | 세트 표(D-1-ⅱ ⓒ) + `SetSummaryFormatter` 교체 + 리포트·주간 집계 세트 반영 + 재부착 규칙 확장 | ② 뒤. AI 가 `SetResult` 를 실제로 채우기 전까진 «1세트」 로 떨어지는 폴백 | 폴백 규칙을 여기서 정해야 화면이 안 깨짐 |
+| ③ | 세트 표(V26) + `SessionSetAssembler` + `SetSummaryFormatter` 교체 + 리포트 `sets` + 세션 시작 body `targetRepsPerSet`·`targetSets` + 추천 폴백 + `difficultyLevel` 채움 | **없음** — 세트 요약을 Spring 이 `pose_data` 로 만들기로 해서(§7 3-D-ⅱ) ②·AI 를 안 기다린다. 2026-09-22 구현(PR 별도) | 세트 도입 전 세션은 세트 행 없음 → «1세트 x N회」 폴백 |
 | ④ | 런지 활성화 절차 — 관리자 mp4 업로드 → 추출(종목 코드 반영) → `PATCH /analysis-support`. 템플릿 시드·`FeedbackType` 확장 | AI 런지 분석기 머지 뒤 | 그 전엔 W007 그대로. 3-E 안건 합의가 선행 |
 
 ①·② 는 이번 주에 백엔드가 시작할 수 있고, ③ 은 ② 의 계약이 잡히면 AI 구현을 안 기다려도 된다. ④ 만 AI 를 기다린다.
@@ -148,7 +148,7 @@ PDF 에 없다. 플랭크는 rep 이 아니라 **시간 유지** 종목이라 `t
 | 3-C | **C-1** — `GET /exercises` | 미지원 종목도 `analysisSupported=false` 로 내림 |
 | 3-D | **D-1** — AI 가 세트 경계 인지 | «코드 봐서 정하라」 → 아래 두 줄 |
 | 3-D-ⅰ | **ⓒ** — `POST /exercises/sessions` body 에 `targetRepsPerSet`(선택)·`targetSets`(선택, null = 열린 세트). `targetRepsPerSet` 이 없으면 `RecommendationService.buildRecommendation` 값 | 공식이 이미 코드에 있어 재사용. 세트 수는 공식이 없어 사용자 입력만. 채택 부속: `Session.difficultyLevel` 에 추천 level 을 채운다(죽어 있던 컬럼 — `RecommendationService` 주석의 «직전 난이도」 결손이 이걸로 풀림) |
-| 3-D-ⅱ | **세트 표 + rep 범위, `pose_data` 무변경** — `exercise_session_sets(session_id, set_no, reps, avg_sync_rate, started_sec, ended_sec)`, `SessionCompleteRequest.sets` 로 채움 | AI 가 rep 이 목표에 닿을 때 세트를 닫으므로 프레임의 세트 = `ceil(rep_number / target_reps_per_set)` — `set_index` 불필요. `pose_data` 파티션은 `retention-buffer-months: 1` 로 드롭되니 세트 요약은 별도 표에 남긴다. 옛 AI(`sets` 비어 있음) 폴백 = 지금처럼 1세트 |
+| 3-D-ⅱ | **세트 표 + rep 범위, `pose_data` 무변경** — `exercise_session_sets(session_id, set_no, reps, avg_sync_rate, started_sec, ended_sec)` (V26). **채우는 주체는 Spring** — 완료 시점에 `pose_data` 의 rep 별 집계(`findRepSummaries`)를 `ceil(rep_number / T)` 로 묶는다(`SessionSetAssembler`). ~~`SessionCompleteRequest.sets` 로 AI 가 채움~~ → 2026-09-22 ③ 착수 때 변경(사용자 confirm) | 세트 경계가 «목표 도달」 하나뿐이라 저장본만으로 결정적으로 재현된다 — 싱크 통계(#75)가 AI 값 대신 `pose_data` 를 쓰는 것과 같은 원칙이고, proto 에 `SetResult` 가 필요 없어져 ③ 이 ②·AI 구현에 안 묶인다. `pose_data` 파티션은 `retention-buffer-months: 1` 로 드롭되니 세트 요약은 별도 표에 남긴다. 세트 도입 전 세션(`target_reps_per_set` NULL) 폴백 = 지금처럼 1세트 |
 | 3-F | **플랭크 제외** — 나중에 | — |
 
 ## 8. 변경 이력
@@ -156,3 +156,4 @@ PDF 에 없다. 플랭크는 rep 이 아니라 **시간 유지** 종목이라 `t
 - 2026-09-22: 신설. §2 는 이 시점 `origin/main`(#784 포함) 실측.
 - 2026-09-22: 사용자 confirm → §7 박제. §2-2 의 «공식이 코드에 없다」 는 오기를 정정(`RecommendationService` 에 있음).
 - 2026-09-22: ① 백엔드 구현 — `code` 는 NULL 허용(사용자 confirm, 관리자 종목엔 분석기가 없으므로), 관리자 생성·수정에서 받되 분석이 켜진 종목은 잠금(추천값, 미응답).
+- 2026-09-22: ③ 착수 — 세트 요약 출처를 «AI `SetResult`」 에서 «Spring 이 `pose_data` 로 집계」 로 변경(사용자 confirm). ② proto 에서 `SetResult` 가 빠지고 `target_reps_per_set`·`target_sets` 는 TTS cue 용으로만 남는다. 세트 설정 API 는 따로 두지 않는다 — 목표는 세션 시작 body 에 실리고 도중 변경은 없다(`ceil(rep/T)` 역산이 흔들리므로).

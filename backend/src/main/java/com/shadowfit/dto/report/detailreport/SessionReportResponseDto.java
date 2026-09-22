@@ -34,6 +34,12 @@ public class SessionReportResponseDto {
 
     private List<ExerciseSyncRateDto> syncRateDetails;
 
+    /**
+     * 세트별 요약(V26) — set_no 오름차순. 세트 도입 전 세션은 빈 리스트.
+     * {@code syncRateDetails[0].setInfo} 가 한 줄 표기라면 이것은 세트마다 한 행이다.
+     */
+    private List<SessionSetDto> sets = List.of();
+
     private ComparisonWithPreviousDto comparisonWithPrevious;
 
     /**

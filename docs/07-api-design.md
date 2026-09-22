@@ -103,11 +103,13 @@
 ```
 
 ### POST /exercises/sessions - 운동 세션 시작
+`targetRepsPerSet`·`targetSets` 는 선택(2026-09-22, V26). `targetRepsPerSet` 을 생략하면 `GET /recommendations/next-session` 과 같은 공식(페르소나·레벨)으로 채우고, `targetSets` 는 사용자 값만(생략 = 열린 세트). 응답의 두 값이 **세션에 확정된 값**이며 도중에 바꿀 수 없다 — 세트 경계가 «rep 이 이 값에 닿는 순간」 이라 바꾸면 이미 저장된 프레임의 세트가 흔들린다([`decisions/lunge-and-set-backend.md`](./decisions/lunge-and-set-backend.md) §7). 세트 설정 API 는 따로 없다.
 ```json
 // Request
 {
   "exerciseId": 1,
-  "referenceSource": "youtube:https://youtu.be/xxx"
+  "targetRepsPerSet": 12,   // 선택
+  "targetSets": 3           // 선택
 }
 
 // Response 202 Accepted (비동기 - gRPC 호출이 백그라운드로 진행)
@@ -115,9 +117,14 @@
   "sessionId": 42,
   "exerciseId": 1,
   "startTime": "2026-03-30T14:00:00",
-  "status": "IN_PROGRESS"
+  "status": "IN_PROGRESS",
+  "sessionNonce": "…",
+  "aiWorkerIndex": 0,
+  "targetRepsPerSet": 12,
+  "targetSets": 3
 }
 ```
+`GET /sessions/active` 도 같은 두 필드를 돌려준다(이어하기 화면이 «12회 x 3세트」 를 복원할 근거).
 > 내부 흐름: Spring 이 DB에 세션 생성 → 즉시 202 응답 → `@Async` 로 gRPC `StartAnalysis` 송신 (AI 가 기준 좌표 받아 분석 시작). 결합 상세는 [`architecture/ai-backend-integration.md`](./architecture/ai-backend-integration.md).
 
 ### POST /admin/exercises/{exerciseId}/reference-video - 기준 영상(mp4) 업로드 → 기준 좌표 추출 (관리자, 2026-09-17)
@@ -242,9 +249,16 @@ AI = 운동 통계의 단일 진실 원천 원칙. (커밋 143a2e4)
     "syncRateChange": +5.2,
     "repChange": +3
   },
-  "syncRateTimeline": [82.5, 80.1, 75.0, ...]
+  "syncRateTimeline": [82.5, 80.1, 75.0, ...],
+  "syncRateDetails": [{ "exerciseId": 1, "name": "스쿼트", "setInfo": "3세트 x 12회 (마지막 7회)", "syncRate": 78.5 }],
+  "sets": [                              // 2026-09-22, V26. 세트 도입 전 세션은 []
+    { "setNo": 1, "reps": 12, "avgSyncRate": 80.1, "startedSec": 3.2, "endedSec": 41.0 },
+    { "setNo": 2, "reps": 12, "avgSyncRate": 78.9, "startedSec": 95.4, "endedSec": 133.7 },
+    { "setNo": 3, "reps": 7,  "avgSyncRate": 74.2, "startedSec": 190.0, "endedSec": 214.5 }
+  ]
 }
 ```
+`sets`·`setInfo` 는 AI 가 보낸 값이 아니라 완료 시점에 `pose_data` 의 rep 별 집계를 `ceil(rep_number / targetRepsPerSet)` 로 묶은 것이다(싱크 통계 #75 와 같은 원칙). 마지막 세트만 목표 미달일 수 있어 `setInfo` 는 «N세트 x T회」 또는 «N세트 x T회 (마지막 r회)」 두 꼴뿐이다.
 
 ### ~~GET /reports/weekly~~ → **GET /reports/weekly-summary 로 합쳤다** (2026-08-23, #352)
 
