@@ -4,7 +4,9 @@ import com.shadowfit.dto.exercises.session.ExercisesResponseDto;
 import com.shadowfit.dto.exercises.VideoRequestDto;
 import com.shadowfit.global.security.auth.CustomUserDetails;
 import com.shadowfit.model.exercise.Status;
+import com.shadowfit.dto.exercises.ExerciseCatalogItemDto;
 import com.shadowfit.service.exercise.ExerciseAnalysisService;
+import com.shadowfit.service.exercise.ExerciseCatalogService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -15,6 +17,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 
 @Tag(name = "운동 분석", description = "운동 분석 및 세션 관리 API")
 @Slf4j
@@ -24,6 +28,17 @@ import org.springframework.web.bind.annotation.*;
 public class ExercisesController {
 
     private final ExerciseAnalysisService analysisService;
+    private final ExerciseCatalogService catalogService;
+
+    /**
+     * 회원용 종목 목록 — 종목 선택 화면. {@code analysisSupported=false} 인 종목도 내린다
+     * ({@link ExerciseCatalogItemDto} 주석). 07-api-design.md 에는 오래전부터 적혀 있었지만 구현이 없었다.
+     */
+    @Operation(summary = "운동 종목 목록", description = "종목 선택 화면용. analysisSupported=false 인 종목은 세션을 시작할 수 없다(W007)")
+    @GetMapping
+    public ResponseEntity<List<ExerciseCatalogItemDto>> getCatalog() {
+        return ResponseEntity.ok(catalogService.getCatalog());
+    }
 
     /**
      * ✅ 기준 좌표 추출 (관리자/등록용)

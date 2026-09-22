@@ -71,17 +71,33 @@
 
 ## 운동 API
 
-### GET /exercises - 운동 종목 목록
+### GET /exercises - 운동 종목 목록 (2026-09-22 구현 — 그 전엔 문서에만 있었다)
+종목 선택 화면용. 인증 필요. `analysisSupported=false` 인 종목도 내려온다 — 그 종목으로 `POST /exercises/sessions` 를 부르면 W007. 화면이 «준비 중» 을 그릴지 숨길지 고른다 ([`decisions/lunge-and-set-backend.md`](./decisions/lunge-and-set-backend.md) §3-C).
+`code` 는 AI 분석기 키(`exercises.code`, V25) — null 이면 분석기가 없는 종목이라 관리자가 분석을 켤 수 없다(W020).
 ```json
 // Response 200
 [
   {
     "id": 1,
+    "code": "SQUAT",
     "name": "스쿼트",
-    "category": "LOWER",
+    "categoryId": 1,
+    "categoryName": "LOWER",
     "description": "하체 전체 운동",
-    "syncThresholdBeginner": 60.0,
-    "syncThresholdAdvanced": 85.0
+    "preferredUrl": "https://www.youtube.com/watch?v=q6hBSSis_60",
+    "expectedDurationMinutes": 15,
+    "analysisSupported": true
+  },
+  {
+    "id": 2,
+    "code": "LUNGE",
+    "name": "런지",
+    "categoryId": 1,
+    "categoryName": "LOWER",
+    "description": null,
+    "preferredUrl": "https://www.youtube.com/watch?v=U4s4mEQ5ovM",
+    "expectedDurationMinutes": 15,
+    "analysisSupported": false
   }
 ]
 ```
@@ -291,6 +307,12 @@ AI = 운동 통계의 단일 진실 원천 원칙. (커밋 143a2e4)
 `ttsSpeed` 는 0.5~2.0 범위. device TTS 재생 시 클라이언트가 이 값을 그대로 `expo-speech` 의 `rate` 로 전달. ([`11-tts-youtube-guide.md`](./11-tts-youtube-guide.md))
 
 ## 관리자 API (2026-05 추가)
+
+### 종목 코드 `code` (2026-09-22, V25)
+`POST /admin/exercises`·`PATCH /admin/exercises/{id}` 가 `code`(선택, `^[A-Z][A-Z0-9_]{1,31}$`) 를 받고, 목록·상세 응답에 실린다.
+- 중복이면 **409 W018** (UNIQUE 가 어차피 막지만 500 대신 이유를 준다)
+- `analysisSupported=true` 인 종목의 코드 변경은 **409 W019** — 끄고 → 바꾸고 → 기준 영상 다시 올려 → 켠다
+- `PATCH …/analysis-support` 로 켤 때 코드가 없으면 **400 W020** (기준 좌표 없음 W012 와 나란한 필요조건, 코드 검사가 먼저)
 
 ### PATCH /admin/exercises/{exerciseId}/thresholds - 싱크로율 임계값 변경
 관리자 권한(`ROLE_ADMIN`) 필수. 신규 세션부터 적용.

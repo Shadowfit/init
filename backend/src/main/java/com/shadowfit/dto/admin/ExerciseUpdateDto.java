@@ -1,7 +1,9 @@
 package com.shadowfit.dto.admin;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import com.shadowfit.model.exercise.ExerciseCode;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 /**
@@ -27,6 +29,10 @@ public record ExerciseUpdateDto(
         @Schema(description = "운동명. 생략하면 안 바뀐다", example = "데드리프트")
         @Size(max = 100, message = "운동명은 100자를 넘을 수 없습니다")
         String name,
+
+        @Schema(description = "종목 코드. 생략하면 안 바뀐다. 분석이 켜진 종목은 바꿀 수 없다(W019)", example = "LUNGE")
+        @Pattern(regexp = ExerciseCode.PATTERN, message = ExerciseCode.PATTERN_MESSAGE)
+        String code,
 
         @Schema(description = "부위 카테고리 ID. 생략하면 안 바뀐다")
         Long categoryId,

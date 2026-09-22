@@ -42,6 +42,7 @@ CREATE TABLE users (
 CREATE TABLE exercises (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(100) NOT NULL,                          -- 스쿼트, 데드리프트, 턱걸이
+    code VARCHAR(32) NULL UNIQUE,                        -- AI 분석기 키 (SQUAT·LUNGE·PLANK). NULL = 분석기 없는 종목 (V25, 2026-09-22)
     category ENUM('LOWER', 'BACK', 'UPPER', 'CORE', 'FULL') NOT NULL,
     description TEXT,
     preferred_url VARCHAR(500),                          -- 기본 레퍼런스 영상 (코드상 컬럼명)

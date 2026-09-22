@@ -65,11 +65,12 @@
 
 `weekly-report` 는 2026-09-14 머지(#758) — 백엔드를 최신 main 으로 띄워야 보인다. PENDING 상태 UI(«분석 중…» + 재조회)가 필요하다.
 
-## 2회차 — 런지 · 운동 set ⚠️ 백엔드·AI 없음
+## 2회차 — 종목 선택 · 런지 · 운동 set (2026-09-22 갱신 — 종목 목록 API 는 있음, 런지·세트는 후속)
 
 | 항목 | 현재 | 뭐가 필요한가 |
 |---|---|---|
-| 런지 | DB 에 종목 행은 있으나 `analysis_supported=FALSE`. AI 분석기가 `squat_analyzer.py` 하나뿐 | AI 쪽 런지 분석기 → 그 뒤 `PATCH /admin/exercises/{id}/analysis-support` 로 켬. 백엔드 API 는 새로 만들 게 없다 |
+| **종목 선택** (지금 가능, AI 무관) | `GET /exercises`(2026-09-22 신설)가 `id·code·name·categoryName·analysisSupported…` 를 내린다. 프론트는 `exercise.tsx` 의 `exerciseId=1` 고정·`exerciseTypeOf()` switch 를 응답의 `id`·`code` 로 대체 | `analysisSupported=false` 면 «준비 중» 표시(숨길지는 화면 결정). 그 종목으로 세션 시작하면 W007 |
+| 런지 (후속) | DB 에 종목 행은 있으나 `analysis_supported=FALSE`. AI 분석기가 `squat_analyzer.py` 하나뿐 | AI 쪽 런지 분석기 → 그 뒤 `PATCH /admin/exercises/{id}/analysis-support` 로 켬. 프론트는 위 목록 연동만 하면 켜지는 날 그대로 보인다. 설계: [`../decisions/lunge-and-set-backend.md`](../decisions/lunge-and-set-backend.md) |
 | 운동 set | 미구현(BE-09). `SetSummaryFormatter` 가 «1세트 × N회» 고정 출력이라 화면상만 세트처럼 보임 | proto·DB·API 전부 신규. AI 의 세트 인지(AI-03)와 동시 필요 |
 
 둘 다 2026-09-11 에 **이번 학기 범위에서 뺀 항목**이다(발표는 스쿼트 하나, [`24-semester2-plan.md`](./24-semester2-plan.md) «뺀 것»). 2회차에 정말 넣으려면 그 결정을 뒤집고 AI 트랙까지 같이 잡아야 한다 — 프론트 UI 만 먼저 만들면 붙일 곳이 없다.

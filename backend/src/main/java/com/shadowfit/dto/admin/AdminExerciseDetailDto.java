@@ -25,6 +25,9 @@ public record AdminExerciseDetailDto(
         @Schema(description = "운동명", example = "스쿼트")
         String name,
 
+        @Schema(description = "종목 코드 — AI 분석기 키. null 이면 분석기가 없는 종목(분석을 켤 수 없다, W020)", example = "SQUAT")
+        String code,
+
         @Schema(description = "부위 카테고리 ID")
         Long categoryId,
 
@@ -69,6 +72,7 @@ public record AdminExerciseDetailDto(
         return new AdminExerciseDetailDto(
                 e.getId(),
                 e.getName(),
+                e.getCode(),
                 e.getCategory().getId(),
                 e.getCategory().getName(),
                 e.getDescription(),

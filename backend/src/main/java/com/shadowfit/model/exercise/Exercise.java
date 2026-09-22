@@ -22,6 +22,18 @@ public class Exercise {
     @Column(nullable = false, length = 100)
     private String name;
 
+    /**
+     * AI 분석기 키({@code SQUAT}·{@code LUNGE}·…). <b>NULL = 분석기가 없는 종목</b>이라 관리자가 만든
+     * 종목은 비어 있고, {@code analysis_supported} 를 켜려면 이 값이 있어야 한다
+     * ({@code AdminExerciseService.updateAnalysisSupport}). 값 규칙은 {@code ExerciseCode.PATTERN}.
+     *
+     * <p>이 컬럼이 생긴 이유는 V25 머리 주석 — DB id 를 ai-server·프론트·시드가 따로 하드코딩하던 것을
+     * 한 값으로 모은다. 분석이 켜진 종목의 코드를 바꾸면 진행 중 세션이 다른 분석기로 넘어가므로
+     * {@link #changeCode} 가 아니라 서비스가 그 조건을 막는다.
+     */
+    @Column(length = 32, unique = true)
+    private String code;
+
     // BE-04 — 카테고리가 고정 enum 에서 관리 가능한 테이블로 승격됐다(V11 마이그레이션).
     @ToString.Exclude
     @ManyToOne(fetch = FetchType.LAZY)
@@ -106,6 +118,14 @@ public class Exercise {
         if (preferredUrl != null) this.preferredUrl = preferredUrl;
         if (targetJoints != null) this.targetJoints = targetJoints;
         if (expectedDurationMinutes != null) this.expectedDurationMinutes = expectedDurationMinutes;
+    }
+
+    /**
+     * 종목 코드를 바꾼다. «분석이 켜진 종목은 못 바꾼다» 는 호출자({@code AdminExerciseService}) 몫이다 —
+     * 그 판단에 {@code analysisSupported} 와 로그가 같이 필요해 여기서 접지 않는다.
+     */
+    public void changeCode(String code) {
+        this.code = code;
     }
 
     /**

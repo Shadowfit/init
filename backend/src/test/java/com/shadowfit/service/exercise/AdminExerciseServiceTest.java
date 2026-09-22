@@ -64,7 +64,8 @@ class AdminExerciseServiceTest {
     }
 
     private Exercise exercise() {
-        return Exercise.builder().id(EXERCISE_ID).name("스쿼트").category(category)
+        // code 가 있는 «분석 가능한 종목» 이 기본 픽스처다 — 켜기(W020) 검사가 걸리지 않게.
+        return Exercise.builder().id(EXERCISE_ID).name("스쿼트").code("SQUAT").category(category)
                 .expectedDurationMinutes(15)
                 .syncThresholdBeginner(new BigDecimal("60.00")).syncThresholdAdvanced(new BigDecimal("85.00"))
                 .syncThresholdDiet(new BigDecimal("70.00")).syncThresholdRehab(new BigDecimal("50.00"))
@@ -131,9 +132,9 @@ class AdminExerciseServiceTest {
         @Test
         @DisplayName("analysisSupported 는 요청과 무관하게 false 로 저장된다")
         void create_analysisSupportedIsAlwaysFalse() {
-            when(exercisesRepository.save(any(Exercise.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(exercisesRepository.saveAndFlush(any(Exercise.class))).thenAnswer(inv -> inv.getArgument(0));
             ExerciseCreateDto dto = new ExerciseCreateDto(
-                    "데드리프트", categoryBack.getId(), "설명", "https://y.com/x", null, null);
+                    "데드리프트", null, categoryBack.getId(), "설명", "https://y.com/x", null, null);
 
             AdminExerciseDetailDto result = service.createExercise(dto);
 
@@ -143,9 +144,9 @@ class AdminExerciseServiceTest {
         @Test
         @DisplayName("예상 운동시간을 생략하면 엔티티 기본값 15 가 남는다")
         void create_nullDuration_keepsEntityDefault() {
-            when(exercisesRepository.save(any(Exercise.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(exercisesRepository.saveAndFlush(any(Exercise.class))).thenAnswer(inv -> inv.getArgument(0));
             ExerciseCreateDto dto = new ExerciseCreateDto(
-                    "데드리프트", categoryBack.getId(), null, null, null, null);
+                    "데드리프트", null, categoryBack.getId(), null, null, null, null);
 
             AdminExerciseDetailDto result = service.createExercise(dto);
 
@@ -157,15 +158,78 @@ class AdminExerciseServiceTest {
         @Test
         @DisplayName("임계값 4종은 엔티티 기본값에서 시작한다")
         void create_thresholdsStartFromDefaults() {
-            when(exercisesRepository.save(any(Exercise.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(exercisesRepository.saveAndFlush(any(Exercise.class))).thenAnswer(inv -> inv.getArgument(0));
             ExerciseCreateDto dto = new ExerciseCreateDto(
-                    "데드리프트", categoryBack.getId(), null, null, null, 20);
+                    "데드리프트", null, categoryBack.getId(), null, null, null, 20);
 
             AdminExerciseDetailDto result = service.createExercise(dto);
 
             assertThat(result.syncThresholdBeginner()).isEqualByComparingTo("60.00");
             assertThat(result.syncThresholdAdvanced()).isEqualByComparingTo("85.00");
             assertThat(result.expectedDurationMinutes()).isEqualTo(20);
+        }
+
+        @Test
+        @DisplayName("code 를 보내면 그대로 저장되고, 생략하면 null(분석기 없는 종목)")
+        void create_codeIsOptional() {
+            when(exercisesRepository.saveAndFlush(any(Exercise.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(exercisesRepository.existsByCode("DEADLIFT")).thenReturn(false);
+
+            AdminExerciseDetailDto withCode = service.createExercise(new ExerciseCreateDto(
+                    "데드리프트", "DEADLIFT", categoryBack.getId(), null, null, null, null));
+            AdminExerciseDetailDto withoutCode = service.createExercise(new ExerciseCreateDto(
+                    "케틀벨 스윙", null, categoryBack.getId(), null, null, null, null));
+
+            assertThat(withCode.code()).isEqualTo("DEADLIFT");
+            assertThat(withoutCode.code()).isNull();
+            // null 코드는 중복 검사 대상이 아니다 — UNIQUE 에서 NULL 끼리는 충돌하지 않는다
+            verify(exercisesRepository, never()).existsByCode(null);
+        }
+
+        /**
+         * [왜] 코드 하나 = 분석기 하나. UNIQUE 가 어차피 막지만 그러면 500 이다 — 관리자가 «뭐가 틀렸는지»
+         * 를 보려면 저장 전에 W018 로 걸러야 한다.
+         */
+        @Test
+        @DisplayName("이미 있는 code 면 EXERCISE_CODE_DUPLICATION — 저장 시도 자체를 안 함")
+        void create_duplicateCode_throwsBeforeSave() {
+            when(exercisesRepository.existsByCode("SQUAT")).thenReturn(true);
+            ExerciseCreateDto dto = new ExerciseCreateDto(
+                    "스쿼트2", "SQUAT", categoryBack.getId(), null, null, null, null);
+
+            assertThatThrownBy(() -> service.createExercise(dto))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getErrorCode())
+                    .isEqualTo(ErrorCode.EXERCISE_CODE_DUPLICATION);
+
+            verify(exercisesRepository, never()).saveAndFlush(any());
+        }
+
+        /**
+         * [왜] 사전 검사와 INSERT 사이에 같은 코드가 먼저 들어오면 UNIQUE 가 던진다 — 그걸 500 으로 흘리면
+         * 관리자는 «뭐가 틀렸는지」 를 못 본다. 이름을 확인한 제약(uk_exercises_code)만 W018 로 접고,
+         * 다른 무결성 위반은 서버 결함일 수 있어 그대로 던진다.
+         */
+        @Test
+        @DisplayName("사전검사 뒤 UNIQUE(uk_exercises_code) 경합이면 W018 — 다른 제약 위반은 그대로")
+        void create_uniqueRace_translatesOnlyCodeConstraint() {
+            when(exercisesRepository.existsByCode("SQUAT")).thenReturn(false);
+            ExerciseCreateDto dto = new ExerciseCreateDto(
+                    "스쿼트2", "SQUAT", categoryBack.getId(), null, null, null, null);
+
+            when(exercisesRepository.saveAndFlush(any(Exercise.class))).thenThrow(
+                    new org.springframework.dao.DataIntegrityViolationException("dup",
+                            new org.hibernate.exception.ConstraintViolationException("dup", null, "uk_exercises_code")));
+            assertThatThrownBy(() -> service.createExercise(dto))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getErrorCode())
+                    .isEqualTo(ErrorCode.EXERCISE_CODE_DUPLICATION);
+
+            when(exercisesRepository.saveAndFlush(any(Exercise.class))).thenThrow(
+                    new org.springframework.dao.DataIntegrityViolationException("fk",
+                            new org.hibernate.exception.ConstraintViolationException("fk", null, "fk_exercises_category")));
+            assertThatThrownBy(() -> service.createExercise(dto))
+                    .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
         }
 
         /**
@@ -176,14 +240,14 @@ class AdminExerciseServiceTest {
         @DisplayName("targetJoints 가 JSON 이 아니면 INVALID_INPUT_VALUE — 저장 시도 자체를 안 함")
         void create_invalidJson_throwsBeforeSave() {
             ExerciseCreateDto dto = new ExerciseCreateDto(
-                    "데드리프트", categoryBack.getId(), null, null, "{깨진", null);
+                    "데드리프트", null, categoryBack.getId(), null, null, "{깨진", null);
 
             assertThatThrownBy(() -> service.createExercise(dto))
                     .isInstanceOf(BusinessException.class)
                     .extracting(e -> ((BusinessException) e).getErrorCode())
                     .isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
 
-            verify(exercisesRepository, never()).save(any());
+            verify(exercisesRepository, never()).saveAndFlush(any());
         }
     }
 
@@ -197,7 +261,7 @@ class AdminExerciseServiceTest {
             Exercise exercise = exercise();
             when(exercisesRepository.findById(EXERCISE_ID)).thenReturn(Optional.of(exercise));
             ExerciseUpdateDto dto = new ExerciseUpdateDto(
-                    "스쿼트(개선)", null, null, null, null, null);
+                    "스쿼트(개선)", null, null, null, null, null, null);
 
             AdminExerciseDetailDto result = service.updateExercise(EXERCISE_ID, dto);
 
@@ -211,7 +275,7 @@ class AdminExerciseServiceTest {
         @DisplayName("name 을 빈 문자열로 보내면 INVALID_INPUT_VALUE")
         void update_blankName_throws() {
             when(exercisesRepository.findById(EXERCISE_ID)).thenReturn(Optional.of(exercise()));
-            ExerciseUpdateDto dto = new ExerciseUpdateDto("   ", null, null, null, null, null);
+            ExerciseUpdateDto dto = new ExerciseUpdateDto("   ", null, null, null, null, null, null);
 
             assertThatThrownBy(() -> service.updateExercise(EXERCISE_ID, dto))
                     .isInstanceOf(BusinessException.class)
@@ -220,10 +284,71 @@ class AdminExerciseServiceTest {
         }
 
         @Test
+        @DisplayName("분석이 꺼진 종목은 code 를 바꿀 수 있다 — 자기 행은 중복 검사에서 제외")
+        void update_code_whenDisabled_changes() {
+            Exercise exercise = exercise(); // analysisSupported=false
+            when(exercisesRepository.findById(EXERCISE_ID)).thenReturn(Optional.of(exercise));
+            when(exercisesRepository.existsByCodeAndIdNot("SQUAT_V2", EXERCISE_ID)).thenReturn(false);
+
+            AdminExerciseDetailDto result = service.updateExercise(EXERCISE_ID,
+                    new ExerciseUpdateDto(null, "SQUAT_V2", null, null, null, null, null));
+
+            assertThat(result.code()).isEqualTo("SQUAT_V2");
+        }
+
+        @Test
+        @DisplayName("같은 code 를 다시 보내면 no-op — 중복 검사도 타지 않는다")
+        void update_sameCode_isNoop() {
+            when(exercisesRepository.findById(EXERCISE_ID)).thenReturn(Optional.of(exercise()));
+
+            AdminExerciseDetailDto result = service.updateExercise(EXERCISE_ID,
+                    new ExerciseUpdateDto(null, "SQUAT", null, null, null, null, null));
+
+            assertThat(result.code()).isEqualTo("SQUAT");
+            verify(exercisesRepository, never()).existsByCodeAndIdNot(any(), any());
+        }
+
+        /**
+         * [왜] 코드는 ai-server 가 분석기를 고르는 키다. 켜진 채 바꾸면 그 순간부터의 세션이 다른 분석기
+         * 기준으로 채점되는데 기준 좌표는 옛 종목 것이다 — «조용히 틀린 점수» 가 #147 이 없애려던 바로 그것.
+         */
+        @Test
+        @DisplayName("분석이 켜진 종목의 code 변경은 EXERCISE_CODE_LOCKED — 값이 그대로 남는다")
+        void update_code_whenEnabled_throws() {
+            Exercise exercise = exercise();
+            exercise.changeAnalysisSupport(true);
+            when(exercisesRepository.findById(EXERCISE_ID)).thenReturn(Optional.of(exercise));
+
+            assertThatThrownBy(() -> service.updateExercise(EXERCISE_ID,
+                    new ExerciseUpdateDto(null, "LUNGE", null, null, null, null, null)))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getErrorCode())
+                    .isEqualTo(ErrorCode.EXERCISE_CODE_LOCKED);
+
+            assertThat(exercise.getCode()).isEqualTo("SQUAT");
+        }
+
+        @Test
+        @DisplayName("다른 행이 쓰는 code 로 바꾸면 EXERCISE_CODE_DUPLICATION")
+        void update_duplicateCode_throws() {
+            Exercise exercise = exercise();
+            when(exercisesRepository.findById(EXERCISE_ID)).thenReturn(Optional.of(exercise));
+            when(exercisesRepository.existsByCodeAndIdNot("LUNGE", EXERCISE_ID)).thenReturn(true);
+
+            assertThatThrownBy(() -> service.updateExercise(EXERCISE_ID,
+                    new ExerciseUpdateDto(null, "LUNGE", null, null, null, null, null)))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getErrorCode())
+                    .isEqualTo(ErrorCode.EXERCISE_CODE_DUPLICATION);
+
+            assertThat(exercise.getCode()).isEqualTo("SQUAT");
+        }
+
+        @Test
         @DisplayName("존재하지 않는 운동이면 EXERCISE_NOT_FOUND")
         void update_notFound_throws() {
             when(exercisesRepository.findById(EXERCISE_ID)).thenReturn(Optional.empty());
-            ExerciseUpdateDto dto = new ExerciseUpdateDto("x", null, null, null, null, null);
+            ExerciseUpdateDto dto = new ExerciseUpdateDto("x", null, null, null, null, null, null);
 
             assertThatThrownBy(() -> service.updateExercise(EXERCISE_ID, dto))
                     .isInstanceOf(BusinessException.class)
@@ -256,6 +381,26 @@ class AdminExerciseServiceTest {
 
             // 거부됐으면 값이 그대로여야 한다 — 예외를 던지기 전에 setter 가 돌면 안 된다
             assertThat(exercise.getAnalysisSupported()).isFalse();
+        }
+
+        /**
+         * [왜] 코드가 없으면 ai-server 는 어느 분석기를 쓸지 모른다 — StartAnalysis 가 거절돼 세션이 FAILED 로
+         * 닫힌다(#147 ㄷ). 켜기 전에 막아야 «켰는데 세션마다 실패» 가 안 생긴다. 코드 검사가 기준 좌표보다
+         * 먼저다 — 아래 verifyNoInteractions 가 그 순서를 고정한다.
+         */
+        @Test
+        @DisplayName("code 가 없으면 켤 수 없다 — W020, 기준 좌표는 보지도 않는다")
+        void enable_withoutCode_throws() {
+            Exercise exercise = Exercise.builder().id(EXERCISE_ID).name("케틀벨 스윙").category(category).build();
+            when(exercisesRepository.findById(EXERCISE_ID)).thenReturn(Optional.of(exercise));
+
+            assertThatThrownBy(() -> service.updateAnalysisSupport(EXERCISE_ID, true))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getErrorCode())
+                    .isEqualTo(ErrorCode.EXERCISE_CODE_REQUIRED);
+
+            assertThat(exercise.getAnalysisSupported()).isFalse();
+            verifyNoInteractions(exerciseReferenceRepository);
         }
 
         @Test
