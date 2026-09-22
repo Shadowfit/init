@@ -50,6 +50,7 @@ class ReportServiceTest {
     @Mock private SessionRepository sessionRepository;
     @Mock private PoseDataRepository poseDataRepository;
     @Mock private SessionAnalysisCalculator sessionAnalysisCalculator;
+    @Mock private com.shadowfit.repository.exercise.SessionSetRepository sessionSetRepository;
 
     private ReportService reportService;
 
@@ -63,7 +64,7 @@ class ReportServiceTest {
         MockitoAnnotations.openMocks(this);
         // 실제 JSON 직렬화/역직렬화 동작이 검증 대상이라 ObjectMapper는 모킹하지 않고 실사용
         reportService = new ReportService(reportRepository, sessionRepository, poseDataRepository,
-                sessionAnalysisCalculator, new ObjectMapper());
+                sessionAnalysisCalculator, new ObjectMapper(), sessionSetRepository);
 
         Member member = Member.builder().id(MEMBER_ID).email("t@t.com").username("u").password("p").build();
         Category category = Category.builder().id(1L).name("LOWER").build();

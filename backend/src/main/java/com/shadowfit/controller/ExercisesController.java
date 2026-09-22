@@ -96,6 +96,8 @@ public class ExercisesController {
                 .status(Status.IN_PROGRESS)
                 .sessionNonce(started.sessionNonce())
                 .aiWorkerIndex(started.aiWorkerIndex())
+                .targetRepsPerSet(started.targetRepsPerSet())
+                .targetSets(started.targetSets())
                 .build();
 
         return ResponseEntity.accepted().body(response);

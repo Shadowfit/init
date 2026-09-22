@@ -27,6 +27,9 @@ import com.shadowfit.repository.exercise.ExercisesRepository;
 import com.shadowfit.repository.exercise.PoseDataRepository;
 import com.shadowfit.repository.member.MemberRepository;
 import com.shadowfit.repository.exercise.SessionRepository;
+import com.shadowfit.repository.exercise.SessionSetRepository;
+import com.shadowfit.service.recommendation.RecommendationService;
+import com.shadowfit.dto.recommendation.NextSessionRecommendationResponseDto;
 import com.shadowfit.service.report.DailyLogService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -51,6 +54,8 @@ public class SessionService {
     private final SessionMetrics sessionMetrics;
     private final OutboxEventRepository outboxRepository;
     private final SessionNonceGenerator sessionNonceGenerator;
+    private final SessionSetRepository sessionSetRepository;
+    private final RecommendationService recommendationService;
     private final DailyLogService dailyLogService;
     // completeSession의 실제 반영(@Transactional)을 갖는 별도 빈 — self 주입 대신 이걸 부른다
     // (이슈 #175). 자기호출은 AOP 프록시를 우회해 @Transactional이 조용히 무시되는데, 다른 빈으로
@@ -125,6 +130,16 @@ public class SessionService {
         //   ② 아직 DB 를 안 거친 엔티티로 조회하면 나노초가 남아 등호가 안 맞고 **조용히 0행**이 된다
         // 자르면 둘 다 사라진다 — 이건 정밀도를 «버리는» 게 아니라, 저장소가 이미 버리고 있던
         // 것을 애플리케이션이 **명시**하는 것이다.
+        // 세트 목표(V26). body 에 없으면 추천 공식으로 채운다 — 이 세션의 세트 경계가 «rep 이 이 값에 닿는
+        // 순간» 이므로 세션이 생기는 이 자리에서 확정돼야 한다. 추천의 level 은 그동안 죽어 있던
+        // difficultyLevel 에 같이 넣는다(RecommendationService 클래스 주석의 «직전 난이도» 결손이 이걸로 풀린다).
+        // targetSets 는 사용자 값만 — 세트 «수» 공식은 어디에도 없다.
+        NextSessionRecommendationResponseDto recommendation =
+                recommendationService.getNextSessionRecommendation(currentMemberId, exercise.getId());
+        int targetRepsPerSet = appDto.getTargetRepsPerSet() != null
+                ? appDto.getTargetRepsPerSet()
+                : recommendation.targetReps();
+
         Session session = Session.builder()
                 .member(member)
                 .exercise(exercise)
@@ -132,6 +147,9 @@ public class SessionService {
                 .startTime(LocalDateTime.now().withNano(0))
                 .status(Status.IN_PROGRESS)
                 .sessionNonce(sessionNonceGenerator.generate())
+                .difficultyLevel(recommendation.difficultyLevel())
+                .targetRepsPerSet(targetRepsPerSet)
+                .targetSets(appDto.getTargetSets())
                 .build();
 
         return sessionRepository.save(session);
@@ -326,6 +344,7 @@ public class SessionService {
         }
 
         poseDataRepository.deleteBySessionIdIn(List.of(session.getId()));
+        sessionSetRepository.deleteBySessionId(session.getId());
         sessionRepository.delete(session);
         sessionRepository.flush();
 

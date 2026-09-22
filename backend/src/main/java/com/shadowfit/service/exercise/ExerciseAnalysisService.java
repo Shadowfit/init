@@ -334,8 +334,12 @@ public class ExerciseAnalysisService {
      *                  <p>표시용 시각이 아니라서 아프다 — 이 값은 {@code pose_data} 의 멱등
      *                  앵커이자 파티션 키이고(#188 · #392), 리포트·재부착 조회가 <b>등호</b>로
      *                  찾는 바로 그 값이다. 「받은 시각 = 저장된 시각」이 성립해야 한다.
+     * @param targetRepsPerSet 세션에 확정된 세트당 목표(추천 폴백 포함, V26). 앱이 «12회 x 3세트» 를 그리고
+     *                         세트 cue 를 낼 근거다 — 세션 도중 바뀌지 않는다
+     * @param targetSets 목표 세트 수. null = 열린 세트
      */
-    public record StartedSession(Long sessionId, String sessionNonce, LocalDateTime startTime, int aiWorkerIndex) {}
+    public record StartedSession(Long sessionId, String sessionNonce, LocalDateTime startTime, int aiWorkerIndex,
+                                 Integer targetRepsPerSet, Integer targetSets) {}
 
     /**
      * [STEP 2: 운동 분석 시작 - Entry Point]
@@ -379,7 +383,8 @@ public class ExerciseAnalysisService {
         // 클라가 받는 값이 DB 와 갈린다 — Session 의 @PrePersist 가 초 이하를 자르므로(#446)
         // 이 값은 이미 DB 에 박힌 것과 같은 값이다.
         return new StartedSession(sessionId, savedSession.getSessionNonce(),
-                savedSession.getStartTime(), Math.floorMod(sessionId, aiChannelPoolSize));
+                savedSession.getStartTime(), Math.floorMod(sessionId, aiChannelPoolSize),
+                savedSession.getTargetRepsPerSet(), savedSession.getTargetSets());
     }
 
     /**

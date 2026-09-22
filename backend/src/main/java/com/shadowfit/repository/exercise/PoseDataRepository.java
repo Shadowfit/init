@@ -105,12 +105,25 @@ public interface PoseDataRepository extends JpaRepository<PoseData, Long> {
      *
      * <p>반환 행 수는 세션의 rep 수(수십 규모)라 호출부에서 avg/max/min 을 계산해도 부담이 없다.
      * DB 에서 한 번에 접으려면 파생 테이블(native)이 필요한데, 그 대가로 얻는 게 없다.
+     *
+     * <p>2026-09-22(세트 도입, V26): 같은 GROUP BY 에 rep 의 시작·끝 시각을 얹었다. 세트 요약
+     * ({@code SessionSetAssembler})이 같은 rep 목록에서 나오므로 두 집계가 한 쿼리를 나눠 쓴다 —
+     * 싱크 통계와 세트 평균이 서로 다른 rep 집합을 보는 일이 구조적으로 없다.
      */
-    @Query("SELECT AVG(p.syncRate) FROM PoseData p " +
+    @Query("SELECT p.repNumber AS repNumber, AVG(p.syncRate) AS avgSyncRate, " +
+           "MIN(p.timestampSec) AS startedSec, MAX(p.timestampSec) AS endedSec FROM PoseData p " +
            "WHERE p.session.id = :sessionId AND p.createdAt = :sessionAnchor AND p.repNumber > 0 " +
            "GROUP BY p.repNumber ORDER BY p.repNumber")
-    List<Double> findRepAverageSyncRates(@Param("sessionId") Long sessionId,
-                                         @Param("sessionAnchor") LocalDateTime sessionAnchor);
+    List<RepSummaryProjection> findRepSummaries(@Param("sessionId") Long sessionId,
+                                                @Param("sessionAnchor") LocalDateTime sessionAnchor);
+
+    /** {@link #findRepSummaries} 의 한 행 = rep 하나. */
+    interface RepSummaryProjection {
+        Integer getRepNumber();
+        Double getAvgSyncRate();
+        Double getStartedSec();
+        Double getEndedSec();
+    }
 
     // 회원 탈퇴 시 pose_data 참조무결성 대체(FK CASCADE 제거로 인한 애플리케이션 정리).
     // PoseDataCleanupService에서 afterCommit 이후 비동기로 호출됨.

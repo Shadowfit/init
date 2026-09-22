@@ -10,6 +10,9 @@ import com.shadowfit.dto.report.PoseFrameProjection;
 import com.shadowfit.global.error.BusinessException;
 import com.shadowfit.global.error.ErrorCode;
 import com.shadowfit.global.util.SetSummaryFormatter;
+import com.shadowfit.model.exercise.SessionSet;
+import com.shadowfit.repository.exercise.SessionSetRepository;
+import com.shadowfit.dto.report.detailreport.SessionSetDto;
 import com.shadowfit.model.exercise.Session;
 import com.shadowfit.model.exercise.Status;
 import com.shadowfit.model.report.Report;
@@ -33,6 +36,7 @@ public class ReportService {
     private final PoseDataRepository poseDataRepository;
     private final SessionAnalysisCalculator sessionAnalysisCalculator;
     private final ObjectMapper objectMapper;
+    private final SessionSetRepository sessionSetRepository;
 
     @Transactional(readOnly = true)
     public SessionReportResponseDto getSessionReport(Long sessionId, Long currentMemberId) {
@@ -68,7 +72,9 @@ public class ReportService {
         attachJointCoordinates(worstSection, session);
         responseDto.setWorstSection(worstSection);
         responseDto.setRepTrend(analysis.getRepTrend() == null ? List.of() : analysis.getRepTrend());
-        responseDto.setSyncRateDetails(buildSyncRateDetails(session));
+        List<SessionSet> sets = sessionSetRepository.findBySessionIdOrderBySetNo(session.getId());
+        responseDto.setSyncRateDetails(buildSyncRateDetails(session, sets));
+        responseDto.setSets(sets.stream().map(SessionSetDto::from).toList());
         lastSession.ifPresent(last ->
                 responseDto.setComparisonWithPrevious(buildComparisonWithPrevious(session, last))
         );
@@ -130,12 +136,12 @@ public class ReportService {
                 .ifPresent(worstSection::setJointCoordinates);
     }
 
-    private List<ExerciseSyncRateDto> buildSyncRateDetails(Session session) {
+    private List<ExerciseSyncRateDto> buildSyncRateDetails(Session session, List<SessionSet> sets) {
         double avgSyncRate = session.getAvgSyncRate() == null ? 0.0 : session.getAvgSyncRate().doubleValue();
         ExerciseSyncRateDto detail = new ExerciseSyncRateDto(
                 session.getExercise().getId(),
                 session.getExercise().getName(),
-                SetSummaryFormatter.format(session.getTotalReps()),
+                SetSummaryFormatter.format(sets, session.getTotalReps()),
                 avgSyncRate
         );
         return List.of(detail);

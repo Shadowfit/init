@@ -70,6 +70,19 @@ public class Session {
     @Builder.Default
     private Integer difficultyLevel = 1;
 
+    /**
+     * 세트당 목표 횟수 — 세션 시작 때 body 값 또는 {@code RecommendationService} 공식으로 채워진다(V26,
+     * lunge-and-set-backend.md §7). 세트 경계는 «rep 이 이 값에 닿는 순간» 하나뿐이라 프레임의 세트는
+     * {@code ceil(rep_number / targetRepsPerSet)} 로 역산된다. NULL = 세트 도입 전 세션(세트 행 없음).
+     * 세션 도중 바꾸지 않는다 — 바꾸면 이미 저장된 프레임의 세트가 흔들린다.
+     */
+    @Column(name = "target_reps_per_set")
+    private Integer targetRepsPerSet;
+
+    /** 목표 세트 수 — 사용자가 정한 값만(세트 «수» 는 공식이 없다). NULL = 열린 세트. */
+    @Column(name = "target_sets")
+    private Integer targetSets;
+
     @Enumerated(EnumType.STRING) // 숫자가 아닌 문자열 이름으로 저장
     @Builder.Default
     private Status status = Status.IN_PROGRESS;

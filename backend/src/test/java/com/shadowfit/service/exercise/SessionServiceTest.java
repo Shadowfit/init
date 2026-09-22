@@ -155,6 +155,34 @@ class SessionServiceTest {
             assertThat(result.getMember().getId()).isEqualTo(member.getId());
         }
 
+        /**
+         * 세트 목표(V26). body 에 없으면 추천 공식 — 이 회원은 workoutLevel 이 없어 level 1, BEGINNER 라 baseReps 10
+         * → targetReps 10 (RecommendationService.buildRecommendation). 추천 level 은 difficultyLevel 에도 들어간다.
+         */
+        @Test
+        @DisplayName("targetRepsPerSet 생략 → 추천 공식으로 채우고 difficultyLevel 도 추천 level 로")
+        void createSession_fillsTargetFromRecommendation() {
+            VideoRequestDto dto = VideoRequestDto.builder().exerciseId(exercise.getId()).build();
+
+            Session result = sessionService.createSession(dto, member.getId(), "https://youtu.be/dummy");
+
+            assertThat(result.getTargetRepsPerSet()).isEqualTo(10);
+            assertThat(result.getTargetSets()).as("세트 수는 공식이 없어 사용자 값만").isNull();
+            assertThat(result.getDifficultyLevel()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("targetRepsPerSet·targetSets 를 보내면 그 값이 세션에 확정된다")
+        void createSession_keepsRequestedTargets() {
+            VideoRequestDto dto = VideoRequestDto.builder()
+                    .exerciseId(exercise.getId()).targetRepsPerSet(15).targetSets(4).build();
+
+            Session result = sessionService.createSession(dto, member.getId(), "https://youtu.be/dummy");
+
+            assertThat(result.getTargetRepsPerSet()).isEqualTo(15);
+            assertThat(result.getTargetSets()).isEqualTo(4);
+        }
+
         @Test
         @DisplayName("AI 분석기가 없는 종목이면 EXERCISE_NOT_SUPPORTED — 런지·플랭크가 조용히 빈 결과를 내던 것 차단")
         void createSession_analysisNotSupported_throws() {

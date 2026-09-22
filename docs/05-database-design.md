@@ -54,6 +54,21 @@ CREATE TABLE exercises (
 );
 ```
 
+### exercise_session_sets (세션별 세트 요약) — 2026-09-22 추가 (V26)
+```sql
+CREATE TABLE exercise_session_sets (
+    session_id    BIGINT       NOT NULL,
+    set_no        INT          NOT NULL,   -- 1-based
+    reps          INT          NOT NULL,   -- 마지막 세트만 목표 미달일 수 있다
+    avg_sync_rate DECIMAL(5,2) NOT NULL,   -- rep 가중 평균 (#75 와 같은 계산)
+    started_sec   DOUBLE       NOT NULL,   -- pose_data.timestamp_sec 과 같은 원점
+    ended_sec     DOUBLE       NOT NULL,
+    PRIMARY KEY (session_id, set_no),
+    FOREIGN KEY (session_id) REFERENCES exercise_sessions(id) ON DELETE CASCADE
+);
+```
+세션 완료 시점에 Spring 이 `pose_data` 의 rep 별 집계를 `ceil(rep_number / target_reps_per_set)` 로 묶어 채운다(`SessionSetAssembler`). `pose_data` 에 `set_index` 를 두지 않는 이유 — 세트 경계가 «목표 도달」 하나뿐이라 역산되고, 파티션 표 ALTER 를 피한다. `pose_data` 파티션은 보존 기간 뒤 드롭되므로 리포트가 세트를 계속 보여주려면 이 표가 필요하다. 설계: [`decisions/lunge-and-set-backend.md`](./decisions/lunge-and-set-backend.md) §7.
+
 ### exercise_references (운동별 기준 좌표) — 2026-04 추가
 ```sql
 CREATE TABLE exercise_references (
@@ -82,7 +97,9 @@ CREATE TABLE exercise_sessions (
     max_sync_rate DECIMAL(5,2),
     min_sync_rate DECIMAL(5,2),
     calories_burned DECIMAL(7,2),
-    difficulty_level INT DEFAULT 1,
+    difficulty_level INT DEFAULT 1,                      -- 2026-09-22 부터 세션 시작 때 추천 level 로 채움(그전엔 항상 1)
+    target_reps_per_set INT NULL,                        -- 세트당 목표 (V26). NULL = 세트 도입 전 세션
+    target_sets INT NULL,                                -- 목표 세트 수, 사용자 입력만 (V26). NULL = 열린 세트
     status ENUM('IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'FAILED') DEFAULT 'IN_PROGRESS',
     version BIGINT NOT NULL DEFAULT 0,               -- JPA @Version (낙관적 락, 2026-05 추가)
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
