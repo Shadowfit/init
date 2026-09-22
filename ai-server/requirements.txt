@@ -1,5 +1,5 @@
 fastapi==0.141.1
-uvicorn[standard]==0.52.4
+uvicorn[standard]==0.53.0
 pydantic==2.13.5
 pydantic-settings==2.15.0
 orjson==3.12.0
@@ -12,10 +12,10 @@ pybase64==1.5.0
 # 핀도 같이 풀린다(0.10.35 는 둘 다 요구하지 않는다). 그래서 아래 셋은 한 묶음이다:
 #   mediapipe 0.10.21 → numpy<2 (mediapipe 요구) → opencv-python-headless 4.x (5.x 는 numpy>=2)
 mediapipe==0.10.21
-opencv-python-headless==4.11.0.86
+opencv-python-headless==4.14.0.94
 numpy<2
 
-dtaidistance==2.5.0
+dtaidistance==2.5.1
 
 python-multipart==0.0.32
 
