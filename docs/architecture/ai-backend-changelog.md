@@ -321,6 +321,13 @@
 - **Spring 쪽 경계.** `exercises.reference_video_path`(V23) 갱신은 tx, 파일 쓰기는 tx 앞, gRPC 는 `afterCommit`, tx 실패 시 파일 삭제(보상). 서킷 OPEN 이면 파일·DB 를 건드리기 전에 503(W017)
 - **AI 코드 변경을 동반한다** — §6 두 번째 관찰의 예외가 아니라 같은 결이다(신뢰성 문제를 AI 쪽에서 닫음). 결정 기록: 이 대화(2026-09-17)에서 사용자 confirm — 전달 ①공유 볼륨, 기록 = 컬럼 1개, 보관·교체, 상한 50MB, 서킷 ㄴ, 데드라인 A
 
+### 런지·세트 ② — proto 에 종목 코드·세트 목표 (2026-09-22) ⭐ 메시지 필드 추가, AI 미착수
+
+- **왜 지금인가.** 캡스톤 1회차 보고(09-22)가 런지·세트를 이번 학기 범위로 되돌렸고, 그 설계([`../decisions/lunge-and-set-backend.md`](../decisions/lunge-and-set-backend.md) §7)가 «종목의 정체를 DB id 에서 `exercises.code` 로」(#785)·«세트 경계 = rep 목표 도달 하나」(#786)를 박제했다. 이 커밋은 그 두 값을 AI 로 나르는 계약 — `AnalyzeRequest(7·8·9)`·`ReattachRequest(8·9·10)`·`ExtractRequest(4)`. [integration.md §3-4](./ai-backend-integration.md)
+- **결합 방향이 이례적이다.** 지금까지 계약 변경은 «AI 가 보내고 Spring 이 받는」 쪽(rep_number·smoothed_knee_angle)이 많았는데, 이번엔 **Spring 이 먼저 보내고 AI 가 나중에 읽는다.** 세트 저장·집계를 Spring 이 `pose_data` 로 하기로 해서(#75 와 같은 원칙) AI 몫이 «cue 와 레지스트리 키」 로 줄었고, 그래서 Spring 쪽을 AI 답 전에 먼저 갈 수 있었다. 필드 이름·번호는 AI 담당자와 합의 전 Spring 제안 — 바꾸자고 하면 AI 가 읽기 전에 바꾼다.
+- **원래 초안에 있던 `SessionCompleteRequest.sets`(AI → Spring 세트 요약)는 취소됐다** — ③ 착수 때 «완료 시점에 Spring 이 rep 집계로 만든다」 로 바뀌어 proto 에 안 들어갔다.
+- **AI 코드 변경 없음**(pb2 재생성만). 갱신 트리거 1번. 판정 기준(5번)은 AI 가 `exercise_code` 로 분석기를 고르기 시작할 때 다시 온다.
+
 ---
 
 ## 5. 결합 요소별 변경 시점

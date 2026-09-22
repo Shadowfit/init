@@ -139,11 +139,25 @@ Docker 네트워크는 `shadowfit-net` 브리지 한 개. 외부 노출은 backe
 Spring 쪽 트랜잭션 경계(`ReferenceVideoService`): 서킷 확인 → 파일 저장(tx 밖) → `attachReferenceVideo`(tx: 경로 갱신 + `@CacheEvict`) → **afterCommit** 에서 gRPC 발사·이전 파일 삭제 → tx 실패 시 새 파일 삭제(보상). gRPC 를 tx 안에서 쏘지 않는 이유는 `startAnalysis` 와 같다(커넥션 점유·롤백 뒤 콜백).
 
 핵심 메시지:
-- `AnalyzeRequest`: `exercise_id(int64)`, `session_id(int64)`, `reference_poses(PoseDataRequest[])`
+- `AnalyzeRequest`: `exercise_id(int64)`, `session_id(int64)`, `reference_poses(PoseDataRequest[])`, `persona`, `session_nonce`, **`exercise_code`·`target_reps_per_set`·`target_sets`** (2026-09-22, §3-4)
 - `SessionCompleteRequest`: `session_id(int64)`, `total_reps(int32)`, `avg_sync_rate(double)`, `max/min_sync_rate(double)`, `calories_burned(double)`
 - `PoseDataRequest`: `timestamp_sec(double)`, `joint_coordinates(string=JSON)`, `sync_rate(double)`, `feedback_message(string)`
 
 `SessionStatus` enum: `IN_PROGRESS=0`, `COMPLETED=1`, `FAILED=2`.
+
+### 3-4. 종목 코드·세트 목표 — Spring 이 실어 보내고 AI 는 아직 안 읽는다 🆕 (2026-09-22, 런지·세트 ②)
+
+`AnalyzeRequest(7·8·9)`·`ReattachRequest(8·9·10)` 에 `exercise_code`·`target_reps_per_set`·`target_sets`, `ExtractRequest(4)` 에 `exercise_code` 가 붙었다([`../decisions/lunge-and-set-backend.md`](../decisions/lunge-and-set-backend.md) §4 ②, [`../handoff/ai-lunge-and-sets-proto.md`](../handoff/ai-lunge-and-sets-proto.md)).
+
+| 필드 | 출처(Spring) | AI 가 할 일 (미착수) |
+|---|---|---|
+| `exercise_code` | `exercises.code`(V25) 저장값 그대로 — `"SQUAT"`. NULL 이면 빈 문자열 | 분석기 레지스트리 키로 쓴다. 지금은 `_EXERCISE_ID_TO_TYPE={1:"squat"}` DB id 표 — 빈 문자열이면 그 표로 폴백. `ExtractReferenceData` 의 `analyze_video(path,"squat")` 하드코딩도 이 값으로 |
+| `target_reps_per_set` | `exercise_sessions.target_reps_per_set`(V26) — body 또는 추천 공식. 0 = 없음 | «n세트 완료» TTS cue, `ReportFeedbackBatch.set_no`. **세트 저장·집계는 Spring 이 `pose_data` 로 하므로 AI 는 세트를 기억할 필요가 없다** |
+| `target_sets` | 사용자 값만. 0 = 열린 세트 | «마지막 세트» cue |
+
+- **한쪽만 배포돼도 안 깨진다** — proto3 기본값(`""`·`0`)이 «없음» 이고, AI 는 모르는 필드를 무시한다. 재생성된 `exercise_pb2.py` 는 커밋돼 있다(CI `ai-server-test.yml` 이 원본과 대조).
+- **판정 기준 갱신은 아직이다** — 계약에 코드가 실려도 AI 가 안 읽으면 런지 세션은 여전히 id 표 밖이라 `StartAnalysis` 거절(#147 ㄷ). 갱신 트리거 1번(메시지 추가)에는 해당하고 5번(판정 기준)은 AI 쪽 작업 뒤에 온다.
+- 값의 «단일 출처» 는 `ExerciseAnalysisService.SessionTargets.of(session)` — 시작(`startAnalysis` 가 커밋 전 엔티티에서 확정해 afterCommit 으로 넘김)과 재부착(`ReattachRequestBuilder`)이 같은 변환을 쓴다. nonce 를 한 곳에서 확정하는 것과 같은 이유.
 
 ---
 

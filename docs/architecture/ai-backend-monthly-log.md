@@ -859,3 +859,21 @@
 **FastAPI 측** — (없음)
 
 **결합 결과**: ⚠️ **관측성이 Spring 만 덮는다.** ai-server 는 계측이 없어 스크레이프 타깃에 넣지 않았다(넣으면 영원히 DOWN 인 타깃이 생긴다). 즉 `07-11` 의 서킷브레이커가 회로를 열어도 **AI 쪽 상태를 볼 지표가 없다** — 결합 관점에서 **관측의 절반이 빈칸**이다.
+
+---
+
+## 2026-09 — 관리자 업로드와 런지·세트 계약 (결합 계약에 영향 준 것만)
+
+### 09-17 — 관리자 mp4 업로드 → 기준 좌표 추출 (#772, 양쪽)
+
+[`ai-backend-changelog.md`](./ai-backend-changelog.md) «#772» 참고 — proto 밖 계약(공유 볼륨)과 응답 의미 변경(«추출됨」→«접수됨」).
+
+### 09-22 — 런지·세트 ②: proto 에 종목 코드·세트 목표 (Spring 주도, AI 는 pb2 재생성만)
+
+**proto** — `proto/exercise.proto`: `AnalyzeRequest`·`ReattachRequest`·`ExtractRequest` 에 `exercise_code`, 앞 둘에 `target_reps_per_set`·`target_sets`
+
+**Spring 측** — `ExerciseAnalysisService`(`SessionTargets`, `extractReferencePoses`), `ReattachRequestBuilder`. 선행 #785(V25 `exercises.code`, `GET /exercises`)·#786(V26 세션 목표·세트 표, `SessionSetAssembler`)
+
+**FastAPI 측** — `exercise_pb2.py` 재생성. 읽는 코드 없음
+
+**결합 결과**: Spring 이 종목·세트 값을 실어 보내지만 AI 는 아직 id 표와 자기 카운터만 본다 — «계약은 앞서 있고 판정은 그대로」 인 구간. 세트 저장·집계는 Spring 이 `pose_data` 로 하기로 해서(③) 이 구간이 시연을 막지는 않는다. 설계: `docs/decisions/lunge-and-set-backend.md`, AI 요청: `docs/handoff/ai-lunge-and-sets-proto.md`.

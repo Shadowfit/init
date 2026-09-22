@@ -273,6 +273,8 @@ public class ExerciseAnalysisService {
         com.shadowfit.grpc.ExtractRequest request = com.shadowfit.grpc.ExtractRequest.newBuilder()
                 .setExerciseId(exerciseId)
                 .setYoutubeUrl(videoSource) // 필드 이름만 youtube_url — 의미는 컨테이너 안 파일 경로
+                // 종목 코드(V25) — 기준 영상 분절에 어느 분석기를 쓸지. 코드 없는 종목은 빈 문자열(proto3 «없음»).
+                .setExerciseCode(codeOrEmpty(exercise))
                 .build();
 
         log.info("FastAPI에게 기준 좌표 추출 요청 전송 - 운동 ID: {}", exerciseId);
@@ -342,6 +344,24 @@ public class ExerciseAnalysisService {
                                  Integer targetRepsPerSet, Integer targetSets) {}
 
     /**
+     * AI 로 가는 종목 코드·세트 목표 — proto3 라 null 을 못 실어 «없음» 을 빈 문자열·0 으로 접은 꼴.
+     * {@code AnalyzeRequest}(시작)와 {@code ReattachRequest}(재부착)가 같은 변환을 쓰게 한 곳으로 모은다.
+     */
+    public record SessionTargets(String exerciseCode, int targetRepsPerSet, int targetSets) {
+        public static SessionTargets of(Session session) {
+            return new SessionTargets(
+                    codeOrEmpty(session.getExercise()),
+                    session.getTargetRepsPerSet() == null ? 0 : session.getTargetRepsPerSet(),
+                    session.getTargetSets() == null ? 0 : session.getTargetSets());
+        }
+    }
+
+    /** {@code exercises.code} 는 NULL 허용(분석기 없는 종목) — proto 로는 빈 문자열이 «없음» 이다. */
+    static String codeOrEmpty(Exercise exercise) {
+        return exercise.getCode() == null ? "" : exercise.getCode();
+    }
+
+    /**
      * [STEP 2: 운동 분석 시작 - Entry Point]
      * 앱의 요청을 받아 DB에 세션을 생성하고 즉시 세션 ID와 소유권 비밀값을 반환합니다. (응답 속도 최적화)
      */
@@ -359,6 +379,9 @@ public class ExerciseAnalysisService {
         Session savedSession = sessionService.createSession(appDto, currentMemberId, finalUrl);
         Long sessionId = savedSession.getId();
         String persona = member.getSelectedPersona().name();
+        // AI 로 갈 종목 코드·세트 목표는 nonce 와 같은 이유로 **여기서** 확정해 넘긴다 — 클라 응답(StartedSession)과
+        // AnalyzeRequest 가 같은 엔티티의 같은 값을 보게. 비동기 워커에서 세션을 다시 읽으면 두 경로가 갈릴 수 있다.
+        SessionTargets targets = SessionTargets.of(savedSession);
 
         // 비동기로 FastAPI에 분석 요청 — self를 거쳐야 @Async가 Spring 프록시를 타고 실제로
         // 비동기 실행됨. this.로 호출하면 자기호출(self-invocation)이라 AOP 프록시를 우회해서
@@ -374,7 +397,7 @@ public class ExerciseAnalysisService {
                     @Override
                     public void afterCommit() {
                         self.sendAnalysisRequestToFastApi(sessionId, appDto, finalUrl, persona,
-                                savedSession.getSessionNonce());
+                                savedSession.getSessionNonce(), targets);
                     }
                 }
         );
@@ -394,7 +417,7 @@ public class ExerciseAnalysisService {
     @Async("applicationTaskExecutor")
     @Transactional(readOnly = true)
     public void sendAnalysisRequestToFastApi(Long sessionId, VideoRequestDto appDto, String finalUrl, String persona,
-                                             String sessionNonce) {
+                                             String sessionNonce, SessionTargets targets) {
         // 여기는 이미 @Async 워커 스레드 — cid 는 AsyncConfig 의 TaskDecorator 가 넘겨줬고,
         // 세션 id 는 이 흐름의 시작점인 여기서 얹는다.
         try (CorrelationIds.Scope ignored = CorrelationIds.withSession(sessionId)) {
@@ -414,7 +437,11 @@ public class ExerciseAnalysisService {
                     .setSessionId(sessionId)
                     .setReferenceSource(finalUrl)
                     .setPersona(persona)
-                    .setSessionNonce(sessionNonce == null ? "" : sessionNonce);
+                    .setSessionNonce(sessionNonce == null ? "" : sessionNonce)
+                    // ② (lunge-and-set-backend.md §4): 종목 코드·세트 목표. AI 가 아직 안 읽어도 proto3 기본값이라 무해.
+                    .setExerciseCode(targets.exerciseCode())
+                    .setTargetRepsPerSet(targets.targetRepsPerSet())
+                    .setTargetSets(targets.targetSets());
 
             for (ExerciseReference ref : referencePoses) {
                 requestBuilder.addReferencePoses(PoseDataRequest.newBuilder()
