@@ -24,6 +24,9 @@ public record AdminExerciseListItemDto(
         @Schema(description = "운동명", example = "스쿼트")
         String name,
 
+        @Schema(description = "종목 코드 — AI 분석기 키. null 이면 분석을 켤 수 없는 종목", example = "SQUAT")
+        String code,
+
         @Schema(description = "부위 카테고리 ID")
         Long categoryId,
 

@@ -110,6 +110,15 @@ public enum ErrorCode {
     // 됐는데 추출은 조용히 안 된 상태를 안 만들기 위해서다 — 재추출 API 가 없어 그 상태에서 복구하려면
     // 관리자가 같은 파일을 다시 올려야 한다.
     REFERENCE_EXTRACTION_UNAVAILABLE(503, "W017", "AI 서버에 연결할 수 없어 기준 영상을 등록할 수 없습니다. 잠시 후 다시 시도해 주세요."),
+    // 종목 코드(exercises.code, V25) — docs/decisions/lunge-and-set-backend.md §3-B.
+    //
+    // W018: 코드 하나 = 분석기 하나. UNIQUE 가 어차피 막지만 500 대신 이유를 준다(W014 와 같은 결).
+    // W019: 분석이 켜진 종목의 코드를 바꾸면 진행 중 세션이 다른 분석기 기준으로 넘어간다 — 먼저 끄고 바꾼다.
+    // W020: 코드가 없는 종목은 ai-server 가 어느 분석기를 쓸지 알 수 없어 StartAnalysis 를 거절한다(#147 ㄷ).
+    //       W012(기준 좌표 없음)와 나란한 «켜기 전 필요조건» 이다.
+    EXERCISE_CODE_DUPLICATION(409, "W018", "이미 사용 중인 종목 코드입니다."),
+    EXERCISE_CODE_LOCKED(409, "W019", "분석이 켜진 종목의 코드는 바꿀 수 없습니다. 분석을 끈 뒤 바꿔 주세요."),
+    EXERCISE_CODE_REQUIRED(400, "W020", "종목 코드가 없어 분석을 활성화할 수 없습니다."),
 
     // --- 시도 제한 (이슈 #394) ---
     //

@@ -38,6 +38,7 @@ public class ExerciseQueryRepositoryImpl implements ExerciseQueryRepository {
                 .select(Projections.constructor(AdminExerciseListItemDto.class,
                         exercise.id,
                         exercise.name,
+                        exercise.code,
                         exercise.category.id,
                         exercise.category.name,
                         exercise.analysisSupported,
