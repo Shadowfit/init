@@ -1,0 +1,1286 @@
+skew_t34_uni.exercise_sessions	analyze	status	OK
+skew_t34_uni.session_reports	analyze	status	OK
+skew_t34_uni.exercise_sessions	histogram	status	Histogram statistics created for column 'member_id'.
+skew_t34_uni.exercise_sessions	histogram	status	Histogram statistics created for column 'start_time'.
+skew_t34_uni.exercise_sessions	histogram	status	Histogram statistics created for column 'status'.
+skew_t34_uni.session_reports	histogram	status	Histogram statistics created for column 'member_id'.
+##STATS
+exercise_sessions	PRIMARY	n_diff_pfx01	99792	20	2026-09-24 00:16:59
+exercise_sessions	PRIMARY	n_leaf_pages	396	NULL	2026-09-24 00:16:59
+exercise_sessions	exercise_id	n_diff_pfx01	0	2	2026-09-24 00:16:59
+exercise_sessions	exercise_id	n_diff_pfx02	100282	20	2026-09-24 00:16:59
+exercise_sessions	exercise_id	n_leaf_pages	133	NULL	2026-09-24 00:16:59
+exercise_sessions	idx_session_member_exercise_status_start	n_diff_pfx01	15028	20	2026-09-24 00:16:59
+exercise_sessions	idx_session_member_exercise_status_start	n_diff_pfx02	14808	20	2026-09-24 00:16:59
+exercise_sessions	idx_session_member_exercise_status_start	n_leaf_pages	368	NULL	2026-09-24 00:16:59
+exercise_sessions	idx_session_member_status_start	n_diff_pfx01	14264	20	2026-09-24 00:16:59
+exercise_sessions	idx_session_member_status_start	n_diff_pfx02	59345	20	2026-09-24 00:16:59
+exercise_sessions	idx_session_member_status_start	n_leaf_pages	286	NULL	2026-09-24 00:16:59
+exercise_sessions	idx_session_starttime_member	n_diff_pfx01	90880	20	2026-09-24 00:16:59
+exercise_sessions	idx_session_starttime_member	n_diff_pfx02	101171	20	2026-09-24 00:16:59
+exercise_sessions	idx_session_starttime_member	n_leaf_pages	256	NULL	2026-09-24 00:16:59
+exercise_sessions	idx_session_status_starttime	n_diff_pfx01	3	5	2026-09-24 00:16:59
+exercise_sessions	idx_session_status_starttime	n_diff_pfx02	98698	20	2026-09-24 00:16:59
+exercise_sessions	idx_session_status_starttime	n_leaf_pages	162	NULL	2026-09-24 00:16:59
+session_reports	PRIMARY	n_diff_pfx01	22085	20	2026-09-24 00:17:00
+session_reports	PRIMARY	n_leaf_pages	5663	NULL	2026-09-24 00:17:00
+session_reports	member_id	n_diff_pfx01	12414	20	2026-09-24 00:17:00
+session_reports	member_id	n_diff_pfx02	24681	20	2026-09-24 00:17:00
+session_reports	member_id	n_leaf_pages	57	NULL	2026-09-24 00:17:00
+session_reports	uk_report_session	n_diff_pfx01	25333	20	2026-09-24 00:17:00
+session_reports	uk_report_session	n_leaf_pages	55	NULL	2026-09-24 00:17:00
+##HIST
+exercise_sessions	member_id	equi-height	100
+exercise_sessions	start_time	equi-height	100
+exercise_sessions	status	singleton	4
+session_reports	member_id	equi-height	100
+##ENDSTATS
+##Q|T3.a.day
+-> Aggregate: count(0)  (cost=82.9 rows=1) (actual time=0.151..0.151 rows=1 loops=1)
+    -> Filter: ((exercise_sessions.start_time >= TIMESTAMP'2025-09-30 00:00:00') and (exercise_sessions.start_time < TIMESTAMP'2025-10-01 00:00:00'))  (cost=55.4 rows=275) (actual time=0.0668..0.137 rows=275 loops=1)
+        -> Covering index range scan on exercise_sessions using idx_session_starttime_member over ('2025-09-30 00:00:00' <= start_time < '2025-10-01 00:00:00')  (cost=55.4 rows=275) (actual time=0.0641..0.107 rows=275 loops=1)
+
+275
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	0
+Handler_read_next	275
+Handler_read_prev	0
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T3.b.status
+-> Group aggregate: count(0)  (cost=20063 rows=3) (actual time=21.3..50.9 rows=4 loops=1)
+    -> Covering index scan on exercise_sessions using idx_session_status_starttime  (cost=10083 rows=99792) (actual time=0.603..26.6 rows=99995 loops=1)
+
+IN_PROGRESS	24954
+COMPLETED	25145
+FAILED	24728
+CANCELLED	25168
+Handler_read_first	1
+Handler_read_key	1
+Handler_read_last	0
+Handler_read_next	99995
+Handler_read_prev	0
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.list.FAILED.w1
+-> Limit: 20 row(s)  (cost=31.8 rows=20) (actual time=0.174..0.178 rows=20 loops=1)
+    -> Index range scan on exercise_sessions using idx_session_status_starttime over (status = 'FAILED' AND '2025-09-30 00:00:00' <= start_time) (reverse), with index condition: ((exercise_sessions.`status` = 'FAILED') and (exercise_sessions.start_time >= <cache>((cast('2025-10-01 00:00:00' as datetime) - interval 1 day))))  (cost=31.8 rows=70) (actual time=0.174..0.176 rows=20 loops=1)
+
+86310	10866	2025-09-30 23:57:00	FAILED
+15032	11387	2025-09-30 23:17:00	FAILED
+62901	2713	2025-09-30 23:14:00	FAILED
+37391	3920	2025-09-30 22:57:00	FAILED
+69229	13788	2025-09-30 22:49:00	FAILED
+98566	13377	2025-09-30 22:45:00	FAILED
+22885	6684	2025-09-30 22:37:00	FAILED
+38519	4891	2025-09-30 22:27:00	FAILED
+38492	5583	2025-09-30 22:16:00	FAILED
+93077	9989	2025-09-30 22:01:00	FAILED
+48367	3548	2025-09-30 21:52:00	FAILED
+91982	1492	2025-09-30 21:47:00	FAILED
+72642	11909	2025-09-30 21:28:00	FAILED
+84638	13728	2025-09-30 21:23:00	FAILED
+34337	1018	2025-09-30 21:12:00	FAILED
+47698	10162	2025-09-30 20:56:00	FAILED
+888	11370	2025-09-30 20:51:00	FAILED
+27977	10484	2025-09-30 20:08:00	FAILED
+82134	10575	2025-09-30 19:29:00	FAILED
+95603	4227	2025-09-30 19:26:00	FAILED
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	0
+Handler_read_next	0
+Handler_read_prev	19
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.listForceTime.FAILED.w1
+-> Limit: 20 row(s)  (cost=0.52 rows=0.247) (actual time=0.0503..0.27 rows=20 loops=1)
+    -> Filter: (exercise_sessions.`status` = 'FAILED')  (cost=0.52 rows=0.247) (actual time=0.0494..0.268 rows=20 loops=1)
+        -> Index range scan on exercise_sessions using idx_session_starttime_member over ('2025-09-30 00:00:00' <= start_time) (reverse), with index condition: (exercise_sessions.start_time >= <cache>((cast('2025-10-01 00:00:00' as datetime) - interval 1 day)))  (cost=0.52 rows=1) (actual time=0.0465..0.23 rows=58 loops=1)
+
+86310	10866	2025-09-30 23:57:00	FAILED
+15032	11387	2025-09-30 23:17:00	FAILED
+62901	2713	2025-09-30 23:14:00	FAILED
+37391	3920	2025-09-30 22:57:00	FAILED
+69229	13788	2025-09-30 22:49:00	FAILED
+98566	13377	2025-09-30 22:45:00	FAILED
+22885	6684	2025-09-30 22:37:00	FAILED
+38519	4891	2025-09-30 22:27:00	FAILED
+38492	5583	2025-09-30 22:16:00	FAILED
+93077	9989	2025-09-30 22:01:00	FAILED
+48367	3548	2025-09-30 21:52:00	FAILED
+91982	1492	2025-09-30 21:47:00	FAILED
+72642	11909	2025-09-30 21:28:00	FAILED
+84638	13728	2025-09-30 21:23:00	FAILED
+34337	1018	2025-09-30 21:12:00	FAILED
+47698	10162	2025-09-30 20:56:00	FAILED
+888	11370	2025-09-30 20:51:00	FAILED
+27977	10484	2025-09-30 20:08:00	FAILED
+82134	10575	2025-09-30 19:29:00	FAILED
+95603	4227	2025-09-30 19:26:00	FAILED
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	1
+Handler_read_next	0
+Handler_read_prev	57
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.count.FAILED.w1
+-> Aggregate: count(0)  (cost=21.3 rows=1) (actual time=0.0779..0.078 rows=1 loops=1)
+    -> Filter: ((exercise_sessions.`status` = 'FAILED') and (exercise_sessions.start_time >= <cache>((cast('2025-10-01 00:00:00' as datetime) - interval 1 day))))  (cost=14.3 rows=70) (actual time=0.0293..0.0696 rows=70 loops=1)
+        -> Covering index range scan on exercise_sessions using idx_session_status_starttime over (status = 'FAILED' AND '2025-09-30 00:00:00' <= start_time)  (cost=14.3 rows=70) (actual time=0.0244..0.0373 rows=70 loops=1)
+
+70
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	0
+Handler_read_next	70
+Handler_read_prev	0
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.list.FAILED.w7
+-> Limit: 20 row(s)  (cost=222 rows=20) (actual time=0.244..0.248 rows=20 loops=1)
+    -> Index range scan on exercise_sessions using idx_session_status_starttime over (status = 'FAILED' AND '2025-09-24 00:00:00' <= start_time) (reverse), with index condition: ((exercise_sessions.`status` = 'FAILED') and (exercise_sessions.start_time >= <cache>((cast('2025-10-01 00:00:00' as datetime) - interval 7 day))))  (cost=222 rows=493) (actual time=0.244..0.247 rows=20 loops=1)
+
+86310	10866	2025-09-30 23:57:00	FAILED
+15032	11387	2025-09-30 23:17:00	FAILED
+62901	2713	2025-09-30 23:14:00	FAILED
+37391	3920	2025-09-30 22:57:00	FAILED
+69229	13788	2025-09-30 22:49:00	FAILED
+98566	13377	2025-09-30 22:45:00	FAILED
+22885	6684	2025-09-30 22:37:00	FAILED
+38519	4891	2025-09-30 22:27:00	FAILED
+38492	5583	2025-09-30 22:16:00	FAILED
+93077	9989	2025-09-30 22:01:00	FAILED
+48367	3548	2025-09-30 21:52:00	FAILED
+91982	1492	2025-09-30 21:47:00	FAILED
+72642	11909	2025-09-30 21:28:00	FAILED
+84638	13728	2025-09-30 21:23:00	FAILED
+34337	1018	2025-09-30 21:12:00	FAILED
+47698	10162	2025-09-30 20:56:00	FAILED
+888	11370	2025-09-30 20:51:00	FAILED
+27977	10484	2025-09-30 20:08:00	FAILED
+82134	10575	2025-09-30 19:29:00	FAILED
+95603	4227	2025-09-30 19:26:00	FAILED
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	0
+Handler_read_next	0
+Handler_read_prev	19
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.listForceTime.FAILED.w7
+-> Limit: 20 row(s)  (cost=0.52 rows=0.247) (actual time=0.0349..0.15 rows=20 loops=1)
+    -> Filter: (exercise_sessions.`status` = 'FAILED')  (cost=0.52 rows=0.247) (actual time=0.0344..0.149 rows=20 loops=1)
+        -> Index range scan on exercise_sessions using idx_session_starttime_member over ('2025-09-24 00:00:00' <= start_time) (reverse), with index condition: (exercise_sessions.start_time >= <cache>((cast('2025-10-01 00:00:00' as datetime) - interval 7 day)))  (cost=0.52 rows=1) (actual time=0.0321..0.142 rows=58 loops=1)
+
+86310	10866	2025-09-30 23:57:00	FAILED
+15032	11387	2025-09-30 23:17:00	FAILED
+62901	2713	2025-09-30 23:14:00	FAILED
+37391	3920	2025-09-30 22:57:00	FAILED
+69229	13788	2025-09-30 22:49:00	FAILED
+98566	13377	2025-09-30 22:45:00	FAILED
+22885	6684	2025-09-30 22:37:00	FAILED
+38519	4891	2025-09-30 22:27:00	FAILED
+38492	5583	2025-09-30 22:16:00	FAILED
+93077	9989	2025-09-30 22:01:00	FAILED
+48367	3548	2025-09-30 21:52:00	FAILED
+91982	1492	2025-09-30 21:47:00	FAILED
+72642	11909	2025-09-30 21:28:00	FAILED
+84638	13728	2025-09-30 21:23:00	FAILED
+34337	1018	2025-09-30 21:12:00	FAILED
+47698	10162	2025-09-30 20:56:00	FAILED
+888	11370	2025-09-30 20:51:00	FAILED
+27977	10484	2025-09-30 20:08:00	FAILED
+82134	10575	2025-09-30 19:29:00	FAILED
+95603	4227	2025-09-30 19:26:00	FAILED
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	1
+Handler_read_next	0
+Handler_read_prev	57
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.count.FAILED.w7
+-> Aggregate: count(0)  (cost=148 rows=1) (actual time=0.558..0.559 rows=1 loops=1)
+    -> Filter: ((exercise_sessions.`status` = 'FAILED') and (exercise_sessions.start_time >= <cache>((cast('2025-10-01 00:00:00' as datetime) - interval 7 day))))  (cost=99.1 rows=493) (actual time=0.12..0.518 rows=493 loops=1)
+        -> Covering index range scan on exercise_sessions using idx_session_status_starttime over (status = 'FAILED' AND '2025-09-24 00:00:00' <= start_time)  (cost=99.1 rows=493) (actual time=0.111..0.338 rows=493 loops=1)
+
+493
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	0
+Handler_read_next	493
+Handler_read_prev	0
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.list.FAILED.w30
+-> Limit: 20 row(s)  (cost=930 rows=20) (actual time=1.27..1.28 rows=20 loops=1)
+    -> Index range scan on exercise_sessions using idx_session_status_starttime over (status = 'FAILED' AND '2025-09-01 00:00:00' <= start_time) (reverse), with index condition: ((exercise_sessions.`status` = 'FAILED') and (exercise_sessions.start_time >= <cache>((cast('2025-10-01 00:00:00' as datetime) - interval 30 day))))  (cost=930 rows=2066) (actual time=1.27..1.28 rows=20 loops=1)
+
+86310	10866	2025-09-30 23:57:00	FAILED
+15032	11387	2025-09-30 23:17:00	FAILED
+62901	2713	2025-09-30 23:14:00	FAILED
+37391	3920	2025-09-30 22:57:00	FAILED
+69229	13788	2025-09-30 22:49:00	FAILED
+98566	13377	2025-09-30 22:45:00	FAILED
+22885	6684	2025-09-30 22:37:00	FAILED
+38519	4891	2025-09-30 22:27:00	FAILED
+38492	5583	2025-09-30 22:16:00	FAILED
+93077	9989	2025-09-30 22:01:00	FAILED
+48367	3548	2025-09-30 21:52:00	FAILED
+91982	1492	2025-09-30 21:47:00	FAILED
+72642	11909	2025-09-30 21:28:00	FAILED
+84638	13728	2025-09-30 21:23:00	FAILED
+34337	1018	2025-09-30 21:12:00	FAILED
+47698	10162	2025-09-30 20:56:00	FAILED
+888	11370	2025-09-30 20:51:00	FAILED
+27977	10484	2025-09-30 20:08:00	FAILED
+82134	10575	2025-09-30 19:29:00	FAILED
+95603	4227	2025-09-30 19:26:00	FAILED
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	0
+Handler_read_next	0
+Handler_read_prev	19
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.listForceTime.FAILED.w30
+-> Limit: 20 row(s)  (cost=0.52 rows=0.247) (actual time=0.0692..0.313 rows=20 loops=1)
+    -> Filter: (exercise_sessions.`status` = 'FAILED')  (cost=0.52 rows=0.247) (actual time=0.0684..0.31 rows=20 loops=1)
+        -> Index range scan on exercise_sessions using idx_session_starttime_member over ('2025-09-01 00:00:00' <= start_time) (reverse), with index condition: (exercise_sessions.start_time >= <cache>((cast('2025-10-01 00:00:00' as datetime) - interval 30 day)))  (cost=0.52 rows=1) (actual time=0.0653..0.287 rows=58 loops=1)
+
+86310	10866	2025-09-30 23:57:00	FAILED
+15032	11387	2025-09-30 23:17:00	FAILED
+62901	2713	2025-09-30 23:14:00	FAILED
+37391	3920	2025-09-30 22:57:00	FAILED
+69229	13788	2025-09-30 22:49:00	FAILED
+98566	13377	2025-09-30 22:45:00	FAILED
+22885	6684	2025-09-30 22:37:00	FAILED
+38519	4891	2025-09-30 22:27:00	FAILED
+38492	5583	2025-09-30 22:16:00	FAILED
+93077	9989	2025-09-30 22:01:00	FAILED
+48367	3548	2025-09-30 21:52:00	FAILED
+91982	1492	2025-09-30 21:47:00	FAILED
+72642	11909	2025-09-30 21:28:00	FAILED
+84638	13728	2025-09-30 21:23:00	FAILED
+34337	1018	2025-09-30 21:12:00	FAILED
+47698	10162	2025-09-30 20:56:00	FAILED
+888	11370	2025-09-30 20:51:00	FAILED
+27977	10484	2025-09-30 20:08:00	FAILED
+82134	10575	2025-09-30 19:29:00	FAILED
+95603	4227	2025-09-30 19:26:00	FAILED
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	1
+Handler_read_next	0
+Handler_read_prev	57
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.count.FAILED.w30
+-> Aggregate: count(0)  (cost=621 rows=1) (actual time=0.96..0.96 rows=1 loops=1)
+    -> Filter: ((exercise_sessions.`status` = 'FAILED') and (exercise_sessions.start_time >= <cache>((cast('2025-10-01 00:00:00' as datetime) - interval 30 day))))  (cost=414 rows=2066) (actual time=0.0505..0.868 rows=2066 loops=1)
+        -> Covering index range scan on exercise_sessions using idx_session_status_starttime over (status = 'FAILED' AND '2025-09-01 00:00:00' <= start_time)  (cost=414 rows=2066) (actual time=0.0454..0.484 rows=2066 loops=1)
+
+2066
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	0
+Handler_read_next	2066
+Handler_read_prev	0
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.list.FAILED.w0
+-> Limit: 20 row(s)  (cost=5253 rows=20) (actual time=8.11..8.14 rows=20 loops=1)
+    -> Filter: (exercise_sessions.`status` = 'FAILED')  (cost=5253 rows=49398) (actual time=8.11..8.14 rows=20 loops=1)
+        -> Index lookup on exercise_sessions using idx_session_status_starttime (status='FAILED') (reverse)  (cost=5253 rows=49398) (actual time=8.1..8.13 rows=20 loops=1)
+
+86310	10866	2025-09-30 23:57:00	FAILED
+15032	11387	2025-09-30 23:17:00	FAILED
+62901	2713	2025-09-30 23:14:00	FAILED
+37391	3920	2025-09-30 22:57:00	FAILED
+69229	13788	2025-09-30 22:49:00	FAILED
+98566	13377	2025-09-30 22:45:00	FAILED
+22885	6684	2025-09-30 22:37:00	FAILED
+38519	4891	2025-09-30 22:27:00	FAILED
+38492	5583	2025-09-30 22:16:00	FAILED
+93077	9989	2025-09-30 22:01:00	FAILED
+48367	3548	2025-09-30 21:52:00	FAILED
+91982	1492	2025-09-30 21:47:00	FAILED
+72642	11909	2025-09-30 21:28:00	FAILED
+84638	13728	2025-09-30 21:23:00	FAILED
+34337	1018	2025-09-30 21:12:00	FAILED
+47698	10162	2025-09-30 20:56:00	FAILED
+888	11370	2025-09-30 20:51:00	FAILED
+27977	10484	2025-09-30 20:08:00	FAILED
+82134	10575	2025-09-30 19:29:00	FAILED
+95603	4227	2025-09-30 19:26:00	FAILED
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	0
+Handler_read_next	0
+Handler_read_prev	19
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.listForceTime.FAILED.w0
+-> Limit: 20 row(s)  (cost=4.7 rows=4.94) (actual time=0.15..0.292 rows=20 loops=1)
+    -> Filter: (exercise_sessions.`status` = 'FAILED')  (cost=4.7 rows=4.94) (actual time=0.149..0.289 rows=20 loops=1)
+        -> Index scan on exercise_sessions using idx_session_starttime_member (reverse)  (cost=4.7 rows=20) (actual time=0.144..0.268 rows=58 loops=1)
+
+86310	10866	2025-09-30 23:57:00	FAILED
+15032	11387	2025-09-30 23:17:00	FAILED
+62901	2713	2025-09-30 23:14:00	FAILED
+37391	3920	2025-09-30 22:57:00	FAILED
+69229	13788	2025-09-30 22:49:00	FAILED
+98566	13377	2025-09-30 22:45:00	FAILED
+22885	6684	2025-09-30 22:37:00	FAILED
+38519	4891	2025-09-30 22:27:00	FAILED
+38492	5583	2025-09-30 22:16:00	FAILED
+93077	9989	2025-09-30 22:01:00	FAILED
+48367	3548	2025-09-30 21:52:00	FAILED
+91982	1492	2025-09-30 21:47:00	FAILED
+72642	11909	2025-09-30 21:28:00	FAILED
+84638	13728	2025-09-30 21:23:00	FAILED
+34337	1018	2025-09-30 21:12:00	FAILED
+47698	10162	2025-09-30 20:56:00	FAILED
+888	11370	2025-09-30 20:51:00	FAILED
+27977	10484	2025-09-30 20:08:00	FAILED
+82134	10575	2025-09-30 19:29:00	FAILED
+95603	4227	2025-09-30 19:26:00	FAILED
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	1
+Handler_read_next	0
+Handler_read_prev	57
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.count.FAILED.w0
+-> Aggregate: count(0)  (cost=9901 rows=1) (actual time=16.2..16.2 rows=1 loops=1)
+    -> Filter: (exercise_sessions.`status` = 'FAILED')  (cost=4961 rows=49398) (actual time=0.698..14.6 rows=24728 loops=1)
+        -> Covering index lookup on exercise_sessions using idx_session_status_starttime (status='FAILED')  (cost=4961 rows=49398) (actual time=0.693..8.46 rows=24728 loops=1)
+
+24728
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	0
+Handler_read_next	24728
+Handler_read_prev	0
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.list.CANCELLED.w1
+-> Limit: 20 row(s)  (cost=30.9 rows=20) (actual time=0.161..0.165 rows=20 loops=1)
+    -> Index range scan on exercise_sessions using idx_session_status_starttime over (status = 'CANCELLED' AND '2025-09-30 00:00:00' <= start_time) (reverse), with index condition: ((exercise_sessions.`status` = 'CANCELLED') and (exercise_sessions.start_time >= <cache>((cast('2025-10-01 00:00:00' as datetime) - interval 1 day))))  (cost=30.9 rows=68) (actual time=0.16..0.163 rows=20 loops=1)
+
+2630	5650	2025-09-30 23:19:00	CANCELLED
+56967	12207	2025-09-30 23:15:00	CANCELLED
+11357	10295	2025-09-30 22:50:00	CANCELLED
+9577	9425	2025-09-30 22:38:00	CANCELLED
+19553	1042	2025-09-30 22:23:00	CANCELLED
+66288	12963	2025-09-30 21:28:00	CANCELLED
+20	5516	2025-09-30 21:21:00	CANCELLED
+44491	1166	2025-09-30 21:04:00	CANCELLED
+38788	2619	2025-09-30 20:23:00	CANCELLED
+65271	602	2025-09-30 20:16:00	CANCELLED
+94033	11979	2025-09-30 20:14:00	CANCELLED
+36225	13075	2025-09-30 19:51:00	CANCELLED
+50762	14146	2025-09-30 19:15:00	CANCELLED
+87026	7529	2025-09-30 19:03:00	CANCELLED
+84356	8826	2025-09-30 18:45:00	CANCELLED
+77048	7067	2025-09-30 18:40:00	CANCELLED
+59273	8629	2025-09-30 18:21:00	CANCELLED
+56175	5999	2025-09-30 17:41:00	CANCELLED
+18391	10183	2025-09-30 17:34:00	CANCELLED
+92425	7370	2025-09-30 17:29:00	CANCELLED
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	0
+Handler_read_next	0
+Handler_read_prev	19
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.listForceTime.CANCELLED.w1
+-> Limit: 20 row(s)  (cost=0.53 rows=0.252) (actual time=0.0539..0.194 rows=20 loops=1)
+    -> Filter: (exercise_sessions.`status` = 'CANCELLED')  (cost=0.53 rows=0.252) (actual time=0.0535..0.192 rows=20 loops=1)
+        -> Index range scan on exercise_sessions using idx_session_starttime_member over ('2025-09-30 00:00:00' <= start_time) (reverse), with index condition: (exercise_sessions.start_time >= <cache>((cast('2025-10-01 00:00:00' as datetime) - interval 1 day)))  (cost=0.53 rows=1) (actual time=0.0411..0.182 rows=84 loops=1)
+
+2630	5650	2025-09-30 23:19:00	CANCELLED
+56967	12207	2025-09-30 23:15:00	CANCELLED
+11357	10295	2025-09-30 22:50:00	CANCELLED
+9577	9425	2025-09-30 22:38:00	CANCELLED
+19553	1042	2025-09-30 22:23:00	CANCELLED
+66288	12963	2025-09-30 21:28:00	CANCELLED
+20	5516	2025-09-30 21:21:00	CANCELLED
+44491	1166	2025-09-30 21:04:00	CANCELLED
+38788	2619	2025-09-30 20:23:00	CANCELLED
+65271	602	2025-09-30 20:16:00	CANCELLED
+94033	11979	2025-09-30 20:14:00	CANCELLED
+36225	13075	2025-09-30 19:51:00	CANCELLED
+50762	14146	2025-09-30 19:15:00	CANCELLED
+87026	7529	2025-09-30 19:03:00	CANCELLED
+84356	8826	2025-09-30 18:45:00	CANCELLED
+77048	7067	2025-09-30 18:40:00	CANCELLED
+59273	8629	2025-09-30 18:21:00	CANCELLED
+56175	5999	2025-09-30 17:41:00	CANCELLED
+18391	10183	2025-09-30 17:34:00	CANCELLED
+92425	7370	2025-09-30 17:29:00	CANCELLED
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	1
+Handler_read_next	0
+Handler_read_prev	83
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.count.CANCELLED.w1
+-> Aggregate: count(0)  (cost=20.7 rows=1) (actual time=0.0986..0.0986 rows=1 loops=1)
+    -> Filter: ((exercise_sessions.`status` = 'CANCELLED') and (exercise_sessions.start_time >= <cache>((cast('2025-10-01 00:00:00' as datetime) - interval 1 day))))  (cost=13.9 rows=68) (actual time=0.0486..0.0909 rows=68 loops=1)
+        -> Covering index range scan on exercise_sessions using idx_session_status_starttime over (status = 'CANCELLED' AND '2025-09-30 00:00:00' <= start_time)  (cost=13.9 rows=68) (actual time=0.0417..0.0575 rows=68 loops=1)
+
+68
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	0
+Handler_read_next	68
+Handler_read_prev	0
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.list.CANCELLED.w7
+-> Limit: 20 row(s)  (cost=219 rows=20) (actual time=0.325..0.33 rows=20 loops=1)
+    -> Index range scan on exercise_sessions using idx_session_status_starttime over (status = 'CANCELLED' AND '2025-09-24 00:00:00' <= start_time) (reverse), with index condition: ((exercise_sessions.`status` = 'CANCELLED') and (exercise_sessions.start_time >= <cache>((cast('2025-10-01 00:00:00' as datetime) - interval 7 day))))  (cost=219 rows=486) (actual time=0.324..0.328 rows=20 loops=1)
+
+2630	5650	2025-09-30 23:19:00	CANCELLED
+56967	12207	2025-09-30 23:15:00	CANCELLED
+11357	10295	2025-09-30 22:50:00	CANCELLED
+9577	9425	2025-09-30 22:38:00	CANCELLED
+19553	1042	2025-09-30 22:23:00	CANCELLED
+66288	12963	2025-09-30 21:28:00	CANCELLED
+20	5516	2025-09-30 21:21:00	CANCELLED
+44491	1166	2025-09-30 21:04:00	CANCELLED
+38788	2619	2025-09-30 20:23:00	CANCELLED
+65271	602	2025-09-30 20:16:00	CANCELLED
+94033	11979	2025-09-30 20:14:00	CANCELLED
+36225	13075	2025-09-30 19:51:00	CANCELLED
+50762	14146	2025-09-30 19:15:00	CANCELLED
+87026	7529	2025-09-30 19:03:00	CANCELLED
+84356	8826	2025-09-30 18:45:00	CANCELLED
+77048	7067	2025-09-30 18:40:00	CANCELLED
+59273	8629	2025-09-30 18:21:00	CANCELLED
+56175	5999	2025-09-30 17:41:00	CANCELLED
+18391	10183	2025-09-30 17:34:00	CANCELLED
+92425	7370	2025-09-30 17:29:00	CANCELLED
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	0
+Handler_read_next	0
+Handler_read_prev	19
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.listForceTime.CANCELLED.w7
+-> Limit: 20 row(s)  (cost=0.53 rows=0.252) (actual time=0.046..0.195 rows=20 loops=1)
+    -> Filter: (exercise_sessions.`status` = 'CANCELLED')  (cost=0.53 rows=0.252) (actual time=0.0455..0.193 rows=20 loops=1)
+        -> Index range scan on exercise_sessions using idx_session_starttime_member over ('2025-09-24 00:00:00' <= start_time) (reverse), with index condition: (exercise_sessions.start_time >= <cache>((cast('2025-10-01 00:00:00' as datetime) - interval 7 day)))  (cost=0.53 rows=1) (actual time=0.0316..0.183 rows=84 loops=1)
+
+2630	5650	2025-09-30 23:19:00	CANCELLED
+56967	12207	2025-09-30 23:15:00	CANCELLED
+11357	10295	2025-09-30 22:50:00	CANCELLED
+9577	9425	2025-09-30 22:38:00	CANCELLED
+19553	1042	2025-09-30 22:23:00	CANCELLED
+66288	12963	2025-09-30 21:28:00	CANCELLED
+20	5516	2025-09-30 21:21:00	CANCELLED
+44491	1166	2025-09-30 21:04:00	CANCELLED
+38788	2619	2025-09-30 20:23:00	CANCELLED
+65271	602	2025-09-30 20:16:00	CANCELLED
+94033	11979	2025-09-30 20:14:00	CANCELLED
+36225	13075	2025-09-30 19:51:00	CANCELLED
+50762	14146	2025-09-30 19:15:00	CANCELLED
+87026	7529	2025-09-30 19:03:00	CANCELLED
+84356	8826	2025-09-30 18:45:00	CANCELLED
+77048	7067	2025-09-30 18:40:00	CANCELLED
+59273	8629	2025-09-30 18:21:00	CANCELLED
+56175	5999	2025-09-30 17:41:00	CANCELLED
+18391	10183	2025-09-30 17:34:00	CANCELLED
+92425	7370	2025-09-30 17:29:00	CANCELLED
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	1
+Handler_read_next	0
+Handler_read_prev	83
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.count.CANCELLED.w7
+-> Aggregate: count(0)  (cost=146 rows=1) (actual time=0.225..0.225 rows=1 loops=1)
+    -> Filter: ((exercise_sessions.`status` = 'CANCELLED') and (exercise_sessions.start_time >= <cache>((cast('2025-10-01 00:00:00' as datetime) - interval 7 day))))  (cost=97.7 rows=486) (actual time=0.0269..0.206 rows=486 loops=1)
+        -> Covering index range scan on exercise_sessions using idx_session_status_starttime over (status = 'CANCELLED' AND '2025-09-24 00:00:00' <= start_time)  (cost=97.7 rows=486) (actual time=0.0238..0.104 rows=486 loops=1)
+
+486
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	0
+Handler_read_next	486
+Handler_read_prev	0
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.list.CANCELLED.w30
+-> Limit: 20 row(s)  (cost=925 rows=20) (actual time=0.675..0.681 rows=20 loops=1)
+    -> Index range scan on exercise_sessions using idx_session_status_starttime over (status = 'CANCELLED' AND '2025-09-01 00:00:00' <= start_time) (reverse), with index condition: ((exercise_sessions.`status` = 'CANCELLED') and (exercise_sessions.start_time >= <cache>((cast('2025-10-01 00:00:00' as datetime) - interval 30 day))))  (cost=925 rows=2054) (actual time=0.674..0.679 rows=20 loops=1)
+
+2630	5650	2025-09-30 23:19:00	CANCELLED
+56967	12207	2025-09-30 23:15:00	CANCELLED
+11357	10295	2025-09-30 22:50:00	CANCELLED
+9577	9425	2025-09-30 22:38:00	CANCELLED
+19553	1042	2025-09-30 22:23:00	CANCELLED
+66288	12963	2025-09-30 21:28:00	CANCELLED
+20	5516	2025-09-30 21:21:00	CANCELLED
+44491	1166	2025-09-30 21:04:00	CANCELLED
+38788	2619	2025-09-30 20:23:00	CANCELLED
+65271	602	2025-09-30 20:16:00	CANCELLED
+94033	11979	2025-09-30 20:14:00	CANCELLED
+36225	13075	2025-09-30 19:51:00	CANCELLED
+50762	14146	2025-09-30 19:15:00	CANCELLED
+87026	7529	2025-09-30 19:03:00	CANCELLED
+84356	8826	2025-09-30 18:45:00	CANCELLED
+77048	7067	2025-09-30 18:40:00	CANCELLED
+59273	8629	2025-09-30 18:21:00	CANCELLED
+56175	5999	2025-09-30 17:41:00	CANCELLED
+18391	10183	2025-09-30 17:34:00	CANCELLED
+92425	7370	2025-09-30 17:29:00	CANCELLED
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	0
+Handler_read_next	0
+Handler_read_prev	19
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.listForceTime.CANCELLED.w30
+-> Limit: 20 row(s)  (cost=0.53 rows=0.252) (actual time=0.116..0.374 rows=20 loops=1)
+    -> Filter: (exercise_sessions.`status` = 'CANCELLED')  (cost=0.53 rows=0.252) (actual time=0.114..0.37 rows=20 loops=1)
+        -> Index range scan on exercise_sessions using idx_session_starttime_member over ('2025-09-01 00:00:00' <= start_time) (reverse), with index condition: (exercise_sessions.start_time >= <cache>((cast('2025-10-01 00:00:00' as datetime) - interval 30 day)))  (cost=0.53 rows=1) (actual time=0.0358..0.347 rows=84 loops=1)
+
+2630	5650	2025-09-30 23:19:00	CANCELLED
+56967	12207	2025-09-30 23:15:00	CANCELLED
+11357	10295	2025-09-30 22:50:00	CANCELLED
+9577	9425	2025-09-30 22:38:00	CANCELLED
+19553	1042	2025-09-30 22:23:00	CANCELLED
+66288	12963	2025-09-30 21:28:00	CANCELLED
+20	5516	2025-09-30 21:21:00	CANCELLED
+44491	1166	2025-09-30 21:04:00	CANCELLED
+38788	2619	2025-09-30 20:23:00	CANCELLED
+65271	602	2025-09-30 20:16:00	CANCELLED
+94033	11979	2025-09-30 20:14:00	CANCELLED
+36225	13075	2025-09-30 19:51:00	CANCELLED
+50762	14146	2025-09-30 19:15:00	CANCELLED
+87026	7529	2025-09-30 19:03:00	CANCELLED
+84356	8826	2025-09-30 18:45:00	CANCELLED
+77048	7067	2025-09-30 18:40:00	CANCELLED
+59273	8629	2025-09-30 18:21:00	CANCELLED
+56175	5999	2025-09-30 17:41:00	CANCELLED
+18391	10183	2025-09-30 17:34:00	CANCELLED
+92425	7370	2025-09-30 17:29:00	CANCELLED
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	1
+Handler_read_next	0
+Handler_read_prev	83
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.count.CANCELLED.w30
+-> Aggregate: count(0)  (cost=617 rows=1) (actual time=1.04..1.04 rows=1 loops=1)
+    -> Filter: ((exercise_sessions.`status` = 'CANCELLED') and (exercise_sessions.start_time >= <cache>((cast('2025-10-01 00:00:00' as datetime) - interval 30 day))))  (cost=412 rows=2054) (actual time=0.101..0.937 rows=2054 loops=1)
+        -> Covering index range scan on exercise_sessions using idx_session_status_starttime over (status = 'CANCELLED' AND '2025-09-01 00:00:00' <= start_time)  (cost=412 rows=2054) (actual time=0.0943..0.52 rows=2054 loops=1)
+
+2054
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	0
+Handler_read_next	2054
+Handler_read_prev	0
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.list.CANCELLED.w0
+-> Limit: 20 row(s)  (cost=5302 rows=20) (actual time=5.76..5.76 rows=20 loops=1)
+    -> Filter: (exercise_sessions.`status` = 'CANCELLED')  (cost=5302 rows=49896) (actual time=5.76..5.76 rows=20 loops=1)
+        -> Index lookup on exercise_sessions using idx_session_status_starttime (status='CANCELLED') (reverse)  (cost=5302 rows=49896) (actual time=5.75..5.75 rows=20 loops=1)
+
+2630	5650	2025-09-30 23:19:00	CANCELLED
+56967	12207	2025-09-30 23:15:00	CANCELLED
+11357	10295	2025-09-30 22:50:00	CANCELLED
+9577	9425	2025-09-30 22:38:00	CANCELLED
+19553	1042	2025-09-30 22:23:00	CANCELLED
+66288	12963	2025-09-30 21:28:00	CANCELLED
+20	5516	2025-09-30 21:21:00	CANCELLED
+44491	1166	2025-09-30 21:04:00	CANCELLED
+38788	2619	2025-09-30 20:23:00	CANCELLED
+65271	602	2025-09-30 20:16:00	CANCELLED
+94033	11979	2025-09-30 20:14:00	CANCELLED
+36225	13075	2025-09-30 19:51:00	CANCELLED
+50762	14146	2025-09-30 19:15:00	CANCELLED
+87026	7529	2025-09-30 19:03:00	CANCELLED
+84356	8826	2025-09-30 18:45:00	CANCELLED
+77048	7067	2025-09-30 18:40:00	CANCELLED
+59273	8629	2025-09-30 18:21:00	CANCELLED
+56175	5999	2025-09-30 17:41:00	CANCELLED
+18391	10183	2025-09-30 17:34:00	CANCELLED
+92425	7370	2025-09-30 17:29:00	CANCELLED
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	0
+Handler_read_next	0
+Handler_read_prev	19
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.listForceTime.CANCELLED.w0
+-> Limit: 20 row(s)  (cost=4.78 rows=5.03) (actual time=0.0769..0.193 rows=20 loops=1)
+    -> Filter: (exercise_sessions.`status` = 'CANCELLED')  (cost=4.78 rows=5.03) (actual time=0.0763..0.192 rows=20 loops=1)
+        -> Index scan on exercise_sessions using idx_session_starttime_member (reverse)  (cost=4.78 rows=20) (actual time=0.0713..0.179 rows=84 loops=1)
+
+2630	5650	2025-09-30 23:19:00	CANCELLED
+56967	12207	2025-09-30 23:15:00	CANCELLED
+11357	10295	2025-09-30 22:50:00	CANCELLED
+9577	9425	2025-09-30 22:38:00	CANCELLED
+19553	1042	2025-09-30 22:23:00	CANCELLED
+66288	12963	2025-09-30 21:28:00	CANCELLED
+20	5516	2025-09-30 21:21:00	CANCELLED
+44491	1166	2025-09-30 21:04:00	CANCELLED
+38788	2619	2025-09-30 20:23:00	CANCELLED
+65271	602	2025-09-30 20:16:00	CANCELLED
+94033	11979	2025-09-30 20:14:00	CANCELLED
+36225	13075	2025-09-30 19:51:00	CANCELLED
+50762	14146	2025-09-30 19:15:00	CANCELLED
+87026	7529	2025-09-30 19:03:00	CANCELLED
+84356	8826	2025-09-30 18:45:00	CANCELLED
+77048	7067	2025-09-30 18:40:00	CANCELLED
+59273	8629	2025-09-30 18:21:00	CANCELLED
+56175	5999	2025-09-30 17:41:00	CANCELLED
+18391	10183	2025-09-30 17:34:00	CANCELLED
+92425	7370	2025-09-30 17:29:00	CANCELLED
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	1
+Handler_read_next	0
+Handler_read_prev	83
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.count.CANCELLED.w0
+-> Aggregate: count(0)  (cost=10001 rows=1) (actual time=20.7..20.7 rows=1 loops=1)
+    -> Filter: (exercise_sessions.`status` = 'CANCELLED')  (cost=5011 rows=49896) (actual time=0.743..19.1 rows=25168 loops=1)
+        -> Covering index lookup on exercise_sessions using idx_session_status_starttime (status='CANCELLED')  (cost=5011 rows=49896) (actual time=0.737..9.92 rows=25168 loops=1)
+
+25168
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	0
+Handler_read_next	25168
+Handler_read_prev	0
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.list.IN_PROGRESS.w1
+-> Limit: 20 row(s)  (cost=31.8 rows=20) (actual time=0.267..0.273 rows=20 loops=1)
+    -> Index range scan on exercise_sessions using idx_session_status_starttime over (status = 'IN_PROGRESS' AND '2025-09-30 00:00:00' <= start_time) (reverse), with index condition: ((exercise_sessions.`status` = 'IN_PROGRESS') and (exercise_sessions.start_time >= <cache>((cast('2025-10-01 00:00:00' as datetime) - interval 1 day))))  (cost=31.8 rows=70) (actual time=0.267..0.271 rows=20 loops=1)
+
+35870	12808	2025-09-30 23:28:00	IN_PROGRESS
+95557	310	2025-09-30 22:59:00	IN_PROGRESS
+88787	1686	2025-09-30 22:49:00	IN_PROGRESS
+24022	1005	2025-09-30 22:48:00	IN_PROGRESS
+73887	9880	2025-09-30 22:29:00	IN_PROGRESS
+64231	895	2025-09-30 22:15:00	IN_PROGRESS
+74549	11565	2025-09-30 21:52:00	IN_PROGRESS
+25797	11547	2025-09-30 21:46:00	IN_PROGRESS
+76728	1805	2025-09-30 21:11:00	IN_PROGRESS
+82158	5385	2025-09-30 21:02:00	IN_PROGRESS
+23410	2356	2025-09-30 20:05:00	IN_PROGRESS
+17941	4410	2025-09-30 19:59:00	IN_PROGRESS
+97819	13936	2025-09-30 19:32:00	IN_PROGRESS
+86653	6799	2025-09-30 19:24:00	IN_PROGRESS
+39530	9501	2025-09-30 19:10:00	IN_PROGRESS
+38791	2619	2025-09-30 18:13:00	IN_PROGRESS
+71892	5095	2025-09-30 17:45:00	IN_PROGRESS
+69255	25	2025-09-30 17:45:00	IN_PROGRESS
+83512	9018	2025-09-30 17:25:00	IN_PROGRESS
+77606	9705	2025-09-30 16:48:00	IN_PROGRESS
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	0
+Handler_read_next	0
+Handler_read_prev	19
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.listForceTime.IN_PROGRESS.w1
+-> Limit: 20 row(s)  (cost=0.525 rows=0.249) (actual time=0.0402..0.205 rows=20 loops=1)
+    -> Filter: (exercise_sessions.`status` = 'IN_PROGRESS')  (cost=0.525 rows=0.249) (actual time=0.0396..0.203 rows=20 loops=1)
+        -> Index range scan on exercise_sessions using idx_session_starttime_member over ('2025-09-30 00:00:00' <= start_time) (reverse), with index condition: (exercise_sessions.start_time >= <cache>((cast('2025-10-01 00:00:00' as datetime) - interval 1 day)))  (cost=0.525 rows=1) (actual time=0.0296..0.193 rows=91 loops=1)
+
+35870	12808	2025-09-30 23:28:00	IN_PROGRESS
+95557	310	2025-09-30 22:59:00	IN_PROGRESS
+88787	1686	2025-09-30 22:49:00	IN_PROGRESS
+24022	1005	2025-09-30 22:48:00	IN_PROGRESS
+73887	9880	2025-09-30 22:29:00	IN_PROGRESS
+64231	895	2025-09-30 22:15:00	IN_PROGRESS
+74549	11565	2025-09-30 21:52:00	IN_PROGRESS
+25797	11547	2025-09-30 21:46:00	IN_PROGRESS
+76728	1805	2025-09-30 21:11:00	IN_PROGRESS
+82158	5385	2025-09-30 21:02:00	IN_PROGRESS
+23410	2356	2025-09-30 20:05:00	IN_PROGRESS
+17941	4410	2025-09-30 19:59:00	IN_PROGRESS
+97819	13936	2025-09-30 19:32:00	IN_PROGRESS
+86653	6799	2025-09-30 19:24:00	IN_PROGRESS
+39530	9501	2025-09-30 19:10:00	IN_PROGRESS
+38791	2619	2025-09-30 18:13:00	IN_PROGRESS
+71892	5095	2025-09-30 17:45:00	IN_PROGRESS
+69255	25	2025-09-30 17:45:00	IN_PROGRESS
+83512	9018	2025-09-30 17:25:00	IN_PROGRESS
+77606	9705	2025-09-30 16:48:00	IN_PROGRESS
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	1
+Handler_read_next	0
+Handler_read_prev	90
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.count.IN_PROGRESS.w1
+-> Aggregate: count(0)  (cost=21.3 rows=1) (actual time=0.0601..0.0601 rows=1 loops=1)
+    -> Filter: ((exercise_sessions.`status` = 'IN_PROGRESS') and (exercise_sessions.start_time >= <cache>((cast('2025-10-01 00:00:00' as datetime) - interval 1 day))))  (cost=14.3 rows=70) (actual time=0.0346..0.0552 rows=70 loops=1)
+        -> Covering index range scan on exercise_sessions using idx_session_status_starttime over (status = 'IN_PROGRESS' AND '2025-09-30 00:00:00' <= start_time)  (cost=14.3 rows=70) (actual time=0.0302..0.037 rows=70 loops=1)
+
+70
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	0
+Handler_read_next	70
+Handler_read_prev	0
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.list.IN_PROGRESS.w7
+-> Limit: 20 row(s)  (cost=226 rows=20) (actual time=0.479..0.487 rows=20 loops=1)
+    -> Index range scan on exercise_sessions using idx_session_status_starttime over (status = 'IN_PROGRESS' AND '2025-09-24 00:00:00' <= start_time) (reverse), with index condition: ((exercise_sessions.`status` = 'IN_PROGRESS') and (exercise_sessions.start_time >= <cache>((cast('2025-10-01 00:00:00' as datetime) - interval 7 day))))  (cost=226 rows=502) (actual time=0.476..0.482 rows=20 loops=1)
+
+35870	12808	2025-09-30 23:28:00	IN_PROGRESS
+95557	310	2025-09-30 22:59:00	IN_PROGRESS
+88787	1686	2025-09-30 22:49:00	IN_PROGRESS
+24022	1005	2025-09-30 22:48:00	IN_PROGRESS
+73887	9880	2025-09-30 22:29:00	IN_PROGRESS
+64231	895	2025-09-30 22:15:00	IN_PROGRESS
+74549	11565	2025-09-30 21:52:00	IN_PROGRESS
+25797	11547	2025-09-30 21:46:00	IN_PROGRESS
+76728	1805	2025-09-30 21:11:00	IN_PROGRESS
+82158	5385	2025-09-30 21:02:00	IN_PROGRESS
+23410	2356	2025-09-30 20:05:00	IN_PROGRESS
+17941	4410	2025-09-30 19:59:00	IN_PROGRESS
+97819	13936	2025-09-30 19:32:00	IN_PROGRESS
+86653	6799	2025-09-30 19:24:00	IN_PROGRESS
+39530	9501	2025-09-30 19:10:00	IN_PROGRESS
+38791	2619	2025-09-30 18:13:00	IN_PROGRESS
+71892	5095	2025-09-30 17:45:00	IN_PROGRESS
+69255	25	2025-09-30 17:45:00	IN_PROGRESS
+83512	9018	2025-09-30 17:25:00	IN_PROGRESS
+77606	9705	2025-09-30 16:48:00	IN_PROGRESS
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	0
+Handler_read_next	0
+Handler_read_prev	19
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.listForceTime.IN_PROGRESS.w7
+-> Limit: 20 row(s)  (cost=0.525 rows=0.249) (actual time=0.0593..9.97 rows=20 loops=1)
+    -> Filter: (exercise_sessions.`status` = 'IN_PROGRESS')  (cost=0.525 rows=0.249) (actual time=0.0586..9.97 rows=20 loops=1)
+        -> Index range scan on exercise_sessions using idx_session_starttime_member over ('2025-09-24 00:00:00' <= start_time) (reverse), with index condition: (exercise_sessions.start_time >= <cache>((cast('2025-10-01 00:00:00' as datetime) - interval 7 day)))  (cost=0.525 rows=1) (actual time=0.0425..9.94 rows=91 loops=1)
+
+35870	12808	2025-09-30 23:28:00	IN_PROGRESS
+95557	310	2025-09-30 22:59:00	IN_PROGRESS
+88787	1686	2025-09-30 22:49:00	IN_PROGRESS
+24022	1005	2025-09-30 22:48:00	IN_PROGRESS
+73887	9880	2025-09-30 22:29:00	IN_PROGRESS
+64231	895	2025-09-30 22:15:00	IN_PROGRESS
+74549	11565	2025-09-30 21:52:00	IN_PROGRESS
+25797	11547	2025-09-30 21:46:00	IN_PROGRESS
+76728	1805	2025-09-30 21:11:00	IN_PROGRESS
+82158	5385	2025-09-30 21:02:00	IN_PROGRESS
+23410	2356	2025-09-30 20:05:00	IN_PROGRESS
+17941	4410	2025-09-30 19:59:00	IN_PROGRESS
+97819	13936	2025-09-30 19:32:00	IN_PROGRESS
+86653	6799	2025-09-30 19:24:00	IN_PROGRESS
+39530	9501	2025-09-30 19:10:00	IN_PROGRESS
+38791	2619	2025-09-30 18:13:00	IN_PROGRESS
+71892	5095	2025-09-30 17:45:00	IN_PROGRESS
+69255	25	2025-09-30 17:45:00	IN_PROGRESS
+83512	9018	2025-09-30 17:25:00	IN_PROGRESS
+77606	9705	2025-09-30 16:48:00	IN_PROGRESS
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	1
+Handler_read_next	0
+Handler_read_prev	90
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.count.IN_PROGRESS.w7
+-> Aggregate: count(0)  (cost=151 rows=1) (actual time=0.226..0.226 rows=1 loops=1)
+    -> Filter: ((exercise_sessions.`status` = 'IN_PROGRESS') and (exercise_sessions.start_time >= <cache>((cast('2025-10-01 00:00:00' as datetime) - interval 7 day))))  (cost=101 rows=502) (actual time=0.0275..0.209 rows=502 loops=1)
+        -> Covering index range scan on exercise_sessions using idx_session_status_starttime over (status = 'IN_PROGRESS' AND '2025-09-24 00:00:00' <= start_time)  (cost=101 rows=502) (actual time=0.0243..0.105 rows=502 loops=1)
+
+502
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	0
+Handler_read_next	502
+Handler_read_prev	0
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.list.IN_PROGRESS.w30
+-> Limit: 20 row(s)  (cost=932 rows=20) (actual time=0.688..0.694 rows=20 loops=1)
+    -> Index range scan on exercise_sessions using idx_session_status_starttime over (status = 'IN_PROGRESS' AND '2025-09-01 00:00:00' <= start_time) (reverse), with index condition: ((exercise_sessions.`status` = 'IN_PROGRESS') and (exercise_sessions.start_time >= <cache>((cast('2025-10-01 00:00:00' as datetime) - interval 30 day))))  (cost=932 rows=2071) (actual time=0.687..0.692 rows=20 loops=1)
+
+35870	12808	2025-09-30 23:28:00	IN_PROGRESS
+95557	310	2025-09-30 22:59:00	IN_PROGRESS
+88787	1686	2025-09-30 22:49:00	IN_PROGRESS
+24022	1005	2025-09-30 22:48:00	IN_PROGRESS
+73887	9880	2025-09-30 22:29:00	IN_PROGRESS
+64231	895	2025-09-30 22:15:00	IN_PROGRESS
+74549	11565	2025-09-30 21:52:00	IN_PROGRESS
+25797	11547	2025-09-30 21:46:00	IN_PROGRESS
+76728	1805	2025-09-30 21:11:00	IN_PROGRESS
+82158	5385	2025-09-30 21:02:00	IN_PROGRESS
+23410	2356	2025-09-30 20:05:00	IN_PROGRESS
+17941	4410	2025-09-30 19:59:00	IN_PROGRESS
+97819	13936	2025-09-30 19:32:00	IN_PROGRESS
+86653	6799	2025-09-30 19:24:00	IN_PROGRESS
+39530	9501	2025-09-30 19:10:00	IN_PROGRESS
+38791	2619	2025-09-30 18:13:00	IN_PROGRESS
+71892	5095	2025-09-30 17:45:00	IN_PROGRESS
+69255	25	2025-09-30 17:45:00	IN_PROGRESS
+83512	9018	2025-09-30 17:25:00	IN_PROGRESS
+77606	9705	2025-09-30 16:48:00	IN_PROGRESS
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	0
+Handler_read_next	0
+Handler_read_prev	19
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.listForceTime.IN_PROGRESS.w30
+-> Limit: 20 row(s)  (cost=0.525 rows=0.249) (actual time=0.0563..0.541 rows=20 loops=1)
+    -> Filter: (exercise_sessions.`status` = 'IN_PROGRESS')  (cost=0.525 rows=0.249) (actual time=0.0558..0.538 rows=20 loops=1)
+        -> Index range scan on exercise_sessions using idx_session_starttime_member over ('2025-09-01 00:00:00' <= start_time) (reverse), with index condition: (exercise_sessions.start_time >= <cache>((cast('2025-10-01 00:00:00' as datetime) - interval 30 day)))  (cost=0.525 rows=1) (actual time=0.0427..0.513 rows=91 loops=1)
+
+35870	12808	2025-09-30 23:28:00	IN_PROGRESS
+95557	310	2025-09-30 22:59:00	IN_PROGRESS
+88787	1686	2025-09-30 22:49:00	IN_PROGRESS
+24022	1005	2025-09-30 22:48:00	IN_PROGRESS
+73887	9880	2025-09-30 22:29:00	IN_PROGRESS
+64231	895	2025-09-30 22:15:00	IN_PROGRESS
+74549	11565	2025-09-30 21:52:00	IN_PROGRESS
+25797	11547	2025-09-30 21:46:00	IN_PROGRESS
+76728	1805	2025-09-30 21:11:00	IN_PROGRESS
+82158	5385	2025-09-30 21:02:00	IN_PROGRESS
+23410	2356	2025-09-30 20:05:00	IN_PROGRESS
+17941	4410	2025-09-30 19:59:00	IN_PROGRESS
+97819	13936	2025-09-30 19:32:00	IN_PROGRESS
+86653	6799	2025-09-30 19:24:00	IN_PROGRESS
+39530	9501	2025-09-30 19:10:00	IN_PROGRESS
+38791	2619	2025-09-30 18:13:00	IN_PROGRESS
+71892	5095	2025-09-30 17:45:00	IN_PROGRESS
+69255	25	2025-09-30 17:45:00	IN_PROGRESS
+83512	9018	2025-09-30 17:25:00	IN_PROGRESS
+77606	9705	2025-09-30 16:48:00	IN_PROGRESS
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	1
+Handler_read_next	0
+Handler_read_prev	90
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.count.IN_PROGRESS.w30
+-> Aggregate: count(0)  (cost=622 rows=1) (actual time=0.877..0.877 rows=1 loops=1)
+    -> Filter: ((exercise_sessions.`status` = 'IN_PROGRESS') and (exercise_sessions.start_time >= <cache>((cast('2025-10-01 00:00:00' as datetime) - interval 30 day))))  (cost=415 rows=2071) (actual time=0.0405..0.797 rows=2071 loops=1)
+        -> Covering index range scan on exercise_sessions using idx_session_status_starttime over (status = 'IN_PROGRESS' AND '2025-09-01 00:00:00' <= start_time)  (cost=415 rows=2071) (actual time=0.0375..0.393 rows=2071 loops=1)
+
+2071
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	0
+Handler_read_next	2071
+Handler_read_prev	0
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.list.IN_PROGRESS.w0
+-> Limit: 20 row(s)  (cost=5302 rows=20) (actual time=12..12 rows=20 loops=1)
+    -> Filter: (exercise_sessions.`status` = 'IN_PROGRESS')  (cost=5302 rows=49896) (actual time=12..12 rows=20 loops=1)
+        -> Index lookup on exercise_sessions using idx_session_status_starttime (status='IN_PROGRESS') (reverse)  (cost=5302 rows=49896) (actual time=12..12 rows=20 loops=1)
+
+35870	12808	2025-09-30 23:28:00	IN_PROGRESS
+95557	310	2025-09-30 22:59:00	IN_PROGRESS
+88787	1686	2025-09-30 22:49:00	IN_PROGRESS
+24022	1005	2025-09-30 22:48:00	IN_PROGRESS
+73887	9880	2025-09-30 22:29:00	IN_PROGRESS
+64231	895	2025-09-30 22:15:00	IN_PROGRESS
+74549	11565	2025-09-30 21:52:00	IN_PROGRESS
+25797	11547	2025-09-30 21:46:00	IN_PROGRESS
+76728	1805	2025-09-30 21:11:00	IN_PROGRESS
+82158	5385	2025-09-30 21:02:00	IN_PROGRESS
+23410	2356	2025-09-30 20:05:00	IN_PROGRESS
+17941	4410	2025-09-30 19:59:00	IN_PROGRESS
+97819	13936	2025-09-30 19:32:00	IN_PROGRESS
+86653	6799	2025-09-30 19:24:00	IN_PROGRESS
+39530	9501	2025-09-30 19:10:00	IN_PROGRESS
+38791	2619	2025-09-30 18:13:00	IN_PROGRESS
+71892	5095	2025-09-30 17:45:00	IN_PROGRESS
+69255	25	2025-09-30 17:45:00	IN_PROGRESS
+83512	9018	2025-09-30 17:25:00	IN_PROGRESS
+77606	9705	2025-09-30 16:48:00	IN_PROGRESS
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	0
+Handler_read_next	0
+Handler_read_prev	19
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.listForceTime.IN_PROGRESS.w0
+-> Limit: 20 row(s)  (cost=4.74 rows=4.99) (actual time=0.101..0.387 rows=20 loops=1)
+    -> Filter: (exercise_sessions.`status` = 'IN_PROGRESS')  (cost=4.74 rows=4.99) (actual time=0.1..0.384 rows=20 loops=1)
+        -> Index scan on exercise_sessions using idx_session_starttime_member (reverse)  (cost=4.74 rows=20) (actual time=0.0937..0.358 rows=91 loops=1)
+
+35870	12808	2025-09-30 23:28:00	IN_PROGRESS
+95557	310	2025-09-30 22:59:00	IN_PROGRESS
+88787	1686	2025-09-30 22:49:00	IN_PROGRESS
+24022	1005	2025-09-30 22:48:00	IN_PROGRESS
+73887	9880	2025-09-30 22:29:00	IN_PROGRESS
+64231	895	2025-09-30 22:15:00	IN_PROGRESS
+74549	11565	2025-09-30 21:52:00	IN_PROGRESS
+25797	11547	2025-09-30 21:46:00	IN_PROGRESS
+76728	1805	2025-09-30 21:11:00	IN_PROGRESS
+82158	5385	2025-09-30 21:02:00	IN_PROGRESS
+23410	2356	2025-09-30 20:05:00	IN_PROGRESS
+17941	4410	2025-09-30 19:59:00	IN_PROGRESS
+97819	13936	2025-09-30 19:32:00	IN_PROGRESS
+86653	6799	2025-09-30 19:24:00	IN_PROGRESS
+39530	9501	2025-09-30 19:10:00	IN_PROGRESS
+38791	2619	2025-09-30 18:13:00	IN_PROGRESS
+71892	5095	2025-09-30 17:45:00	IN_PROGRESS
+69255	25	2025-09-30 17:45:00	IN_PROGRESS
+83512	9018	2025-09-30 17:25:00	IN_PROGRESS
+77606	9705	2025-09-30 16:48:00	IN_PROGRESS
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	1
+Handler_read_next	0
+Handler_read_prev	90
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.count.IN_PROGRESS.w0
+-> Aggregate: count(0)  (cost=10001 rows=1) (actual time=25.6..25.6 rows=1 loops=1)
+    -> Filter: (exercise_sessions.`status` = 'IN_PROGRESS')  (cost=5011 rows=49896) (actual time=0.476..24 rows=24954 loops=1)
+        -> Covering index lookup on exercise_sessions using idx_session_status_starttime (status='IN_PROGRESS')  (cost=5011 rows=49896) (actual time=0.472..10.6 rows=24954 loops=1)
+
+24954
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	0
+Handler_read_next	24954
+Handler_read_prev	0
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.list.COMPLETED.w1
+-> Limit: 20 row(s)  (cost=30.4 rows=20) (actual time=0.166..0.17 rows=20 loops=1)
+    -> Index range scan on exercise_sessions using idx_session_status_starttime over (status = 'COMPLETED' AND '2025-09-30 00:00:00' <= start_time) (reverse), with index condition: ((exercise_sessions.`status` = 'COMPLETED') and (exercise_sessions.start_time >= <cache>((cast('2025-10-01 00:00:00' as datetime) - interval 1 day))))  (cost=30.4 rows=67) (actual time=0.166..0.169 rows=20 loops=1)
+
+16293	8689	2025-09-30 23:52:00	COMPLETED
+73252	10211	2025-09-30 23:12:00	COMPLETED
+38595	13727	2025-09-30 22:41:00	COMPLETED
+43850	2977	2025-09-30 22:29:00	COMPLETED
+53658	11940	2025-09-30 22:18:00	COMPLETED
+37454	2311	2025-09-30 22:08:00	COMPLETED
+27721	14280	2025-09-30 21:58:00	COMPLETED
+61938	12148	2025-09-30 21:21:00	COMPLETED
+4607	12670	2025-09-30 21:06:00	COMPLETED
+21567	10741	2025-09-30 20:44:00	COMPLETED
+91725	8817	2025-09-30 20:16:00	COMPLETED
+93421	4438	2025-09-30 20:09:00	COMPLETED
+84987	3689	2025-09-30 20:09:00	COMPLETED
+57225	5033	2025-09-30 19:08:00	COMPLETED
+50082	14239	2025-09-30 19:00:00	COMPLETED
+71866	10124	2025-09-30 18:44:00	COMPLETED
+18271	6306	2025-09-30 18:41:00	COMPLETED
+4843	4533	2025-09-30 18:24:00	COMPLETED
+20631	9985	2025-09-30 18:23:00	COMPLETED
+3991	9506	2025-09-30 17:34:00	COMPLETED
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	0
+Handler_read_next	0
+Handler_read_prev	19
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.listForceTime.COMPLETED.w1
+-> Limit: 20 row(s)  (cost=0.53 rows=0.252) (actual time=0.0591..0.207 rows=20 loops=1)
+    -> Filter: (exercise_sessions.`status` = 'COMPLETED')  (cost=0.53 rows=0.252) (actual time=0.0585..0.205 rows=20 loops=1)
+        -> Index range scan on exercise_sessions using idx_session_starttime_member over ('2025-09-30 00:00:00' <= start_time) (reverse), with index condition: (exercise_sessions.start_time >= <cache>((cast('2025-10-01 00:00:00' as datetime) - interval 1 day)))  (cost=0.53 rows=1) (actual time=0.044..0.191 rows=83 loops=1)
+
+16293	8689	2025-09-30 23:52:00	COMPLETED
+73252	10211	2025-09-30 23:12:00	COMPLETED
+38595	13727	2025-09-30 22:41:00	COMPLETED
+43850	2977	2025-09-30 22:29:00	COMPLETED
+53658	11940	2025-09-30 22:18:00	COMPLETED
+37454	2311	2025-09-30 22:08:00	COMPLETED
+27721	14280	2025-09-30 21:58:00	COMPLETED
+61938	12148	2025-09-30 21:21:00	COMPLETED
+4607	12670	2025-09-30 21:06:00	COMPLETED
+21567	10741	2025-09-30 20:44:00	COMPLETED
+91725	8817	2025-09-30 20:16:00	COMPLETED
+93421	4438	2025-09-30 20:09:00	COMPLETED
+84987	3689	2025-09-30 20:09:00	COMPLETED
+57225	5033	2025-09-30 19:08:00	COMPLETED
+50082	14239	2025-09-30 19:00:00	COMPLETED
+71866	10124	2025-09-30 18:44:00	COMPLETED
+18271	6306	2025-09-30 18:41:00	COMPLETED
+4843	4533	2025-09-30 18:24:00	COMPLETED
+20631	9985	2025-09-30 18:23:00	COMPLETED
+3991	9506	2025-09-30 17:34:00	COMPLETED
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	1
+Handler_read_next	0
+Handler_read_prev	82
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.count.COMPLETED.w1
+-> Aggregate: count(0)  (cost=20.4 rows=1) (actual time=0.0967..0.0968 rows=1 loops=1)
+    -> Filter: ((exercise_sessions.`status` = 'COMPLETED') and (exercise_sessions.start_time >= <cache>((cast('2025-10-01 00:00:00' as datetime) - interval 1 day))))  (cost=13.7 rows=67) (actual time=0.0445..0.0902 rows=67 loops=1)
+        -> Covering index range scan on exercise_sessions using idx_session_status_starttime over (status = 'COMPLETED' AND '2025-09-30 00:00:00' <= start_time)  (cost=13.7 rows=67) (actual time=0.0398..0.0537 rows=67 loops=1)
+
+67
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	0
+Handler_read_next	67
+Handler_read_prev	0
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.list.COMPLETED.w7
+-> Limit: 20 row(s)  (cost=234 rows=20) (actual time=0.554..0.561 rows=20 loops=1)
+    -> Index range scan on exercise_sessions using idx_session_status_starttime over (status = 'COMPLETED' AND '2025-09-24 00:00:00' <= start_time) (reverse), with index condition: ((exercise_sessions.`status` = 'COMPLETED') and (exercise_sessions.start_time >= <cache>((cast('2025-10-01 00:00:00' as datetime) - interval 7 day))))  (cost=234 rows=520) (actual time=0.553..0.559 rows=20 loops=1)
+
+16293	8689	2025-09-30 23:52:00	COMPLETED
+73252	10211	2025-09-30 23:12:00	COMPLETED
+38595	13727	2025-09-30 22:41:00	COMPLETED
+43850	2977	2025-09-30 22:29:00	COMPLETED
+53658	11940	2025-09-30 22:18:00	COMPLETED
+37454	2311	2025-09-30 22:08:00	COMPLETED
+27721	14280	2025-09-30 21:58:00	COMPLETED
+61938	12148	2025-09-30 21:21:00	COMPLETED
+4607	12670	2025-09-30 21:06:00	COMPLETED
+21567	10741	2025-09-30 20:44:00	COMPLETED
+91725	8817	2025-09-30 20:16:00	COMPLETED
+93421	4438	2025-09-30 20:09:00	COMPLETED
+84987	3689	2025-09-30 20:09:00	COMPLETED
+57225	5033	2025-09-30 19:08:00	COMPLETED
+50082	14239	2025-09-30 19:00:00	COMPLETED
+71866	10124	2025-09-30 18:44:00	COMPLETED
+18271	6306	2025-09-30 18:41:00	COMPLETED
+4843	4533	2025-09-30 18:24:00	COMPLETED
+20631	9985	2025-09-30 18:23:00	COMPLETED
+3991	9506	2025-09-30 17:34:00	COMPLETED
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	0
+Handler_read_next	0
+Handler_read_prev	19
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.listForceTime.COMPLETED.w7
+-> Limit: 20 row(s)  (cost=0.53 rows=0.252) (actual time=0.0585..0.454 rows=20 loops=1)
+    -> Filter: (exercise_sessions.`status` = 'COMPLETED')  (cost=0.53 rows=0.252) (actual time=0.0578..0.449 rows=20 loops=1)
+        -> Index range scan on exercise_sessions using idx_session_starttime_member over ('2025-09-24 00:00:00' <= start_time) (reverse), with index condition: (exercise_sessions.start_time >= <cache>((cast('2025-10-01 00:00:00' as datetime) - interval 7 day)))  (cost=0.53 rows=1) (actual time=0.0445..0.417 rows=83 loops=1)
+
+16293	8689	2025-09-30 23:52:00	COMPLETED
+73252	10211	2025-09-30 23:12:00	COMPLETED
+38595	13727	2025-09-30 22:41:00	COMPLETED
+43850	2977	2025-09-30 22:29:00	COMPLETED
+53658	11940	2025-09-30 22:18:00	COMPLETED
+37454	2311	2025-09-30 22:08:00	COMPLETED
+27721	14280	2025-09-30 21:58:00	COMPLETED
+61938	12148	2025-09-30 21:21:00	COMPLETED
+4607	12670	2025-09-30 21:06:00	COMPLETED
+21567	10741	2025-09-30 20:44:00	COMPLETED
+91725	8817	2025-09-30 20:16:00	COMPLETED
+93421	4438	2025-09-30 20:09:00	COMPLETED
+84987	3689	2025-09-30 20:09:00	COMPLETED
+57225	5033	2025-09-30 19:08:00	COMPLETED
+50082	14239	2025-09-30 19:00:00	COMPLETED
+71866	10124	2025-09-30 18:44:00	COMPLETED
+18271	6306	2025-09-30 18:41:00	COMPLETED
+4843	4533	2025-09-30 18:24:00	COMPLETED
+20631	9985	2025-09-30 18:23:00	COMPLETED
+3991	9506	2025-09-30 17:34:00	COMPLETED
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	1
+Handler_read_next	0
+Handler_read_prev	82
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.count.COMPLETED.w7
+-> Aggregate: count(0)  (cost=156 rows=1) (actual time=0.644..0.645 rows=1 loops=1)
+    -> Filter: ((exercise_sessions.`status` = 'COMPLETED') and (exercise_sessions.start_time >= <cache>((cast('2025-10-01 00:00:00' as datetime) - interval 7 day))))  (cost=104 rows=520) (actual time=0.062..0.592 rows=520 loops=1)
+        -> Covering index range scan on exercise_sessions using idx_session_status_starttime over (status = 'COMPLETED' AND '2025-09-24 00:00:00' <= start_time)  (cost=104 rows=520) (actual time=0.0529..0.305 rows=520 loops=1)
+
+520
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	0
+Handler_read_next	520
+Handler_read_prev	0
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.list.COMPLETED.w30
+-> Limit: 20 row(s)  (cost=913 rows=20) (actual time=2.14..2.15 rows=20 loops=1)
+    -> Index range scan on exercise_sessions using idx_session_status_starttime over (status = 'COMPLETED' AND '2025-09-01 00:00:00' <= start_time) (reverse), with index condition: ((exercise_sessions.`status` = 'COMPLETED') and (exercise_sessions.start_time >= <cache>((cast('2025-10-01 00:00:00' as datetime) - interval 30 day))))  (cost=913 rows=2028) (actual time=2.14..2.15 rows=20 loops=1)
+
+16293	8689	2025-09-30 23:52:00	COMPLETED
+73252	10211	2025-09-30 23:12:00	COMPLETED
+38595	13727	2025-09-30 22:41:00	COMPLETED
+43850	2977	2025-09-30 22:29:00	COMPLETED
+53658	11940	2025-09-30 22:18:00	COMPLETED
+37454	2311	2025-09-30 22:08:00	COMPLETED
+27721	14280	2025-09-30 21:58:00	COMPLETED
+61938	12148	2025-09-30 21:21:00	COMPLETED
+4607	12670	2025-09-30 21:06:00	COMPLETED
+21567	10741	2025-09-30 20:44:00	COMPLETED
+91725	8817	2025-09-30 20:16:00	COMPLETED
+93421	4438	2025-09-30 20:09:00	COMPLETED
+84987	3689	2025-09-30 20:09:00	COMPLETED
+57225	5033	2025-09-30 19:08:00	COMPLETED
+50082	14239	2025-09-30 19:00:00	COMPLETED
+71866	10124	2025-09-30 18:44:00	COMPLETED
+18271	6306	2025-09-30 18:41:00	COMPLETED
+4843	4533	2025-09-30 18:24:00	COMPLETED
+20631	9985	2025-09-30 18:23:00	COMPLETED
+3991	9506	2025-09-30 17:34:00	COMPLETED
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	0
+Handler_read_next	0
+Handler_read_prev	19
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.listForceTime.COMPLETED.w30
+-> Limit: 20 row(s)  (cost=0.53 rows=0.252) (actual time=0.069..0.4 rows=20 loops=1)
+    -> Filter: (exercise_sessions.`status` = 'COMPLETED')  (cost=0.53 rows=0.252) (actual time=0.0682..0.397 rows=20 loops=1)
+        -> Index range scan on exercise_sessions using idx_session_starttime_member over ('2025-09-01 00:00:00' <= start_time) (reverse), with index condition: (exercise_sessions.start_time >= <cache>((cast('2025-10-01 00:00:00' as datetime) - interval 30 day)))  (cost=0.53 rows=1) (actual time=0.0544..0.362 rows=83 loops=1)
+
+16293	8689	2025-09-30 23:52:00	COMPLETED
+73252	10211	2025-09-30 23:12:00	COMPLETED
+38595	13727	2025-09-30 22:41:00	COMPLETED
+43850	2977	2025-09-30 22:29:00	COMPLETED
+53658	11940	2025-09-30 22:18:00	COMPLETED
+37454	2311	2025-09-30 22:08:00	COMPLETED
+27721	14280	2025-09-30 21:58:00	COMPLETED
+61938	12148	2025-09-30 21:21:00	COMPLETED
+4607	12670	2025-09-30 21:06:00	COMPLETED
+21567	10741	2025-09-30 20:44:00	COMPLETED
+91725	8817	2025-09-30 20:16:00	COMPLETED
+93421	4438	2025-09-30 20:09:00	COMPLETED
+84987	3689	2025-09-30 20:09:00	COMPLETED
+57225	5033	2025-09-30 19:08:00	COMPLETED
+50082	14239	2025-09-30 19:00:00	COMPLETED
+71866	10124	2025-09-30 18:44:00	COMPLETED
+18271	6306	2025-09-30 18:41:00	COMPLETED
+4843	4533	2025-09-30 18:24:00	COMPLETED
+20631	9985	2025-09-30 18:23:00	COMPLETED
+3991	9506	2025-09-30 17:34:00	COMPLETED
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	1
+Handler_read_next	0
+Handler_read_prev	82
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.count.COMPLETED.w30
+-> Aggregate: count(0)  (cost=610 rows=1) (actual time=2.06..2.06 rows=1 loops=1)
+    -> Filter: ((exercise_sessions.`status` = 'COMPLETED') and (exercise_sessions.start_time >= <cache>((cast('2025-10-01 00:00:00' as datetime) - interval 30 day))))  (cost=407 rows=2028) (actual time=0.0958..1.92 rows=2028 loops=1)
+        -> Covering index range scan on exercise_sessions using idx_session_status_starttime over (status = 'COMPLETED' AND '2025-09-01 00:00:00' <= start_time)  (cost=407 rows=2028) (actual time=0.0879..1.04 rows=2028 loops=1)
+
+2028
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	0
+Handler_read_next	2028
+Handler_read_prev	0
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.list.COMPLETED.w0
+-> Limit: 20 row(s)  (cost=5302 rows=20) (actual time=16.6..16.7 rows=20 loops=1)
+    -> Filter: (exercise_sessions.`status` = 'COMPLETED')  (cost=5302 rows=49896) (actual time=16.6..16.7 rows=20 loops=1)
+        -> Index lookup on exercise_sessions using idx_session_status_starttime (status='COMPLETED') (reverse)  (cost=5302 rows=49896) (actual time=16.6..16.7 rows=20 loops=1)
+
+16293	8689	2025-09-30 23:52:00	COMPLETED
+73252	10211	2025-09-30 23:12:00	COMPLETED
+38595	13727	2025-09-30 22:41:00	COMPLETED
+43850	2977	2025-09-30 22:29:00	COMPLETED
+53658	11940	2025-09-30 22:18:00	COMPLETED
+37454	2311	2025-09-30 22:08:00	COMPLETED
+27721	14280	2025-09-30 21:58:00	COMPLETED
+61938	12148	2025-09-30 21:21:00	COMPLETED
+4607	12670	2025-09-30 21:06:00	COMPLETED
+21567	10741	2025-09-30 20:44:00	COMPLETED
+91725	8817	2025-09-30 20:16:00	COMPLETED
+93421	4438	2025-09-30 20:09:00	COMPLETED
+84987	3689	2025-09-30 20:09:00	COMPLETED
+57225	5033	2025-09-30 19:08:00	COMPLETED
+50082	14239	2025-09-30 19:00:00	COMPLETED
+71866	10124	2025-09-30 18:44:00	COMPLETED
+18271	6306	2025-09-30 18:41:00	COMPLETED
+4843	4533	2025-09-30 18:24:00	COMPLETED
+20631	9985	2025-09-30 18:23:00	COMPLETED
+3991	9506	2025-09-30 17:34:00	COMPLETED
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	0
+Handler_read_next	0
+Handler_read_prev	19
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.listForceTime.COMPLETED.w0
+-> Limit: 20 row(s)  (cost=4.78 rows=5.03) (actual time=0.109..0.344 rows=20 loops=1)
+    -> Filter: (exercise_sessions.`status` = 'COMPLETED')  (cost=4.78 rows=5.03) (actual time=0.107..0.339 rows=20 loops=1)
+        -> Index scan on exercise_sessions using idx_session_starttime_member (reverse)  (cost=4.78 rows=20) (actual time=0.0996..0.309 rows=83 loops=1)
+
+16293	8689	2025-09-30 23:52:00	COMPLETED
+73252	10211	2025-09-30 23:12:00	COMPLETED
+38595	13727	2025-09-30 22:41:00	COMPLETED
+43850	2977	2025-09-30 22:29:00	COMPLETED
+53658	11940	2025-09-30 22:18:00	COMPLETED
+37454	2311	2025-09-30 22:08:00	COMPLETED
+27721	14280	2025-09-30 21:58:00	COMPLETED
+61938	12148	2025-09-30 21:21:00	COMPLETED
+4607	12670	2025-09-30 21:06:00	COMPLETED
+21567	10741	2025-09-30 20:44:00	COMPLETED
+91725	8817	2025-09-30 20:16:00	COMPLETED
+93421	4438	2025-09-30 20:09:00	COMPLETED
+84987	3689	2025-09-30 20:09:00	COMPLETED
+57225	5033	2025-09-30 19:08:00	COMPLETED
+50082	14239	2025-09-30 19:00:00	COMPLETED
+71866	10124	2025-09-30 18:44:00	COMPLETED
+18271	6306	2025-09-30 18:41:00	COMPLETED
+4843	4533	2025-09-30 18:24:00	COMPLETED
+20631	9985	2025-09-30 18:23:00	COMPLETED
+3991	9506	2025-09-30 17:34:00	COMPLETED
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	1
+Handler_read_next	0
+Handler_read_prev	82
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##Q|T4.count.COMPLETED.w0
+-> Aggregate: count(0)  (cost=10001 rows=1) (actual time=57.2..57.2 rows=1 loops=1)
+    -> Filter: (exercise_sessions.`status` = 'COMPLETED')  (cost=5011 rows=49896) (actual time=0.641..52.5 rows=25145 loops=1)
+        -> Covering index lookup on exercise_sessions using idx_session_status_starttime (status='COMPLETED')  (cost=5011 rows=49896) (actual time=0.635..34.4 rows=25145 loops=1)
+
+25145
+Handler_read_first	0
+Handler_read_key	1
+Handler_read_last	0
+Handler_read_next	25145
+Handler_read_prev	0
+Handler_read_rnd	0
+Handler_read_rnd_next	0
+##END
