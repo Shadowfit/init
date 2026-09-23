@@ -102,6 +102,7 @@
 - [ai-backend-coupling.md](./ai-backend-coupling.md) — AI↔Backend 결합 방식(분기 A~I) (확정 — H2 프론트 직결 등 다수 분기 채택 확정)
 - [ai-session-ownership-verification.md](./ai-session-ownership-verification.md) — 세션 소유권 검증 — 신원은 채널①에서만(#187) (진행중 — 정적 사실은 확정, 동적 재현은 미착수)
 - [api-improvement-opportunities.md](./api-improvement-opportunities.md) — 지금까지 만든 API 표면 감사 (확정 — 9개 항목 전부 커밋 반영 완료)
+- [resource-ownership-403-vs-404.md](./resource-ownership-403-vs-404.md) — 남의 리소스에 403 인가 404 인가 — 세션 안에서도 갈림 (보류 — 사용자 결정 대기, 추천 C: 개인 소유 404·그룹 403)
 - [architecture-review-2026-08-11.md](./architecture-review-2026-08-11.md) — 아키텍처 회고 — 결함·재조립·점수 (확정 — 새 결함 발견 즉시 수정, 결함 ⑤는 철회)
 - [circuit-breaker-worker-aggregation.md](./circuit-breaker-worker-aggregation.md) — 서킷브레이커 워커 3개 실패율 합산(#556) (진행중 — 워킹트리에 반영, 커밋은 별도 요청 시)
 - [grpc-integration-checklist.md](./grpc-integration-checklist.md) — gRPC 좌표 송수신(AI↔Backend) 설계 체크리스트 (진행중 — 일부 완료, 관련 이슈 열려있음)
