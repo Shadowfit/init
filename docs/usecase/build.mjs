@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { UC, GROUPS, STATUS, ACTORS, SCREENS, UPDATED } from './catalog.mjs';
+import { UC, GROUPS, STATUS, ACTORS, SCREENS, UPDATED, BACKEND, BE_STATUS } from './catalog.mjs';
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 const byId = Object.fromEntries(UC.map((u) => [u.id, u]));
@@ -18,6 +18,8 @@ const counts = Object.fromEntries(Object.keys(STATUS).map((k) => [k, UC.filter((
 const demoSteps = UC.filter((u) => typeof u.demo === 'number').sort((a, b) => a.demo - b.demo);
 const demoAll = UC.filter((u) => u.demo);
 const blockers = UC.filter((u) => u.blocker);
+const beOf = (u) => BACKEND[u.id] ?? ['na'];
+const beCounts = Object.fromEntries(Object.keys(BE_STATUS).map((k) => [k, UC.filter((u) => beOf(u)[0] === k).length]));
 
 /* ───────────── SVG 기본기 ───────────── */
 function svgOpen(W, H, label, n) {
@@ -69,7 +71,7 @@ function legend(x, y, keys, n) {
 function overview(mode, n) {
   const demo = mode === 'demo';
   const W = 1360, GX = 256, GW = 848, BW = 264, BH = 56, GAPX = 16, GAPY = 16, PADL = 12;
-  const RIGHT = { B: ['AI 서버'], C: ['LLM (Gemini)'], E: ['모임 친구', 'Expo Push'], G: ['관리자'], S: ['스케줄러'] };
+  const RIGHT = { B: ['AI 서버'], C: ['LLM (Gemini)'], E: ['모임 친구', 'Expo Push'], G: ['관리자'], H: ['트레이너'], S: ['스케줄러'] };
   const fadedActor = { 'LLM (Gemini)': true, 'Expo Push': true };
 
   let body = '', y = 132;
@@ -109,7 +111,7 @@ function overview(mode, n) {
     list.forEach((name, i) => {
       const ay = list.length === 1 ? mids[k].mid : mids[k].top + (i === 0 ? 130 : mids[k].h - 110);
       const faded = demo && fadedActor[name];
-      const person = name === '관리자' || name === '모임 친구';
+      const person = name === '관리자' || name === '모임 친구' || name === '트레이너';
       actors += `<line x1="${GX + GW}" y1="${ay}" x2="${person ? 1208 : 1156}" y2="${ay}" stroke="${LINE}" stroke-width="1.5"${faded ? ' opacity="0.4"' : ''}/>`;
       actors += person ? stick(1246, ay + 6, name, { faded }) : sysActor(1156, ay - 32, 184, 64, name, faded);
     });
@@ -289,13 +291,18 @@ const socialRel = (n) => relFigure({
 const md = (s) => String(s);
 function readme() {
   const L = [];
-  L.push(`# ShadowFit 유스케이스 — 프론트 관점`, '');
-  L.push(`기준: ${UPDATED} 코드 · 총 ${UC.length}개. **상태는 «앱 화면 + API 연동» 기준**이다 — 백엔드 API 가 있어도 화면이 없으면 «화면 없음» 으로 센다. 백엔드 관점의 옛 초안은 [\`../USE-CASES.md\`](../USE-CASES.md)(2026-07, UC-01 식 번호).`, '');
+  L.push(`# ShadowFit 유스케이스`, '');
+  L.push(`기준: ${UPDATED} 코드 · 총 ${UC.length}개. 이 저장소의 **유스케이스 정본**이다 — 2026-09-23 에 백엔드 관점 문서([\`../USE-CASES.md\`](../USE-CASES.md))를 여기로 합쳤다.`, '');
+  L.push(`상태는 두 축이다. **앱** 축은 «앱 화면 + API 연동» 기준이라 백엔드 API 가 있어도 화면이 없으면 «화면 없음» 으로 센다 — 그림 색과 시연 판정은 이 축이다. **백엔드** 축은 서버 API · 내부 동작이 있는지다. 두 축이 다른 행(백엔드 완료 · 앱 화면 없음)이 남은 프론트 일이다.`, '');
+  L.push(`백엔드가 **왜** 이렇게 생겼는지(흐름 상세 · 설계 판단 W-01~W-41 · 알려진 결함)는 [\`design-rationale.md\`](./design-rationale.md) 에 있다. 명세의 «백엔드» 줄에 붙은 W-nn 이 그 번호다.`, '');
   L.push(`> 이 문서와 그림은 [\`catalog.mjs\`](./catalog.mjs) 에서 생성된다. 손으로 고치지 말고 카탈로그를 고친 뒤 아래 «갱신 방법» 을 돌릴 것.`, '');
   L.push(`## 한눈에`, '');
   L.push(`| 상태 | 뜻 | 개수 |`, `|---|---|:--:|`);
   const mean = { done: '화면이 있고 API 까지 붙어 동작', partial: '화면은 있으나 일부가 목업 · 미연결', noscreen: '백엔드 API 는 있는데 앱 화면이 없음', planned: '백엔드 · AI 도 없거나 화면이 목업뿐', backend: '앱 화면 대상이 아님 (Swagger · 서버 내부)' };
   for (const k of Object.keys(STATUS)) L.push(`| ${STATUS[k].label} | ${mean[k]} | ${counts[k]} |`);
+  const beMean = { done: '서버 API · 내부 동작이 있다', partial: '서버 쪽 일부만 있다', none: '서버 API 가 없다', na: '서버가 할 일이 없다 (앱 · AI 만의 일)' };
+  L.push('', `| 백엔드 | 뜻 | 개수 |`, `|---|---|:--:|`);
+  for (const k of Object.keys(BE_STATUS)) L.push(`| ${BE_STATUS[k].label} | ${beMean[k]} | ${beCounts[k]} |`);
   L.push('', `**시연을 끊는 것 ${blockers.length}개** — 시연 필수인데 아직 미완:`, '');
   for (const b of blockers) L.push(`- **${b.id} ${b.name}** — ${md(b.note)}`);
   L.push('', `## 그림`, '');
@@ -310,11 +317,18 @@ function readme() {
   L.push(`## 3자 회의 자료 (2026-09-21) — 역할별 1장 + 통합 1장`, '');
   L.push(`[\`roles.mjs\`](./roles.mjs) 가 만든다. 역할별 장은 **각자 가져온 내용 그대로**(프론트 = 이 카탈로그 · 백엔드 = 담당자 그림 3장 · AI = 담당자 PDF UC-01~09), 통합본만 ID 를 하나로 맞추고 유스케이스마다 F · B · A 세 역할의 상태를 나란히 놓았다.`, '');
   for (const [f, t] of [['10-role-frontend', '프론트엔드'], ['11-role-backend', '백엔드'], ['12-role-ai', 'AI'], ['13-integrated', '통합']]) L.push(`### ${t}`, '', `![${t}](./png/${f}.png)`, '');
+  L.push(`이 네 장은 **09-21 회의 시점 스냅샷**이라 \`build.mjs\` 가 다시 만들지 않는다. 통합본에서 새로 생긴 번호(B-07 종목 선택 · B-08 촬영 점검 · B-09 스쿼트 횟수)는 09-23 에 카탈로그로 옮겼고, 그 뒤 바뀐 상태(세트 B-06 백엔드 완료 등)는 아래 목록이 정본이다.`, '');
   L.push(`통합본의 A 열은 AI 담당자 **보고 기준**이다 — main 브랜치에는 스쿼트 분석기뿐이라(\`ai-server/app/core/analyzer_registry.py\`), 보고로는 구현이지만 main 에 없는 칸은 붉은 \\* 로 표시했다.`, '');
   L.push(`## 시연 순서`, '', `| # | 유스케이스 | 화면 | 상태 |`, `|:--:|---|---|---|`);
   for (const u of UC.filter((x) => x.demo === 'pre')) L.push(`| 사전 | ${u.id} ${u.name} | ${u.screen} | ${STATUS[u.status].label} |`);
   for (const u of demoSteps) L.push(`| ${u.demo} | ${u.id} ${u.name}${u.blocker ? ' 🔴' : ''} | ${u.screen} | ${STATUS[u.status].label} |`);
   for (const u of UC.filter((x) => x.demo === 'bg')) L.push(`| 배경 | ${u.id} ${u.name} | ${u.screen} | ${STATUS[u.status].label} |`);
+  L.push('', `## 목록`, '', `| ID | 이름 | 액터 | 앱 | 백엔드 | 시연 |`, `|---|---|---|---|---|:--:|`);
+  for (const grp of GROUPS) for (const id of grp.ids) {
+    const u = byId[id];
+    const demo = typeof u.demo === 'number' ? `${u.demo}` : u.demo === 'pre' ? '사전' : u.demo === 'bg' ? '배경' : '';
+    L.push(`| ${u.id} | ${u.name}${u.blocker ? ' 🔴' : ''} | ${u.actors.join(', ')} | ${STATUS[u.status].label} | ${BE_STATUS[beOf(u)[0]].label} | ${demo} |`);
+  }
   L.push('', `## 액터`, '', `| 액터 | 유형 | 설명 |`, `|---|---|---|`);
   for (const a of ACTORS) L.push(`| ${a.name} | ${a.kind} | ${a.desc} |`);
   L.push('', `## 유스케이스 명세`, '');
@@ -333,6 +347,8 @@ function readme() {
       if (u.alt.length) { L.push(`- **대안 · 예외**`); u.alt.forEach((m) => L.push(`  - ${m}`)); }
       L.push(`- **사후조건**: ${u.post}`);
       if (u.note) L.push(`- **프론트 메모**: ${u.note}`);
+      const [bs, bn] = beOf(u);
+      L.push(`- **백엔드**: ${BE_STATUS[bs].label}${bn ? ` — ${bn}` : ''}`);
       L.push('');
     }
   }
