@@ -142,13 +142,13 @@ class GroupInvitationControllerIntegrationTest {
     }
 
     @Test
-    @DisplayName("초대 수락 — 초대받은 사람이 아니면 403")
-    void accept_wrongInvitee_returns403() throws Exception {
+    @DisplayName("초대 수락 — 초대받은 사람이 아니면 404 (없는 초대와 같은 답)")
+    void accept_wrongInvitee_returns404() throws Exception {
         GroupInvitation invitation = sendInvitation();
 
         mockMvc.perform(post("/invitations/" + invitation.getId() + "/accept")
                         .header("Authorization", "Bearer " + ownerToken))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isNotFound());
     }
 
     @Test
