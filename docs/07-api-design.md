@@ -555,10 +555,12 @@ message FeedbackBatchResponse {
 ```json
 {
   "status": 400,
-  "error": "BAD_REQUEST",
-  "message": "유효하지 않은 이메일 형식입니다."
+  "code": "C001",
+  "message": "email: 올바른 형식의 이메일 주소여야 합니다",
+  "timestamp": "2026-09-23T14:30:00"
 }
 ```
+모든 에러(401·403·429 포함)가 이 모양이다. 분기는 `code` 로 한다 — 코드 목록은 [`17-error-codes.md`](./17-error-codes.md).
 
 ## 인증 방식
 - JWT Bearer Token

@@ -6,20 +6,21 @@ import lombok.Getter;
 @Getter
 public enum ErrorCode {
 
+    // code 값은 ErrorResponseDto.code 로 클라이언트에 나가는 계약이다 — 한 번 쓴 번호는 뜻을 바꾸거나
+    // 다른 항목에 재사용하지 않는다. 비어 있는 번호(C004·C005·A003·U002·W002·W004·V001~V003·AI*·I*)는
+    // 호출부 없이 정의만 있다가 2026-09-23 에 지운 것들이라 결번으로 남긴다.
 
     // --- Common ---
     INVALID_INPUT_VALUE(400, "C001", "올바르지 않은 입력값입니다."),
     METHOD_NOT_ALLOWED(405, "C002", "허용되지 않은 HTTP 메서드입니다."),
     INTERNAL_SERVER_ERROR(500, "C003", "서버 내부 오류가 발생했습니다."),
-    INVALID_TYPE_VALUE(400, "C004", "입력값의 타입이 적절하지 않습니다."),
-    HANDLE_ACCESS_DENIED(403, "C005", "접근이 거부되었습니다."),
     RESOURCE_NOT_FOUND(404, "C006", "요청한 경로를 찾을 수 없습니다."),
     FILE_TOO_LARGE(413, "C007", "파일 크기가 제한을 초과했습니다."),
+    UNSUPPORTED_MEDIA_TYPE(415, "C008", "지원하지 않는 Content-Type 입니다."),
 
     // --- Auth ---
     UNAUTHORIZED(401, "A001", "로그인이 필요한 서비스입니다."),
     ACCESS_DENIED(403, "A002", "해당 리소스에 대한 접근 권한이 없습니다."),
-    TOKEN_EXPIRED(401, "A003", "인증 토큰이 만료되었습니다."),
     INVALID_TOKEN(401, "A004", "잘못된 인증 토큰입니다."),
     LOGIN_INPUT_INVALID(401, "A005", "비밀번호가 틀렸습니다."),
     // 폐기된 refresh token 이 도착했다 — 재시도 유예 밖이라 탈취로 본다 (이슈 #135).
@@ -27,21 +28,18 @@ public enum ErrorCode {
     // 문구에 «탈취» 라고 쓰지 않는 것은 의도다 — 낡은 기기가 살아 있을 때도 같은 코드가 나가고
     // (decisions/token-lifecycle.md §4-3), 서버는 그 둘을 구분하지 못한다.
     //
-    // 🔴 **이 코드는 지금 클라에 도달하지 않는다.** ErrorResponseDto 가 status·message·timestamp
-    // 만 싣고 code 를 안 싣는다. 즉 프론트는 A004(단순 무효)와 이걸 **message 문자열로만** 가를 수
-    // 있다. 응답에 code 를 추가하는 것은 전 에러 응답의 계약 변경이라 이 작업 범위 밖으로 뒀다.
+    // 2026-09-23 부터 ErrorResponseDto 가 code 를 싣는다 — 프론트는 A004(단순 무효)와 이걸 code 로
+    // 가를 수 있다(그 전엔 message 문자열뿐이었다). 프론트가 실제로 가르는지는 별개다.
     REFRESH_TOKEN_REUSED(401, "A006", "만료된 로그인 정보입니다. 보안을 위해 다시 로그인해 주세요."),
 
     // --- User & Persona ---
     USER_NOT_FOUND(404, "U001", "존재하지 않는 사용자입니다."),
-    INVALID_PERSONA_TYPE(400, "U002", "유효하지 않은 페르소나 설정입니다."),
     USERID_DUPLICATION(400, "U003", "이미 가입된 사용자입니다."),
     // 이슈 #195 — username 도 UNIQUE(V1__baseline.sql:28)인데 사전검사가 email 에만 있어
     // 겹친 닉네임으로 가입하면 400 이 아니라 500 이 나갔다.
     //
-    // U003 을 재사용하지 않는 이유는 «코드» 가 아니라 «문구» 다. ErrorResponseDto 는 code 를
-    // 싣지 않고(29~31행), 프론트는 message 를 그대로 사용자에게 띄운다
-    // (frontend/app/(auth)/login.tsx:229-231). 즉 메시지가 유일한 식별자다 — 닉네임만 겹친
+    // U003 을 재사용하지 않는 이유는 «코드» 가 아니라 «문구» 다. 프론트는 message 를 그대로
+    // 사용자에게 띄운다(frontend/app/(auth)/login.tsx:229-231). 닉네임만 겹친
     // 신규 사용자에게 "이미 가입된 사용자입니다"가 나가면, 있지도 않은 자기 계정을 찾아
     // 로그인·비밀번호 찾기로 가게 된다.
     //
@@ -52,9 +50,7 @@ public enum ErrorCode {
 
     // --- Workout Session  ---
     EXERCISE_NOT_FOUND(404, "W001", "존재하지 않는 운동 종목입니다."),
-    METADATA_NOT_FOUND(404, "W002", "운동 메타데이터(JSON/Video)를 찾을 수 없습니다."),
     SESSION_NOT_FOUND(404, "W003", "진행 중인 운동 세션을 찾을 수 없습니다."),
-    S3_UPLOAD_ERROR(500, "W004", "파일 저장소(S3) 연결에 실패했습니다."),
     SESSION_ALREADY_IN_PROGRESS(409, "W005", "이미 진행 중인 운동 세션이 있습니다."),
     SESSION_DELETE_NOT_ALLOWED(409, "W006", "진행 중인 세션은 삭제할 수 없습니다."),
     // 종목 행은 있으나 ai-server에 분석기가 아직 없는 경우(런지·플랭크). 409가 아닌 400인 이유는
@@ -129,20 +125,7 @@ public enum ErrorCode {
     TOO_MANY_AUTH_REQUESTS(429, "A008", "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."),
 
     // --- F10-1 Filtering Engine ---
-    LOW_SYNC_RATE(400, "V001", "운동 싱크로율이 너무 낮아 기록되지 않았습니다."),
-    INVALID_WORKOUT_DATA(400, "V002", "부정행위 또는 유효하지 않은 움직임이 감지되었습니다."),
-    INSUFFICIENT_COUNT(400, "V003", "최소 운동 횟수를 채우지 못했습니다."),
     DATA_INTEGRITY_VIOLATION(422, "V004", "전달된 좌표 데이터가 손상되었거나 형식이 맞지 않습니다."),
-
-    // --- AI & GPT Factory ---
-    AI_FEEDBACK_FAILED(503, "AI001", "AI 피드백 생성 중 오류가 발생했습니다."),
-    PROMPT_TEMPLATE_ERROR(500, "AI002", "GPT 프롬프트 생성 로직에 오류가 발생했습니다."),
-    AI_QUOTA_EXCEEDED(429, "AI003", "AI 서비스 호출 할당량을 초과했습니다."),
-
-    // --- Infrastructure & Cache  ---
-    REDIS_CONNECTION_FAILURE(500, "I001", "캐시 서버 연결에 실패했습니다."),
-    API_RESPONSE_TIMEOUT(504, "I002", "API 응답 시간이 초과되었습니다. (Threshold: 500ms)"),
-    DATABASE_LOCK_FAILURE(500, "I003", "데이터베이스 트랜잭션 처리 중 오류가 발생했습니다."),
 
     //Report
     REPORT_NOT_FOUND(404,"R001","리포트를 찾을 수 없습니다"),
