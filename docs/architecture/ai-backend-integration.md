@@ -1,6 +1,6 @@
 # AI ↔ Backend 결합 현황
 
-마지막 업데이트: **2026-09-06** (§3-2 RPC별 stub 종류 정정 추가 — 이전 대규모 반영은 2026-08-08, §0 참조)
+마지막 업데이트: **2026-09-23** (§6 아웃박스 — 송신 예외도 재시도 상한 안으로, #759. 그 전: 09-06 §3-2 RPC별 stub 종류 정정 — 대규모 반영은 2026-08-08, §0 참조)
 범위: `ai-server/` (Python, FastAPI + gRPC) ↔ `backend/` (Spring Boot, Java/Kotlin)
 목적: 현재 어떻게 결합돼 있는지 사실만 정리한 스냅샷. 트레이드오프·대안 비교는 [`docs/decisions/ai-backend-coupling.md`](../decisions/ai-backend-coupling.md) 참조.
 
@@ -234,7 +234,7 @@ AI 컨테이너가 재시작되면 in-memory `SessionState` 가 사라지는데,
 | **AI 콜백 스레드 상한** 🆕 (2026-09-14, #614) | `app/grpc/callback_pool.py` · `exercise_servicer.get_complete_callback_pool` | 완료 콜백은 고정 크기 데몬 풀(기본 `GRPC_MAX_WORKERS`)에서 돈다. Spring 이 느려도 AI 의 스레드는 안 는다 — 대신 **큐가 는다**(`shadowfit_ai_complete_callback_pending`·`_in_flight`). 🔴 큐 상한은 없다: 버릴 후보가 없어서(유실 = 세션이 IN_PROGRESS 로 남음). Spring 장애가 AI 서버로 번지던 캐스케이드 경로를 끊는 것이지 전달 보장을 바꾸는 것은 아니다 |
 | Spring 낙관적 락 재시도 | `SessionService.completeSession` | `@Version` 충돌 시 최대 3회 |
 | 타임아웃 양보 | `SessionTimeoutScheduler` | AI 완료 콜백이 늦게 와도 충돌 시 AI 결과 우선 |
-| **아웃박스 (상한 있는 재시도)** 🆕 | `OutboxPublisher` + `outbox_events` 테이블 | 종료 통보를 DB 에 같이 커밋 → 폴링 발행 → **재시도 상한 10회 초과 시 터미널 `FAILED`**(`OutboxPublisher.java:148-149`). 🔴 **무한 재시도가 아니므로 «반드시 전달» 이 아니다** |
+| **아웃박스 (상한 있는 재시도)** 🆕 | `OutboxPublisher` + `outbox_events` 테이블 | 종료 통보를 DB 에 같이 커밋 → 폴링 발행 → **재시도 상한 10회 초과 시 터미널 `FAILED`**(`AbstractOutboxPublisher.dispatchOne` 의 RETRY 분기). 🔴 **무한 재시도가 아니므로 «반드시 전달» 이 아니다**. 🔄 **2026-09-23(#759)**: 송신(`dispatch()`)이 **던진 예외**도 RETRY 로 세어 같은 상한을 쓴다 — 전엔 행을 `PROCESSING` 으로 두고 lease 회수에 맡겼는데 회수는 `retry_count` 를 안 올려, 영구 예외(NPE·잘못된 페이로드)가 상한 **밖에서** lease 주기마다 무한 반복했다. 결과 기록 단계(DB 쓰기) 예외만 여전히 회수 대기 |
 | **gRPC deadline** 🆕 | `ExerciseAnalysisService` — 모든 스텁에 `withDeadlineAfter` | AI 가 hang 해도 호출 스레드가 무한 대기하지 않는다 |
 | **서킷브레이커** 🆕 | Resilience4j `aiServer` 인스턴스 (`CircuitBreakerRegistry`) | AI 연속 실패 시 회로 개방 — 죽은 서버에 계속 밀어넣지 않는다 |
 | **correlation id 전파** 🆕 | `CorrelationIdFilter` · `GrpcCorrelation{Client,Server}Interceptor` · `CorrelationIds` | HTTP `X-Request-Id` → MDC(`cid`) → gRPC 메타데이터 `x-request-id` → FastAPI `ContextVar`. `@Async`·스케줄러 경계도 넘긴다 |

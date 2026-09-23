@@ -210,6 +210,33 @@ class WeeklyReportLlmOutboxIntegrationTest {
         assertThat(row.getFallbackReason()).isEqualTo("exhausted");
     }
 
+    /**
+     * #759 회귀 고정. dispatch() 가 던진 예외(여기선 집계가 NPE)는 예전엔 행을 PROCESSING 으로 두고 lease 회수에
+     * 맡겼다 — 회수는 retryCount 를 안 올려 리포트가 영원히 «준비 중» 이었다. 이제 RETRY 로 세고 소진되면 발행기 훅이 닫는다.
+     */
+    @Test
+    @DisplayName("dispatch 가 던진 영구 예외도 RETRY 로 세고, 소진되면 발행기 훅이 exhausted 로 닫는다 — 영원히 PENDING 이 아니다")
+    void permanentException_countsAsRetry_thenExhaustedClosesRow() throws Exception {
+        read();
+        when(weeklySummaryService.compute(anyLong(), any())).thenThrow(new NullPointerException("집계 버그 흉내"));
+
+        reportPublisher.dispatchPending();
+        OutboxEvent event = outboxRepository.findAll().get(0);
+        assertThat(event.getStatus()).isEqualTo(OutboxStatus.PENDING);
+        assertThat(event.getRetryCount()).isEqualTo(1);
+        assertThat(event.getNextRetryAt()).isNotNull();
+
+        event.setRetryCount(12);
+        event.setNextRetryAt(null);
+        outboxRepository.saveAndFlush(event);
+        reportPublisher.dispatchPending();
+
+        assertThat(outboxRepository.findAll().get(0).getStatus()).isEqualTo(OutboxStatus.FAILED);
+        WeeklyReport row = weeklyReportRepository.findAll().get(0);
+        assertThat(row.getSummarySource()).isEqualTo(WeeklyReportSource.TEMPLATE_FALLBACK);
+        assertThat(row.getFallbackReason()).isEqualTo("exhausted");
+    }
+
     @Test
     @DisplayName("이번 주·미래 주는 400(R002) — LLM 문장은 끝난 주에만")
     void currentWeek_rejected() throws Exception {
