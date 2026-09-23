@@ -1,6 +1,6 @@
 # 남의 리소스에 대한 응답 — 403 인가 404 인가
 
-작성 2026-09-23. 상태: **분기점 — 사용자 결정 대기.** 아래 추천은 추천일 뿐 채택이 아니다.
+작성 2026-09-23. 상태: **결정됨(2026-09-23, 사용자 confirm) — 후보 C 채택, 로그 구분 안 함.** §7.
 출처: 백엔드 API 감사·클린코드 감사(2026-09-23)가 각자 따로 짚은 항목. 기준 코드 `origin/main` 731f2274.
 
 ---
@@ -129,6 +129,14 @@ A는 여기에 그룹 쪽 약 10곳(§2-2)과 프론트 `group/[id].tsx:103`(지
 
 | 항목 | 결정 |
 |---|---|
-| 후보 | (사용자 결정 대기 — 추천 C) |
-| 404일 때 서버 로그에 «남의 것» 구분을 남기는가 | (결정 대기) |
-| 그룹 존재 오라클을 수용하는가 (C′ 여부) | (결정 대기) |
+| 후보 | ✅ **C** — 개인 소유 404, 그룹 403 유지 (2026-09-23 사용자 confirm) |
+| 404일 때 서버 로그에 «남의 것» 구분을 남기는가 | ✅ **남기지 않는다** (2026-09-23 사용자 confirm) — 실패 경로의 추가 조회도 없다 |
+| 그룹 존재 오라클을 수용하는가 (C′ 여부) | C 채택에 따라 **수용**(그룹은 403 유지). C′ 는 채택하지 않음 |
+
+### 적용 (같은 PR)
+
+- `SessionService.endSession` → `findByIdAndMemberId`
+- `SessionFeedbackQueryService.ensureOwnership` → `existsByIdAndMemberId`(신설 — 세션 행을 쓰지 않으므로 엔티티를 싣지 않는다. §5 의 미확인 항목은 이걸로 닫음)
+- `GroupInvitationService.getRespondableInvitation` → `findByIdAndInviteeId`(신설) + `INVITATION_NOT_FOUND`
+- 테스트: 단위 3파일·통합 1파일의 403 단언 → 404. 신규 `SessionOwnershipNotFoundTest` — 실제 DB 로 «남의 세션 응답 본문 == 없는 세션 응답 본문»(timestamp 제외)을 세 엔드포인트에 대해 고정하고, 남의 종료 요청이 `endTime` 을 안 찍는 것까지 본다
+- 판정 문장은 `17-error-codes.md` §3 에 옮겨 적었다
