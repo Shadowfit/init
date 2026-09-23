@@ -121,8 +121,8 @@
 | G-01 | 운동 카테고리 관리 | 관리자 | ✅ | ❌ | `/admin/categories` CRUD |
 | G-02 | 운동 카탈로그 관리(등록·수정·삭제·종목 코드·분석 지원 토글) | 관리자 | ✅ | ❌ | `/admin/exercises` CRUD · `PATCH …/analysis-support` |
 | G-03 | **기준 동작 등록 — mp4 업로드** | 관리자, AI 서버 | ✅ (09-17) | ❌ | `POST /admin/exercises/{id}/reference-video` (multipart) → gRPC `ExtractReferenceData` 비동기 |
-| G-04 | 기준 동작 등록 — YouTube URL | 관리자, AI 서버 | △ | ❌ | `POST /exercises/{id}/reference?youtubeUrl=` — 202 를 주지만 AI 가 http(s) 를 거절 | [#800](https://github.com/Shadowfit/init/issues/800) |
-| G-05 | 싱크로율 임계값 변경 | 관리자 | △ | ❌ | `PATCH /admin/exercises/{id}/thresholds` — 저장만 되고 판정에 안 쓰인다 | [#801](https://github.com/Shadowfit/init/issues/801) |
+| G-04 | 기준 동작 등록 — YouTube URL | 관리자, AI 서버 | △ | ❌ | `POST /exercises/{id}/reference?youtubeUrl=` — 202 를 주지만 AI 가 http(s) 를 거절 |
+| G-05 | 싱크로율 임계값 변경 | 관리자 | △ | ❌ | `PATCH /admin/exercises/{id}/thresholds` — 저장만 되고 판정에 안 쓰인다 |
 | G-06 | 회원 / 세션 목록 | 관리자 | ✅ | ❌ | `GET /admin/members` · `/admin/sessions` |
 | G-07 | 대시보드 통계 | 관리자 | ✅ | ❌ | `GET /admin/stats/overview` |
 
