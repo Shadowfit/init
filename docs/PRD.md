@@ -42,6 +42,8 @@ ShadowFit은 사용자가 지정한 기준 영상(로컬 또는 YouTube)과 사�
 
 기준 분류는 캡스톤 발표자료 원본 "요구사항 정의"(HO-PT 6쪽)의 6개 카테고리를 그대로 사용. 원본 표시는 **굵게 = 발표 시점(2026-05-23 이전) 구현 완료**, **회색 = 발표 시점 계획 단계**였음을 뜻하며, 우선순위(MoSCoW)와는 별개다 — 예를 들어 "AI 분석 서버 연동"은 발표 시점엔 회색(미완료)이었지만 데모 핵심 흐름이라 우선순위는 Must다.
 
+> **2026-09-23 주석** — 이 절의 «현재 상태» 열은 07-22 시점이고, 09-23 에 TTS·리포트 행(아래 ⟳ 표시)만 [`tasks/37-product-scenario-and-use-cases.md`](./tasks/37-product-scenario-and-use-cases.md) 기준으로 고쳤다. 나머지 행의 최신 상태(앱 화면 · 백엔드 두 축)는 [`usecase/README.md`](./usecase/README.md) 가 정본이다 — 세트 · 패턴 · 추천 · 목표 · 관리자 API · 세션 삭제 · 파티션 정리는 그 뒤 백엔드가 다 들어왔다.
+
 현재 상태는 코드 기준 (✅ 완료 / 🟡 부분 / ⬜ 미착수). 출처: `REQUIREMENTS.md`, `tasks/20-feature-roadmap.md`(2026-05-23), `tasks/27-implementation-gaps.md`(2026-07-20, 최신). 프론트엔드 연동 세부 상태는 2026-05-23 이후 갱신된 문서가 없어 **검증 필요**로 표시.
 
 **담당 열 표기**: 이 프로젝트는 Spring(본인) / FastAPI(팀원) / React Native(팀원) 3자 분업([`docs/handoff/3way-meeting-agenda.md`]). "✅ 완료" 항목은 담당을 표기하지 않음(이미 끝남). 남은 작업(🟡/⬜)만 **누가 할 일인지**를 표시 — **나** = 본인(Backend/Spring), **팀원(FE)** = React Native 담당자, **팀원(AI)** = FastAPI 담당자, **나+팀원(FE)** = 백엔드 API는 내가, 화면 연동은 팀원이 해야 함. 근거: `tasks/21-task-assignment.md`(FE-*/BE-*/AI-* 작업 ID 매핑).
@@ -69,9 +71,9 @@ ShadowFit은 사용자가 지정한 기준 영상(로컬 또는 YouTube)과 사�
 | 운동 데이터 저장 | 회색(계획) | Must | ✅ | — | `pose_data` |
 | 운동 완료 결과 전송 | 회색(계획) | Must | ✅ | — | `CompleteAnalysis` |
 | 운동 자세 유사도 분석 | 회색(계획) | Must | ✅ | — | DTW (`dtw_calculator.py`) |
-| 개인화 TTS 피드백 | 회색(계획) | Should | 🟡 | 팀원(FE) — FE-07 | 서버 템플릿 8종 완료(나), 디바이스 TTS 재생부만 남음 |
-| 운동 타이머 기능 | 회색(계획) | Should | 🟡 | 팀원(FE) — FE-12 | 백엔드 `start_time`/`end_time` 이미 있음(나 몫 없음) |
-| 관절 색깔 시각화 | 회색(계획) | Should | 🟡 | 팀원(FE) — FE-08 | AI가 landmarks는 이미 반환(팀원 AI 몫 없음), 오버레이만 프론트 작업 |
+| 개인화 TTS 피드백 ⟳ | 회색(계획) | Should | 🟡 — **시연 끊김** | 팀원(FE) — 37 §6 G1(다음 미팅) | 서버 템플릿 완료. 앱은 `expo-speech` 설치만 하고 호출 0건 — 결함 토스트·햅틱뿐 (B-04) |
+| 운동 타이머 기능 ⟳ | 회색(계획) | Should | ⬜(화면) | 팀원(FE) — 37 §6 G4(다음 미팅) | 백엔드 `start_time`/`end_time` 이미 있음(나 몫 없음). 세션 화면에 경과 시간 없음 |
+| 관절 색깔 시각화 ⟳ | 회색(계획) | Should | 🟡 | 팀원(FE) — 37 §6 G3(마지막 미팅) | 싱크로율 3색 글로우는 있음. landmarks 위 관절 오버레이가 없다 |
 | 운동 세트 자동 구분 | 회색(계획) | 보류 | ⬜ | 나+팀원(AI) — BE-09+AI-03 | DB에 set 개념 자체 없음. [`project_squat_first`] 방침상 후순위, 새 스키마(나)+분석기(팀원 AI) 협의 필요 |
 | 사용자 운동 패턴 분석 | 회색(계획) | 2학기 | ⬜ | 나 — BE-07 | 백엔드 분석 로직 자체가 없음 |
 
@@ -81,10 +83,10 @@ ShadowFit은 사용자가 지정한 기준 영상(로컬 또는 YouTube)과 사�
 |---|---|---|---|---|---|
 | 메인 캘린더 대시보드 | 굵게(완료) | Must | ✅ | — | `GET /reports/calendar` |
 | 주간 운동 요약 통계 | 굵게(완료) | Must | ✅ | — | `GET /reports/weekly-summary` |
-| 실시간 자세 피드백 | 회색(계획) | Should | 🟡 | 팀원(FE) — FE-07 | 서버 생성은 완료(나 몫 없음), 실시간 표시/발화만 프론트 |
-| 이전 운동 기록 비교 | 회색(계획) | Should | 🟡 | 팀원(FE) — FE-11 | `comparison_with_previous` JSON 이미 있음(나 몫 없음), 화면만 프론트 |
-| 운동 worst 구간 선정 | 회색(계획) | Must | 🟡 | 나 — BE-02 | 조회 시 즉석 재계산(`selectWorstSection`) — precompute-on-write 로직 보강, [`tasks/27-implementation-gaps.md`] §1 |
-| AI 리포트 자동 생성 | 회색(계획) | Could | ⬜ | 나 — BE-03 | `OPENAI_API_KEY`만 준비, `GptFeedbackService` 신설 필요 |
+| 실시간 자세 피드백 ⟳ | 회색(계획) | Should | 🟡 | 팀원(FE) — 37 §6 G1 | 서버 생성 완료. 표시(토스트)는 있고 발화가 없다 — 위 TTS 행과 같은 갭 |
+| 이전 운동 기록 비교 ⟳ | 회색(계획) | Should | 🟡 — **시연 끊김** | 팀원(FE) — 37 §6 G2(다음 미팅) | `comparison_with_previous` 응답 있음. 리포트 화면이 `MOCK_REPORT` 상수라 API 미연결 (C-01) |
+| 운동 worst 구간 선정 ⟳ | 회색(계획) | Must | ✅(백엔드) / 🟡(화면) | 팀원(FE) — 37 §6 G2 | 세션 종료 때 1회 precompute(07-24, BE-02 완료). 화면은 위 행과 같은 mock 갭 |
+| AI 리포트 자동 생성 ⟳ | 회색(계획) | Could | ✅(백엔드) / ⬜(화면) | 팀원(FE) — 37 §6 G7(마지막 미팅) | 주간 리포트 AI 총평으로 구현(BE-03, Gemini · 아웃박스 · 출력 검증 폴백, PR #758). 세션 단위가 아니라 주 단위 (C-04) |
 | 데이터 기반 개인화 루틴 추천 | 회색(계획) | 2학기 | ⬜ | 나 — BE-08 (BE-07 선행) | 추천 알고리즘 설계 자체가 필요한 큰 작업 |
 | 운동 목표 달성현황 | 회색(계획) | Could | ⬜ | 나+팀원(FE) — BE-06 | 목표 엔티티·API 신설(나) + 화면(팀원) |
 
