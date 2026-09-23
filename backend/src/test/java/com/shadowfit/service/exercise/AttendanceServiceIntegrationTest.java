@@ -92,6 +92,38 @@ class AttendanceServiceIntegrationTest {
     }
 
     @Test
+    @DisplayName("#761 — 미래 세션이 첫 페이지 칸을 차지해도 페이지 경계를 넘는 streak 는 같다 (첫 페이지는 상한 없는 쿼리)")
+    void currentStreak_futureSessionsOnFirstPage() {
+        int days = AttendanceService.FETCH_BATCH + 5;
+        for (int i = 0; i < days; i++) {
+            sessionOn(member, today.minusDays(i), Status.COMPLETED);
+        }
+        sessionOn(member, today.minusDays(days + 1), Status.COMPLETED); // days 일 전이 비어 있음
+        for (int i = 1; i <= 3; i++) {
+            sessionOn(member, today.plusDays(i), Status.COMPLETED);     // 미래 — 세면 안 된다
+        }
+
+        AttendanceService.StreakRun run = attendanceService.currentStreakRun(member.getId(), today);
+        assertThat(run.length()).isEqualTo(days);
+        assertThat(run.end()).isEqualTo(today);
+    }
+
+    @Test
+    @DisplayName("#761 — 첫 페이지가 전부 미래 세션으로 차도 그 아래의 streak 를 이어 센다")
+    void currentStreak_firstPageAllFuture() {
+        for (int i = 1; i <= AttendanceService.FETCH_BATCH; i++) {
+            sessionOn(member, today.plusDays(i), Status.COMPLETED);
+        }
+        sessionOn(member, today.minusDays(1), Status.COMPLETED);
+        sessionOn(member, today.minusDays(2), Status.COMPLETED);
+        sessionOn(member, today.minusDays(4), Status.COMPLETED);
+
+        AttendanceService.StreakRun run = attendanceService.currentStreakRun(member.getId(), today);
+        assertThat(run.length()).isEqualTo(2);
+        assertThat(run.end()).isEqualTo(today.minusDays(1));
+    }
+
+    @Test
     @DisplayName("longestStreakRun — COMPLETED 만, 같은 날 여러 세션은 하루, 남의 출석 무관. 오래된 5일 구간이 최근 2일보다 길다")
     void longestStreak_realQuery() {
         for (int i = 60; i >= 56; i--) {

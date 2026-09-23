@@ -388,8 +388,13 @@ public interface SessionRepository extends JpaRepository<Session,Long> {
      * 연속 출석 계산용 — {@code before} 이전의 세션 시작 시각을 최신순으로 한 페이지. 엔티티가
      * 아니라 시각만 싣는 이유는 {@code findDistinctActiveDates} 와 같고, DISTINCT 를 안 거는 이유는
      * 표현식 DISTINCT 가 임시 테이블을 만들어 LIMIT 의 조기 종료를 잃기 때문이다 — 같은 날의
-     * 중복은 호출부가 날짜 비교로 건너뛴다. 위 {@code ...OrderByStartTimeDesc(Limit)} 와 같은
-     * 인덱스 역방향 걷기라 계정 크기와 무관한 비용(recommendation-algorithm.md §10 실측).
+     * 중복은 호출부가 날짜 비교로 건너뛴다.
+     *
+     * <p><b>두 번째 페이지부터만 쓴다</b>(#761). 커서가 기록 안쪽이면 옵티마이저가
+     * {@code idx_session_member_status_start} 역방향 range scan 을 골라 LIMIT 에서 멈추지만, 커서가
+     * «내일 00:00» 처럼 회원의 모든 행을 덮으면 {@code (member_id)} 프리픽스 ref + filesort 로 그 회원의
+     * COMPLETED 세션 전부를 읽는다(MySQL 8.0.46, 2,000세션 회원 2,000행·2.9ms). 첫 페이지는
+     * {@link #findLatestCompletedStartTimes} 로.
      */
     @Query("SELECT s.startTime FROM Session s "
          + "WHERE s.member.id = :memberId AND s.status = :status AND s.startTime < :before "
@@ -397,6 +402,22 @@ public interface SessionRepository extends JpaRepository<Session,Long> {
     List<LocalDateTime> findCompletedStartTimesBefore(@Param("memberId") Long memberId,
                                                       @Param("status") Status status,
                                                       @Param("before") LocalDateTime before,
+                                                      Pageable page);
+
+    /**
+     * 연속 출석 계산의 <b>첫 페이지</b> — 상한 없이 최신순 한 페이지(#761 후보 1). 위
+     * {@link #findCompletedStartTimesBefore} 에서 {@code start_time < :before} 만 뺀 모양이고,
+     * {@code recommendation-algorithm.md} §10 이 실측한 «(member_id, status) 등치 + ORDER BY start_time DESC
+     * LIMIT n» 과 같아 {@code idx_session_member_status_start} 를 뒤에서부터 걸으며 LIMIT 에서 멈춘다
+     * (#761 재현: 2,000세션 회원 31행·0.15ms). 상한 술어의 목적은 «미래 start_time 배제» 뿐이었으므로
+     * 그 배제는 호출부(AttendanceService)가 Java 에서 한다 — 미래 행도 LIMIT 칸을 차지할 수 있다는 점은
+     * 호출부가 페이지 크기 판정·다음 커서로 처리한다.
+     */
+    @Query("SELECT s.startTime FROM Session s "
+         + "WHERE s.member.id = :memberId AND s.status = :status "
+         + "ORDER BY s.startTime DESC")
+    List<LocalDateTime> findLatestCompletedStartTimes(@Param("memberId") Long memberId,
+                                                      @Param("status") Status status,
                                                       Pageable page);
 
     /**
