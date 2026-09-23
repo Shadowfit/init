@@ -89,6 +89,65 @@ case "$ROLE" in
   *) die "모르는 ROLE 이다: '$ROLE' — db · p6-target · p6-loader · ai-venv · app 중 하나여야 한다" ;;
 esac
 
+# ── AI 메모리 캡 ≤ 호스트 RAM (#698, 처방 ㉡) ─────────────────────────────
+#
+# 🔴 **캡이 호스트 RAM 보다 크면 그 캡은 캡이 아니다.** 컨테이너가 자기 cgroup 한도에 영영
+#    못 닿으니 `OOMKilled` 는 끝까지 false 로 남고(판정 채널이 조용하다), 압력은 컨테이너가 아니라
+#    **호스트 회수 경로**로 샌다 — 스왑이 0 이면 kswapd 가 회수 못 할 페이지를 계속 훑는다.
+#    기본값 20000m(≈19.5GiB)는 c7i.4xlarge(32GiB) 기준 상수라 c7i.2xlarge(15,708MiB)에 그대로
+#    쓰면 이 조합이 된다 — 08-28·09-08 두 라운드가 실제로 그 조합이었다(#698 본문).
+#    ⚠️ 그 조합이 08-28 의 «718초 무응답» 을 **일으켰는지는 미검증**이다(#698 🔴 절 — 캡을 내린
+#       대조가 한 판도 못 돌았다). 이 게이트는 인과를 주장하지 않는다. «판정 채널이 조용해지는
+#       조합» 자체를 막을 뿐이다.
+#
+# 기본값은 **안 바꾼다** — 그건 처방 ㉠(박스 RAM 에서 유도)이고 채택되지 않았다. 여기서는 기동 시
+# 멈추기만 한다. 부트스트랩 맨 앞에서 거는 이유: 이 역할은 뒤에 빌드가 10~25분 붙는다. 그걸 다
+# 기다린 뒤에 알면 늦다.
+#
+# 🔴 같은 값도 막는다(`-ge`). MemTotal 은 커널 예약만 뺀 값이라 커널 자신·다른 컨테이너·sshd 가
+#    그 안에서 먹는다 — 캡이 MemTotal 과 같아도 컨테이너는 그 한도에 못 닿는다.
+# ⚠️ **다른 컨테이너 캡과의 합은 안 본다.** 이 역할이 같이 띄우는 MySQL(3072m)·Spring(2048m)
+#    캡은 docker-compose.yml 기본값이고 ai-nginx 는 캡이 아예 없다 — 합을 내려면 compose 기본값을
+#    여기 사본으로 두거나(조용히 어긋난다) `compose config` 를 파싱해야 하는데, 그래도 캡 없는
+#    ai-nginx·호스트 프로세스 몫이 빠져 «합 ≤ RAM» 이 안전하다는 보장이 안 된다. 그래서 게이트는
+#    «AI 캡 단독 > RAM» 이라는 **확실히 틀린** 조합만 막는다.
+#
+# docker·compose 는 메모리 표기를 go-units RAMInBytes 로 읽는다 — 단위가 **1024 배수**다
+# (20000m → 20,971,520,000B, #698 의 `docker inspect` 실측과 같다). 여기도 같게 읽는다.
+mem_to_bytes() {  # $1 = docker 메모리 표기(20000m · 8g · 1.5g · 2147483648 · 512MiB). 못 읽으면 빈 문자열
+  echo "$1" | awk '{
+    s = tolower($0)
+    if (match(s, /^[0-9]+(\.[0-9]+)?/) == 0) exit
+    n = substr(s, 1, RLENGTH); u = substr(s, RLENGTH + 1)
+    sub(/^ /, "", u); sub(/i?b$/, "", u)
+    if      (u == "")  m = 1
+    else if (u == "k") m = 1024
+    else if (u == "m") m = 1024 * 1024
+    else if (u == "g") m = 1024 * 1024 * 1024
+    else if (u == "t") m = 1024 * 1024 * 1024 * 1024
+    else exit
+    printf "%.0f", n * m
+  }'
+}
+
+if [ "$ROLE" = "p6-target" ]; then   # AI_MEM_LIMIT 을 .env 에 박아 AI 컨테이너를 띄우는 역할은 이것뿐이다
+  _ai_cap_b=$(mem_to_bytes "$AI_MEM_LIMIT")
+  _ram_b=$(awk '/^MemTotal:/ { printf "%.0f", $2 * 1024 }' /proc/meminfo 2>/dev/null)
+  [ -n "$_ai_cap_b" ] || die "AI_MEM_LIMIT 을 못 읽는다: '$AI_MEM_LIMIT' — docker 메모리 표기(예: <MiB>m)로 줄 것"
+  [ -n "$_ram_b" ]    || die "/proc/meminfo 에서 MemTotal 을 못 읽는다 — AI 메모리 캡을 호스트 RAM 과 대조할 수 없다(#698)"
+  if [ "$_ai_cap_b" -ge "$_ram_b" ]; then
+    die "$(printf '%s\n' \
+      "AI_MEM_LIMIT($AI_MEM_LIMIT = $((_ai_cap_b / 1048576))MiB)이 호스트 RAM(MemTotal $((_ram_b / 1048576))MiB) 이상이다 (#698)." \
+      "   캡이 RAM 보다 크면 컨테이너가 cgroup 한도에 영영 못 닿는다 — OOMKilled 는 false 로 남고," \
+      "   압력은 호스트 회수(kswapd 스래싱)로 새서 박스 전체가 멈출 수 있다. 판정 채널이 조용해진다." \
+      "   고치는 법: AI_MEM_LIMIT=<호스트 RAM 보다 작은 MiB>m 을 넘길 것. 같이 뜨는 MySQL·Spring 캡" \
+      "   (docker-compose.yml 기본값)과 호스트 몫도 그 RAM 안에서 나눠야 한다는 것을 잊지 말 것." \
+      "   ⚠️ 캡을 내리면 POSE_DETECTOR_POOL_SIZE($POSE_DETECTOR_POOL_SIZE)가 캡에서 유도한 상한으로 깎일 수" \
+      "   있다(mediapipe_detector.py 가 경고 후 낮춘다) — 그 값도 측정 조건이니 결과에 적을 것.")"
+  fi
+  echo "  AI 메모리 캡 $AI_MEM_LIMIT ($((_ai_cap_b / 1048576))MiB) < 호스트 RAM $((_ram_b / 1048576))MiB ✅ (#698)"
+fi
+
 # ── root SSH (다른 박스가 이 박스로 root@ 로 붙는 라운드용, #642) ──────────
 #
 # 🔴 P4·P6·R10-b 처럼 인스턴스 2대를 쓰는 라운드는 한 박스가 다른 박스로
