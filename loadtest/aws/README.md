@@ -37,6 +37,20 @@
    > 그것이 안전한 이유는 하나뿐이다 — **`run_all.sh` 는 S3 업로드가 성공했을 때만 끈다**
    > (`FINAL_OK`). 업로드가 실패하면 박스를 남긴다. 그 가드가 없으면 이 결정은 위험하다.
    >
+   > 🔴 **가드가 하나 더 있다 — 단계가 실패하면 안 끈다**([#641](https://github.com/Shadowfit/init/issues/641),
+   > 사용자 승인 규칙). 이번 판의 `phases.tsv` 에 `FAIL(rc)`·`TIMEOUT` 이 하나라도 있으면 **업로드가
+   > 성공했어도** 이 박스·리플리카·대상 **전부** 남긴다(`PHASES_OK`). 실패 로그만 올라간 판도 업로드는
+   > 성공하므로, `FINAL_OK` 하나로는 `repl_preflight`·`q2` 가 즉시 FAIL 한 판에서 원인 로그가 볼륨째
+   > 사라졌다. `SKIP` 은 실패로 안 센다 — 리허설·게이트 실패로 막힌 SKIP 은 원인 행이 이미 FAIL 이고,
+   > 일부러 건너뛴 SKIP(`calibration`)은 실패가 아니다. 이렇게 남은 박스는 **사람이 들여다본 뒤 직접 끈다.**
+   >
+   > 🔴 **2대 구성이면 저쪽 박스도 같은 조건으로 같이 끈다** — P4 의 `REPLICA_HOST`, 그리고
+   > P6·httpwrite·httpread·poolsizing 의 `TARGET_HOST`([#688](https://github.com/Shadowfit/init/issues/688) —
+   > 예전엔 대상을 안 꺼서 09-08 P6 라운드의 대상이 2시간 24분 초과 과금됐다). 대상이 이 박스 자신이면
+   > (`TARGET_SSH="bash -c"`) 따로 안 건다. ⚠️ 같은 대상을 **다음 라운드가 또 쓰면** 앞 호출에
+   > `AUTO_SHUTDOWN=0` 을 줄 것. ⚠️ poolsizing 3대 구성의 `DB_HOST`·R10-b 의 `FP_REMOTE_TARGET` 은
+   > 여전히 안 끈다 — 사람이 끈다.
+   >
    > 🔴 **손으로 도는 판은 이 보호가 없다.** rig 을 SSH 로 직접 부르면(`run_arms.py` 등)
    > `run_all.sh` 를 안 거치므로 **아무것도 안 끄고, 아무것도 안 지킨다.** 그때는 사람이 끈다.
    >
@@ -556,7 +570,7 @@ PHASES="framepath" \
 | `FP_REMOTE_TARGET` | (없음) | R10-b — 대상 사설 IP. 비면 R10-a 와 같은 로컬(동거) 경로 |
 | `FP_REMOTE_SSH` | `ssh root@$FP_REMOTE_TARGET` | R10-b — 키를 쓰면 직접 지정 |
 | `FP_REMOTE_ROOT` | `/root/init` | R10-b — 대상의 저장소 루트 |
-| `AUTO_SHUTDOWN` | **`1`** | **업로드 성공 시에만** 정지. 기본이 켜짐(2026-08-24 결정) — 박스를 남기려면 `0` |
+| `AUTO_SHUTDOWN` | **`1`** | **업로드 성공 + 실패 단계 없음(FAIL·TIMEOUT 0개, #641)일 때만** 정지 — `REPLICA_HOST`·`TARGET_HOST`(#688)도 같이. 기본이 켜짐(2026-08-24 결정) — 박스를 남기려면 `0` |
 | `SHUTDOWN_DELAY_MIN` | `5` | 정지까지의 유예(분). 취소: 박스 안에서 `pkill -f 'shutdown'`. ⚠️ **취소하려면 그 박스에 SSH 로 들어가야 하는데, 리허설을 `run_all.sh` 로 직접 돌리면 러너(예: R10-b 의 부하기)가 대상이 아닌 경우가 있다**(#648) — 2026-09-02부터 부트스트랩이 role 과 무관하게 모든 박스에 `root@` 접근을 열어두므로(#642), 어느 박스가 러너든 `measure.pem` 으로 들어가 취소할 수 있다 |
 | `SYNC_SEC` | `300` | S3 주기 업로드 간격 |
 | `WRITER_MAX_SEC` | `14400` | ⚠️ rig 기본은 5,400. 아래 참고 |
