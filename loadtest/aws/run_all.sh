@@ -2060,7 +2060,8 @@ target_is_self() {
 # 🔴 단계가 실패했어도 안 끈다(#641, 위 판정 ①). 결과는 올라갔어도 **원인은 박스 안에** 있다.
 #
 # ⚠️ 이 블록이 끄는 박스는 **이 박스·REPLICA_HOST·TARGET_HOST** 셋뿐이다. 러너가 SSH 로 모는 박스가
-#    더 있는 라운드 — poolsizing 3대 구성의 DB_HOST, R10-b 의 FP_REMOTE_TARGET — 는 여기서 안 끈다.
+#    더 있는 라운드 — poolsizing 3대 구성의 DB_HOST(#812) — 는 여기서 안 끈다. (R10-b 의
+#    FP_REMOTE_TARGET 은 배선 자체가 없다 — #708 이 지웠고 #813 ㉡ 로 되살리지 않았다)
 #    그 박스는 사람이 끈다(#688 은 TARGET_HOST 만 다뤘다).
 if [ "$AUTO_SHUTDOWN" = "1" ] && [ "$FINAL_OK" = "1" ] && [ "$PHASES_OK" = "1" ]; then
   # 🔴 **리플리카·대상을 먼저 끈다.** 2대 라운드에서 이 스크립트는 한쪽 박스(P4 는 소스, P6·http* 는
