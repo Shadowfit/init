@@ -23,7 +23,6 @@ import org.mockito.MockitoAnnotations;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -59,7 +58,7 @@ class SessionFeedbackQueryServiceTest {
     @Test
     @DisplayName("getEvents — 본인 세션이면 발생시각 순 이벤트 목록 반환")
     void getEvents_success() {
-        when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
+        when(sessionRepository.existsByIdAndMemberId(SESSION_ID, OWNER_ID)).thenReturn(true);
         SessionFeedbackLog log = SessionFeedbackLog.builder()
                 .id(1L).session(session).feedbackType(FeedbackType.KNEE_OUT)
                 .repNumber(1).occurredAt(LocalDateTime.now()).build();
@@ -74,7 +73,7 @@ class SessionFeedbackQueryServiceTest {
     @Test
     @DisplayName("getEvents — 세션이 없으면 SESSION_NOT_FOUND")
     void getEvents_sessionNotFound_throws() {
-        when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.empty());
+        when(sessionRepository.existsByIdAndMemberId(SESSION_ID, OWNER_ID)).thenReturn(false);
 
         assertThatThrownBy(() -> service.getEvents(SESSION_ID, OWNER_ID))
                 .isInstanceOf(BusinessException.class)
@@ -83,20 +82,20 @@ class SessionFeedbackQueryServiceTest {
     }
 
     @Test
-    @DisplayName("getEvents — 본인 세션이 아니면 ACCESS_DENIED")
+    @DisplayName("getEvents — 본인 세션이 아니면 SESSION_NOT_FOUND (존재 여부 비공개)")
     void getEvents_notOwner_throws() {
-        when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
+        when(sessionRepository.existsByIdAndMemberId(SESSION_ID, 999L)).thenReturn(false);
 
         assertThatThrownBy(() -> service.getEvents(SESSION_ID, 999L))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
-                .isEqualTo(ErrorCode.ACCESS_DENIED);
+                .isEqualTo(ErrorCode.SESSION_NOT_FOUND);
     }
 
     @Test
     @DisplayName("getSummary — 타입별 카운트·통계를 총합과 함께 반환")
     void getSummary_success() {
-        when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
+        when(sessionRepository.existsByIdAndMemberId(SESSION_ID, OWNER_ID)).thenReturn(true);
         SessionFeedbackLogRepository.TypeStats stat = mock(SessionFeedbackLogRepository.TypeStats.class);
         when(stat.getFeedbackType()).thenReturn(FeedbackType.KNEE_OUT);
         when(stat.getCount()).thenReturn(3L);
@@ -113,13 +112,13 @@ class SessionFeedbackQueryServiceTest {
     }
 
     @Test
-    @DisplayName("getSummary — 본인 세션이 아니면 ACCESS_DENIED (getEvents와 동일 소유권 검증 공유)")
+    @DisplayName("getSummary — 본인 세션이 아니면 SESSION_NOT_FOUND (getEvents와 동일 소유권 검증 공유)")
     void getSummary_notOwner_throws() {
-        when(sessionRepository.findById(SESSION_ID)).thenReturn(Optional.of(session));
+        when(sessionRepository.existsByIdAndMemberId(SESSION_ID, 999L)).thenReturn(false);
 
         assertThatThrownBy(() -> service.getSummary(SESSION_ID, 999L))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
-                .isEqualTo(ErrorCode.ACCESS_DENIED);
+                .isEqualTo(ErrorCode.SESSION_NOT_FOUND);
     }
 }
