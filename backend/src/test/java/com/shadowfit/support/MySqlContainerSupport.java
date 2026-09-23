@@ -37,8 +37,10 @@ import java.time.Duration;
         disabledReason = "-Dmysql.container=false 로 실 MySQL 테스트를 명시적으로 껐다")
 public abstract class MySqlContainerSupport {
 
+    // protected: 앱 계정(test)은 자기 스키마 권한뿐이라, 스크래치 스키마가 필요한 테스트
+    // (PoseDataPartitionMaintenanceRaceTest)가 root 로 붙을 때 URL·비밀번호를 여기서 얻는다.
     @ServiceConnection
-    static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.0")
+    protected static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.0")
             .withCommand(
                     "--character-set-server=utf8mb4",
                     "--collation-server=utf8mb4_unicode_ci",
