@@ -28,7 +28,7 @@
 | SENT 행을 다시 읽는 코드 | **없다.** 중복 적재 가드(`existsByAggregateIdAndEventTypeAndStatusIn`)는 PENDING·PROCESSING 만 본다 | `ExerciseAnalysisService.enqueueReattachForWorker` |
 | FAILED 관측 | 카운터(`shadowfit.outbox.dispatch{outcome}`)라 행을 지워도 지표는 안 바뀐다. 게이지는 PENDING 만(`countByStatus(PENDING)`) | `SessionMetrics`, `OutboxPublisher` |
 | 스케줄러 중복 실행 방지 | 없음(ShedLock 미도입). 지금은 단일 인스턴스 | `outbox-reliable-messaging.md` §4-2 ⑦ |
-| 운영 DB | 없다. 배포 호스트가 없어 «첫 실행 때 쌓인 양» 은 로컬·측정 rig 에만 있다 | `USE-CASES.md` §5 OP-02 |
+| 운영 DB | 없다. 배포 호스트가 없어 «첫 실행 때 쌓인 양» 은 로컬·측정 rig 에만 있다 | [`tasks/24-semester2-plan.md`](../tasks/24-semester2-plan.md) OP-02 «배포 호스트 없어 막힘» |
 
 **지워도 기능이 안 깨진다는 점은 확인됐다.** 남은 질문은 전부 «어떻게 지우나» 다.
 
