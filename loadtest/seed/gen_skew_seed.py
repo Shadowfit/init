@@ -170,8 +170,7 @@ def main():
 
     out = sys.stdout.write
     out(f"-- gen_skew_seed.py {' '.join(sys.argv[1:])}\n")
-    out("SET NAMES utf8mb4;
-")
+    out("SET NAMES utf8mb4;\n")
     out(f"DROP DATABASE IF EXISTS {args.db};\nCREATE DATABASE {args.db} CHARACTER SET utf8mb4;\nUSE {args.db};\n")
     out("""
 CREATE TABLE users (
