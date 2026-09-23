@@ -449,6 +449,17 @@ proto의 `int64`와 Spring DTO 타입 정렬 + REST 시대 잔재 제거.
 
 선행: #785(V25 `exercises.code`), #786(V26 세션 목표·세트 표). 설계: `docs/decisions/lunge-and-set-backend.md` §4 ②.
 
+### #759 — 아웃박스 `dispatch()` 예외를 RETRY 로 센다 (2026-09-23)
+
+| 축 | 변경 |
+|---|---|
+| **proto** | 없음 |
+| **Spring** | `AbstractOutboxPublisher.dispatchOne` — `dispatch()` 를 `try/catch (RuntimeException)` 로 감싸 RETRY 로 접는다(스택 로그 1회). `dispatchBatch` 의 catch 는 이제 결과 기록·`onGivenUp` 단계 예외만 받는다(행은 `PROCESSING` → 회수). 테스트: `OutboxPublisherFailureInjectionTest`(«예외 → PROCESSING» 계약을 «예외 → RETRY·상한 후 FAILED» 로 교체, 기록 단계 예외 계약은 새 Nested 로 유지), `WeeklyReportLlmOutboxIntegrationTest`(영구 예외 → exhausted 로 닫힘) |
+| **AI** | 없음 |
+| **Infra** | 없음 |
+
+의미 변화: `StopAnalysis`·`ReattachAnalysis` 아웃박스 행의 «상한 10회» 가 예외 경로까지 덮는다. 설계: `docs/decisions/outbox-reliable-messaging.md` §4-3-1.
+
 ---
 
 ## 보조 그룹: 직접 영향 적은 잡정리

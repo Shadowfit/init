@@ -877,3 +877,9 @@
 **FastAPI 측** — `exercise_pb2.py` 재생성. 읽는 코드 없음
 
 **결합 결과**: Spring 이 종목·세트 값을 실어 보내지만 AI 는 아직 id 표와 자기 카운터만 본다 — «계약은 앞서 있고 판정은 그대로」 인 구간. 세트 저장·집계는 Spring 이 `pose_data` 로 하기로 해서(③) 이 구간이 시연을 막지는 않는다. 설계: `docs/decisions/lunge-and-set-backend.md`, AI 요청: `docs/handoff/ai-lunge-and-sets-proto.md`.
+
+### 09-23 — 아웃박스 송신 예외를 재시도 상한 안으로 (#759, Spring 단독)
+
+**Spring 측** — `AbstractOutboxPublisher`(`dispatchOne` 이 `dispatch()` 예외를 RETRY 로 접음), 테스트 `OutboxPublisherFailureInjectionTest`·`WeeklyReportLlmOutboxIntegrationTest`
+
+**결합 결과**: `StopAnalysis`·`ReattachAnalysis` 행의 «상한 10회 후 `FAILED`» 가 던진 예외에도 적용된다. 전엔 예외가 lease 회수(`retry_count` 불변)로 빠져 상한 밖에서 무한 반복할 수 있었다. 결과 기록 단계(DB) 예외는 그대로 회수 대기.

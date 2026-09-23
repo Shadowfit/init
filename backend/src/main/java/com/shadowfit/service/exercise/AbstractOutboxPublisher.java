@@ -48,7 +48,15 @@ public abstract class AbstractOutboxPublisher {
         this.publisherId = "pub-" + lane + "-" + UUID.randomUUID().toString().substring(0, 8);
     }
 
-    /** 이벤트 하나를 실제로 보낸다. 트랜잭션 <b>밖</b>에서 불린다. 던진 예외는 «상태 못 바꿈 → lease 만료 후 회수» 경로로 간다. */
+    /**
+     * 이벤트 하나를 실제로 보낸다. 트랜잭션 <b>밖</b>에서 불린다.
+     *
+     * <p>실패는 {@link DispatchOutcome} 으로 분류해 돌려주는 게 계약이다. 그래도 던진 {@link RuntimeException} 은
+     * {@link DispatchOutcome#RETRY} 로 센다(#759) — retryCount 를 올리고 백오프를 걸며, {@code maxRetry} 를 넘기면
+     * FAILED + {@link #onGivenUp} 이다. 예전엔 «상태 못 바꿈 → lease 만료 후 회수» 로 갔는데, 회수는 retryCount 를
+     * 안 올려 영구 예외(NPE·잘못된 페이로드)가 lease 주기마다 영원히 재처리됐다.
+     * 그러니 일시적 실패를 예외로 올리면 재시도 한도를 소진한다 — 일시적인 건 되도록 RETRY 로 분류해서 돌려줄 것.
+     */
     protected abstract DispatchOutcome dispatch(OutboxEvent event, boolean possiblyRedelivered);
 
     /**
@@ -116,16 +124,33 @@ public abstract class AbstractOutboxPublisher {
                  CorrelationIds.Scope session = CorrelationIds.withSession(sessionId)) {
                 dispatchOne(event, possiblyRedelivered);
             } catch (Exception e) {
-                // 한 건의 실패가 배치 전체를 멈추면 안 된다. 상태를 못 바꾸고 빠져도 행은
-                // PROCESSING 으로 남아 lock 만료 후 회수되므로 유실되지 않는다.
-                log.error("아웃박스 행 처리 실패 - id: {}", event.getId(), e);
+                // 한 건의 실패가 배치 전체를 멈추면 안 된다. 여기 오는 건 dispatch() 의 예외가 아니라
+                // (그건 dispatchOne 이 RETRY 로 센다, #759) 결과 기록·onGivenUp 단계의 예외다 — DB 에 못 쓰는
+                // 상황이라 retryCount 도 못 올린다. 상태를 못 바꾸고 빠져도 행은 PROCESSING 으로 남아
+                // lock 만료 후 회수되므로 유실되지 않는다.
+                log.error("아웃박스 결과 기록 실패 — lease 만료 후 회수 대기 (id: {})", event.getId(), e);
             }
         }
     }
 
-    /** 송신은 트랜잭션 <b>밖</b>에서, 결과 기록만 짧은 트랜잭션으로. */
+    /**
+     * 송신은 트랜잭션 <b>밖</b>에서, 결과 기록만 짧은 트랜잭션으로.
+     *
+     * <p>예외의 출처를 둘로 가른다(#759). {@link #dispatch} 가 던진 것은 여기서 RETRY 로 세고 — 한도 안에서
+     * 재시도하다 넘기면 독 메시지로 닫는다(RETRY 결과와 같은 길) — 결과 기록 단계에서 난 것은 그대로 올려
+     * {@code dispatchBatch} 가 잡게 둔다(PROCESSING 으로 남아 회수). 예외 뒤 recordRetry 자체가 실패해도
+     * 후자로 떨어지므로 행은 잃지 않는다.
+     */
     private void dispatchOne(OutboxEvent event, boolean possiblyRedelivered) {
-        DispatchOutcome outcome = dispatch(event, possiblyRedelivered);
+        DispatchOutcome outcome;
+        try {
+            outcome = dispatch(event, possiblyRedelivered);
+        } catch (RuntimeException e) {
+            // 스택은 여기서 한 번만 남긴다. 아래 RETRY 분기가 한도 초과면 «독 메시지로 종료» 를 따로 찍는다.
+            log.error("아웃박스 송신 중 예외 — RETRY 로 센다 (id: {}, {}: {}, 시도: {})",
+                    event.getId(), event.getAggregateType(), event.getAggregateId(), event.getRetryCount() + 1, e);
+            outcome = DispatchOutcome.RETRY;
+        }
 
         switch (outcome) {
             case SENT -> {

@@ -629,9 +629,9 @@ public class ExerciseAnalysisService {
                 return DispatchOutcome.RETRY;
             } catch (RuntimeException e) {
                 // gRPC 실패는 StatusRuntimeException 으로 오지만, 인터셉터·직렬화 등 그 바깥에서 나는
-                // 예외도 있다. 여기서 안 잡으면 "예외를 던지지 않는다"는 이 메서드의 계약이 깨지고,
-                // 발행기는 결과를 못 받아 행을 PROCESSING 으로 방치한 채 lease 만료까지(60초)
-                // 불필요하게 기다리게 된다. 원인이 무엇이든 "지금은 실패, 나중에 재시도"가 맞다.
+                // 예외도 있다. 여기서 안 잡으면 "예외를 던지지 않는다"는 이 메서드의 계약이 깨진다 —
+                // 발행기가 그 예외를 RETRY 로 세긴 하지만(#759) 서킷브레이커엔 실패가 안 남고
+                // 지표(aiStopResult)도 빠진다. 원인이 무엇이든 "지금은 실패, 나중에 재시도"가 맞다.
                 cb.onError(System.nanoTime() - callStart, TimeUnit.NANOSECONDS, e);
                 sessionMetrics.aiStopResult("error");
                 log.error("AI 서버 중단 요청 중 예기치 못한 오류 - sessionId: {}", sessionId, e);
