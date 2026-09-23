@@ -159,7 +159,7 @@ ShadowFit은 사용자가 지정한 기준 영상(로컬 또는 YouTube)과 사�
 ## 관련 문서
 - 캡스톤 발표자료 "요구사항 정의" (HO-PT 6쪽) — 원본 요구사항 분류·완료표시의 1차 소스 (바탕화면 `남은거.PNG`, 저장소 밖 개인 파일)
 - [`REQUIREMENTS.md`](./REQUIREMENTS.md) — 코드 기준 도메인별 요구사항
-- [`USE-CASES.md`](./USE-CASES.md) — 유스케이스 상세
+- [`usecase/README.md`](./usecase/README.md) — 유스케이스 상세 (정본, 2026-09-23 통합)
 - [`tasks/20-feature-roadmap.md`](./tasks/20-feature-roadmap.md) — 요구사항↔코드 매핑, 스택별 잔여 작업
 - [`tasks/27-implementation-gaps.md`](./tasks/27-implementation-gaps.md) — 최신 미구현/미결정 항목 (2026-07-20 기준)
 - [`12-persona-difficulty.md`](./12-persona-difficulty.md) — 페르소나 정의
