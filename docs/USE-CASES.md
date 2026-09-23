@@ -121,8 +121,8 @@
 | G-01 | 운동 카테고리 관리 | 관리자 | ✅ | ❌ | `/admin/categories` CRUD |
 | G-02 | 운동 카탈로그 관리(등록·수정·삭제·종목 코드·분석 지원 토글) | 관리자 | ✅ | ❌ | `/admin/exercises` CRUD · `PATCH …/analysis-support` |
 | G-03 | **기준 동작 등록 — mp4 업로드** | 관리자, AI 서버 | ✅ (09-17) | ❌ | `POST /admin/exercises/{id}/reference-video` (multipart) → gRPC `ExtractReferenceData` 비동기 |
-| G-04 | 기준 동작 등록 — YouTube URL | 관리자, AI 서버 | △ | ❌ | `POST /exercises/{id}/reference?youtubeUrl=` — 202 를 주지만 AI 가 http(s) 를 거절 |
-| G-05 | 싱크로율 임계값 변경 | 관리자 | △ | ❌ | `PATCH /admin/exercises/{id}/thresholds` — 저장만 되고 판정에 안 쓰인다 |
+| G-04 | 기준 동작 등록 — YouTube URL | 관리자, AI 서버 | △ | ❌ | `POST /exercises/{id}/reference?youtubeUrl=` — 202 를 주지만 AI 가 http(s) 를 거절 | [#800](https://github.com/Shadowfit/init/issues/800) |
+| G-05 | 싱크로율 임계값 변경 | 관리자 | △ | ❌ | `PATCH /admin/exercises/{id}/thresholds` — 저장만 되고 판정에 안 쓰인다 | [#801](https://github.com/Shadowfit/init/issues/801) |
 | G-06 | 회원 / 세션 목록 | 관리자 | ✅ | ❌ | `GET /admin/members` · `/admin/sessions` |
 | G-07 | 대시보드 통계 | 관리자 | ✅ | ❌ | `GET /admin/stats/overview` |
 
@@ -544,16 +544,16 @@
 
 ## 6. 알려진 결함 (근거 조사 중 드러난 것)
 
-코드와 문서를 맞추다 나온 것들이다. 이슈 등록 여부는 확인하지 않았다.
+코드와 문서를 맞추다 나온 것들이다(09-23 이슈 등록).
 
-| 유스케이스 | 결함 | 근거 |
-|---|---|---|
-| B-01 | AI 가 검출기 풀 부족으로 `StartAnalysis` 에 `success=false` 를 돌려줘도 Spring 이 읽지 않는다. 세션은 AI 상태 없이 `IN_PROGRESS` 로 남고, 앱은 첫 프레임에서 «세션 없음» 을 받아 녹화를 멈춘다(미검증) | `exercise_servicer.py` StartAnalysis, `ExerciseAnalysisService` onNext, `exercise.tsx` 오류 처리 |
-| B-01 | `CompleteAnalysis` 콜백은 아웃박스가 아니다. AI 3회 시도(최대 약 19초) 뒤 유실되면 세션은 `FAILED` 로 끝난다 | `ai-server/app/grpc/spring_client.py` |
-| G-04 | `POST /exercises/{id}/reference?youtubeUrl=` 는 202 를 주지만 AI 가 http(s) 를 거절한다. YouTube 다운로드 약관 수용이 미결정이라서다 | `exercise_servicer.py`, `decisions/youtube-coordinate-harvest.md`, `07-api-design.md` |
-| G-05 | 임계값은 저장만 되고 AI 판정에 안 쓰인다. proto 에 필드가 없고 AI 는 `constants.py` 의 하드코딩 값을 쓴다. Swagger 의 «신규 세션부터 적용» 도 사실이 아니다 | `decisions/production-signal-checklist.md` |
-| A-03 | 선호 영상 URL 에 형식 검증이 없다. `YoutubeValidator` 는 04-28 에 호출처가 빠진 채 남아 있다(`e8e1b65c`, 사유 없음) | `OnboardingService` |
-| S-01 | 아웃박스 정리 스케줄러가 없다. `deleteByStatusAndCreatedAtBefore` 는 «보존 정책 정리용» 주석만 있고 호출처가 0 | `OutboxEventRepository` |
+| 유스케이스 | 결함 | 근거 | 이슈 |
+|---|---|---|---|
+| B-01 | AI 가 검출기 풀 부족으로 `StartAnalysis` 에 `success=false` 를 돌려줘도 Spring 이 읽지 않는다. 세션은 AI 상태 없이 `IN_PROGRESS` 로 남고, 앱은 첫 프레임에서 «세션 없음» 을 받아 녹화를 멈춘다(미검증) | `exercise_servicer.py` StartAnalysis, `ExerciseAnalysisService` onNext, `exercise.tsx` 오류 처리 | [#798](https://github.com/Shadowfit/init/issues/798) |
+| B-01 | `CompleteAnalysis` 콜백은 아웃박스가 아니다. AI 3회 시도(최대 약 19초) 뒤 유실되면 세션은 `FAILED` 로 끝난다 | `ai-server/app/grpc/spring_client.py` | [#799](https://github.com/Shadowfit/init/issues/799) |
+| G-04 | `POST /exercises/{id}/reference?youtubeUrl=` 는 202 를 주지만 AI 가 http(s) 를 거절한다. YouTube 다운로드 약관 수용이 미결정이라서다 | `exercise_servicer.py`, `decisions/youtube-coordinate-harvest.md`, `07-api-design.md` | [#800](https://github.com/Shadowfit/init/issues/800) |
+| G-05 | 임계값은 저장만 되고 AI 판정에 안 쓰인다. proto 에 필드가 없고 AI 는 `constants.py` 의 하드코딩 값을 쓴다. Swagger 의 «신규 세션부터 적용» 도 사실이 아니다 | `decisions/production-signal-checklist.md` | [#801](https://github.com/Shadowfit/init/issues/801) |
+| A-03 | 선호 영상 URL 에 형식 검증이 없다. `YoutubeValidator` 는 04-28 에 호출처가 빠진 채 남아 있다(`e8e1b65c`, 사유 없음) | `OnboardingService` | [#802](https://github.com/Shadowfit/init/issues/802) |
+| S-01 | 아웃박스 정리 스케줄러가 없다. `deleteByStatusAndCreatedAtBefore` 는 «보존 정책 정리용» 주석만 있고 호출처가 0 | `OutboxEventRepository` | [#793](https://github.com/Shadowfit/init/issues/793) |
 
 ---
 
