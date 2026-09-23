@@ -7,8 +7,8 @@ import { friendService } from '@/services/friendService';
 import type { MemberAttendanceStatus } from '@/types/social';
 import CheerModal from './CheerModal';
 
-// 백엔드 ErrorResponseDto 는 {status, message, timestamp} — code 필드가 없다(2026-09-17 실측, api.ts 주석과 같음).
-// 그래서 분기는 HTTP status 로만 하고, 문장은 서버 message(이미 한국어)를 그대로 쓴다.
+// 백엔드 ErrorResponseDto 는 {status, code, message, timestamp} — code 는 2026-09-23 에 추가됐다.
+// 여기 분기는 아직 HTTP status 로만 하고, 문장은 서버 message(이미 한국어)를 그대로 쓴다.
 function errorMessage(e: any, fallback: string): string {
   const status = e?.response?.status;
   if (status === 409) return `${e?.response?.data?.message ?? '오늘은 이미 보냈어요.'} 내일 다시 보낼 수 있어요.`;
