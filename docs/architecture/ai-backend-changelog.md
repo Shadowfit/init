@@ -334,6 +334,12 @@
 - **바꾼 것.** `AbstractOutboxPublisher.dispatchOne` 이 예외의 출처를 가른다 — `dispatch()` 예외 = RETRY(재시도 기록 + 백오프, 상한 초과 시 `onGivenUp` → `FAILED`), 결과 기록 단계 예외 = 예전대로 회수 대기. 예외 뒤 재시도 기록마저 실패하면 후자로 떨어져 행을 잃지 않는다.
 - **결합면 영향.** `StopAnalysis`·`ReattachAnalysis` 경로는 gRPC 실패를 이미 RETRY 로 분류해 돌려주므로(예외를 안 던지는 계약) 보통 경로는 그대로다. 달라지는 건 그 분류 밖에서 새는 예외(DB 조회 실패·gRPC 밖 런타임 예외)뿐이다 — 이제 재시도 상한을 소진한다. 갱신 트리거 2번(전달 보장)·4번(실패 처리).
 
+### #276 — fix(pose): `savePoseDataBatch` 를 READ COMMITTED 로 (2026-09-24) ⭐ 실패 처리 변경, Spring 단독
+
+- **무엇이 문제였나.** AI 재전송(`spring_client.py`, 실패 시 3회)이 원본과 겹치면 RR 에서 중복 키 한 건이 `pose_data` 의 파티션 끝(`PRIMARY` supremum)에 X 락을 잡아, 서로 다른 세션의 재전송이 동시에 겹칠 때 데드락이 됐다(동시 부하 45.9%). 지금까지는 Spring 쪽 데드락 재시도(상한 5)가 가렸고, 그 소진분은 `INTERNAL` → AI 재전송으로 되돌아가는 **두 겹** 구조였다.
+- **바꾼 것.** 이 트랜잭션만 RC — supremum 락이 안 생긴다(0/960, [`loadtest/results/r276-lock-trace-2026-09-24/`](../../loadtest/results/r276-lock-trace-2026-09-24/README.md)). 데드락 재시도는 그물로 남긴다. 분기: [`../decisions/r276-lock-root-cause-fix.md`](../decisions/r276-lock-root-cause-fix.md)
+- **결합면 영향.** RPC·proto·응답 계약은 그대로다. 달라지는 것은 «재전송이 `INTERNAL` 을 받을 확률» — 측정한 모양(다세션 중복, 워커 8)에서는 데드락이 0 이었다 — 다른 동시성·다른 삽입 모양에서의 0 은 안 쟀다. 갱신 트리거 4번(실패 처리). AI 코드 변경 없음.
+
 ---
 
 ## 5. 결합 요소별 변경 시점

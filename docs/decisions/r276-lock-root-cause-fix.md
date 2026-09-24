@@ -1,7 +1,7 @@
 # #276 근본 처방 — 재시도가 아니라 «중복 하나가 파티션 끝을 잠그는» 자리를 없앤다
 
 작성: 2026-09-24
-상태: **분기점 — 사용자 결정 대기** (후보와 트레이드오프까지만. 채택은 confirm 뒤 별도로 박제)
+상태: **ㄴ(RC) 채택 · 적용 (2026-09-24 사용자 confirm)** — ㄷ(자연키 PK) 비용 측정 착수는 미결정
 근거: [`loadtest/results/r276-lock-trace-2026-09-24/`](../../loadtest/results/r276-lock-trace-2026-09-24/README.md)
 관련: [#276](https://github.com/Shadowfit/init/issues/276) · [`r276-retry-followup.md`](./r276-retry-followup.md) · [`pose-batch-idempotency-vs-partition.md`](./pose-batch-idempotency-vs-partition.md) · [`online-ddl-vs-blocking-alter.md`](./online-ddl-vs-blocking-alter.md)
 
@@ -71,10 +71,13 @@ RR 에서 **중복 키 한 건**이 `PRIMARY` 의 파티션 끝(supremum)에 `X`
 
 ## 4. 미결정 (사용자 confirm 필요)
 
-1. ㄴ 을 적용할지
+1. ~~ㄴ 을 적용할지~~ → ✅ 적용(아래 결정 로그)
 2. ㄷ 의 비용 측정(§3 순서)을 착수할지
 3. #276 에 이 판 결과를 코멘트로 남기고, 이슈 상태 블록을 갱신할지
 
 ## 결정 로그
 
 - 2026-09-24 — 문서 작성. 결정 없음
+- 2026-09-24 — **ㄴ 채택 (사용자 confirm).** `PoseDataService.savePoseDataBatch` 에 `@Transactional(isolation = READ_COMMITTED)`.
+  회귀 가드 `PoseDataResendDeadlockRaceTest`(실 MySQL, 세션 8 × 재전송 20): **RR 로 되돌리면 데드락 63/160 으로 실패, RC 에서 0 으로 통과**를 둘 다 확인했다.
+  데드락 재시도(상한 5)는 그대로 둔다(§3)
