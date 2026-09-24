@@ -21,6 +21,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -87,8 +88,19 @@ public class PoseDataService {
      * 저장 전 다운샘플(위치 B: Spring, pose-ingest-downsampling.md §3-B) — 라이브 분석
      * (DTW·sync·rep 감지)은 이 저장 이전 FastAPI에서 이미 끝난 값이라 저장본을 줄여도 영향 없고,
      * 영향받는 건 리포트 시계열 해상도뿐(같은 문서 §1 안전판).
+     *
+     * <p><b>격리수준 READ COMMITTED (#276, 2026-09-24 사용자 confirm).</b> 기본 RR 에서는 중복 키
+     * 한 건(재전송이 원본과 겹칠 때)이 {@code PRIMARY} 의 파티션 끝(supremum)에 X 락을 잡아, 커밋까지
+     * 같은 파티션의 <b>모든 신규 삽입</b>을 세우고 두 재전송이 겹치면 데드락이 된다. RC 에서는 그 락이
+     * 안 생긴다 — 결정적 재현과 동시 부하(워커 8, 중복)에서 RR 45.9% → RC 0/960
+     * ({@code loadtest/results/r276-lock-trace-2026-09-24/}). 중복 검사가 uk 원본 레코드에 잡는
+     * next-key 락은 RC 에서도 남아 <b>한 방향 대기</b>는 생길 수 있다 — 세션 키가 {@code session_id}
+     * 로 묶여 있어 순환이 안 닫힌다는 것이 근거이고, 한 트랜잭션이 여러 세션 키를 섞게 되면 다시 볼 것.
+     * 아래 세션 조회는 잠금 없는 읽기 한 번이라 RC 로 바뀌어도 보장이 달라지지 않는다.
+     * 데드락 재시도({@code ExerciseGrpcService})는 다른 원인에 대한 그물로 그대로 둔다.
+     * 분기와 기각된 대안: docs/decisions/r276-lock-root-cause-fix.md
      */
-    @Transactional
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void savePoseDataBatch(Long sessionId, List<com.shadowfit.grpc.PoseDataRequest> grpcList) {
         if (grpcList == null || grpcList.isEmpty()) return;
 

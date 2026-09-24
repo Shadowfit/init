@@ -60,7 +60,8 @@ Windows PowerShell:
 | Docker 없을 때 | — | `@Testcontainers(disabledWithoutDocker = true)` → **건너뜀**. 강제로 끄려면 `-Dmysql.container=false` |
 
 쓰는 클래스: `FlywayMigrationValidationTest`(마이그레이션↔엔티티 정합 — 이 프로파일이 존재하는 첫 번째 이유),
-`PoseDataOrphanRaceTest`(FK 없는 파티션 표), `SignupUsernameRaceTest`(벤더 제약명), `WeeklySummaryBLayerRaceTest`(`JSON_TABLE`).
+`PoseDataOrphanRaceTest`(FK 없는 파티션 표), `SignupUsernameRaceTest`(벤더 제약명), `WeeklySummaryBLayerRaceTest`(`JSON_TABLE`),
+`PoseDataResendDeadlockRaceTest`(InnoDB 잠금 — 재전송 데드락 #276, 격리수준 RC 의 회귀 가드).
 `PoseDataOrphanWindowTest` 는 같은 프로파일이지만 **측정 장치**라 `-Dmeasure.orphan.window=true` 로만 돈다(4분+, 2026-09-11 에는
 30스레드 구간이 InnoDB 데드락으로 끝났다 — 미검증, 박스가 다른 컨테이너와 동거 중이었다). 새 테스트가 «H2 로는 원리상 안 된다» 면 `MySqlContainerSupport` 를
 상속하고 `@ActiveProfiles("race")` 를 붙인다 — 그 외에는 기본 프로파일에 둔다(컨테이너 기동 비용).
