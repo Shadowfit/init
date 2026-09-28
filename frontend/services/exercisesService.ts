@@ -1,8 +1,11 @@
 import api from './api';
 import type { FeedbackTemplate, SessionFeedbackSummary } from '@/types/feedback';
+import type { SquatDepthMode } from '@/types/report';
 
 interface StartSessionRequest {
   exerciseId: number;
+  // 스쿼트 깊이 모드(FULL/HALF, 2026-09-21). 스쿼트가 아니거나 생략하면 백엔드가 FULL로 취급.
+  depthMode?: SquatDepthMode;
 }
 
 // 백엔드 ExercisesResponseDto (POST /exercises/sessions, 202)

@@ -77,6 +77,11 @@ public class Exercise {
     @Column(name = "analysis_supported", nullable = false)
     private Boolean analysisSupported = false;
 
+    /** 기준 자세 채점 없이 반복 횟수만 측정하는 종목. */
+    @Builder.Default
+    @Column(name = "repetition_only", nullable = false)
+    private Boolean repetitionOnly = false;
+
     @CreationTimestamp
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;

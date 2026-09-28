@@ -168,6 +168,12 @@ message PoseDataRequest {
   // (스쿼트 무릎각은 0 이 될 수 없다) — Spring 은 0 인 프레임을 대표 후보에서 제외하고
   // 기존처럼 중앙 프레임으로 떨어진다. reference_poses / extracted_poses 로 쓰일 때도 0 이다.
   double smoothed_knee_angle = 6;
+  // 이 프레임이 속한 rep의 앞다리 — "left" | "right", 런지가 아니거나 판정 전이면 빈 문자열
+  // (2026-09-27). smoothed_knee_angle이 런지에서는 좌우 평균이 아니라 이 다리의 무릎각이다
+  // (ai-server app/core/lunge_analyzer.py 참고) — 백엔드가 좌우별 깊이를 따로 채점하려면
+  // "어느 다리의 값인가"를 프레임 단위로 알아야 하는데, 그 정보가 이 필드가 생기기 전에는
+  // AI 세션 메모리에만 있고 pose_data까지 내려오지 않았다. 스쿼트 프레임에는 항상 빈 문자열.
+  string lead_leg = 7;
 }
 
 message PoseDataBatchRequest {

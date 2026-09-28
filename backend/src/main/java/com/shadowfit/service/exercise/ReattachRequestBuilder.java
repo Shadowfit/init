@@ -83,7 +83,8 @@ public class ReattachRequestBuilder {
                 .setPersona(session.getMember().getSelectedPersona().name())
                 .setInitialRepCount(restoredRepCount)
                 .setElapsedSec(elapsedSec)
-                .setSessionNonce(sessionNonce == null ? "" : sessionNonce);
+                .setSessionNonce(sessionNonce == null ? "" : sessionNonce)
+                .setDepthMode(session.getSquatDepthMode().name());
 
         // 기준 좌표는 AI 가 보관하지 않는다 — 시작 때와 똑같이 Spring 이 DB 에서 읽어 실어 보낸다.
         for (ExerciseReference ref : referenceRepository.findByExerciseId(exerciseId)) {

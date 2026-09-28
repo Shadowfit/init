@@ -32,6 +32,8 @@ public class ReportService {
     private final SessionRepository sessionRepository;
     private final PoseDataRepository poseDataRepository;
     private final SessionAnalysisCalculator sessionAnalysisCalculator;
+    private final SquatDepthAnalysisCalculator squatDepthAnalysisCalculator;
+    private final LungeDepthAnalysisCalculator lungeDepthAnalysisCalculator;
     private final ObjectMapper objectMapper;
 
     @Transactional(readOnly = true)
@@ -68,6 +70,8 @@ public class ReportService {
         attachJointCoordinates(worstSection, session);
         responseDto.setWorstSection(worstSection);
         responseDto.setRepTrend(analysis.getRepTrend() == null ? List.of() : analysis.getRepTrend());
+        responseDto.setSquatDepthAnalysis(analysis.getSquatDepthAnalysis());
+        responseDto.setLungeDepthAnalysis(analysis.getLungeDepthAnalysis());
         responseDto.setSyncRateDetails(buildSyncRateDetails(session));
         lastSession.ifPresent(last ->
                 responseDto.setComparisonWithPrevious(buildComparisonWithPrevious(session, last))
@@ -96,7 +100,9 @@ public class ReportService {
                 SessionDetailedAnalysis parsed =
                         objectMapper.readValue(detailedAnalysis, SessionDetailedAnalysis.class);
                 if (parsed.getWorstSection() != null
-                        || (parsed.getRepTrend() != null && !parsed.getRepTrend().isEmpty())) {
+                        || (parsed.getRepTrend() != null && !parsed.getRepTrend().isEmpty())
+                        || parsed.getSquatDepthAnalysis() != null
+                        || parsed.getLungeDepthAnalysis() != null) {
                     return parsed;
                 }
                 log.warn("세션 {} detailed_analysis 가 구버전 형식으로 판단됨 — pose_data 즉석 재계산으로 대체",
@@ -108,7 +114,9 @@ public class ReportService {
         List<PoseFrameProjection> poseFrames = poseDataRepository.findFramesBySessionId(session.getId(), session.getStartTime());
         return new SessionDetailedAnalysis(
                 sessionAnalysisCalculator.calculate(session, poseFrames),
-                sessionAnalysisCalculator.calculateRepTrend(poseFrames));
+                sessionAnalysisCalculator.calculateRepTrend(poseFrames),
+                squatDepthAnalysisCalculator.calculate(session, poseFrames),
+                lungeDepthAnalysisCalculator.calculate(session, poseFrames));
     }
 
     /**

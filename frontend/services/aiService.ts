@@ -50,7 +50,7 @@ function resolveAiBaseUrl(): string {
   if (Platform.OS === 'android' && (host === 'localhost' || host.startsWith('127.'))) {
     host = '10.0.2.2';
   }
-  return `http://${host}:8000/api/v1`;
+  return `http://${host}:${process.env.EXPO_PUBLIC_AI_PORT || '8000'}/api/v1`;
 }
 
 const aiApi = axios.create({

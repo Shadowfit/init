@@ -33,4 +33,16 @@ public class SessionDetailedAnalysis {
 
     /** 회차별 싱크로율(rep 오름차순). 측정된 rep 이 없으면 빈 리스트. */
     private List<RepSyncRateDto> repTrend;
+
+    /**
+     * 스쿼트 깊이 정확도 리포트 (2026-09-21). 스쿼트가 아니거나 깊이 데이터가 없으면 null —
+     * 구버전으로 저장된 행을 이 타입으로 읽어도 필드가 없으니 자동으로 null이 된다(하위호환).
+     */
+    private SquatDepthAnalysisDto squatDepthAnalysis;
+
+    /**
+     * 런지 깊이 정확도 리포트 (2026-09-27). 런지가 아니거나 좌우 구분 깊이 데이터가 없으면
+     * null — 위와 같은 하위호환 규약(V24 이전에 완료된 런지 세션도 이 필드가 null이 된다).
+     */
+    private LungeDepthAnalysisDto lungeDepthAnalysis;
 }

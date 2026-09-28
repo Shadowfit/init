@@ -10,7 +10,7 @@ package com.shadowfit.dto.coaching;
  */
 public record TrainerRepEventDto(
         int repNumber,
-        double syncRate,
+        Double syncRate,
         boolean danger,
         String message
 ) {

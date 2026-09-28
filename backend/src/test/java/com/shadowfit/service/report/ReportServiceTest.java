@@ -50,6 +50,8 @@ class ReportServiceTest {
     @Mock private SessionRepository sessionRepository;
     @Mock private PoseDataRepository poseDataRepository;
     @Mock private SessionAnalysisCalculator sessionAnalysisCalculator;
+    @Mock private SquatDepthAnalysisCalculator squatDepthAnalysisCalculator;
+    @Mock private LungeDepthAnalysisCalculator lungeDepthAnalysisCalculator;
 
     private ReportService reportService;
 
@@ -63,7 +65,8 @@ class ReportServiceTest {
         MockitoAnnotations.openMocks(this);
         // 실제 JSON 직렬화/역직렬화 동작이 검증 대상이라 ObjectMapper는 모킹하지 않고 실사용
         reportService = new ReportService(reportRepository, sessionRepository, poseDataRepository,
-                sessionAnalysisCalculator, new ObjectMapper());
+                sessionAnalysisCalculator, squatDepthAnalysisCalculator, lungeDepthAnalysisCalculator,
+                new ObjectMapper());
 
         Member member = Member.builder().id(MEMBER_ID).email("t@t.com").username("u").password("p").build();
         Category category = Category.builder().id(1L).name("LOWER").build();
@@ -127,7 +130,7 @@ class ReportServiceTest {
         SessionDetailedAnalysis stored = new SessionDetailedAnalysis(precomputed, List.of(
                 new RepSyncRateDto(1, 80.0, "00:12"),
                 new RepSyncRateDto(2, 75.0, "01:15")
-        ));
+        ), null, null);
         report.setDetailedAnalysis(new ObjectMapper().writeValueAsString(stored));
         when(reportRepository.findBySessionId(SESSION_ID)).thenReturn(Optional.of(report));
 
@@ -156,7 +159,7 @@ class ReportServiceTest {
         report.setDetailedAnalysis(new ObjectMapper().writeValueAsString(legacy));
         when(reportRepository.findBySessionId(SESSION_ID)).thenReturn(Optional.of(report));
 
-        List<PoseFrameProjection> frames = List.of(new PoseFrameProjection(1L, 0.0, 50.0, 1, 100.0));
+        List<PoseFrameProjection> frames = List.of(new PoseFrameProjection(1L, 0.0, 50.0, 1, 100.0, null));
         when(poseDataRepository.findFramesBySessionId(eq(SESSION_ID), any())).thenReturn(frames);
         WorstSectionDto recomputed = new WorstSectionDto();
         recomputed.setReason("재계산됨");
@@ -176,7 +179,7 @@ class ReportServiceTest {
     void blankAnalysis_fallsBackToPoseDataRecompute() {
         report.setDetailedAnalysis(null); // 시드 데이터처럼 precompute 이전 상태
         when(reportRepository.findBySessionId(SESSION_ID)).thenReturn(Optional.of(report));
-        List<PoseFrameProjection> frames = List.of(new PoseFrameProjection(1L, 0.0, 50.0, 1, 100.0));
+        List<PoseFrameProjection> frames = List.of(new PoseFrameProjection(1L, 0.0, 50.0, 1, 100.0, null));
         when(poseDataRepository.findFramesBySessionId(eq(SESSION_ID), any())).thenReturn(frames);
         WorstSectionDto recomputed = new WorstSectionDto();
         recomputed.setReason("재계산됨");
@@ -193,7 +196,7 @@ class ReportServiceTest {
     void malformedAnalysis_fallsBackGracefully() {
         report.setDetailedAnalysis("{이건 JSON이 아님");
         when(reportRepository.findBySessionId(SESSION_ID)).thenReturn(Optional.of(report));
-        List<PoseFrameProjection> frames = List.of(new PoseFrameProjection(1L, 0.0, 50.0, 1, 100.0));
+        List<PoseFrameProjection> frames = List.of(new PoseFrameProjection(1L, 0.0, 50.0, 1, 100.0, null));
         when(poseDataRepository.findFramesBySessionId(eq(SESSION_ID), any())).thenReturn(frames);
         WorstSectionDto recomputed = new WorstSectionDto();
         recomputed.setReason("재계산됨");

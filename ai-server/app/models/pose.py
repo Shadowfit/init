@@ -1,6 +1,7 @@
 """포즈 관련 Pydantic 모델."""
 
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -85,6 +86,17 @@ class PoseRequest(BaseModel):
     )
 
 
+class LungeProgress(BaseModel):
+    phase: Literal["calibrating", "ready", "descending", "returning"]
+    lead_leg: Literal["left", "right"] | None = None
+    left_reps: int = 0
+    right_reps: int = 0
+    # Restored totals have no side history in the current persistence contract.
+    unassigned_reps: int = 0
+    guidance: str
+    score_available: bool = False
+
+
 class PoseResponse(BaseModel):
     """포즈 감지 응답."""
 
@@ -106,3 +118,4 @@ class PoseResponse(BaseModel):
     rep_count: int | None = None
     rep_completed: bool = False
     sync_rate: float | None = None
+    lunge: LungeProgress | None = None

@@ -29,6 +29,7 @@ export interface ExerciseSession {
   exerciseName: string;            // "스쿼트"
   setSummary: string;              // "1세트 x 12회"
   syncRate: number;
+  scoreAvailable?: boolean;
 }
 
 export interface WeeklyActivityResponse {
@@ -81,9 +82,75 @@ export interface ComparisonWithPrevious {
   caloriesDiff: number;
 }
 
+/* ── 스쿼트 깊이 모드 (2026-09-21) ── */
+export type SquatDepthMode = 'FULL' | 'HALF';
+export type SquatDepthGrade = 'EXCELLENT' | 'GOOD' | 'FAIR' | 'NEEDS_WORK' | 'POOR';
+
+export const DEPTH_GRADE_LABEL: Record<SquatDepthGrade, string> = {
+  EXCELLENT: '매우 정확해요',
+  GOOD: '좋아요',
+  FAIR: '양호해요',
+  NEEDS_WORK: '조금 더 신경 써보세요',
+  POOR: '깊이를 다시 확인해보세요',
+};
+
+/** 회차(rep) 하나의 깊이 정확도 — RepSyncRate의 깊이 버전 */
+export interface RepDepth {
+  repNumber: number;
+  minKneeAngle: number;
+  depthScore: number;              // 0-100
+  timeStamp: string;                // "01:15" — 가장 깊었던 프레임
+}
+
+/**
+ * 스쿼트 깊이 정확도 리포트. 런지 세션·구버전 세션·깊이 데이터가 없는 세션은 null —
+ * scoreAvailable 처럼 화면에서 이 필드로 카드 표시 여부를 결정한다.
+ *
+ * ⚠️ HALF 모드의 목표 밴드(115~140도)는 실촬영 하프 스쿼트 영상으로 검증되기 전까지 잠정값이다
+ * (docs/decisions/squat-repetition-counting.md 2026-09-21 절 참고).
+ */
+export interface SquatDepthAnalysis {
+  depthMode: SquatDepthMode;
+  depthScore: number;              // 세션 평균, 0-100
+  depthGrade: SquatDepthGrade;
+  repDepths: RepDepth[];
+  narrative: string[];             // 회차별 한국어 코멘트, 최대 4문장
+}
+
+/* ── 런지 깊이 정확도 (2026-09-27) ── */
+// 스쿼트와 등급 라벨을 공유한다 — 채점 공식(100도 목표선, FULL과 같은 모양)이 같아서다
+// (backend LungeDepthAnalysisCalculator 참고).
+export type LungeDepthGrade = SquatDepthGrade;
+
+/** 회차(rep) 하나의 깊이 정확도 — RepDepth의 런지 버전. side가 추가된 것만 다르다. */
+export interface LungeRepDepth {
+  repNumber: number;
+  side: 'left' | 'right' | null;
+  minKneeAngle: number;
+  depthScore: number;              // 0-100
+  timeStamp: string;                // "01:15" — 가장 깊었던 프레임
+}
+
+/**
+ * 런지 깊이 정확도 리포트. 스쿼트 세션·구버전 세션(좌우 구분 데이터가 없는 V24 이전 런지)은
+ * null — scoreAvailable과 같은 널 가드 규약이다.
+ *
+ * leftAvgKneeAngle/rightAvgKneeAngle은 그 다리로 시작한 회차가 하나도 없으면 null이다
+ * (예: 한쪽 다리로만 촬영된 짧은 세션).
+ */
+export interface LungeDepthAnalysis {
+  depthScore: number;              // 세션 평균, 0-100
+  depthGrade: LungeDepthGrade;
+  leftAvgKneeAngle: number | null;
+  rightAvgKneeAngle: number | null;
+  repDepths: LungeRepDepth[];
+  narrative: string[];             // 회차별 한국어 코멘트, 최대 4문장
+}
+
 export interface SessionReportResponse {
   sessionId: number;
   avgSyncRate: number;
+  scoreAvailable?: boolean;
   totalReps: number;
   workoutMinutes: number;
   caloriesBurned: number;
@@ -96,6 +163,8 @@ export interface SessionReportResponse {
    * worst 점은 repTrend.find(r => r.repNumber === worstSection?.repNumber) 로 찾는다.
    */
   repTrend: RepSyncRate[];
+  squatDepthAnalysis: SquatDepthAnalysis | null;
+  lungeDepthAnalysis: LungeDepthAnalysis | null;
   syncRateDetails: ExerciseSyncRate[];
   comparisonWithPrevious: ComparisonWithPrevious | null;
 }

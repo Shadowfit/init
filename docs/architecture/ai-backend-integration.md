@@ -1,6 +1,23 @@
 # AI ↔ Backend 결합 현황
 
-마지막 업데이트: **2026-09-06** (§3-2 RPC별 stub 종류 정정 추가 — 이전 대규모 반영은 2026-08-08, §0 참조)
+## 2026-09-17 추가: 스쿼트 반복 판정 통일
+
+스쿼트(`exercise_id=1`)는 논문에서 제시한 무릎·고관절 단계와 초 단위 확인을 결합한
+`SquatCounter`로 실시간·업로드 영상 횟수를 함께 판단한다. 완료 시 기존 rep 배치와
+종료 콜백이 실행되며 nonce·proto·Spring 저장 구조는 유지된다. 업로드 영상
+`quality_score`는 `null`이고 기존 실시간 `sync_rate`는 참고용 DTW 유사도다.
+[근거·검증 한계](../decisions/squat-repetition-counting.md).
+
+## 2026-09-17 추가: 전방 런지 횟수 측정
+
+`exercise_id=2`는 전방 런지 분석기로 연결한다. 기준 좌표 없이 시작·재부착할 수 있으며,
+기존 rep 배치와 종료 콜백으로 총 횟수를 저장한다. nonce·워커·proto 필드는 유지한다.
+런지 HTTP 점수는 null이고, gRPC 기본 숫자 0은 Spring의 `repetition_only` 종목 판정으로
+DB NULL로 변환한다(V22). SSE 점수는 nullable, 상세 리포트는 `scoreAvailable`로 구분한다.
+좌우 횟수는 살아 있는 AI 세션에서 유지되며 프로세스 재시작 이전 기록은 좌우 미상으로 표시한다.
+근거·단계·배포 순서는 [전방 런지 구현 문서](../decisions/lunge-repetition-counting.md)를 참조한다.
+
+마지막 업데이트: **2026-09-17** (스쿼트 판정 통일·전방 런지 추가. 이전 대규모 반영은 §0 참조)
 범위: `ai-server/` (Python, FastAPI + gRPC) ↔ `backend/` (Spring Boot, Java/Kotlin)
 목적: 현재 어떻게 결합돼 있는지 사실만 정리한 스냅샷. 트레이드오프·대안 비교는 [`docs/decisions/ai-backend-coupling.md`](../decisions/ai-backend-coupling.md) 참조.
 

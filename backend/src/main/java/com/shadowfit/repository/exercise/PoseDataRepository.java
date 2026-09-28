@@ -46,7 +46,7 @@ public interface PoseDataRepository extends JpaRepository<PoseData, Long> {
      * "프레임이 아예 없다"와 "rep 을 알 수 없는 프레임뿐이다"를 계산기가 구분해 다룰 수 있다.
      */
     @Query("SELECT new com.shadowfit.dto.report.PoseFrameProjection(" +
-           "p.id, p.timestampSec, p.syncRate, p.repNumber, p.smoothedKneeAngle) " +
+           "p.id, p.timestampSec, p.syncRate, p.repNumber, p.smoothedKneeAngle, p.leadLeg) " +
            "FROM PoseData p WHERE p.session.id = :sessionId AND p.createdAt = :sessionAnchor " +
            "ORDER BY p.repNumber ASC, p.timestampSec ASC")
     List<PoseFrameProjection> findFramesBySessionId(@Param("sessionId") Long sessionId,
@@ -107,7 +107,7 @@ public interface PoseDataRepository extends JpaRepository<PoseData, Long> {
      * DB 에서 한 번에 접으려면 파생 테이블(native)이 필요한데, 그 대가로 얻는 게 없다.
      */
     @Query("SELECT AVG(p.syncRate) FROM PoseData p " +
-           "WHERE p.session.id = :sessionId AND p.createdAt = :sessionAnchor AND p.repNumber > 0 " +
+           "WHERE p.session.id = :sessionId AND p.createdAt = :sessionAnchor AND p.repNumber > 0 AND p.syncRate IS NOT NULL " +
            "GROUP BY p.repNumber ORDER BY p.repNumber")
     List<Double> findRepAverageSyncRates(@Param("sessionId") Long sessionId,
                                          @Param("sessionAnchor") LocalDateTime sessionAnchor);

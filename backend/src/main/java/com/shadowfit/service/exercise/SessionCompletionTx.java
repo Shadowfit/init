@@ -3,8 +3,10 @@ package com.shadowfit.service.exercise;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shadowfit.dto.report.PoseFrameProjection;
+import com.shadowfit.dto.report.detailreport.LungeDepthAnalysisDto;
 import com.shadowfit.dto.report.detailreport.RepSyncRateDto;
 import com.shadowfit.dto.report.detailreport.SessionDetailedAnalysis;
+import com.shadowfit.dto.report.detailreport.SquatDepthAnalysisDto;
 import com.shadowfit.dto.report.detailreport.WorstSectionDto;
 import com.shadowfit.global.observability.CorrelationIds;
 import com.shadowfit.global.observability.SessionMetrics;
@@ -20,6 +22,7 @@ import com.shadowfit.repository.group.GroupMemberRepository;
 import com.shadowfit.repository.outbox.OutboxEventRepository;
 import com.shadowfit.repository.report.ReportRepository;
 import com.shadowfit.service.report.SessionAnalysisCalculator;
+import com.shadowfit.service.report.SquatDepthAnalysisCalculator;
 import com.shadowfit.global.error.BusinessException;
 import com.shadowfit.global.error.ErrorCode;
 import com.shadowfit.grpc.SessionCompleteRequest;
@@ -47,6 +50,8 @@ public class SessionCompletionTx {
     private final PoseDataRepository poseDataRepository;
     private final com.shadowfit.service.report.DailyLogService dailyLogService;
     private final SessionAnalysisCalculator sessionAnalysisCalculator;
+    private final SquatDepthAnalysisCalculator squatDepthAnalysisCalculator;
+    private final com.shadowfit.service.report.LungeDepthAnalysisCalculator lungeDepthAnalysisCalculator;
     private final ReportRepository reportRepository;
     private final ObjectMapper objectMapper;
     private final SessionMetrics sessionMetrics;
@@ -132,6 +137,9 @@ public class SessionCompletionTx {
      * 프레임 단위로 평균 내면 값이 달라진다.
      */
     private SyncStats resolveSyncStats(Session session, SessionCompleteRequest request) {
+        if (ExerciseAnalysisCapabilities.isCountOnly(session)) {
+            return SyncStats.none();
+        }
         List<Double> repAverages = poseDataRepository.findRepAverageSyncRates(session.getId(), session.getStartTime());
 
         if (repAverages.isEmpty()) {
@@ -168,16 +176,18 @@ public class SessionCompletionTx {
         List<PoseFrameProjection> poseFrames = poseDataRepository.findFramesBySessionId(session.getId(), session.getStartTime());
         WorstSectionDto worstSection = sessionAnalysisCalculator.calculate(session, poseFrames);
         List<RepSyncRateDto> repTrend = sessionAnalysisCalculator.calculateRepTrend(poseFrames);
+        SquatDepthAnalysisDto squatDepthAnalysis = squatDepthAnalysisCalculator.calculate(session, poseFrames);
+        LungeDepthAnalysisDto lungeDepthAnalysis = lungeDepthAnalysisCalculator.calculate(session, poseFrames);
 
         Report report = new Report();
         report.setMember(session.getMember());
         report.setSession(session);
-        // 둘 다 비면 컬럼을 비워 둔다 — 읽기 경로가 "저장된 게 없다"로 보고 재계산을 시도하는데,
+        // 넷 다 비면 컬럼을 비워 둔다 — 읽기 경로가 "저장된 게 없다"로 보고 재계산을 시도하는데,
         // 프레임이 없어서 비었던 것이라면 재계산도 같은 결과라 손해가 없다.
-        if (worstSection != null || !repTrend.isEmpty()) {
+        if (worstSection != null || !repTrend.isEmpty() || squatDepthAnalysis != null || lungeDepthAnalysis != null) {
             try {
                 report.setDetailedAnalysis(objectMapper.writeValueAsString(
-                        new SessionDetailedAnalysis(worstSection, repTrend)));
+                        new SessionDetailedAnalysis(worstSection, repTrend, squatDepthAnalysis, lungeDepthAnalysis)));
             } catch (JsonProcessingException e) {
                 throw new IllegalStateException("리포트 분석 직렬화 실패 - 세션 " + session.getId(), e);
             }

@@ -144,7 +144,7 @@ SessionMetricsRecordingTest {
             circuitBreakerRegistry.circuitBreaker("aiServer-0").transitionToOpenState();
             when(sessionService.markAsFailedIfStillInProgress(eq(1L), any(LocalDateTime.class))).thenReturn(true);
 
-            service.sendAnalysisRequestToFastApi(1L, dto(), "https://youtu.be/dummy", "BEGINNER", "test-nonce");
+            service.sendAnalysisRequestToFastApi(1L, dto(), "https://youtu.be/dummy", "BEGINNER", "test-nonce", "FULL");
 
             assertThat(transitions(Status.FAILED, "circuit-open")).isEqualTo(1.0);
             // 원인이 다른 FAILED와 섞이면 안 된다 — source 태그가 존재 이유이므로
@@ -157,9 +157,33 @@ SessionMetricsRecordingTest {
             circuitBreakerRegistry.circuitBreaker("aiServer-0").transitionToOpenState();
             when(sessionService.markAsFailedIfStillInProgress(eq(1L), any(LocalDateTime.class))).thenReturn(false);
 
-            service.sendAnalysisRequestToFastApi(1L, dto(), "https://youtu.be/dummy", "BEGINNER", "test-nonce");
+            service.sendAnalysisRequestToFastApi(1L, dto(), "https://youtu.be/dummy", "BEGINNER", "test-nonce", "FULL");
 
             assertThat(transitions(Status.FAILED, "circuit-open")).isZero();
+        }
+
+        @Test
+        @DisplayName("squatDepthMode 인자가 AnalyzeRequest.depth_mode로 그대로 실린다 (2026-09-21)")
+        void sendAnalysisRequest_setsDepthModeOnAnalyzeRequest() {
+            org.mockito.ArgumentCaptor<AnalyzeRequest> captor =
+                    org.mockito.ArgumentCaptor.forClass(AnalyzeRequest.class);
+
+            service.sendAnalysisRequestToFastApi(3L, dto(), "https://youtu.be/dummy", "BEGINNER", "test-nonce", "HALF");
+
+            verify(stub).startAnalysis(captor.capture(), any());
+            assertThat(captor.getValue().getDepthMode()).isEqualTo("HALF");
+        }
+
+        @Test
+        @DisplayName("squatDepthMode가 null이면 AnalyzeRequest.depth_mode는 빈 문자열(AI측 FULL 취급)")
+        void sendAnalysisRequest_nullDepthMode_sendsEmptyString() {
+            org.mockito.ArgumentCaptor<AnalyzeRequest> captor =
+                    org.mockito.ArgumentCaptor.forClass(AnalyzeRequest.class);
+
+            service.sendAnalysisRequestToFastApi(4L, dto(), "https://youtu.be/dummy", "BEGINNER", "test-nonce", null);
+
+            verify(stub).startAnalysis(captor.capture(), any());
+            assertThat(captor.getValue().getDepthMode()).isEmpty();
         }
 
         @Test
@@ -177,7 +201,7 @@ SessionMetricsRecordingTest {
                 return null;
             }).when(stub).startAnalysis(any(AnalyzeRequest.class), any());
 
-            service.sendAnalysisRequestToFastApi(2L, dto(), "https://youtu.be/dummy", "BEGINNER", "test-nonce");
+            service.sendAnalysisRequestToFastApi(2L, dto(), "https://youtu.be/dummy", "BEGINNER", "test-nonce", "FULL");
 
             assertThat(transitions(Status.FAILED, "grpc-error")).isEqualTo(1.0);
             assertThat(transitions(Status.FAILED, "circuit-open")).isZero();

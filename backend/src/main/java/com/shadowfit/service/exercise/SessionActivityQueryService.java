@@ -179,6 +179,7 @@ public class SessionActivityQueryService {
         // 같은 세션이 화면마다 0/1세트로 다르게 보였음(#69).
         detail.setSetSummary(SetSummaryFormatter.format(s.getTotalReps()));
         detail.setSyncRate(s.getAvgSyncRate() != null ? s.getAvgSyncRate().doubleValue() : 0.0);
+        detail.setScoreAvailable(s.getAvgSyncRate() != null);
         return detail;
     }
 

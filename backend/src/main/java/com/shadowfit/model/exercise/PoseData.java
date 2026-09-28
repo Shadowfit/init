@@ -73,6 +73,16 @@ public class PoseData {
     @Builder.Default
     private Double smoothedKneeAngle = 0.0;
 
+    /**
+     * 이 프레임(rep)이 속한 앞다리 — {@code "left"} | {@code "right"}, 스쿼트·구버전 행은
+     * {@code null}(V24, 2026-09-27). 런지에서는 {@link #smoothedKneeAngle}이 좌우 평균이 아니라
+     * 이 다리의 무릎각이라(ai-server app/core/lunge_analyzer.py), 좌/우로 나눠 채점하려면
+     * 이 값이 있어야 한다. proto3 빈 문자열은 저장 계층(PoseDataService)에서 null로 접는다 —
+     * "런지인데 판정 전"과 "이 개념 자체가 없음(스쿼트)"을 구분하기 위해서다.
+     */
+    @Column(name = "lead_leg", length = 5)
+    private String leadLeg;
+
     @Column(length = 500)
     private String feedbackMessage; // AI가 주는 실시간 피드백
 

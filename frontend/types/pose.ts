@@ -4,6 +4,16 @@ import type { FeedbackType } from './feedback';
 // AI 가 돌려주는 자세 결함 유형 (백엔드 FeedbackType 8종과 동일)
 export type AiFeedbackType = FeedbackType;
 
+export interface LungeProgress {
+  phase: 'calibrating' | 'ready' | 'descending' | 'returning';
+  lead_leg: 'left' | 'right' | null;
+  left_reps: number;
+  right_reps: number;
+  unassigned_reps: number;
+  guidance: string;
+  score_available: boolean;
+}
+
 // 실시간 포즈 감지 요청
 export interface PoseDetectRequest {
   image: string; // base64 인코딩 프레임
@@ -19,8 +29,8 @@ export interface PoseDetectRequest {
 }
 
 // 실시간 포즈 감지 응답
-// ⚠️ AI PoseResponse 에는 feedback_type 필드가 아직 없음. exercise.tsx 가 r.feedback_type 을
-//    읽으므로 optional 로 둠 — 실제 동작하려면 AI 서버 응답에 추가 필요(협의 대상).
+// AI 는 완료/깊이 미확인 스쿼트 안내를 message 로 보낸다. feedback_type 은 현재
+// PoseResponse 에 없으므로 향후 구조화 유형을 추가할 때까지 optional 호환 필드다.
 // 프레임이 판정에 못 들어간 사유 (이슈 #267). AI PoseSkipReason 과 1:1 이다.
 //   RATE_LIMITED         서버가 의도적으로 잘랐다 — 세션이 건강해도 나온다
 //   NO_POSE·LOW_VISIBILITY   입력 문제 — 프레임은 왔는데 쓸 수가 없다
@@ -48,6 +58,7 @@ export interface PoseDetectResponse {
   sync_rate?: number | null;
   rep_count?: number | null;
   rep_completed?: boolean;
+  lunge?: LungeProgress | null;
   feedback_type?: AiFeedbackType | null;
   angles?: number[] | null;
   message?: string | null;

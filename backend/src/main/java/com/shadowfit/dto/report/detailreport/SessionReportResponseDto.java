@@ -16,6 +16,8 @@ import java.util.List;
 public class SessionReportResponseDto {
     private Long sessionId;
     private int avgSyncRate;
+    // 횟수만 측정한 운동의 0 기본값을 점수로 표시하지 않도록 구분한다.
+    private boolean scoreAvailable;
     private int totalReps;
     private int workoutMinutes;
     private int caloriesBurned;
@@ -31,6 +33,18 @@ public class SessionReportResponseDto {
      * {@code pose_data} 에 rep 별로 이미 있었고 노출 경로만 없었다.
      */
     private List<RepSyncRateDto> repTrend;
+
+    /**
+     * 스쿼트 깊이 정확도 리포트(2026-09-21). 런지 세션·구버전 세션·깊이 데이터가 없는 세션은
+     * null — {@code worstSection}과 같은 널 가드 규약이다.
+     */
+    private SquatDepthAnalysisDto squatDepthAnalysis;
+
+    /**
+     * 런지 깊이 정확도 리포트(2026-09-27). 스쿼트 세션·구버전 세션(V24 이전)·좌우 구분 깊이
+     * 데이터가 없는 세션은 null — 위와 같은 널 가드 규약이다.
+     */
+    private LungeDepthAnalysisDto lungeDepthAnalysis;
 
     private List<ExerciseSyncRateDto> syncRateDetails;
 
@@ -56,6 +70,7 @@ public class SessionReportResponseDto {
         SessionReportResponseDto dto = new SessionReportResponseDto();
         dto.setSessionId(session.getId());
         dto.setAvgSyncRate(intOrZero(session.getAvgSyncRate()));
+        dto.setScoreAvailable(session.getAvgSyncRate() != null);
         dto.setTotalReps(session.getTotalReps() == null ? 0 : session.getTotalReps());
         dto.setWorkoutMinutes((int) java.time.Duration.between(session.getStartTime(), session.getEndTime()).toMinutes());
         dto.setCaloriesBurned(intOrZero(session.getCaloriesBurned()));

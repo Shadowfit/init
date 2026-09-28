@@ -1,13 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, Alert, AppState, type AppStateStatus } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, AppState, Platform, type AppStateStatus } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { exercisesService } from '@/services/exercisesService';
 import { aiService, aiConfigError } from '@/services/aiService';
 import type { FeedbackTemplate } from '@/types/feedback';
 import { FEEDBACK_TYPE_LABEL } from '@/types/feedback';
-import type { AiFeedbackType } from '@/types/pose';
+import type { AiFeedbackType, LungeProgress } from '@/types/pose';
 import {
   Camera as CameraIcon,
   ChevronLeft,
@@ -17,33 +16,15 @@ import {
   ChevronUp,
   ChevronDown,
   Play,
-  FlaskConical,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
-import * as Haptics from 'expo-haptics';
 import { COLORS, FONT_SIZE, SPACING, RADIUS } from '@/constants/Colors';
 import Button from '@/components/ui/Button';
-
-/** 색상을 rgba 문자열로 변환 (hex만 지원) */
-function hexToRgba(hex: string, alpha: number) {
-  const clean = hex.replace('#', '');
-  const r = parseInt(clean.slice(0, 2), 16);
-  const g = parseInt(clean.slice(2, 4), 16);
-  const b = parseInt(clean.slice(4, 6), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
-/** 싱크로율 → 색상 (80%+ 정석 / 60~80% 교정 필요 / <60% 부상 위험) */
-function getSyncColor(rate: number) {
-  if (rate >= 80) return COLORS.syncHigh; // 라임 그린 — 정석
-  if (rate >= 60) return COLORS.syncMid;  // 주황 — 교정 필요
-  return COLORS.syncLow;                  // 빨강 — 부상 위험
-}
 
 /** 백엔드 exerciseId → AI exercise_type 매핑 */
 function exerciseTypeOf(exerciseId: number): string {
   // 백엔드 시드: 1=스쿼트, 2=런지, 3=플랭크
-  // AI 측은 squat/deadlift/pullup 분석기만 있음. 매핑 부족분은 squat 폴백.
+  // 선택 가능한 종목은 스쿼트와 전방 런지다.
   switch (exerciseId) {
     case 1: return 'squat';
     case 2: return 'lunge';
@@ -52,16 +33,19 @@ function exerciseTypeOf(exerciseId: number): string {
   }
 }
 
-/** 임시 mock base64 1×1 px JPEG. 카메라 frame capture 도입 시 교체.
- *  실제 분석은 mediapipe 라 0byte 페이로드는 거부될 수 있으나, 폴링 흐름 검증용. */
-const MOCK_FRAME_B64 =
-  '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAj/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFAEBAAAAAAAAAAAAAAAAAAAAAP/EABQRAQAAAAAAAAAAAAAAAAAAAAD/2gAMAwEAAhEDEQA/AL+AB//Z';
-
 export default function ExerciseScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ exerciseId?: string }>();
   // 운동 종목 — 라우트 param 우선, 기본 1(스쿼트). 추후 종목 선택 UI 추가 시 정리.
-  const exerciseId = params.exerciseId ? Number(params.exerciseId) : 1;
+  const [exerciseId, setExerciseId] = useState(params.exerciseId === '2' ? 2 : 1);
+  const isLunge = exerciseId === 2;
+  // 스쿼트 깊이 모드(FULL/HALF, 2026-09-21). 종목 선택과 같은 화면에서 운동 시작 전에 고른다 —
+  // 녹화 중엔 종목 칩과 동일하게 잠근다(선택은 한 번, 세션 시작 시점에 고정).
+  const [squatDepthMode, setSquatDepthMode] = useState<'FULL' | 'HALF'>('FULL');
+  const [lunge, setLunge] = useState<LungeProgress | null>(null);
+  const [captureMessage, setCaptureMessage] = useState<string | null>(null);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [cameraRetryKey, setCameraRetryKey] = useState(0);
 
   const [permission, requestPermission] = useCameraPermissions();
   const [isRecording, setIsRecording] = useState(false);
@@ -80,10 +64,20 @@ export default function ExerciseScreen() {
   // 워커로 고정 전달한다. 안 실으면 커널이 무작위 분산시켜 세션 상태가 없는 워커로 갈 수 있다.
   const [aiWorkerIndex, setAiWorkerIndex] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
+  const lastRouteExercise = useRef(params.exerciseId);
+  useEffect(() => {
+    if (lastRouteExercise.current === params.exerciseId) return;
+    lastRouteExercise.current = params.exerciseId;
+    if (!isRecording && !busy && sessionId == null) {
+      setExerciseId(params.exerciseId === '2' ? 2 : 1);
+      setLunge(null);
+    }
+  }, [params.exerciseId, isRecording, busy, sessionId]);
   // 페르소나 멘트 프리로드 (TTS 보류 — 일단 받아서 보관만)
   const [, setFeedbackTemplates] = useState<FeedbackTemplate[]>([]);
   // AI 응답 — 최근 자세 결함 라벨 (시각 표시용)
   const [lastFeedback, setLastFeedback] = useState<AiFeedbackType | null>(null);
+  const [coachingNotice, setCoachingNotice] = useState<{ message: string; success: boolean } | null>(null);
   // AI 응답 — 누적 횟수
   const [repCount, setRepCount] = useState(0);
   // 카메라 ref (takePictureAsync 호출용)
@@ -112,6 +106,7 @@ export default function ExerciseScreen() {
       try {
         const re = await exercisesService.reattachSession(active.data.sessionId);
         const r = re.data;
+        setExerciseId(active.data.exerciseId);
         setSessionId(r.sessionId);
         setSessionNonce(r.sessionNonce);
         setAiWorkerIndex(r.aiWorkerIndex ?? null);
@@ -170,16 +165,26 @@ export default function ExerciseScreen() {
     // 예전에는 릴리스 빌드가 조용히 http://localhost:8000 을 만들었고, ATS·cleartext 정책이
     // 그걸 막아 «세션은 시작됐는데 카운트가 안 오르는» 상태가 됐다. 원인이 주소라는 단서가
     // 어디에도 없었다. 세션을 만들기 전에 걸러야 DB 에 못 쓸 세션이 안 남는다.
-    if (aiConfigError) {
+    if (!isRecording && aiConfigError) {
       Alert.alert('AI 서버 설정 오류', aiConfigError);
+      return;
+    }
+
+    if (!isRecording && !process.env.EXPO_PUBLIC_AI_PUBLIC_TOKEN) {
+      Alert.alert('AI 서버 설정 오류', 'AI 연결 설정이 없어 운동을 분석할 수 없습니다.');
       return;
     }
 
     setBusy(true);
     try {
       if (!isRecording) {
+        setLunge(null);
+        setCaptureMessage(null);
         // ── 시작: 백엔드에 세션 생성 + 멘트 프리로드 ─────────
-        const res = await exercisesService.startSession({ exerciseId });
+        const res = await exercisesService.startSession({
+          exerciseId,
+          depthMode: isLunge ? undefined : squatDepthMode,
+        });
         setSessionId(res.data.sessionId);
         setSessionNonce(res.data.sessionNonce);
         setAiWorkerIndex(res.data.aiWorkerIndex ?? null);
@@ -192,14 +197,23 @@ export default function ExerciseScreen() {
       } else {
         // ── 종료: 백엔드 종료 통보 + 리포트로 이동 ──────────
         const id = sessionId;
+        if (id != null) await exercisesService.endSession(id);
         setIsRecording(false);
         // 비밀값은 세션과 함께 버린다 (#187). 리포트 화면으로 넘어가면 어차피 언마운트되지만,
         // «끝난 세션의 자격증명이 메모리에 남아 있다» 를 화면 전환 타이밍에 기대지 않는다.
         setSessionNonce(null);
         setAiWorkerIndex(null);
+        setSessionId(null);
         if (id != null) {
-          await exercisesService.endSession(id);
-          router.replace(`/report/${id}` as any);
+          if (isLunge) {
+            const sides = lunge
+              ? `왼쪽 ${lunge.left_reps}회 · 오른쪽 ${lunge.right_reps}회` +
+                (lunge.unassigned_reps ? `\n이전 기록 ${lunge.unassigned_reps}회 (좌우 정보 없음)` : '')
+              : '좌우 정보가 아직 없습니다.';
+            Alert.alert('전방 런지 종료', `총 ${repCount}회\n${sides}\n자세 점수는 측정하지 않습니다.`);
+          } else {
+            router.replace(`/report/${id}` as any);
+          }
         }
       }
     } catch (e: any) {
@@ -215,15 +229,15 @@ export default function ExerciseScreen() {
     }
   };
 
-  // 테두리 점멸 애니메이션
-  const borderOpacity = useRef(new Animated.Value(0)).current;
-
-  // 녹화 정지 시 싱크로율 0 + 결함 라벨 + rep 초기화
+  // 녹화 정지 시 참고 유사도, 알림, 횟수 초기화
   useEffect(() => {
     if (!isRecording) {
       setSyncRate(0);
       setLastFeedback(null);
+      setCoachingNotice(null);
       setRepCount(0);
+      setLunge(null);
+      setCaptureMessage(null);
     }
   }, [isRecording]);
 
@@ -233,6 +247,12 @@ export default function ExerciseScreen() {
     const t = setTimeout(() => setLastFeedback(null), 4000);
     return () => clearTimeout(t);
   }, [lastFeedback]);
+
+  useEffect(() => {
+    if (!coachingNotice) return;
+    const t = setTimeout(() => setCoachingNotice(null), 4000);
+    return () => clearTimeout(t);
+  }, [coachingNotice]);
 
   // ── AI 폴링 (분기 H2) ────────────────────────────────────
   // takePictureAsync 는 셔터·인코딩 비용이 크므로 10fps 는 비현실적.
@@ -244,7 +264,7 @@ export default function ExerciseScreen() {
     // 프레임을 쏘면서 «세션 없음» 을 반복해 받느니 아예 시작을 안 하는 편이 낫다.
     // 화면이 포커스를 잃었거나 앱이 백그라운드면 폴링 자체를 안 돈다(§2) — 세션은 끝내지
     // 않고 그대로 두며, 돌아오면 이 effect 가 재실행돼 이어서 폴링한다.
-    if (!isRecording || sessionId == null || sessionNonce == null || !isForeground || !isScreenFocused) return;
+    if (busy || !isRecording || sessionId == null || sessionNonce == null || !isForeground || !isScreenFocused) return;
     const token = process.env.EXPO_PUBLIC_AI_PUBLIC_TOKEN;
     if (!token) return;
 
@@ -260,15 +280,14 @@ export default function ExerciseScreen() {
       if (cancelled || inFlight) return;
       inFlight = true;
       try {
-        let image = MOCK_FRAME_B64;
-        // 실제 카메라 프레임 (가능하면). 카메라가 아직 마운트 안 됐을 때만 mock 사용.
+        let image: string | undefined;
         try {
           const cam = cameraRef.current;
           if (cam) {
             const snap = await cam.takePictureAsync({
               base64: true,
               quality: 0.4, // 분석엔 충분, 페이로드 줄임
-              skipProcessing: true, // 회전·EXIF 처리 스킵 → 지연 단축
+              skipProcessing: false, // 분석 좌표계가 기기 회전과 일치하도록 처리
               shutterSound: false,
             });
             if (snap?.base64) image = snap.base64;
@@ -281,6 +300,10 @@ export default function ExerciseScreen() {
         }
 
         if (cancelled) return;
+        if (!image) {
+          setCaptureMessage('카메라 영상을 가져오지 못했습니다. 카메라 상태를 확인해주세요.');
+          return;
+        }
         try {
           // timestamp_sec 은 더 보내지 않는다 (이슈 #156). 여기서 보내던 Date.now()/1000 은
           // epoch 라 «세션 시작 기준 경과 초» 가 아니었고, 변환하는 곳이 한 군데도 없어 그대로
@@ -296,7 +319,11 @@ export default function ExerciseScreen() {
           );
           if (cancelled) return;
           const r = res.data;
+          if (r.lunge) setLunge(r.lunge);
           if (r.success === false) {
+            if (r.skip_reason !== 'RATE_LIMITED') {
+              setCaptureMessage(r.lunge?.guidance ?? r.message ?? '전신이 보이도록 위치를 조정해주세요.');
+            }
             // success 는 «판정에 들어갔는가» 다(#267) — RATE_LIMITED·NO_POSE·LOW_VISIBILITY 는
             // 정상 동작 중에도 나는 스킵이라 폴링을 유지한다. 세션·순서 문제만 치명적이다.
             const fatal =
@@ -312,10 +339,18 @@ export default function ExerciseScreen() {
             }
             return;
           }
+          setCaptureMessage(null);
           if (r.sync_rate != null) setSyncRate(Math.round(r.sync_rate));
-          if (r.feedback_type) setLastFeedback(r.feedback_type);
+          if (r.message) {
+            setCoachingNotice({ message: r.message, success: r.rep_completed === true });
+            setLastFeedback(null);
+          } else if (r.feedback_type) {
+            setLastFeedback(r.feedback_type);
+            setCoachingNotice(null);
+          }
           if (r.rep_count != null) setRepCount(r.rep_count);
         } catch (e: any) {
+          if (!cancelled) setCaptureMessage('AI 연결을 확인하고 있습니다. 잠시 원위치에서 기다려주세요.');
           if (__DEV__) {
             // eslint-disable-next-line no-console
             console.warn('[ai pose] status=', e?.response?.status, e?.message);
@@ -331,51 +366,7 @@ export default function ExerciseScreen() {
       cancelled = true;
       clearInterval(id);
     };
-  }, [isRecording, sessionId, sessionNonce, exerciseId, aiWorkerIndex, isForeground, isScreenFocused]);
-
-  // 싱크로율 낮을 때 진동 피드백
-  const prevSyncRef = useRef(syncRate);
-  useEffect(() => {
-    if (!isRecording) return;
-    const prev = prevSyncRef.current;
-    prevSyncRef.current = syncRate;
-
-    // 부상 위험 구간 (<60%) 진입/유지 시 진동 알림
-    if (syncRate < 60 && prev >= 60) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    } else if (syncRate < 60) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-  }, [syncRate, isRecording]);
-
-  // 싱크로율에 따른 비네트 페이드 애니메이션
-  useEffect(() => {
-    if (!isRecording) {
-      borderOpacity.setValue(0);
-      return;
-    }
-
-    if (syncRate < 60) {
-      // 부상 위험 구간(<60%): 빨강이 부드럽게 페이드 in/out
-      const pulse = Animated.loop(
-        Animated.sequence([
-          Animated.timing(borderOpacity, { toValue: 0.9, duration: 800, useNativeDriver: false }),
-          Animated.timing(borderOpacity, { toValue: 0.4, duration: 800, useNativeDriver: false }),
-        ]),
-      );
-      pulse.start();
-      return () => pulse.stop();
-    }
-
-    // 60% 이상: 은은하게 고정 (정석 80%+ 는 더 옅게)
-    Animated.timing(borderOpacity, {
-      toValue: syncRate >= 80 ? 0.5 : 0.6,
-      duration: 400,
-      useNativeDriver: false,
-    }).start();
-  }, [syncRate, isRecording]);
-
-  const syncColor = getSyncColor(syncRate);
+  }, [busy, isRecording, sessionId, sessionNonce, exerciseId, aiWorkerIndex, isForeground, isScreenFocused]);
 
   // 카메라 권한 없을 때
   if (!permission) {
@@ -405,19 +396,14 @@ export default function ExerciseScreen() {
 
   return (
     <View style={styles.container}>
-      {/* 싱크로율 기반 비네트 그라데이션 (4방향) */}
-      <Animated.View
-        style={[styles.vignetteWrap, { opacity: borderOpacity }]}
-        pointerEvents="none"
-      >
-        <LinearGradient
-          colors={[hexToRgba(syncColor, 0.85), 'transparent']}
-          style={styles.vignetteTop}
-        />
-      </Animated.View>
-
       {/* 카메라 뷰 */}
-      <CameraView ref={cameraRef} style={styles.camera} facing="front">
+      <CameraView
+        key={cameraRetryKey}
+        ref={cameraRef}
+        style={styles.camera}
+        facing="front"
+        onMountError={(error) => setCameraError(error.message || '카메라 연결에 실패했습니다.')}
+      >
         {/* 상단 UI 오버레이 */}
         <View style={styles.topOverlay}>
           <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
@@ -433,38 +419,86 @@ export default function ExerciseScreen() {
           </View>
         </View>
 
-        {/* 싱크로율 게이지 */}
-        <View style={styles.syncGauge}>
-          <Zap size={14} color={syncColor} strokeWidth={2} fill={syncColor} />
-          <Text style={styles.syncLabel}>싱크로율</Text>
-          <View style={styles.syncBarBg}>
-            <View
-              style={[
-                styles.syncBarFill,
-                { width: `${syncRate}%`, backgroundColor: syncColor },
-              ]}
+        {cameraError && (
+          <View style={styles.cameraErrorPanel}>
+            <CameraIcon size={32} color={COLORS.textMuted} strokeWidth={1.75} />
+            <Text style={styles.permTitle}>카메라를 열 수 없습니다</Text>
+            <Text style={styles.permDesc}>
+              {Platform.OS === 'web'
+                ? '브라우저의 카메라 권한과 연결된 카메라를 확인해주세요.'
+                : '기기의 카메라 권한과 연결 상태를 확인해주세요.'}
+            </Text>
+            {__DEV__ && <Text style={styles.permDesc}>{cameraError}</Text>}
+            <Button
+              title="다시 시도"
+              onPress={() => { setCameraError(null); setCameraRetryKey((key) => key + 1); }}
+              style={{ marginTop: SPACING.lg }}
             />
           </View>
-          <Text style={[styles.syncValue, { color: syncColor }]}>{syncRate}%</Text>
+        )}
+
+        {/* 종목 선택과 측정 상태 */}
+        <View style={styles.exercisePicker}>
+          {([{ id: 1, name: '스쿼트' }, { id: 2, name: '전방 런지' }]).map((exercise) => (
+            <TouchableOpacity
+              key={exercise.id}
+              accessibilityRole="button"
+              accessibilityState={{ selected: exerciseId === exercise.id, disabled: isRecording || busy }}
+              disabled={isRecording || busy}
+              onPress={() => { setExerciseId(exercise.id); setLunge(null); setCaptureMessage(null); }}
+              style={[styles.exerciseChoice, exerciseId === exercise.id && styles.exerciseSelected]}
+            >
+              <Text style={styles.exerciseChoiceText}>{exercise.name}</Text>
+            </TouchableOpacity>
+          ))}
         </View>
+        {!isLunge && (
+          <View style={styles.depthModePicker}>
+            {([{ id: 'FULL', label: '풀 스쿼트' }, { id: 'HALF', label: '하프 스쿼트' }] as const).map((mode) => (
+              <TouchableOpacity
+                key={mode.id}
+                accessibilityRole="button"
+                accessibilityState={{ selected: squatDepthMode === mode.id, disabled: isRecording || busy }}
+                disabled={isRecording || busy}
+                onPress={() => setSquatDepthMode(mode.id)}
+                style={[styles.depthModeChoice, squatDepthMode === mode.id && styles.exerciseSelected]}
+              >
+                <Text style={styles.exerciseChoiceText}>{mode.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+        {isLunge ? (
+          <View style={styles.lungePanel}>
+            <Text style={styles.lungeTitle}>전방 런지 · 횟수 측정</Text>
+            <Text style={styles.guideRow}>{captureMessage ?? lunge?.guidance ?? '옆모습과 두 발이 보이게 서주세요. 앞발을 내딛고 굽힌 뒤 원위치로 돌아오면 1회입니다.'}</Text>
+            {isRecording && <Text style={styles.lungeSides}>{lunge ? `왼쪽 ${lunge.left_reps}회 · 오른쪽 ${lunge.right_reps}회` : '좌우 횟수 확인 중...'}</Text>}
+            {!!lunge?.unassigned_reps && <Text style={styles.guideRow}>이전 {lunge.unassigned_reps}회는 좌우 정보 없이 복원되었습니다.</Text>}
+            <Text style={styles.guideRow}>자세 점수는 측정하지 않습니다.</Text>
+          </View>
+        ) : (
+        <View style={styles.syncGauge}>
+          <Text style={styles.syncLabel}>동작 유사도 · 참고용</Text>
+          <Text style={styles.syncValue}>{isRecording && syncRate > 0 ? `${syncRate}%` : '측정 전'}</Text>
+        </View>
+        )}
 
         {/* 자세 결함 토스트 (AI feedback_type 응답) */}
-        {lastFeedback && (
-          <View style={styles.feedbackToast}>
-            <Zap size={14} color={COLORS.warning} strokeWidth={2} fill={COLORS.warning} />
+        {(coachingNotice || lastFeedback) && (
+          <View style={[styles.feedbackToast, coachingNotice?.success && styles.feedbackToastSuccess]}>
+            <Zap size={14} color={coachingNotice?.success ? COLORS.success : COLORS.warning}
+              strokeWidth={2} fill={coachingNotice?.success ? COLORS.success : COLORS.warning} />
             <Text style={styles.feedbackToastText}>
-              {FEEDBACK_TYPE_LABEL[lastFeedback] ?? lastFeedback}
+              {coachingNotice?.message ?? (lastFeedback ? FEEDBACK_TYPE_LABEL[lastFeedback] ?? lastFeedback : '')}
             </Text>
           </View>
         )}
 
-        {/* 운동 횟수 카운터 (AI rep_count 응답) */}
-        {isRecording && (
-          <View style={styles.repCounter}>
-            <Text style={styles.repValue}>{repCount}</Text>
-            <Text style={styles.repLabel}>회</Text>
-          </View>
-        )}
+        {/* AI가 완료 동작으로 판정한 횟수 */}
+        <View style={styles.repCounter}>
+          <Text style={styles.repValue}>{repCount}</Text>
+          <Text style={styles.repLabel}>완료한 횟수</Text>
+        </View>
 
         {/* 촬영 가이드 (접기/펴기) */}
         <TouchableOpacity
@@ -481,56 +515,12 @@ export default function ExerciseScreen() {
         </TouchableOpacity>
         {guideOpen && (
           <View style={styles.guidePanel}>
-            <Text style={styles.guideRow}>📐  정면 또는 측면(45°)에서 촬영</Text>
-            <Text style={styles.guideRow}>🧍  전신이 보이도록 1.5m 이상 거리 확보</Text>
+            <Text style={styles.guideRow}>{isLunge ? '📐  측면에 카메라 고정 · 양쪽 무릎과 발끝이 보여야 합니다' : '📐  정면 기준 45° 위치에 카메라 고정'}</Text>
+            {isLunge && <Text style={styles.guideRow}>🦶  뒷발 위치를 유지하고 앞발을 처음 자리로 되돌려주세요</Text>}
+            <Text style={styles.guideRow}>🧍  머리부터 발목까지 여백을 두고 촬영</Text>
+            <Text style={styles.guideRow}>⏱️  시작과 종료 때 똑바로 선 자세를 2초 유지</Text>
             <Text style={styles.guideRow}>💡  밝은 조명, 단색 배경 권장</Text>
-            <Text style={styles.guideRow}>🚫  거울 반사, 여러 사람 환경 주의</Text>
-          </View>
-        )}
-
-        {/* DEV: 싱크로율 수동 조절 (AI 서버 연동 전 테스트용) */}
-        {__DEV__ && isRecording && (
-          <View style={styles.devPanel}>
-            <View style={styles.devLabelRow}>
-              <FlaskConical size={14} color={COLORS.textSecondary} strokeWidth={2} />
-              <Text style={styles.devLabel}>DEV 싱크로율 테스트</Text>
-            </View>
-            <Text style={styles.devGuide}>
-              <Text style={{ color: COLORS.syncHigh, fontWeight: '700' }}>80%↑ 정석</Text>
-              <Text>  ·  </Text>
-              <Text style={{ color: COLORS.syncMid, fontWeight: '700' }}>60~80% 교정 필요</Text>
-              <Text>  ·  </Text>
-              <Text style={{ color: COLORS.syncLow, fontWeight: '700' }}>60%↓ 부상 위험</Text>
-            </Text>
-            <View style={styles.devRow}>
-              <TouchableOpacity
-                style={[styles.devBtn, { borderColor: COLORS.syncLow }]}
-                onPress={() => setSyncRate(40)}
-              >
-                <Text style={[styles.devBtnText, { color: COLORS.syncLow }]}>
-                  40%
-                </Text>
-                <Text style={styles.devBtnSub}>부상 위험</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.devBtn, { borderColor: COLORS.syncMid }]}
-                onPress={() => setSyncRate(70)}
-              >
-                <Text style={[styles.devBtnText, { color: COLORS.syncMid }]}>
-                  70%
-                </Text>
-                <Text style={styles.devBtnSub}>교정 필요</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.devBtn, { borderColor: COLORS.syncHigh }]}
-                onPress={() => setSyncRate(90)}
-              >
-                <Text style={[styles.devBtnText, { color: COLORS.syncHigh }]}>
-                  90%
-                </Text>
-                <Text style={styles.devBtnSub}>정석</Text>
-              </TouchableOpacity>
-            </View>
+            <Text style={styles.guideRow}>🚫  무릎을 가리는 랙·기구와 여러 사람 환경은 피해주세요</Text>
           </View>
         )}
 
@@ -557,10 +547,10 @@ export default function ExerciseScreen() {
           </View>
 
           {/* 기준 영상 미리보기 */}
-          <TouchableOpacity style={styles.refVideoBtn} activeOpacity={0.7}>
+          {!isLunge && <TouchableOpacity style={styles.refVideoBtn} activeOpacity={0.7}>
             <Play size={14} color={COLORS.primary} strokeWidth={2} fill={COLORS.primary} />
             <Text style={styles.refVideoText}>기준 영상</Text>
-          </TouchableOpacity>
+          </TouchableOpacity>}
         </View>
       </CameraView>
     </View>
@@ -568,6 +558,15 @@ export default function ExerciseScreen() {
 }
 
 const styles = StyleSheet.create({
+  exercisePicker: { flexDirection: 'row', gap: 8, marginHorizontal: 20, marginTop: 12 },
+  exerciseChoice: { paddingHorizontal: 18, paddingVertical: 10, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.6)', borderWidth: 1, borderColor: 'transparent' },
+  exerciseSelected: { borderColor: COLORS.primary },
+  exerciseChoiceText: { color: COLORS.text, fontWeight: '700' },
+  depthModePicker: { flexDirection: 'row', gap: 8, marginHorizontal: 20, marginTop: 8 },
+  depthModeChoice: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.5)', borderWidth: 1, borderColor: 'transparent' },
+  lungePanel: { margin: 20, padding: 16, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.75)', gap: 8 },
+  lungeTitle: { color: COLORS.primary, fontSize: 17, fontWeight: '700' },
+  lungeSides: { color: COLORS.text, fontSize: 20, fontWeight: '700' },
   container: { flex: 1, backgroundColor: COLORS.black },
   center: {
     flex: 1,
@@ -590,24 +589,18 @@ const styles = StyleSheet.create({
     marginTop: SPACING.sm,
   },
 
-  // 비네트 그라데이션
-  vignetteWrap: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 10,
-  },
-  vignetteTop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 260,
-  },
-
   camera: { flex: 1 },
+  cameraErrorPanel: {
+    position: 'absolute',
+    top: '32%',
+    left: SPACING.lg,
+    right: SPACING.lg,
+    zIndex: 20,
+    padding: SPACING.xl,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.surface,
+    alignItems: 'center',
+  },
 
   // Top overlay
   topOverlay: {
@@ -626,10 +619,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 
-  // Sync gauge
+  // 동작 유사도 참고 정보
   syncGauge: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     backgroundColor: 'rgba(0,0,0,0.6)',
     marginHorizontal: SPACING.lg,
     marginTop: SPACING.lg,
@@ -639,19 +633,10 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
   },
   syncLabel: { color: COLORS.textSecondary, fontSize: FONT_SIZE.xs },
-  syncBarBg: {
-    flex: 1,
-    height: 6,
-    backgroundColor: COLORS.surfaceLight,
-    borderRadius: 3,
-  },
-  syncBarFill: {
-    height: 6,
-    borderRadius: 3,
-  },
   syncValue: {
     fontSize: FONT_SIZE.md,
     fontWeight: '800',
+    color: COLORS.text,
     minWidth: 40,
     textAlign: 'right',
   },
@@ -673,6 +658,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: SPACING.sm,
+  },
+  feedbackToastSuccess: {
+    borderColor: COLORS.success,
   },
   feedbackToastText: {
     color: COLORS.text,
@@ -782,53 +770,4 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 
-  // DEV 패널
-  devPanel: {
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    marginHorizontal: SPACING.lg,
-    marginTop: SPACING.sm,
-    borderRadius: RADIUS.sm,
-    padding: SPACING.md,
-    borderWidth: 1,
-    borderColor: COLORS.warning,
-  },
-  devLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    marginBottom: SPACING.sm,
-  },
-  devLabel: {
-    fontSize: FONT_SIZE.xs,
-    color: COLORS.textSecondary,
-    fontWeight: '700',
-  },
-  devGuide: {
-    fontSize: 10,
-    color: COLORS.textMuted,
-    textAlign: 'center',
-    marginBottom: SPACING.sm,
-  },
-  devRow: {
-    flexDirection: 'row',
-    gap: SPACING.sm,
-  },
-  devBtn: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: RADIUS.sm,
-    paddingVertical: SPACING.sm,
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.4)',
-  },
-  devBtnText: {
-    fontSize: FONT_SIZE.md,
-    fontWeight: '800',
-  },
-  devBtnSub: {
-    fontSize: 10,
-    color: COLORS.textMuted,
-    marginTop: 2,
-  },
 });

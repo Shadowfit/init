@@ -21,10 +21,16 @@ package com.shadowfit.dto.report;
  * <p>{@code id} 는 P5 Tier 0(32-deferred-items.md)로 추가됐다. 대표 프레임이 정해진 뒤 그
  * 프레임의 {@code jointCoordinates} 하나만 <b>PK로 다시 조회</b>하기 위한 열쇠다 — 여기서
  * 값을 직접 싣지 않는 이유는 그대로다(대부분의 프레임은 대표로 안 뽑혀 그 비용이 버려진다).
+ *
+ * <p>{@code leadLeg} 는 V24(2026-09-27)로 추가됐다 — 런지에서 {@code smoothedKneeAngle} 이
+ * "앞다리 무릎각"이 되면서(좌우 평균이 아니라), 그 값이 어느 다리의 것인지 없이는 좌/우로 나눠
+ * 채점할 수 없다. {@code "left"}·{@code "right"} 둘 중 하나거나, 스쿼트·구버전 행이면 {@code null}
+ * 이다.
  */
 public record PoseFrameProjection(
         Long id,
         Double timestampSec,
         Double syncRate,
         Integer repNumber,
-        Double smoothedKneeAngle) {}
+        Double smoothedKneeAngle,
+        String leadLeg) {}

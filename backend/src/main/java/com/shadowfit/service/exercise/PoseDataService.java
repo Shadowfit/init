@@ -55,8 +55,8 @@ public class PoseDataService {
     // ODKU 는 중복 키만 흡수하고 NOT NULL 위반은 그대로 터뜨린다.
     private static final String INSERT_POSE_SQL =
             "INSERT INTO pose_data " +
-            "(session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at) " +
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?) " +
+            "(session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at, lead_leg) " +
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) " +
             "ON DUPLICATE KEY UPDATE session_id = session_id";
 
     // 다운샘플 윈도우 크기 — R-sweep 실측(docs/decisions/pose-ingest-downsampling.md §5-1(4))에서
@@ -172,13 +172,26 @@ public class PoseDataService {
                 ps.setInt(2, grpc.getRepNumber());
                 ps.setDouble(3, grpc.getTimestampSec());
                 ps.setString(4, grpc.getJointCoordinates());
-                ps.setDouble(5, grpc.getSyncRate());
+                if (ExerciseAnalysisCapabilities.isCountOnly(session)) {
+                    ps.setNull(5, java.sql.Types.DECIMAL);
+                } else {
+                    ps.setDouble(5, grpc.getSyncRate());
+                }
                 // 구버전 AI 는 이 필드를 안 보내 0(미상)이 들어온다 — rep_number 와 같은 방식이라
                 // 배포 순서를 맞추지 않아도 깨지지 않는다. 스쿼트 무릎각은 0 이 될 수 없으므로
                 // 유효값과 구분되고, 대표 프레임 선택에서 후보에서 빠진다.
                 ps.setDouble(6, grpc.getSmoothedKneeAngle());
                 ps.setString(7, grpc.getFeedbackMessage());
                 ps.setObject(8, sessionAnchor);
+                // proto3 는 "안 보냄"을 빈 문자열로 표현한다 — 스쿼트 프레임과 구버전 AI가 전부
+                // 여기 해당한다. 빈 문자열을 그대로 저장하면 "런지인데 판정 전"과 "이 개념 자체가
+                // 없음"이 안 갈리므로 NULL로 접는다(PoseData.leadLeg 주석과 같은 이유).
+                String leadLeg = grpc.getLeadLeg();
+                if (leadLeg == null || leadLeg.isBlank()) {
+                    ps.setNull(9, java.sql.Types.VARCHAR);
+                } else {
+                    ps.setString(9, leadLeg);
+                }
             }
 
             @Override
@@ -254,7 +267,9 @@ public class PoseDataService {
                 .findFirst()
                 .orElse(null);
         TrainerRepEventDto event = new TrainerRepEventDto(
-                representative.getRepNumber(), representative.getSyncRate(), message != null, message);
+                representative.getRepNumber(),
+                ExerciseAnalysisCapabilities.isCountOnly(session) ? null : representative.getSyncRate(),
+                message != null, message);
         Long userId = session.getMember().getId();
 
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {

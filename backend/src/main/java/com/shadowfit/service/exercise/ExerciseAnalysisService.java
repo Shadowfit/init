@@ -319,15 +319,21 @@ public class ExerciseAnalysisService {
         Member member = memberRepository.findById(currentMemberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
-        String finalUrl = member.getPreferredUrl();
+        boolean countOnly = exercisesRepository.findByIdCached(appDto.getExerciseId())
+                .map(ExerciseAnalysisCapabilities::isCountOnly).orElse(false);
+        String finalUrl = countOnly ? "" : member.getPreferredUrl();
 
-        if (finalUrl == null || finalUrl.isEmpty()) {
+        if (!countOnly && (finalUrl == null || finalUrl.isEmpty())) {
             throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
         }
 
         Session savedSession = sessionService.createSession(appDto, currentMemberId, finalUrl);
         Long sessionId = savedSession.getId();
         String persona = member.getSelectedPersona().name();
+        // 저장된 엔티티에서 읽는다(persona와 동일한 이유) — appDto.getDepthMode()가 null이어도
+        // createSession이 이미 FULL로 기본값을 채워 저장했으므로, 클라가 받는 값과 AI가 받는
+        // 값이 어긋나지 않는다.
+        String squatDepthMode = savedSession.getSquatDepthMode().name();
 
         // 비동기로 FastAPI에 분석 요청 — self를 거쳐야 @Async가 Spring 프록시를 타고 실제로
         // 비동기 실행됨. this.로 호출하면 자기호출(self-invocation)이라 AOP 프록시를 우회해서
@@ -343,7 +349,7 @@ public class ExerciseAnalysisService {
                     @Override
                     public void afterCommit() {
                         self.sendAnalysisRequestToFastApi(sessionId, appDto, finalUrl, persona,
-                                savedSession.getSessionNonce());
+                                savedSession.getSessionNonce(), squatDepthMode);
                     }
                 }
         );
@@ -362,7 +368,7 @@ public class ExerciseAnalysisService {
     @Async("applicationTaskExecutor")
     @Transactional(readOnly = true)
     public void sendAnalysisRequestToFastApi(Long sessionId, VideoRequestDto appDto, String finalUrl, String persona,
-                                             String sessionNonce) {
+                                             String sessionNonce, String squatDepthMode) {
         // 여기는 이미 @Async 워커 스레드 — cid 는 AsyncConfig 의 TaskDecorator 가 넘겨줬고,
         // 세션 id 는 이 흐름의 시작점인 여기서 얹는다.
         try (CorrelationIds.Scope ignored = CorrelationIds.withSession(sessionId)) {
@@ -382,7 +388,8 @@ public class ExerciseAnalysisService {
                     .setSessionId(sessionId)
                     .setReferenceSource(finalUrl)
                     .setPersona(persona)
-                    .setSessionNonce(sessionNonce == null ? "" : sessionNonce);
+                    .setSessionNonce(sessionNonce == null ? "" : sessionNonce)
+                    .setDepthMode(squatDepthMode == null ? "" : squatDepthMode);
 
             for (ExerciseReference ref : referencePoses) {
                 requestBuilder.addReferencePoses(PoseDataRequest.newBuilder()

@@ -1,5 +1,6 @@
 package com.shadowfit.dto.exercises;
 
+import com.shadowfit.model.exercise.SquatDepthMode;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
@@ -30,5 +31,12 @@ public class VideoRequestDto {
     @Schema(description = "운동 ID",
             requiredMode = Schema.RequiredMode.REQUIRED)
     private Long exerciseId;
+
+    /**
+     * 스쿼트 깊이 모드(2026-09-21). 스쿼트가 아니거나 생략하면 FULL로 취급한다.
+     * 종목 선택과 같은 화면에서 고르므로 별도 검증은 없다.
+     */
+    @Schema(description = "스쿼트 깊이 모드 (FULL/HALF, 생략 시 FULL)")
+    private SquatDepthMode depthMode;
 
 }

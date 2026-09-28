@@ -6,6 +6,7 @@ import lombok.Setter;
 @Getter
 @Setter
 public class ExerciseSessionDto {
+    private boolean scoreAvailable;
     private Long sessionId;              // 클릭 시 이동을 위한 ID
     private String exerciseName;         // "숄더프레스"
     private String setSummary;           // "4세트 x 10회"

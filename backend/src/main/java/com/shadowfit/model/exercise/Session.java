@@ -75,6 +75,16 @@ public class Session {
     private Status status = Status.IN_PROGRESS;
 
     /**
+     * 스쿼트 깊이 모드 FULL/HALF (2026-09-21). 종목 선택과 같은 화면에서 세션 시작 시 고른다.
+     * 스쿼트가 아닌 세션에는 의미가 없지만 항상 채워진다(V23이 NOT NULL DEFAULT 'FULL') —
+     * {@code SquatDepthAnalysisCalculator}가 스쿼트 세션에서만 이 값을 읽는다.
+     */
+    @Enumerated(EnumType.STRING)
+    @Builder.Default
+    @Column(nullable = false, length = 10)
+    private SquatDepthMode squatDepthMode = SquatDepthMode.FULL;
+
+    /**
      * 세션 소유권 검증용 비밀값 (#187 안 (d)). 생성은 {@code SessionNonceGenerator} 가 한다.
      *
      * <p>세 곳으로 흐른다 — ① 세션 생성·재부착·진행중조회 REST 응답으로 <b>그 클라에게만</b>,
