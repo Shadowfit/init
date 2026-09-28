@@ -53,7 +53,7 @@ class SquatDepthAnalysisCalculatorTest {
     }
 
     private PoseFrameProjection frame(int repNumber, double minKneeAngle) {
-        return new PoseFrameProjection(nextPoseDataId++, (double) repNumber, 80.0, repNumber, minKneeAngle, null);
+        return new PoseFrameProjection(nextPoseDataId++, (double) repNumber, 80.0, repNumber, minKneeAngle, null, null);
     }
 
     // ── 가드 ────────────────────────────────────────────────────────────
@@ -77,8 +77,8 @@ class SquatDepthAnalysisCalculatorTest {
     @DisplayName("유효한 무릎각(>0)이 있는 rep이 하나도 없으면 null")
     void noValidKneeAngle_returnsNull() {
         List<PoseFrameProjection> frames = List.of(
-                new PoseFrameProjection(1L, 1.0, 80.0, 1, 0.0, null),
-                new PoseFrameProjection(2L, 1.0, 80.0, 1, null, null));
+                new PoseFrameProjection(1L, 1.0, 80.0, 1, 0.0, null, null),
+                new PoseFrameProjection(2L, 1.0, 80.0, 1, null, null, null));
 
         assertThat(calculator.calculate(squatSession, frames)).isNull();
     }

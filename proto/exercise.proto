@@ -174,6 +174,14 @@ message PoseDataRequest {
   // "어느 다리의 값인가"를 프레임 단위로 알아야 하는데, 그 정보가 이 필드가 생기기 전에는
   // AI 세션 메모리에만 있고 pose_data까지 내려오지 않았다. 스쿼트 프레임에는 항상 빈 문자열.
   string lead_leg = 7;
+  // 어깨 중점-엉덩이 중점 벡터가 수직에서 벗어난 각도(도). 0=완전 직립, 값이 클수록 전방/후방
+  // 기울임이 크다(2026-09-28). 스쿼트·런지 공용 — 백엔드 TrunkLeanAnalysisCalculator가 rep
+  // 내 평균으로 "체간 자세가 그 회차 내내 얼마나 무너졌는가"를 채점하는 근거값이다
+  // (ai-server app/core/squat_analyzer.py·lunge_analyzer.py 참고). proto3라 구버전 AI(미전송)
+  // 에서는 0이 오는데, 이는 "완전 직립"과 구분되지 않는다 — smoothed_knee_angle의 0(미상)과
+  // 달리 이 필드는 0 자체가 이론상 유효한 값이라 별도 "미상" 마커가 없다. 드물게 섞이는 미계산
+  // 프레임 하나가 rep 평균에 0을 끼워넣는 정도의 왜곡은 감수한다.
+  double torso_tilt_deg = 8;
 }
 
 message PoseDataBatchRequest {

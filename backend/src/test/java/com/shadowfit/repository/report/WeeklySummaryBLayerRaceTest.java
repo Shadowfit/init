@@ -127,7 +127,7 @@ class WeeklySummaryBLayerRaceTest extends MySqlContainerSupport {
         report.setSession(s);
         try {
             report.setDetailedAnalysis(
-                    objectMapper.writeValueAsString(new SessionDetailedAnalysis(worstSection, repTrend, null, null)));
+                    objectMapper.writeValueAsString(new SessionDetailedAnalysis(worstSection, repTrend, null, null, null, null)));
         } catch (Exception e) {
             throw new IllegalStateException(e);
         }

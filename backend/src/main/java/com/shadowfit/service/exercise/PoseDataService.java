@@ -55,8 +55,8 @@ public class PoseDataService {
     // ODKU 는 중복 키만 흡수하고 NOT NULL 위반은 그대로 터뜨린다.
     private static final String INSERT_POSE_SQL =
             "INSERT INTO pose_data " +
-            "(session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at, lead_leg) " +
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+            "(session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at, lead_leg, torso_tilt_deg) " +
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
             "ON DUPLICATE KEY UPDATE session_id = session_id";
 
     // 다운샘플 윈도우 크기 — R-sweep 실측(docs/decisions/pose-ingest-downsampling.md §5-1(4))에서
@@ -192,6 +192,11 @@ public class PoseDataService {
                 } else {
                     ps.setString(9, leadLeg);
                 }
+                // torso_tilt_deg는 leadLeg와 달리 0.0 자체가 유효값(완전 직립)이라 접을 필요가
+                // 없다 — proto3 미전송 구버전 AI도 그냥 0.0이 들어오고, 이는 TrunkLeanAnalysis
+                // Calculator가 "체간 자세 완벽"과 구분 없이 그대로 채점에 반영한다(감수한 왜곡,
+                // proto 필드 주석 참고).
+                ps.setDouble(10, grpc.getTorsoTiltDeg());
             }
 
             @Override

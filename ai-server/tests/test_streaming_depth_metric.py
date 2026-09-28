@@ -65,24 +65,37 @@ class StreamingDepthMetricTests(unittest.TestCase):
         analyzer = StreamingSquatAnalyzer()
         state = _state()
 
-        angles, smoothed, rep_event = analyzer.process_frame(state, _frame(170))
+        angles, smoothed, rep_event, torso_tilt = analyzer.process_frame(state, _frame(170))
 
         self.assertIsNotNone(angles)
         self.assertIsNotNone(smoothed)
         self.assertIsNone(rep_event)  # 1프레임으로는 rep 이 완성되지 않는다
         self.assertGreater(smoothed, 0.0)
+        self.assertIsNotNone(torso_tilt)
 
-    def test_visibility_skip_returns_none_for_all_three(self) -> None:
-        """가시성 미달 프레임은 세 값 모두 None — 호출자가 프레임을 버릴 수 있어야 한다."""
+    def test_visibility_skip_returns_none_for_all_four(self) -> None:
+        """가시성 미달 프레임은 네 값 모두 None — 호출자가 프레임을 버릴 수 있어야 한다."""
         analyzer = StreamingSquatAnalyzer()
         state = _state()
         invisible = [_landmark(i, 0.5, 0.5, visibility=0.1) for i in range(33)]
 
-        angles, smoothed, rep_event = analyzer.process_frame(state, invisible)
+        angles, smoothed, rep_event, torso_tilt = analyzer.process_frame(state, invisible)
 
         self.assertIsNone(angles)
         self.assertIsNone(smoothed)
         self.assertIsNone(rep_event)
+        self.assertIsNone(torso_tilt)
+
+    def test_process_frame_returns_torso_tilt_matching_geometry(self) -> None:
+        """체간 기울기 점수(TrunkLeanAnalysisCalculator)용 4번째 반환값 — _frame의 torso_tilt
+        인자로 만든 기하와 process_frame이 돌려주는 값이 실제로 일치하는지 고정한다."""
+        analyzer = StreamingSquatAnalyzer()
+
+        _, _, _, upright_tilt = analyzer.process_frame(_state(), _frame(170, torso_tilt=2.0))
+        _, _, _, leaned_tilt = analyzer.process_frame(_state(), _frame(90, torso_tilt=30.0))
+
+        self.assertAlmostEqual(upright_tilt, 2.0, delta=0.5)
+        self.assertAlmostEqual(leaned_tilt, 30.0, delta=0.5)
 
     def test_depth_metric_varies_within_a_rep(self) -> None:
         """★ 핵심 — 깊이 지표는 rep 안에서 프레임마다 다르다.
@@ -97,7 +110,7 @@ class StreamingDepthMetricTests(unittest.TestCase):
 
         measured = []
         for i, knee_angle in enumerate(descent):
-            _, smoothed, _ = analyzer.process_frame(state, _frame(knee_angle), timestamp_sec=i / 3)
+            _, smoothed, _, _ = analyzer.process_frame(state, _frame(knee_angle), timestamp_sec=i / 3)
             measured.append(smoothed)
 
         self.assertEqual(len(set(measured)), len(measured), "프레임마다 값이 달라야 한다")
@@ -116,7 +129,7 @@ class StreamingDepthMetricTests(unittest.TestCase):
 
         for i, knee_angle in enumerate((170, 170)):
             analyzer.process_frame(state, _frame(knee_angle), timestamp_sec=i / 30)
-        _, smoothed, _ = analyzer.process_frame(state, _frame(80), timestamp_sec=2 / 30)
+        _, smoothed, _, _ = analyzer.process_frame(state, _frame(80), timestamp_sec=2 / 30)
 
         # 원시값이면 ~80 이 나와야 하지만 최근 3프레임 평균이라 훨씬 완만하다
         self.assertGreater(smoothed, 100.0)
@@ -137,8 +150,8 @@ class StreamingDepthMetricTests(unittest.TestCase):
         right_ankle = asymmetric[28]
         asymmetric[28] = _landmark(28, right_ankle.x + 0.12, right_ankle.y)
 
-        _, symmetric_value, _ = analyzer.process_frame(_state(), symmetric)
-        _, asymmetric_value, _ = analyzer.process_frame(_state(), asymmetric)
+        _, symmetric_value, _, _ = analyzer.process_frame(_state(), symmetric)
+        _, asymmetric_value, _, _ = analyzer.process_frame(_state(), asymmetric)
 
         self.assertNotAlmostEqual(
             symmetric_value,

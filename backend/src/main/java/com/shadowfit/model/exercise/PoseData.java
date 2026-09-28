@@ -83,6 +83,16 @@ public class PoseData {
     @Column(name = "lead_leg", length = 5)
     private String leadLeg;
 
+    /**
+     * 어깨 중점-엉덩이 중점 벡터가 수직에서 벗어난 각도(도). 0=완전 직립, 스쿼트·런지 공용
+     * (V25, 2026-09-28). {@link com.shadowfit.service.report.SquatTrunkLeanAnalysisCalculator}/
+     * {@code LungeTrunkLeanAnalysisCalculator}가 rep 내 평균으로 체간 자세 점수를 매기는 근거값이다.
+     * 구버전 행이면 {@code null} — 0은 "완전 직립"이라는 유효한 값이라 leadLeg처럼 빈 문자열을
+     * null로 접는 변환이 필요 없다(proto3 기본값 0.0을 그대로 저장해도 뜻이 통한다).
+     */
+    @Column(name = "torso_tilt_deg")
+    private Double torsoTiltDeg;
+
     @Column(length = 500)
     private String feedbackMessage; // AI가 주는 실시간 피드백
 

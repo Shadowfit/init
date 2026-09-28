@@ -41,7 +41,7 @@ class Run:
     def hold(self, seconds, *args, **kwargs):
         for _ in range(math.ceil(seconds / self.dt)):
             self.now += self.dt
-            _, _, event = self.analyzer.process_frame(
+            _, _, event, _ = self.analyzer.process_frame(
                 self.state, frame(*args, **kwargs, **self.geometry), timestamp_sec=self.now,
                 image_aspect_ratio=self.geometry.get("aspect", 1.),
             )
@@ -132,6 +132,37 @@ def test_interrupted_rep_is_discarded_and_next_rep_works(failure):
     run.hold(1)
     assert run.state.rep_count == 0
     assert run.rep() == 1
+
+
+def test_process_frame_returns_torso_tilt():
+    """체간 기울기 점수(TrunkLeanAnalysisCalculator, 2026-09-28)용 4번째 반환값 — squat과
+    같은 공식으로 어깨/엉덩이 중점 벡터의 수직 이탈각을 낸다. frame()의 어깨(11/12)·엉덩이
+    (23/24)는 항상 같은 x좌표라 거의 직립(0도 근처)이어야 한다."""
+    run = Run()
+    run.hold(.3)
+    _, _, _, torso_tilt = run.analyzer.process_frame(
+        run.state, frame(150, 150, left_step=.3), timestamp_sec=run.now + .1
+    )
+    assert torso_tilt is not None
+    assert torso_tilt < 5.0
+
+
+@pytest.mark.parametrize("failure", ["visibility", "missing", "nan"])
+def test_invalid_frame_returns_none_torso_tilt_too(failure):
+    """가시성 부족·랜드마크 누락·NaN — 무릎각(angles)이 None이 되는 경로는 체간 기울기도
+    같이 None이어야 한다(pose.py가 angles is None일 때 PerRepFrame을 아예 안 만들므로,
+    이 두 값이 항상 같이 유효/무효여야 한다)."""
+    run = Run()
+    bad = frame(150, 150, left_step=.3)
+    if failure == "visibility":
+        bad[0].visibility = .1
+    elif failure == "missing":
+        bad = bad[:-1]
+    else:
+        bad[0].x = float("nan")
+    angles, _, _, torso_tilt = run.analyzer.process_frame(run.state, bad, timestamp_sec=run.now + .1)
+    assert angles is None
+    assert torso_tilt is None
 
 
 def test_resume_counts_total_without_inventing_historical_sides():

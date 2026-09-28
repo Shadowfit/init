@@ -7,6 +7,7 @@ import com.shadowfit.dto.report.detailreport.LungeDepthAnalysisDto;
 import com.shadowfit.dto.report.detailreport.RepSyncRateDto;
 import com.shadowfit.dto.report.detailreport.SessionDetailedAnalysis;
 import com.shadowfit.dto.report.detailreport.SquatDepthAnalysisDto;
+import com.shadowfit.dto.report.detailreport.TrunkLeanAnalysisDto;
 import com.shadowfit.dto.report.detailreport.WorstSectionDto;
 import com.shadowfit.global.observability.CorrelationIds;
 import com.shadowfit.global.observability.SessionMetrics;
@@ -52,6 +53,8 @@ public class SessionCompletionTx {
     private final SessionAnalysisCalculator sessionAnalysisCalculator;
     private final SquatDepthAnalysisCalculator squatDepthAnalysisCalculator;
     private final com.shadowfit.service.report.LungeDepthAnalysisCalculator lungeDepthAnalysisCalculator;
+    private final com.shadowfit.service.report.SquatTrunkLeanAnalysisCalculator squatTrunkLeanAnalysisCalculator;
+    private final com.shadowfit.service.report.LungeTrunkLeanAnalysisCalculator lungeTrunkLeanAnalysisCalculator;
     private final ReportRepository reportRepository;
     private final ObjectMapper objectMapper;
     private final SessionMetrics sessionMetrics;
@@ -178,16 +181,20 @@ public class SessionCompletionTx {
         List<RepSyncRateDto> repTrend = sessionAnalysisCalculator.calculateRepTrend(poseFrames);
         SquatDepthAnalysisDto squatDepthAnalysis = squatDepthAnalysisCalculator.calculate(session, poseFrames);
         LungeDepthAnalysisDto lungeDepthAnalysis = lungeDepthAnalysisCalculator.calculate(session, poseFrames);
+        TrunkLeanAnalysisDto squatTrunkLeanAnalysis = squatTrunkLeanAnalysisCalculator.calculate(session, poseFrames);
+        TrunkLeanAnalysisDto lungeTrunkLeanAnalysis = lungeTrunkLeanAnalysisCalculator.calculate(session, poseFrames);
 
         Report report = new Report();
         report.setMember(session.getMember());
         report.setSession(session);
-        // 넷 다 비면 컬럼을 비워 둔다 — 읽기 경로가 "저장된 게 없다"로 보고 재계산을 시도하는데,
+        // 여섯 다 비면 컬럼을 비워 둔다 — 읽기 경로가 "저장된 게 없다"로 보고 재계산을 시도하는데,
         // 프레임이 없어서 비었던 것이라면 재계산도 같은 결과라 손해가 없다.
-        if (worstSection != null || !repTrend.isEmpty() || squatDepthAnalysis != null || lungeDepthAnalysis != null) {
+        if (worstSection != null || !repTrend.isEmpty() || squatDepthAnalysis != null || lungeDepthAnalysis != null
+                || squatTrunkLeanAnalysis != null || lungeTrunkLeanAnalysis != null) {
             try {
                 report.setDetailedAnalysis(objectMapper.writeValueAsString(
-                        new SessionDetailedAnalysis(worstSection, repTrend, squatDepthAnalysis, lungeDepthAnalysis)));
+                        new SessionDetailedAnalysis(worstSection, repTrend, squatDepthAnalysis, lungeDepthAnalysis,
+                                squatTrunkLeanAnalysis, lungeTrunkLeanAnalysis)));
             } catch (JsonProcessingException e) {
                 throw new IllegalStateException("리포트 분석 직렬화 실패 - 세션 " + session.getId(), e);
             }

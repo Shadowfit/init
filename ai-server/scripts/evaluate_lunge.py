@@ -62,7 +62,7 @@ def main():
                 continue
             next_time = timestamp + 1 / args.sample_fps
             landmarks = detector.detect(cv2.cvtColor(image, cv2.COLOR_BGR2RGB)) or []
-            angles, _, _ = analyzer.process_frame(
+            angles, _, _, _ = analyzer.process_frame(
                 state, landmarks, timestamp_sec=timestamp,
                 image_aspect_ratio=image.shape[1] / image.shape[0],
             )

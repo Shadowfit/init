@@ -147,6 +147,32 @@ export interface LungeDepthAnalysis {
   narrative: string[];             // 회차별 한국어 코멘트, 최대 4문장
 }
 
+/* ── 체간(몸통) 기울기 정확도 (2026-09-28) ── */
+// 스쿼트·런지 공용 셰이프 — 백엔드 TrunkLeanAnalysisDto와 1:1 대응. 좌우/모드 구분이 있는
+// 깊이 타입과 달리 이 축은 두 운동이 같은 계산(rep 평균 체간 기울기)을 쓴다.
+export type TrunkLeanGrade = SquatDepthGrade; // 등급 5단계 이름을 그대로 공유
+
+/** 회차(rep) 하나의 체간 자세 정확도. */
+export interface RepTrunkLean {
+  repNumber: number;
+  avgTiltDeg: number;
+  tiltScore: number;                // 0-100
+  timeStamp: string;                 // "01:15" — 그 rep의 첫 프레임 기준
+}
+
+/**
+ * 체간 기울기 정확도 리포트. 해당 종목이 아니거나 구버전 세션(V25 이전)이면 null —
+ * scoreAvailable과 같은 널 가드 규약이다. 런지 임계값은 스쿼트보다 관대하고 실촬영 검증 전
+ * 잠정값이다(backend LungeTrunkLeanAnalysisCalculator 참고) — 화면 문구에서 단정적으로
+ * 표현하지 않는다.
+ */
+export interface TrunkLeanAnalysis {
+  tiltScore: number;                // 세션 평균, 0-100
+  tiltGrade: TrunkLeanGrade;
+  repTrunkLeans: RepTrunkLean[];
+  narrative: string[];              // 회차별 한국어 코멘트, 최대 4문장
+}
+
 export interface SessionReportResponse {
   sessionId: number;
   avgSyncRate: number;
@@ -165,6 +191,8 @@ export interface SessionReportResponse {
   repTrend: RepSyncRate[];
   squatDepthAnalysis: SquatDepthAnalysis | null;
   lungeDepthAnalysis: LungeDepthAnalysis | null;
+  squatTrunkLeanAnalysis: TrunkLeanAnalysis | null;
+  lungeTrunkLeanAnalysis: TrunkLeanAnalysis | null;
   syncRateDetails: ExerciseSyncRate[];
   comparisonWithPrevious: ComparisonWithPrevious | null;
 }

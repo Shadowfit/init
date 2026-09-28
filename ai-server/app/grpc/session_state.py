@@ -88,6 +88,14 @@ class PerRepFrame:
     # BACK_BENT 재판정(pose.py)이 joint_coordinates를 다시 파싱하지 않도록 원본 객체도 들고 있는다.
     landmarks: list[Landmark] = field(default_factory=list)
 
+    # 어깨 중점-엉덩이 중점 벡터가 수직에서 벗어난 각도(도). 0=완전 직립, 값이 클수록 전방/후방
+    # 기울임이 크다(2026-09-28). 체간 자세 점수(TrunkLeanAnalysisCalculator, 백엔드)가 rep 내
+    # 평균으로 "얼마나 무너졌는가"를 채점하는 근거값이다 — smoothed_knee_angle과 달리 이건
+    # BACK_BENT 재판정(위 landmarks 재계산)과는 별개 경로다: 그쪽은 스쿼트 전용 실시간 이진
+    # 판정이고, 이 필드는 스쿼트·런지 공용으로 세션 종료 후 점수화에 쓰인다. None이면 이 프레임에서
+    # 계산되지 않았다는 뜻(예: 스쿼트/런지가 아닌 옛 경로).
+    torso_tilt_deg: float | None = None
+
 
 @dataclass
 class CompletedRep:

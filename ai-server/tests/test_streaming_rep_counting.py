@@ -35,10 +35,11 @@ def _count_reps(knee_sequence: list[float]) -> int:
     reps = 0
 
     for i, knee_angle in enumerate(knee_sequence):
-        # process_frame 은 (angles, smoothed_knee_angle, rep_event) 3-튜플이다. 가운데
-        # 깊이 지표는 이 테스트가 검증하는 대상이 아니라(test_streaming_depth_metric.py 담당)
-        # 버린다 — rep 집계는 이 값에 의존하지 않는다.
-        angles, _, rep_event = analyzer.process_frame(state, _frame(knee_angle), timestamp_sec=i / 3)
+        # process_frame 은 (angles, smoothed_knee_angle, rep_event, torso_tilt_deg) 4-튜플이다.
+        # 가운데 깊이 지표와 체간 기울기는 이 테스트가 검증하는 대상이 아니라
+        # (각각 test_streaming_depth_metric.py, 체간 기울기 전용 테스트 담당) 버린다 — rep
+        # 집계는 이 값들에 의존하지 않는다.
+        angles, _, rep_event, _ = analyzer.process_frame(state, _frame(knee_angle), timestamp_sec=i / 3)
         if angles is not None:
             state.current_rep_frames.append(
                 PerRepFrame(timestamp_sec=0.0, joint_coordinates="{}", angles=angles)
@@ -109,7 +110,7 @@ class StreamingRepCountingTests(unittest.TestCase):
         batch_sizes = []
 
         for i, knee_angle in enumerate(sequence):
-            angles, _, rep_event = analyzer.process_frame(state, _frame(knee_angle), timestamp_sec=i / 3)
+            angles, _, rep_event, _ = analyzer.process_frame(state, _frame(knee_angle), timestamp_sec=i / 3)
             if angles is not None:
                 state.current_rep_frames.append(
                     PerRepFrame(timestamp_sec=0.0, joint_coordinates="{}", angles=angles)

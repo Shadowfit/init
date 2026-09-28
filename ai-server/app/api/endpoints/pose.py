@@ -326,12 +326,13 @@ def _detect_pose(req: PoseRequest):
             )
 
         if isinstance(analyzer, (StreamingLungeAnalyzer, StreamingSquatAnalyzer)):
-            angles, smoothed_knee_angle, rep_event = analyzer.process_frame(
+            angles, smoothed_knee_angle, rep_event, torso_tilt_deg = analyzer.process_frame(
                 state, landmarks, timestamp_sec=received_at,
                 image_aspect_ratio=image_rgb.shape[1] / image_rgb.shape[0],
             )
         else:
             angles, smoothed_knee_angle, rep_event = analyzer.process_frame(state, landmarks)
+            torso_tilt_deg = None
         lunge_progress = state.lunge_state.progress() if state.lunge_state is not None else None
         coaching_message = (state.squat_counter.coaching_event
                             if state.exercise_type == "squat" and state.squat_counter is not None
@@ -365,6 +366,7 @@ def _detect_pose(req: PoseRequest):
             angles=angles,
             smoothed_knee_angle=smoothed_knee_angle,
             landmarks=landmarks,
+            torso_tilt_deg=torso_tilt_deg,
         )
         state.current_rep_frames.append(frame)
 
@@ -404,6 +406,13 @@ def _detect_pose(req: PoseRequest):
             # lead_leg가 없으므로 getattr 기본값(빈 문자열)이 그대로 나간다 — proto3 기본값과
             # 같아 구버전 계약과도 구분되지 않는다(#156 등 다른 필드와 같은 규약).
             lead_leg=getattr(rep_event, "lead_leg", "") or "",
+            # 체간 기울기 점수(백엔드 TrunkLeanAnalysisCalculator, 2026-09-28)용. 스쿼트·런지
+            # 공용이며 아래 BACK_BENT 실시간 판정과는 별개 경로다. None이면(landmark
+            # 가시성 부족 등으로 이번 프레임에서 계산 못 함) proto3 기본값 0.0이 나가는데, 이는
+            # "완전 직립"과 구분되지 않는다 — 백엔드가 이 필드를 nullable 컬럼에 그대로 못 박지
+            # 않고 0.0을 유효값으로 받아들이는 이유이기도 하다(어차피 세션 내내 계산 불가능한
+            # 프레임은 드물고, 드물게 섞여도 rep 평균에 0.0 하나가 끼는 정도라 왜곡이 작다).
+            torso_tilt_deg=f.torso_tilt_deg or 0.0,
         )
         for f in rep_frames_snapshot
     ]

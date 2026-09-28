@@ -26,6 +26,12 @@ package com.shadowfit.dto.report;
  * "앞다리 무릎각"이 되면서(좌우 평균이 아니라), 그 값이 어느 다리의 것인지 없이는 좌/우로 나눠
  * 채점할 수 없다. {@code "left"}·{@code "right"} 둘 중 하나거나, 스쿼트·구버전 행이면 {@code null}
  * 이다.
+ *
+ * <p>{@code torsoTiltDeg} 는 V25(2026-09-28)로 추가됐다 — 어깨 중점-엉덩이 중점 벡터가 수직에서
+ * 벗어난 각도(도), 스쿼트·런지 공용. {@link com.shadowfit.service.report.SquatTrunkLeanAnalysisCalculator}/
+ * {@link com.shadowfit.service.report.LungeTrunkLeanAnalysisCalculator} 가 rep 내 평균으로
+ * "그 회차 내내 체간 자세가 얼마나 무너졌는가"를 채점하는 근거값이다. 구버전 행이면
+ * {@code null}(0과 구분 — 0은 "완전 직립"이라는 유효한 각도값이라 별도 미상 마커가 필요하다).
  */
 public record PoseFrameProjection(
         Long id,
@@ -33,4 +39,5 @@ public record PoseFrameProjection(
         Double syncRate,
         Integer repNumber,
         Double smoothedKneeAngle,
-        String leadLeg) {}
+        String leadLeg,
+        Double torsoTiltDeg) {}

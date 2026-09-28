@@ -51,7 +51,7 @@ class LungeDepthAnalysisCalculatorTest {
     }
 
     private PoseFrameProjection frame(int repNumber, String side, double minKneeAngle) {
-        return new PoseFrameProjection(nextPoseDataId++, (double) repNumber, null, repNumber, minKneeAngle, side);
+        return new PoseFrameProjection(nextPoseDataId++, (double) repNumber, null, repNumber, minKneeAngle, side, null);
     }
 
     // ── 가드 ────────────────────────────────────────────────────────────
@@ -75,8 +75,8 @@ class LungeDepthAnalysisCalculatorTest {
     @DisplayName("유효한 무릎각(>0)이 있는 rep이 하나도 없으면 null")
     void noValidKneeAngle_returnsNull() {
         List<PoseFrameProjection> frames = List.of(
-                new PoseFrameProjection(1L, 1.0, null, 1, 0.0, "left"),
-                new PoseFrameProjection(2L, 1.0, null, 1, null, "left"));
+                new PoseFrameProjection(1L, 1.0, null, 1, 0.0, "left", null),
+                new PoseFrameProjection(2L, 1.0, null, 1, null, "left", null));
 
         assertThat(calculator.calculate(lungeSession, frames)).isNull();
     }

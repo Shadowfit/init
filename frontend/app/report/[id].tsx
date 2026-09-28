@@ -149,6 +149,30 @@ export default function ReportScreen() {
               </View>
             )}
 
+            {(report.squatTrunkLeanAnalysis ?? report.lungeTrunkLeanAnalysis) && (
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>체간(상체) 자세 정확도</Text>
+                {(() => {
+                  const trunkLean = (report.squatTrunkLeanAnalysis ?? report.lungeTrunkLeanAnalysis)!;
+                  return (
+                    <>
+                      <View style={styles.depthScoreRow}>
+                        <Text style={styles.score}>{trunkLean.tiltScore}점</Text>
+                        <View style={styles.depthGradeBadge}>
+                          <Text style={styles.depthGradeBadgeText}>
+                            {DEPTH_GRADE_LABEL[trunkLean.tiltGrade]}
+                          </Text>
+                        </View>
+                      </View>
+                      {trunkLean.narrative.map((line, i) => (
+                        <Text key={i} style={styles.body}>{line}</Text>
+                      ))}
+                    </>
+                  );
+                })()}
+              </View>
+            )}
+
             {exercise?.setInfo ? (
               <View style={styles.card}>
                 <Text style={styles.cardTitle}>운동 내역</Text>
