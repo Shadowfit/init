@@ -151,7 +151,7 @@ class StreamingLungeAnalyzer:
         s, t = state.lunge_state, self.thresholds
         now = timestamp_sec
         if not math.isfinite(now) or (s.last_time is not None and now <= s.last_time):
-            return None, None, None, None
+            return None, None, None, None, None
         dt = now - s.last_time if s.last_time is not None else 0.0
         s.last_time = now
         if dt > t.max_gap_sec:
@@ -164,7 +164,7 @@ class StreamingLungeAnalyzer:
         except ValueError:
             s.invalidate("양쪽 무릎과 발끝이 모두 보이도록 위치를 조정해주세요.")
             state.current_rep_frames.clear()
-            return None, None, None, None
+            return None, None, None, None, None
 
         alpha = 1.0 - math.exp(-dt / t.smoothing_sec) if dt else 1.0
         s.knees = [old + alpha * (new - old) for old, new in zip(s.knees, angles)] \
@@ -183,11 +183,17 @@ class StreamingLungeAnalyzer:
         torso_tilt = round(
             abs(math.degrees(math.atan2(shoulder[0] - hip[0], hip[1] - shoulder[1] + 1e-8))), 2
         )
+        # 보폭 점수(LungeStepLengthAnalysisCalculator, 2026-09-28)용 — "런지 자세인가"만
+        # 판정하던 stagger 값을 그대로 재사용해 내보낸다. 문헌(Escamilla et al. 계열)이
+        # 짧은 보폭일수록 깊은 굴곡 구간에서 슬개대퇴 관절 부하가 커진다고 보고한다 — 발이
+        # 원위치에 고정된 채 굽혔다 펴는 이 앱의 런지 특성상 한 rep 안에서 stagger는 거의
+        # 변하지 않으므로 별도 최솟값 집계 없이 프레임값 그대로 대표로 쓴다.
+        stagger_ratio = round(stagger, 3)
 
         if s.phase == "ready":
             if not lunge_stance:
                 s.bottom_since = None
-                return angles, mean_knee, None, torso_tilt
+                return angles, mean_knee, None, torso_tilt, stagger_ratio
             # "바닥에 닿았는가"는 두 무릎 중 더 굽은 쪽으로 판단한다 — 어느 다리를 lead로
             # 붙일지와는 분리한다. 워킹 런지 실측(lunge_walking_01, 2026-09-22)에서 두
             # 신호가 다른 다리를 가리키는 프레임이 실제로 나왔다: 발목이 골반 중심에서
@@ -197,7 +203,7 @@ class StreamingLungeAnalyzer:
             # 묶으면 이런 프레임에서 진짜 반복을 통째로 놓친다.
             if min(s.knees) > t.bottom_angle:
                 s.bottom_since = None
-                return angles, mean_knee, None, torso_tilt
+                return angles, mean_knee, None, torso_tilt, stagger_ratio
             if s.bottom_since is None:
                 s.bottom_since = now
             # 표본 간격(dt)이 이미 확인창(bottom_confirm_sec)보다 크면, 이번 표본 하나가
@@ -207,7 +213,7 @@ class StreamingLungeAnalyzer:
             # 이 이유로 반복이 누락됐다). squat_counter.py의 standing_confirm 판정과 같은
             # 보정이다.
             if now - s.bottom_since < t.bottom_confirm_sec and dt < t.bottom_confirm_sec:
-                return angles, mean_knee, None, torso_tilt
+                return angles, mean_knee, None, torso_tilt, stagger_ratio
             # lead(왼쪽/오른쪽 집계용 라벨)는 발목-골반중심 거리로 따로 정한다 — 바닥
             # 검출과 분리했으므로 여기서 잘못 골라도 반복 자체는 이미 세어진 뒤다.
             hip_center_x = (p[23][0] + p[24][0]) / 2
@@ -219,7 +225,7 @@ class StreamingLungeAnalyzer:
             s.bottom_since = None
             s.guidance = "다시 일어서주세요."
             state.current_rep_frames.clear()
-            return angles, mean_knee, None, torso_tilt
+            return angles, mean_knee, None, torso_tilt, stagger_ratio
 
         # s.phase == "returning" — 이 단계에서 반환하는 깊이 지표는 두 무릎 평균이 아니라
         # **lead 다리의 무릎각 하나**다(2026-09-27). pose.py가 이 값을 그대로
@@ -233,11 +239,11 @@ class StreamingLungeAnalyzer:
         lead_knee = s.knees[lead]
         if max(s.knees) < t.recovered_angle:
             s.return_since = None
-            return angles, lead_knee, None, torso_tilt
+            return angles, lead_knee, None, torso_tilt, stagger_ratio
         if s.return_since is None:
             s.return_since = now
         if now - s.return_since < t.recovery_confirm_sec and dt < t.recovery_confirm_sec:
-            return angles, lead_knee, None, torso_tilt
+            return angles, lead_knee, None, torso_tilt, stagger_ratio
         event = None
         if now - s.started_at >= t.min_rep_sec:
             state.rep_count += 1
@@ -249,4 +255,4 @@ class StreamingLungeAnalyzer:
         s.phase, s.lead_leg = "ready", None
         s.bottom_since = s.return_since = None
         s.guidance = "다시 일어선 것을 확인했습니다. 다음 런지를 시작하세요."
-        return angles, lead_knee, event, torso_tilt
+        return angles, lead_knee, event, torso_tilt, stagger_ratio

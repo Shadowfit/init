@@ -57,4 +57,11 @@ public class SessionDetailedAnalysis {
      * 없으면 null — 위와 같은 하위호환 규약.
      */
     private TrunkLeanAnalysisDto lungeTrunkLeanAnalysis;
+
+    /**
+     * 런지 보폭 정확도 리포트 (2026-09-28). 런지가 아니거나 보폭 데이터가 없으면 null —
+     * 위와 같은 하위호환 규약(V26 이전에 완료된 세션도 이 필드가 null이 된다). 스쿼트는
+     * 보폭 개념이 없어 대응 필드 자체가 없다.
+     */
+    private LungeStepLengthAnalysisDto lungeStepLengthAnalysis;
 }

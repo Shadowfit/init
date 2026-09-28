@@ -32,6 +32,11 @@ package com.shadowfit.dto.report;
  * {@link com.shadowfit.service.report.LungeTrunkLeanAnalysisCalculator} 가 rep 내 평균으로
  * "그 회차 내내 체간 자세가 얼마나 무너졌는가"를 채점하는 근거값이다. 구버전 행이면
  * {@code null}(0과 구분 — 0은 "완전 직립"이라는 유효한 각도값이라 별도 미상 마커가 필요하다).
+ *
+ * <p>{@code staggerRatio} 는 V26(2026-09-28)로 추가됐다 — 두 발목 사이 거리 / 어깨-엉덩이 길이,
+ * 런지 전용("보폭이 얼마나 벌어졌는가"). {@link com.shadowfit.service.report.LungeStepLengthAnalysisCalculator}
+ * 가 짧은 보폭일수록 깊은 무릎 굴곡 구간에서 슬개대퇴 관절 부하가 커진다는 문헌 근거로 채점한다.
+ * 스쿼트·구버전 행이면 {@code null}이다.
  */
 public record PoseFrameProjection(
         Long id,
@@ -40,4 +45,5 @@ public record PoseFrameProjection(
         Integer repNumber,
         Double smoothedKneeAngle,
         String leadLeg,
-        Double torsoTiltDeg) {}
+        Double torsoTiltDeg,
+        Double staggerRatio) {}

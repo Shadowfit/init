@@ -326,13 +326,14 @@ def _detect_pose(req: PoseRequest):
             )
 
         if isinstance(analyzer, (StreamingLungeAnalyzer, StreamingSquatAnalyzer)):
-            angles, smoothed_knee_angle, rep_event, torso_tilt_deg = analyzer.process_frame(
+            angles, smoothed_knee_angle, rep_event, torso_tilt_deg, stagger_ratio = analyzer.process_frame(
                 state, landmarks, timestamp_sec=received_at,
                 image_aspect_ratio=image_rgb.shape[1] / image_rgb.shape[0],
             )
         else:
             angles, smoothed_knee_angle, rep_event = analyzer.process_frame(state, landmarks)
             torso_tilt_deg = None
+            stagger_ratio = None
         lunge_progress = state.lunge_state.progress() if state.lunge_state is not None else None
         coaching_message = (state.squat_counter.coaching_event
                             if state.exercise_type == "squat" and state.squat_counter is not None
@@ -367,6 +368,7 @@ def _detect_pose(req: PoseRequest):
             smoothed_knee_angle=smoothed_knee_angle,
             landmarks=landmarks,
             torso_tilt_deg=torso_tilt_deg,
+            stagger_ratio=stagger_ratio,
         )
         state.current_rep_frames.append(frame)
 
@@ -413,6 +415,13 @@ def _detect_pose(req: PoseRequest):
             # 않고 0.0을 유효값으로 받아들이는 이유이기도 하다(어차피 세션 내내 계산 불가능한
             # 프레임은 드물고, 드물게 섞여도 rep 평균에 0.0 하나가 끼는 정도라 왜곡이 작다).
             torso_tilt_deg=f.torso_tilt_deg or 0.0,
+            # 보폭 점수(백엔드 LungeStepLengthAnalysisCalculator, 2026-09-28)용. 런지 전용 —
+            # 스쿼트 프레임은 항상 None이라 proto3 기본값 0.0이 나간다. 이 계산기는 런지
+            # 세션만 채점하므로(exercise_id 가드) 스쿼트 행에 0.0이 들어가도 소비되지 않는다.
+            # 런지 행에서 0.0은 이론상 "발이 완전히 붙음"이지만, 그 값이면 애초에 stagger_min
+            # 문턱을 못 넘어 "returning" 단계(=Spring 전송 구간)에 도달하지 못하므로 실제로는
+            # 나타나지 않는다.
+            stagger_ratio=f.stagger_ratio or 0.0,
         )
         for f in rep_frames_snapshot
     ]

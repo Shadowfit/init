@@ -96,6 +96,13 @@ class PerRepFrame:
     # 계산되지 않았다는 뜻(예: 스쿼트/런지가 아닌 옛 경로).
     torso_tilt_deg: float | None = None
 
+    # 두 발목 사이 거리 / 어깨-엉덩이 길이 — "보폭이 얼마나 벌어졌는가" 비율(2026-09-28).
+    # 런지 전용(lunge_analyzer.py의 stagger_min 판정과 같은 값) — 스쿼트는 보폭 개념이
+    # 없어 항상 None이다. 백엔드 LungeStepLengthAnalysisCalculator가 이 값으로 "보폭이
+    # 짧아 무릎 부담이 커질 수 있는 rep"을 채점한다(짧은 보폭이 깊은 굴곡 구간에서
+    # 슬개대퇴 관절 부하를 늘린다는 문헌 근거, Escamilla et al. 계열).
+    stagger_ratio: float | None = None
+
 
 @dataclass
 class CompletedRep:

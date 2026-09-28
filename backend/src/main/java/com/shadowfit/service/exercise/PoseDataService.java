@@ -55,8 +55,8 @@ public class PoseDataService {
     // ODKU 는 중복 키만 흡수하고 NOT NULL 위반은 그대로 터뜨린다.
     private static final String INSERT_POSE_SQL =
             "INSERT INTO pose_data " +
-            "(session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at, lead_leg, torso_tilt_deg) " +
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+            "(session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at, lead_leg, torso_tilt_deg, stagger_ratio) " +
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
             "ON DUPLICATE KEY UPDATE session_id = session_id";
 
     // 다운샘플 윈도우 크기 — R-sweep 실측(docs/decisions/pose-ingest-downsampling.md §5-1(4))에서
@@ -197,6 +197,10 @@ public class PoseDataService {
                 // Calculator가 "체간 자세 완벽"과 구분 없이 그대로 채점에 반영한다(감수한 왜곡,
                 // proto 필드 주석 참고).
                 ps.setDouble(10, grpc.getTorsoTiltDeg());
+                // stagger_ratio는 런지 전용 — torso_tilt_deg와 같은 이유로 0.0을 그대로 저장한다
+                // (LungeStepLengthAnalysisCalculator가 런지 세션만 채점하므로 스쿼트 행의 0은
+                // 소비되지 않는다).
+                ps.setDouble(11, grpc.getStaggerRatio());
             }
 
             @Override

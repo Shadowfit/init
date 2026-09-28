@@ -107,7 +107,8 @@ class StreamingSquatAnalyzer:
     def process_frame(self, state, landmarks: list[Landmark], *,
                       timestamp_sec: float | None = None,
                       image_aspect_ratio: float = 1.0
-                      ) -> tuple[list[float] | None, float | None, StreamingRepEvent | None, float | None]:
+                      ) -> tuple[list[float] | None, float | None, StreamingRepEvent | None,
+                                 float | None, float | None]:
         now = time.monotonic() if timestamp_sec is None else timestamp_sec
         if state.squat_counter is None:
             # 세션의 depth_mode로 임계값을 고른다. 인식 못 하는 값(또는 이 필드가 없는 옛
@@ -123,7 +124,7 @@ class StreamingSquatAnalyzer:
         state.frame_index += 1
         if obs is None:
             state.current_rep_frames.clear()
-            return None, None, None, None
+            return None, None, None, None, None
         if before != "waiting_for_standing" and counter.stage == "waiting_for_standing":
             state.current_rep_frames.clear()
         if (before == "ready" and counter.stage == "descending"
@@ -136,10 +137,12 @@ class StreamingSquatAnalyzer:
         # 계산되고 있었지만(squat_counter.py) 지금까지는 버려졌다. BACK_BENT 실시간 판정
         # (pose.py)과는 별개 경로이니 여기서 새로 계산하지 않고 이미 있는 값만 흘려보낸다.
         torso_tilt = round(obs.torso_tilt, 2)
+        # 스쿼트는 "보폭" 개념이 없다(양발이 나란함) — 5번째 자리는 런지 전용
+        # LungeStepLengthAnalysisCalculator 몫이라 항상 None을 흘려보낸다.
         if not completed:
-            return angles, knee, None, torso_tilt
+            return angles, knee, None, torso_tilt, None
         state.rep_count = counter.rep_count
-        return angles, knee, self._summarize_rep(state, angles), torso_tilt
+        return angles, knee, self._summarize_rep(state, angles), torso_tilt, None
 
     def _summarize_rep(self, state, terminal_angles: list[float]) -> StreamingRepEvent:
         # 최종 선 프레임은 HTTP 경로에서 process_frame 반환 후 버퍼에 들어간다.

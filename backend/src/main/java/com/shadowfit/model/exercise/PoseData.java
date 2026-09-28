@@ -93,6 +93,15 @@ public class PoseData {
     @Column(name = "torso_tilt_deg")
     private Double torsoTiltDeg;
 
+    /**
+     * 두 발목 사이 거리 / 어깨-엉덩이 길이 — 런지 전용 "보폭이 얼마나 벌어졌는가" 비율
+     * (V26, 2026-09-28). {@link com.shadowfit.service.report.LungeStepLengthAnalysisCalculator}가
+     * 짧은 보폭일수록 깊은 무릎 굴곡 구간에서 슬개대퇴 관절 부하가 커진다는 문헌 근거로 채점한다.
+     * 스쿼트·구버전 행이면 {@code null}.
+     */
+    @Column(name = "stagger_ratio")
+    private Double staggerRatio;
+
     @Column(length = 500)
     private String feedbackMessage; // AI가 주는 실시간 피드백
 

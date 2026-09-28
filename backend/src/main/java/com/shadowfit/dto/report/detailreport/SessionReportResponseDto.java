@@ -58,6 +58,12 @@ public class SessionReportResponseDto {
      */
     private TrunkLeanAnalysisDto lungeTrunkLeanAnalysis;
 
+    /**
+     * 런지 보폭 정확도 리포트(2026-09-28). 스쿼트 세션(보폭 개념 없음)·구버전 세션(V26 이전)·
+     * 보폭 데이터가 없는 세션은 null — 위와 같은 널 가드 규약이다.
+     */
+    private LungeStepLengthAnalysisDto lungeStepLengthAnalysis;
+
     private List<ExerciseSyncRateDto> syncRateDetails;
 
     private ComparisonWithPreviousDto comparisonWithPrevious;

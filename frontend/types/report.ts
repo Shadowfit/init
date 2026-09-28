@@ -173,6 +173,30 @@ export interface TrunkLeanAnalysis {
   narrative: string[];              // 회차별 한국어 코멘트, 최대 4문장
 }
 
+/* ── 런지 보폭 정확도 (2026-09-28) ── */
+// 런지 전용 — 스쿼트는 보폭 개념이 없어 대응 타입이 없다.
+export type StepLengthGrade = SquatDepthGrade;
+
+/** 회차(rep) 하나의 보폭 정확도. */
+export interface RepStepLength {
+  repNumber: number;
+  staggerRatio: number;
+  stepScore: number;                // 0-100
+  timeStamp: string;                 // "01:15"
+}
+
+/**
+ * 런지 보폭 정확도 리포트. 스쿼트 세션·구버전 세션(V26 이전)·보폭 데이터가 없는 세션은
+ * null. ⚠️ 임계값(1.0/0.6)은 실촬영 3개 관찰 + 문헌 근거의 잠정값이다(backend
+ * LungeStepLengthAnalysisCalculator 참고) — 화면 문구에서 단정적으로 표현하지 않는다.
+ */
+export interface LungeStepLengthAnalysis {
+  stepScore: number;                // 세션 평균, 0-100
+  stepGrade: StepLengthGrade;
+  repStepLengths: RepStepLength[];
+  narrative: string[];              // 회차별 한국어 코멘트, 최대 4문장
+}
+
 export interface SessionReportResponse {
   sessionId: number;
   avgSyncRate: number;
@@ -193,6 +217,7 @@ export interface SessionReportResponse {
   lungeDepthAnalysis: LungeDepthAnalysis | null;
   squatTrunkLeanAnalysis: TrunkLeanAnalysis | null;
   lungeTrunkLeanAnalysis: TrunkLeanAnalysis | null;
+  lungeStepLengthAnalysis: LungeStepLengthAnalysis | null;
   syncRateDetails: ExerciseSyncRate[];
   comparisonWithPrevious: ComparisonWithPrevious | null;
 }

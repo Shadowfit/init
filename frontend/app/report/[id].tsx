@@ -173,6 +173,23 @@ export default function ReportScreen() {
               </View>
             )}
 
+            {report.lungeStepLengthAnalysis && (
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>보폭 정확도</Text>
+                <View style={styles.depthScoreRow}>
+                  <Text style={styles.score}>{report.lungeStepLengthAnalysis.stepScore}점</Text>
+                  <View style={styles.depthGradeBadge}>
+                    <Text style={styles.depthGradeBadgeText}>
+                      {DEPTH_GRADE_LABEL[report.lungeStepLengthAnalysis.stepGrade]}
+                    </Text>
+                  </View>
+                </View>
+                {report.lungeStepLengthAnalysis.narrative.map((line, i) => (
+                  <Text key={i} style={styles.body}>{line}</Text>
+                ))}
+              </View>
+            )}
+
             {exercise?.setInfo ? (
               <View style={styles.card}>
                 <Text style={styles.cardTitle}>운동 내역</Text>

@@ -65,7 +65,7 @@ def _count_reps(descent: float, hold: float, ascent: float | None = None) -> int
     total = _LEAD_SEC + descent + hold + ascent + _TAIL_SEC
     for k in range(int(total * _FPS) + 1):
         now = k / _FPS
-        angles, _, rep_event, _ = analyzer.process_frame(
+        angles, _, rep_event, _, _ = analyzer.process_frame(
             state, _frame(_knee_angle_at(now, descent, hold, ascent)), timestamp_sec=now
         )
         if angles is not None:

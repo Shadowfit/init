@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shadowfit.dto.report.PoseFrameProjection;
 import com.shadowfit.dto.report.detailreport.LungeDepthAnalysisDto;
+import com.shadowfit.dto.report.detailreport.LungeStepLengthAnalysisDto;
 import com.shadowfit.dto.report.detailreport.RepSyncRateDto;
 import com.shadowfit.dto.report.detailreport.SessionDetailedAnalysis;
 import com.shadowfit.dto.report.detailreport.SquatDepthAnalysisDto;
@@ -55,6 +56,7 @@ public class SessionCompletionTx {
     private final com.shadowfit.service.report.LungeDepthAnalysisCalculator lungeDepthAnalysisCalculator;
     private final com.shadowfit.service.report.SquatTrunkLeanAnalysisCalculator squatTrunkLeanAnalysisCalculator;
     private final com.shadowfit.service.report.LungeTrunkLeanAnalysisCalculator lungeTrunkLeanAnalysisCalculator;
+    private final com.shadowfit.service.report.LungeStepLengthAnalysisCalculator lungeStepLengthAnalysisCalculator;
     private final ReportRepository reportRepository;
     private final ObjectMapper objectMapper;
     private final SessionMetrics sessionMetrics;
@@ -183,18 +185,19 @@ public class SessionCompletionTx {
         LungeDepthAnalysisDto lungeDepthAnalysis = lungeDepthAnalysisCalculator.calculate(session, poseFrames);
         TrunkLeanAnalysisDto squatTrunkLeanAnalysis = squatTrunkLeanAnalysisCalculator.calculate(session, poseFrames);
         TrunkLeanAnalysisDto lungeTrunkLeanAnalysis = lungeTrunkLeanAnalysisCalculator.calculate(session, poseFrames);
+        LungeStepLengthAnalysisDto lungeStepLengthAnalysis = lungeStepLengthAnalysisCalculator.calculate(session, poseFrames);
 
         Report report = new Report();
         report.setMember(session.getMember());
         report.setSession(session);
-        // 여섯 다 비면 컬럼을 비워 둔다 — 읽기 경로가 "저장된 게 없다"로 보고 재계산을 시도하는데,
+        // 일곱 다 비면 컬럼을 비워 둔다 — 읽기 경로가 "저장된 게 없다"로 보고 재계산을 시도하는데,
         // 프레임이 없어서 비었던 것이라면 재계산도 같은 결과라 손해가 없다.
         if (worstSection != null || !repTrend.isEmpty() || squatDepthAnalysis != null || lungeDepthAnalysis != null
-                || squatTrunkLeanAnalysis != null || lungeTrunkLeanAnalysis != null) {
+                || squatTrunkLeanAnalysis != null || lungeTrunkLeanAnalysis != null || lungeStepLengthAnalysis != null) {
             try {
                 report.setDetailedAnalysis(objectMapper.writeValueAsString(
                         new SessionDetailedAnalysis(worstSection, repTrend, squatDepthAnalysis, lungeDepthAnalysis,
-                                squatTrunkLeanAnalysis, lungeTrunkLeanAnalysis)));
+                                squatTrunkLeanAnalysis, lungeTrunkLeanAnalysis, lungeStepLengthAnalysis)));
             } catch (JsonProcessingException e) {
                 throw new IllegalStateException("리포트 분석 직렬화 실패 - 세션 " + session.getId(), e);
             }

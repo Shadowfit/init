@@ -74,7 +74,7 @@ class SessionAnalysisCalculatorTest {
     /** 무릎각을 명시한 프레임. 작을수록 깊게 앉은 것이다(0 = 미상). */
     private PoseFrameProjection frame(
             int repNumber, double timestampSec, Double syncRate, Double smoothedKneeAngle) {
-        return new PoseFrameProjection(nextPoseDataId++, timestampSec, syncRate, repNumber, smoothedKneeAngle, null, null);
+        return new PoseFrameProjection(nextPoseDataId++, timestampSec, syncRate, repNumber, smoothedKneeAngle, null, null, null);
     }
 
     @Test

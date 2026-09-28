@@ -87,7 +87,7 @@ def _count_reps(fps: float, hold_sec: float, *, limiter: bool) -> int:
         if limiter and not accept_frame(state, now):
             continue
 
-        angles, _, rep_event, _ = analyzer.process_frame(
+        angles, _, rep_event, _, _ = analyzer.process_frame(
             state, _frame(_knee_angle_at(now, hold_sec)), timestamp_sec=now
         )
         if angles is not None:

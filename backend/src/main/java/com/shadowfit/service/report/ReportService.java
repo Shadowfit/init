@@ -36,6 +36,7 @@ public class ReportService {
     private final LungeDepthAnalysisCalculator lungeDepthAnalysisCalculator;
     private final SquatTrunkLeanAnalysisCalculator squatTrunkLeanAnalysisCalculator;
     private final LungeTrunkLeanAnalysisCalculator lungeTrunkLeanAnalysisCalculator;
+    private final LungeStepLengthAnalysisCalculator lungeStepLengthAnalysisCalculator;
     private final ObjectMapper objectMapper;
 
     @Transactional(readOnly = true)
@@ -76,6 +77,7 @@ public class ReportService {
         responseDto.setLungeDepthAnalysis(analysis.getLungeDepthAnalysis());
         responseDto.setSquatTrunkLeanAnalysis(analysis.getSquatTrunkLeanAnalysis());
         responseDto.setLungeTrunkLeanAnalysis(analysis.getLungeTrunkLeanAnalysis());
+        responseDto.setLungeStepLengthAnalysis(analysis.getLungeStepLengthAnalysis());
         responseDto.setSyncRateDetails(buildSyncRateDetails(session));
         lastSession.ifPresent(last ->
                 responseDto.setComparisonWithPrevious(buildComparisonWithPrevious(session, last))
@@ -108,7 +110,8 @@ public class ReportService {
                         || parsed.getSquatDepthAnalysis() != null
                         || parsed.getLungeDepthAnalysis() != null
                         || parsed.getSquatTrunkLeanAnalysis() != null
-                        || parsed.getLungeTrunkLeanAnalysis() != null) {
+                        || parsed.getLungeTrunkLeanAnalysis() != null
+                        || parsed.getLungeStepLengthAnalysis() != null) {
                     return parsed;
                 }
                 log.warn("세션 {} detailed_analysis 가 구버전 형식으로 판단됨 — pose_data 즉석 재계산으로 대체",
@@ -124,7 +127,8 @@ public class ReportService {
                 squatDepthAnalysisCalculator.calculate(session, poseFrames),
                 lungeDepthAnalysisCalculator.calculate(session, poseFrames),
                 squatTrunkLeanAnalysisCalculator.calculate(session, poseFrames),
-                lungeTrunkLeanAnalysisCalculator.calculate(session, poseFrames));
+                lungeTrunkLeanAnalysisCalculator.calculate(session, poseFrames),
+                lungeStepLengthAnalysisCalculator.calculate(session, poseFrames));
     }
 
     /**

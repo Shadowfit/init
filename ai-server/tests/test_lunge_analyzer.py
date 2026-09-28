@@ -41,7 +41,7 @@ class Run:
     def hold(self, seconds, *args, **kwargs):
         for _ in range(math.ceil(seconds / self.dt)):
             self.now += self.dt
-            _, _, event, _ = self.analyzer.process_frame(
+            _, _, event, _, _ = self.analyzer.process_frame(
                 self.state, frame(*args, **kwargs, **self.geometry), timestamp_sec=self.now,
                 image_aspect_ratio=self.geometry.get("aspect", 1.),
             )
@@ -140,18 +140,31 @@ def test_process_frame_returns_torso_tilt():
     (23/24)는 항상 같은 x좌표라 거의 직립(0도 근처)이어야 한다."""
     run = Run()
     run.hold(.3)
-    _, _, _, torso_tilt = run.analyzer.process_frame(
+    _, _, _, torso_tilt, _ = run.analyzer.process_frame(
         run.state, frame(150, 150, left_step=.3), timestamp_sec=run.now + .1
     )
     assert torso_tilt is not None
     assert torso_tilt < 5.0
 
 
+def test_process_frame_returns_stagger_ratio():
+    """보폭 점수(LungeStepLengthAnalysisCalculator, 2026-09-28)용 5번째 반환값 — "런지
+    자세인가"를 판정하던 stagger 값을 그대로 재사용한다. left_step=.3인 frame()은 두 발목이
+    벌어져 있으므로 stagger_ratio가 stagger_min(0.55)보다 뚜렷이 커야 한다."""
+    run = Run()
+    run.hold(.3)
+    _, _, _, _, stagger_ratio = run.analyzer.process_frame(
+        run.state, frame(150, 150, left_step=.3), timestamp_sec=run.now + .1
+    )
+    assert stagger_ratio is not None
+    assert stagger_ratio > 0.55
+
+
 @pytest.mark.parametrize("failure", ["visibility", "missing", "nan"])
-def test_invalid_frame_returns_none_torso_tilt_too(failure):
-    """가시성 부족·랜드마크 누락·NaN — 무릎각(angles)이 None이 되는 경로는 체간 기울기도
-    같이 None이어야 한다(pose.py가 angles is None일 때 PerRepFrame을 아예 안 만들므로,
-    이 두 값이 항상 같이 유효/무효여야 한다)."""
+def test_invalid_frame_returns_none_extras_too(failure):
+    """가시성 부족·랜드마크 누락·NaN — 무릎각(angles)이 None이 되는 경로는 체간 기울기·보폭
+    비율도 같이 None이어야 한다(pose.py가 angles is None일 때 PerRepFrame을 아예 안 만드므로,
+    이 값들이 항상 같이 유효/무효여야 한다)."""
     run = Run()
     bad = frame(150, 150, left_step=.3)
     if failure == "visibility":
@@ -160,9 +173,12 @@ def test_invalid_frame_returns_none_torso_tilt_too(failure):
         bad = bad[:-1]
     else:
         bad[0].x = float("nan")
-    angles, _, _, torso_tilt = run.analyzer.process_frame(run.state, bad, timestamp_sec=run.now + .1)
+    angles, _, _, torso_tilt, stagger_ratio = run.analyzer.process_frame(
+        run.state, bad, timestamp_sec=run.now + .1
+    )
     assert angles is None
     assert torso_tilt is None
+    assert stagger_ratio is None
 
 
 def test_resume_counts_total_without_inventing_historical_sides():

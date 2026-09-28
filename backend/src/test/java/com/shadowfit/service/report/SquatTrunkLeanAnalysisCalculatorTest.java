@@ -52,7 +52,7 @@ class SquatTrunkLeanAnalysisCalculatorTest {
     }
 
     private PoseFrameProjection frame(int repNumber, double torsoTiltDeg) {
-        return new PoseFrameProjection(nextPoseDataId++, (double) repNumber, 80.0, repNumber, 90.0, null, torsoTiltDeg);
+        return new PoseFrameProjection(nextPoseDataId++, (double) repNumber, 80.0, repNumber, 90.0, null, torsoTiltDeg, null);
     }
 
     // ── 가드 ────────────────────────────────────────────────────────────
@@ -74,7 +74,7 @@ class SquatTrunkLeanAnalysisCalculatorTest {
     @DisplayName("유효한 체간 기울기(non-null) 데이터가 있는 rep이 하나도 없으면 null")
     void noValidTilt_returnsNull() {
         List<PoseFrameProjection> frames = List.of(
-                new PoseFrameProjection(1L, 1.0, 80.0, 1, 90.0, null, null));
+                new PoseFrameProjection(1L, 1.0, 80.0, 1, 90.0, null, null, null));
 
         assertThat(calculator.calculate(squatSession, frames)).isNull();
     }
@@ -107,8 +107,8 @@ class SquatTrunkLeanAnalysisCalculatorTest {
     void repScore_isAverageOfFramesInRep_notMinimum() {
         // 같은 rep 안에 10도와 30도 프레임이 섞이면 평균 20도로 채점돼야 한다(만점 경계).
         List<PoseFrameProjection> frames = List.of(
-                new PoseFrameProjection(1L, 1.0, 80.0, 1, 90.0, null, 10.0),
-                new PoseFrameProjection(2L, 1.0, 80.0, 1, 90.0, null, 30.0));
+                new PoseFrameProjection(1L, 1.0, 80.0, 1, 90.0, null, 10.0, null),
+                new PoseFrameProjection(2L, 1.0, 80.0, 1, 90.0, null, 30.0, null));
 
         TrunkLeanAnalysisDto result = calculator.calculate(squatSession, frames);
 

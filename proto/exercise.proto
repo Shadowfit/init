@@ -182,6 +182,14 @@ message PoseDataRequest {
   // 달리 이 필드는 0 자체가 이론상 유효한 값이라 별도 "미상" 마커가 없다. 드물게 섞이는 미계산
   // 프레임 하나가 rep 평균에 0을 끼워넣는 정도의 왜곡은 감수한다.
   double torso_tilt_deg = 8;
+  // 두 발목 사이 거리 / 어깨-엉덩이 길이 — 런지 전용 "보폭이 얼마나 벌어졌는가" 비율
+  // (2026-09-28). ai-server lunge_analyzer.py가 "런지 자세인가"를 판정하던 stagger 값을
+  // 그대로 재사용한다. 짧은 보폭일수록 깊은 무릎 굴곡 구간에서 슬개대퇴 관절 부하가
+  // 커진다는 문헌(Escamilla et al. 계열, 이미 인용된 슬개대퇴 부하 연구와 같은 계보) 근거로
+  // 백엔드 LungeStepLengthAnalysisCalculator가 채점한다. 스쿼트 프레임에는 항상 0(보폭
+  // 개념 없음) — proto3라 구버전 AI(미전송)에서도 0이 온다. 이 계산기는 런지 세션만
+  // 채점하므로 스쿼트 행의 0은 소비되지 않는다.
+  double stagger_ratio = 9;
 }
 
 message PoseDataBatchRequest {
