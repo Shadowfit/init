@@ -25,8 +25,10 @@ public interface SessionRepository extends JpaRepository<Session,Long> {
     Optional<Session> findSessionWithExerciseByIdAndMemberId(@Param("sessionId") Long sessionId,
                                                               @Param("memberId") Long memberId);
 
-    // 개별 세션 삭제(deleteSession) 전용 — exercise fetch join 불필요, 소유권만 WHERE절로 확인.
+    // 세션 삭제·종료(deleteSession·endSession) — exercise fetch join 불필요, 소유권만 WHERE절로 확인.
     Optional<Session> findByIdAndMemberId(Long sessionId, Long memberId);
+
+    boolean existsByIdAndMemberId(Long sessionId, Long memberId);
 
     // 서킷브레이커 OPEN 자동 재부착(REATTACH_ANALYSIS) 전용 — 위 findSessionWithExerciseByIdAndMemberId
     // 와 달리 소유권(memberId) 조건이 없다. 호출 경로가 사용자 요청이 아니라 시스템(서킷브레이커

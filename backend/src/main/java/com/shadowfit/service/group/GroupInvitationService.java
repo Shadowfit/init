@@ -84,12 +84,10 @@ public class GroupInvitationService {
     }
 
     private GroupInvitation getRespondableInvitation(Long invitationId, Long inviteeId) {
-        GroupInvitation invitation = groupInvitationRepository.findById(invitationId)
+        // 초대 한 건은 초대받은 한 사람의 것 — 남의 초대는 없는 것과 같다
+        // (decisions/resource-ownership-403-vs-404.md 후보 C).
+        GroupInvitation invitation = groupInvitationRepository.findByIdAndInviteeId(invitationId, inviteeId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.INVITATION_NOT_FOUND));
-
-        if (!invitation.getInvitee().getId().equals(inviteeId)) {
-            throw new BusinessException(ErrorCode.ACCESS_DENIED);
-        }
         if (invitation.getStatus() != InvitationStatus.PENDING) {
             throw new BusinessException(ErrorCode.INVITATION_ALREADY_RESPONDED);
         }

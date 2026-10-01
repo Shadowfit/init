@@ -36,6 +36,8 @@ ai-server(Python)는 범위 밖 ([[feedback_minimize_python_changes]]).
 
 ## 2. 발견 — 인가(Authorization) — 최우선
 
+> 🔄 **2026-09-23 정정** — 아래에서 «올바른 패턴»으로 소개한 조회 후 비교 + `ACCESS_DENIED`(403)는 같은 날 `report-read-path.md` ⑫ 가 갭으로 본 방식과 반대였다. 개인 소유 리소스는 소유권을 WHERE 에 넣어 404 로 답하기로 결정했다([resource-ownership-403-vs-404.md](./resource-ownership-403-vs-404.md) 후보 C). `endSession`·세션 피드백도 그렇게 바뀌었다. 아래 원문은 당시 판단 기록으로 둔다.
+
 이 프로젝트엔 이미 **소유권 체크를 올바르게 하는 패턴**이 존재한다 — `SessionController.endSession`([`SessionController.java:26-32`](../../backend/src/main/java/com/shadowfit/controller/SessionController.java))가 `SessionService.endSession`([`SessionService.java:132-138`](../../backend/src/main/java/com/shadowfit/service/exercise/SessionService.java))에서 `session.getMember().getId().equals(currentMemberId)`로 검증 후 `ACCESS_DENIED`를 던지고, `SessionFeedbackController`도 동일 패턴으로 `memberId`를 서비스에 넘긴다. **아래 항목들은 이 패턴이 이미 사내에 있는데도 빠뜨린 케이스**라는 게 핵심 — "몰라서"가 아니라 "일관되게 안 지켜서"인 게 인터뷰 서사상으로도 더 정직하다.
 
 ### 2-① `ExerciseReportController.getSessionReport` — 타인 세션 리포트 열람 가능 — ✅ 해결(`52049d0`)

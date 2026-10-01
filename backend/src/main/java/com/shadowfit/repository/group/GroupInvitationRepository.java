@@ -14,6 +14,9 @@ public interface GroupInvitationRepository extends JpaRepository<GroupInvitation
     // 초대 생성 시 중복 초대 방지 — 이미 PENDING 인 초대가 있으면 재초대를 막는다.
     boolean existsByGroupIdAndInviteeIdAndStatus(Long groupId, Long inviteeId, InvitationStatus status);
 
+    // 수락·거절 — 초대받은 본인 것만 찾는다. 남의 초대는 없는 것과 같다(404, 존재 여부 비공개).
+    Optional<GroupInvitation> findByIdAndInviteeId(Long invitationId, Long inviteeId);
+
     // GET /invitations/mine.
     List<GroupInvitation> findAllByInviteeIdAndStatus(Long inviteeId, InvitationStatus status);
 

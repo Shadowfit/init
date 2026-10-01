@@ -300,14 +300,16 @@ class SessionServiceTest {
         }
 
         @Test
-        @DisplayName("본인 세션이 아니면 ACCESS_DENIED")
+        @DisplayName("본인 세션이 아니면 SESSION_NOT_FOUND — 없는 세션과 같은 답 (존재 여부 비공개)")
         void endSession_notOwner_throws() {
             Session session = inProgressSession();
 
             assertThatThrownBy(() -> sessionService.endSession(session.getId(), 999999L))
                     .isInstanceOf(BusinessException.class)
                     .extracting(e -> ((BusinessException) e).getErrorCode())
-                    .isEqualTo(ErrorCode.ACCESS_DENIED);
+                    .isEqualTo(ErrorCode.SESSION_NOT_FOUND);
+            assertThat(sessionRepository.findById(session.getId()).orElseThrow().getEndTime())
+                    .as("남의 요청으로 종료 시각이 찍히면 안 된다").isNull();
         }
 
         @Test
