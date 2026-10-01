@@ -161,6 +161,12 @@ services:
       # §3.3.2 E2E 상호작용 실험 손잡이. 기본 0=off — 콜백에 인위 지연을 얹어 AI worker 가
       # 얼마나 막히는지 잰다(load-test-strategy.md).
       POSE_INJECT_DELAY_MS: ${POSE_INJECT_DELAY_MS:-0}
+      # 측정용 손잡이 — application.yml `pose-data.downsample-window`(R=5, 실측으로 고른 하한이라
+      # 튜닝 손잡이가 아니다) 를 밖에서 바꿀 자리. 이 env 가 없으면 yml 기본값이 그대로 쓰여
+      # 프로덕션 동작은 안 바뀐다. R=1 은 «대표 프레임만» 이 아니라 판정 프레임 전부를 저장하므로
+      # 저장된 좌표로 판정을 재계산할 때(pose-json-backfill-query.md §4-2) 원본 밀도가 필요한
+      # 측정 적재에서만 쓴다. Spring 이 env 이름을 pose-data.downsample-window 로 풀어 읽는다.
+      POSE_DATA_DOWNSAMPLE_WINDOW: ${POSE_DATA_DOWNSAMPLE_WINDOW:-5}
       # 측정용 손잡이(#687) — 이 env가 없으면 application.yml 기본값(true)이 그대로 쓰여
       # 프로덕션 동작은 안 바뀐다. 부하 rig이 계정을 짧은 시간에 대량으로 만들면
       # ip-per-window(60/분) 한도에 걸려 세션 60개를 넘는 트라이얼이 전부 setup_fail로
