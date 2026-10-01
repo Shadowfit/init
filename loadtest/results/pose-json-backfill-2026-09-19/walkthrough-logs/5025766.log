@@ -1,0 +1,19 @@
+[E1] signup                             200
+[E1] login                              200
+[E1] 온보딩                                200
+[E1] 세션 시작                              202 sessionId=108203 aiWorker=2
+[E1] 영상                                 C:/Users/khjae/Downloads/5025766-hd_1080_1920_25fps.mp4 (25.0fps → 8프레임마다, 333ms 간격으로 전송)
+[E1] 프레임 유입                             전송 35 · 랜드마크 35 · 판정에 들어감 35 · rep 0회
+[E1] 세션 종료                              200
+[E1] 리포트                                200 (종료 후 2초)
+        totalReps          0
+        avgSyncRate        0
+        workoutMinutes     0
+        caloriesBurned     0
+        worstSection       None
+        repTrend           0건
+
+[E1] 판정                                 🔴 E1 미통과
+        - AI 가 rep 을 한 번도 완성하지 못했다 (영상이 못 쓰는 것이거나 #217)
+        - 리포트 totalReps 가 0 이다 (rep→콜백→적재 구간이 안 돌았다)
+        - avgSyncRate 가 0 이다 (정답지가 비었을 수 있다 — #192)
