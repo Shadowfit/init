@@ -165,9 +165,8 @@ class TokenReissueIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new ReissueRequestDto(first))))
                 .andExpect(status().isUnauthorized())
-                // ⚠️ 코드("A006")로 단언하지 못한다 — ErrorResponseDto 에 code 필드가 없어
-                //    응답에는 status·message·timestamp 만 나간다. 즉 A004(단순 무효)와 A006 의
-                //    구분은 **지금 서버 안에만 있고 클라는 못 본다.** message 로 대신 고정한다.
+                // A004(단순 무효)가 아니라 A006 이어야 한다 — 이 구분이 응답 code 로 클라에 닿는다.
+                .andExpect(jsonPath("$.code").value("A006"))
                 .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("다시 로그인")));
 
         assertThat(refreshTokenRepository.findById(member.getId()))
@@ -195,9 +194,8 @@ class TokenReissueIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new ReissueRequestDto(firstDevice))))
                 .andExpect(status().isUnauthorized())
-                // ⚠️ 코드("A006")로 단언하지 못한다 — ErrorResponseDto 에 code 필드가 없어
-                //    응답에는 status·message·timestamp 만 나간다. 즉 A004(단순 무효)와 A006 의
-                //    구분은 **지금 서버 안에만 있고 클라는 못 본다.** message 로 대신 고정한다.
+                // A004(단순 무효)가 아니라 A006 이어야 한다 — 이 구분이 응답 code 로 클라에 닿는다.
+                .andExpect(jsonPath("$.code").value("A006"))
                 .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("다시 로그인")));
 
         // ⚠️ **여기서 두 번째 기기의 세션까지 끊긴다.** 서버는 «탈취» 와 «낡은 기기» 를 구분하지

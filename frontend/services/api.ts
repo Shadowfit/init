@@ -188,9 +188,9 @@ api.interceptors.response.use(
     if (status === 401 && hadAuthHeader && fromLiveSession) {
       // 재발급이 실패했거나 이미 한 번 재시도한 뒤다 — 세션이 끝났다.
       //
-      // ⚠️ 서버가 «폐기된 구본» 으로 판정한 경우(A006)도 여기로 온다. 그 둘을 구분하려면
-      // 응답에 에러 코드가 있어야 하는데 ErrorResponseDto 는 status·message·timestamp 만
-      // 싣는다 — 지금은 둘 다 같은 처리를 받는다.
+      // ⚠️ 서버가 «폐기된 구본» 으로 판정한 경우(A006)도 여기로 온다. 응답 data.code 로
+      // 구분할 수 있지만(2026-09-23 부터 ErrorResponseDto 가 code 를 싣는다) 지금은 둘 다
+      // 같은 처리를 받는다.
       const { useAuthStore } = require('@/stores/authStore');
       await useAuthStore.getState().forceLogout();
       // _layout 가드는 __DEV__ 에서 자동 redirect 를 안 시키므로
