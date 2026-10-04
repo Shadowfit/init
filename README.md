@@ -7,17 +7,28 @@
 
 ## DB 운영 실험 기록
 
-백엔드·DB 담당([@Khyojae](https://github.com/Khyojae))이 `pose_data` 테이블을 합성 데이터 1억 행까지 키워 놓고 스키마 변경·보존·백업·복제를 직접 해 본 기록입니다. 실제 사용자 트래픽은 없고, 수치마다 조건(행 수·장비·판 수)을 함께 적었습니다. 스크립트는 [`loadtest/`](./loadtest/)에, 결과는 [`loadtest/results/`](./loadtest/results/)에 있습니다.
+> 백엔드·DB 담당 [@Khyojae](https://github.com/Khyojae) · 합성 데이터 1억 행 · 실제 사용자 트래픽 없음
 
-| 주제 | 결과 | 조건 | 기록 |
-| :--- | :--- | :--- | :--- |
-| 전체 요약 | 수치와 조건을 한 장에 정리 | — | [`docs/portfolio/one-pager.md`](./docs/portfolio/one-pager.md) |
-| 무중단 스키마 변경 | 쓰기 정지 68~69초 → 최대 0.36초. 대가는 작업 시간 1.64배와 binlog 441MB | EC2, 1,000만 행, 쓰기 부하 중 6판 | [결과](./loadtest/results/online-ddl-aws-2026-08-12/README.md) · [결정](./docs/decisions/online-ddl-vs-blocking-alter.md) |
-| 보존 기간 삭제 | DELETE 18.6분 ↔ 파티션 삭제 1.8초. 외래 키를 빼고 탈퇴 즉시 비동기 삭제로 대체 | 로컬, 1억 행 | [결정](./docs/decisions/pose-data-partition-fk-tradeoff.md) |
-| 백업·복구 | 복구 논리 약 21분 ↔ 물리 약 174초. 사고 직전 시점까지 복원 | EC2, 1억 행 | [결과](./loadtest/results/backup-restore-aws-2026-08-13/README.md) · [교정](./loadtest/results/restore-reflink-2026-08-14/README.md) |
-| 복제 | 지연 약 60초. 반동기로 바꾸면 처리량 −5.9% | EC2 2대, 같은 AZ, 1,000만 행 | [결과](./loadtest/results/replication-aws-2026-08-22/README.md) |
-| 쓰기 처리량 | 요청이 한 세션에 몰리면 초당 267건, 10세션 이상으로 나뉘면 약 1,013건. 락을 기다린 요청이 30,000건 중 29,999건에서 40건으로 줄어듦 | EC2 2대, 36판 | [결과](./loadtest/results/session-spread-aws-2026-08-17/README.md) |
-| 적재량 줄이기 | 프레임 다섯 장 중 한 장만 저장하자 요청 처리량 초당 222건 → 914건, p99 3,776ms → 396ms | EC2 2대, 20세션, 8판 | [결과](./loadtest/results/session-spread-aws-2026-08-17/P2-downsample-multisession.md) |
+`pose_data` 테이블을 1억 행까지 키워 놓고 스키마 변경·보존·백업·복제를 직접 해 본 기록입니다.
+
+- **한 장 요약** — [`docs/portfolio/one-pager.md`](./docs/portfolio/one-pager.md) (수치마다 조건 표기)
+- **스크립트** — [`loadtest/`](./loadtest/) · **결과** — [`loadtest/results/`](./loadtest/results/)
+
+| 실험 | 핵심 수치 | 조건 | 기록 |
+| :--- | :--- | :--- | :---: |
+| 무중단 스키마 변경 | 쓰기 정지 **69초 → 0.36초** | EC2 · 1,000만 행 | [결과](./loadtest/results/online-ddl-aws-2026-08-12/README.md) |
+| 보존 기간 삭제 | 삭제 **18.6분 → 1.8초** | 로컬 · 1억 행 | [결정](./docs/decisions/pose-data-partition-fk-tradeoff.md) |
+| 백업·복구 | 복구 **21분**(논리) · **174초**(물리) | EC2 · 1억 행 | [결과](./loadtest/results/backup-restore-aws-2026-08-13/README.md) |
+| 복제 | 지연 **약 60초** · 반동기 처리량 **−5.9%** | EC2 2대 · 1,000만 행 | [결과](./loadtest/results/replication-aws-2026-08-22/README.md) |
+| 쓰기 처리량 | 초당 **267건 → 1,013건** | EC2 2대 · 36판 | [결과](./loadtest/results/session-spread-aws-2026-08-17/README.md) |
+| 적재량 줄이기 | 초당 **222건 → 914건** | EC2 2대 · 8판 | [결과](./loadtest/results/session-spread-aws-2026-08-17/P2-downsample-multisession.md) |
+
+좋아진 것만 적지 않고 그 대가와 원인을 함께 남겼습니다.
+
+- **스키마 변경의 대가** — 작업 시간 1.64배, binlog 441MB 증가 ([결정 문서](./docs/decisions/online-ddl-vs-blocking-alter.md))
+- **파티션의 대가** — 외래 키를 쓸 수 없어 회원 탈퇴 시 삭제를 즉시 비동기 처리로 대체
+- **복구 시간 정정** — 처음 잰 9초는 파일 시스템이 복사를 건너뛴 값이라 174초로 고쳐 적음 ([교정 기록](./loadtest/results/restore-reflink-2026-08-14/README.md))
+- **쓰기 처리량의 원인** — 디스크가 아니라 행 락 대기. 락을 기다린 요청이 30,000건 중 29,999건에서 40건으로 줄어듦
 
 ---
 
