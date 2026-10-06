@@ -29,7 +29,18 @@ export default function ReportScreen() {
     setLoading(true);
     setError(false);
     try {
-      const response = await reportService.getSessionReport(sessionId);
+      // 운동 종료 직후에는 리포트 선계산이 끝나기 전일 수 있다(통주행 기준 2~3초, 그동안 404) —
+      // 에러 화면을 바로 띄우지 않고 잠시 재시도한다.
+      let response: Awaited<ReturnType<typeof reportService.getSessionReport>>;
+      for (let attempt = 0; ; attempt++) {
+        try {
+          response = await reportService.getSessionReport(sessionId);
+          break;
+        } catch (e) {
+          if (attempt >= 7) throw e;
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+      }
       setReport(response.data);
       const summary = await exercisesService.getSessionFeedbackSummary(sessionId).catch(() => null);
       setFeedback(summary?.data ?? null);
@@ -103,9 +114,7 @@ export default function ReportScreen() {
 
             {report.squatDepthAnalysis && (
               <View style={styles.card}>
-                <Text style={styles.cardTitle}>
-                  {report.squatDepthAnalysis.depthMode === 'HALF' ? '하프 스쿼트' : '풀 스쿼트'} 깊이 정확도
-                </Text>
+                <Text style={styles.cardTitle}>스쿼트 깊이 정확도</Text>
                 <View style={styles.depthScoreRow}>
                   <Text style={styles.score}>{report.squatDepthAnalysis.depthScore}점</Text>
                   <View style={styles.depthGradeBadge}>

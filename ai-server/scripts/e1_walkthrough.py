@@ -296,6 +296,21 @@ def main() -> int:
               f"score={depth.get('depthScore')} grade={depth.get('depthGrade')}")
         for line in depth.get("narrative") or []:
             print(f"          - {line}")
+    # 2026-10-05: 런지 깊이·체간 기울기·보폭 카드도 같이 본다 — 시연 전 «새 채점이 리포트까지 나오는가»
+    extra_blocks = {
+        "lungeDepthAnalysis": ("depthScore", "depthGrade"),
+        "squatTrunkLeanAnalysis": ("tiltScore", "tiltGrade"),
+        "lungeTrunkLeanAnalysis": ("tiltScore", "tiltGrade"),
+        "lungeStepLengthAnalysis": ("stepScore", "stepGrade"),
+    }
+    present_blocks = []
+    for name, (score_key, grade_key) in extra_blocks.items():
+        block = report.get(name)
+        if block:
+            present_blocks.append(name)
+            print(f"        {name} score={block.get(score_key)} grade={block.get(grade_key)}")
+            for line in block.get("narrative") or []:
+                print(f"          - {line}")
 
     # ── 판정 ────────────────────────────────────────────────────────────────
     # 200 을 세지 않는다. #196 은 «전 구간 200 인데 전부 0» 이었다.
@@ -308,8 +323,14 @@ def main() -> int:
         problems.append(f"완료 안내 {complete_coaching}건이 완료 횟수 {max_rep}회와 다르다")
     if not report.get("totalReps"):
         problems.append("리포트 totalReps 가 0 이다 (rep→콜백→적재 구간이 안 돌았다)")
-    if not report.get("avgSyncRate"):
+    # 런지(exercise-id 2)는 횟수만 측정해 avgSyncRate 가 의도적으로 비어 있다(V22 repetition_only).
+    if args.exercise_id == 1 and not report.get("avgSyncRate"):
         problems.append("avgSyncRate 가 0 이다 (정답지가 비었을 수 있다 — #192)")
+    expected_blocks = (["squatTrunkLeanAnalysis"] if args.exercise_id == 1
+                       else ["lungeDepthAnalysis", "lungeTrunkLeanAnalysis", "lungeStepLengthAnalysis"])
+    for name in expected_blocks:
+        if name not in present_blocks:
+            problems.append(f"리포트에 {name} 가 없다 (배관이 안 돌았거나 해당 데이터가 비었다)")
     if args.expected_depth_score_min is not None:
         if not depth:
             problems.append("리포트에 squatDepthAnalysis 가 없다 (스쿼트가 아니거나 깊이 데이터 없음)")

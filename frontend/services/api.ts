@@ -4,6 +4,7 @@ import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import { currentSessionVersion } from './sessionVersion';
+import { metroProxyOrigin } from './devProxy';
 
 // Expo dev 모드에서는 Metro 가 알려주는 호스트(=PC LAN IP)를 자동으로 사용한다.
 // 안드로이드 에뮬레이터는 호스트 PC 를 10.0.2.2 로 봐야 하므로 별도 처리.
@@ -25,8 +26,12 @@ function resolveDevHost(): string {
   return host || 'localhost';
 }
 
+// EXPO_PUBLIC_API_VIA_METRO=1 이면 방화벽에 막히지 않도록 Metro 프록시(/__backend) 경유(devProxy.ts).
+const proxyOrigin = metroProxyOrigin();
 const BASE_URL = __DEV__
-  ? `http://${resolveDevHost()}:8080`
+  ? proxyOrigin
+    ? `${proxyOrigin}/__backend`
+    : `http://${resolveDevHost()}:${process.env.EXPO_PUBLIC_BACKEND_PORT || '8080'}`
   : 'https://api.shadowfit.com'; // 추후 프로덕션 URL
 
 // 백엔드 컨트롤러 prefix가 /api/v1 이 아니라 /member, /exercises, /reports 등이라

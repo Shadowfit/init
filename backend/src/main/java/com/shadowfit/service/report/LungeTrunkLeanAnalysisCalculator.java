@@ -118,7 +118,8 @@ public class LungeTrunkLeanAnalysisCalculator {
             RepTrunkLeanDto a = repTrunkLeans.get(i), b = repTrunkLeans.get(i + 1);
             int drop = a.getTiltScore() - b.getTiltScore();
             boolean gotMoreBent = b.getAvgTiltDeg() > a.getAvgTiltDeg();
-            if (a.getTiltScore() >= 85 && drop >= 15 && gotMoreBent && drop > biggestDrop) {
+            // b가 75점 미만일 때만 경고한다 — 점수와 코멘트가 모순되지 않도록(스쿼트 계산기 주석 참고).
+            if (a.getTiltScore() >= 85 && b.getTiltScore() < 75 && drop >= 15 && gotMoreBent && drop > biggestDrop) {
                 biggestDrop = drop;
                 dropFrom = a;
                 dropTo = b;

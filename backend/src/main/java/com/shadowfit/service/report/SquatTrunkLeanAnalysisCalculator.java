@@ -28,7 +28,12 @@ import java.util.Objects;
  * 무게중심이 지지 기반을 벗어나는 명백한 과도 전방 기울임으로 문헌에 정리돼 있다(Straub,
  * <i>A Biomechanical Review of the Squat Exercise</i>, IJSPT). 40도 전후 전방 기울임이 ACL
  * 부담을 16~24% 낮추지만 햄스트링 부하를 35% 늘리는 트레이드오프도 있어 "직립일수록 무조건
- * 좋다"로 설계하지 않았다 — 20도까지는 만점, 35도(기존 BACK_BENT 경계)까지 완만히 감점한다.
+ * 좋다"로 설계하지 않았다.
+ *
+ * <p>🔄 2026-10-05 실측 보정: 처음엔 20도까지 만점으로 잡았는데, 실촬영 정상 스쿼트 3개
+ * (squat_normal_01·02·side_01)의 rep 중 체간 기울기 평균이 29.8·31.1·31.3도로 나와 멀쩡한
+ * 스쿼트가 FAIR("상체가 많이 숙여졌어요")로 깎였다. 그래서 만점 경계를 기존 실시간 BACK_BENT
+ * 경계인 35도로 올리고, 문헌상 "명백한 과도"인 45도에서 60점이 되게 했다.
  */
 @Component
 public class SquatTrunkLeanAnalysisCalculator {
@@ -37,11 +42,12 @@ public class SquatTrunkLeanAnalysisCalculator {
     // 결합 취약성을 그대로 안는다 — 시드가 바뀌면 이 값도 같이 고쳐야 한다.
     private static final long SQUAT_EXERCISE_ID = 1L;
 
-    private static final double NATURAL_LIMIT = 20.0;
     // ai-server pose.py의 _BACK_BENT_TILT_THRESHOLD와 같은 값 — 실시간 피드백과 세션 후 점수가
     // 같은 경계를 말하도록 의도적으로 맞췄다. 값이 어긋나면 두 경로가 "등 굽음"을 다른 기준으로
     // 판정하게 되니 둘 중 하나만 바꾸지 말 것.
-    private static final double BACK_BENT_THRESHOLD = 35.0;
+    private static final double NATURAL_LIMIT = 35.0;
+    // 문헌(Straub, IJSPT)이 "명백한 과도 전방 기울임"으로 꼽는 경계.
+    private static final double EXCESSIVE_THRESHOLD = 45.0;
 
     public TrunkLeanAnalysisDto calculate(Session session, List<PoseFrameProjection> poseFrames) {
         if (session.getExercise().getId() != SQUAT_EXERCISE_ID) {
@@ -87,15 +93,15 @@ public class SquatTrunkLeanAnalysisCalculator {
         return new RepTrunkLeanDto(repNumber, avgTilt, score, formatTimestamp(frames.get(0).timestampSec()));
     }
 
-    /** 20도 이하는 만점, 20~35도는 100→60 선형, 그 너머는 방어적으로 계속 깎는다. */
+    /** 35도 이하는 만점, 35~45도는 100→60 선형, 그 너머는 방어적으로 계속 깎는다. */
     private int scoreTilt(double avgTilt) {
         if (avgTilt <= NATURAL_LIMIT) {
             return 100;
         }
-        if (avgTilt <= BACK_BENT_THRESHOLD) {
-            return (int) Math.round(100 - (avgTilt - NATURAL_LIMIT) / (BACK_BENT_THRESHOLD - NATURAL_LIMIT) * 40);
+        if (avgTilt <= EXCESSIVE_THRESHOLD) {
+            return (int) Math.round(100 - (avgTilt - NATURAL_LIMIT) / (EXCESSIVE_THRESHOLD - NATURAL_LIMIT) * 40);
         }
-        return (int) Math.max(0, Math.round(60 - (avgTilt - BACK_BENT_THRESHOLD) * 3));
+        return (int) Math.max(0, Math.round(60 - (avgTilt - EXCESSIVE_THRESHOLD) * 3));
     }
 
     private String gradeOf(int score) {
@@ -121,7 +127,9 @@ public class SquatTrunkLeanAnalysisCalculator {
             RepTrunkLeanDto a = repTrunkLeans.get(i), b = repTrunkLeans.get(i + 1);
             int drop = a.getTiltScore() - b.getTiltScore();
             boolean gotMoreBent = b.getAvgTiltDeg() > a.getAvgTiltDeg();
-            if (a.getTiltScore() >= 85 && drop >= 15 && gotMoreBent && drop > biggestDrop) {
+            // b가 75점 미만일 때만 경고한다 — 낙차만 보면 93점대 세션에서도 "많이 숙여졌어요"가
+            // 떠서 점수(EXCELLENT)와 코멘트가 모순된다(2026-10-05 실측 e2e에서 확인).
+            if (a.getTiltScore() >= 85 && b.getTiltScore() < 75 && drop >= 15 && gotMoreBent && drop > biggestDrop) {
                 biggestDrop = drop;
                 dropFrom = a;
                 dropTo = b;

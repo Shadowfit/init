@@ -82,37 +82,37 @@ class SquatTrunkLeanAnalysisCalculatorTest {
     // ── 채점 경계값 ────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("체간 기울기 20도 이하는 만점")
+    @DisplayName("체간 기울기 35도 이하는 만점(정상 스쿼트 실측 약 30도)")
     void atOrBelowNaturalLimit_scoresMax() {
-        TrunkLeanAnalysisDto result = calculator.calculate(squatSession, List.of(frame(1, 10.0)));
+        TrunkLeanAnalysisDto result = calculator.calculate(squatSession, List.of(frame(1, 30.0)));
         assertThat(result.getRepTrunkLeans().get(0).getTiltScore()).isEqualTo(100);
     }
 
     @Test
-    @DisplayName("체간 기울기 35도(기존 BACK_BENT 경계)는 60점")
-    void atBackBentThreshold_scores60() {
-        TrunkLeanAnalysisDto result = calculator.calculate(squatSession, List.of(frame(1, 35.0)));
+    @DisplayName("체간 기울기 45도(명백한 과도 경계)는 60점")
+    void atExcessiveThreshold_scores60() {
+        TrunkLeanAnalysisDto result = calculator.calculate(squatSession, List.of(frame(1, 45.0)));
         assertThat(result.getRepTrunkLeans().get(0).getTiltScore()).isEqualTo(60);
     }
 
     @Test
-    @DisplayName("체간 기울기 27.5도(20~35 중간)는 80점")
+    @DisplayName("체간 기울기 40도(35~45 중간)는 80점")
     void atMidpoint_scores80() {
-        TrunkLeanAnalysisDto result = calculator.calculate(squatSession, List.of(frame(1, 27.5)));
+        TrunkLeanAnalysisDto result = calculator.calculate(squatSession, List.of(frame(1, 40.0)));
         assertThat(result.getRepTrunkLeans().get(0).getTiltScore()).isEqualTo(80);
     }
 
     @Test
     @DisplayName("rep 점수는 그 rep에 속한 프레임들의 체간 기울기 '평균'이다 — 최솟값이 아니다")
     void repScore_isAverageOfFramesInRep_notMinimum() {
-        // 같은 rep 안에 10도와 30도 프레임이 섞이면 평균 20도로 채점돼야 한다(만점 경계).
+        // 같은 rep 안에 20도와 50도 프레임이 섞이면 평균 35도로 채점돼야 한다(만점 경계).
         List<PoseFrameProjection> frames = List.of(
-                new PoseFrameProjection(1L, 1.0, 80.0, 1, 90.0, null, 10.0, null),
-                new PoseFrameProjection(2L, 1.0, 80.0, 1, 90.0, null, 30.0, null));
+                new PoseFrameProjection(1L, 1.0, 80.0, 1, 90.0, null, 20.0, null),
+                new PoseFrameProjection(2L, 1.0, 80.0, 1, 90.0, null, 50.0, null));
 
         TrunkLeanAnalysisDto result = calculator.calculate(squatSession, frames);
 
-        assertThat(result.getRepTrunkLeans().get(0).getAvgTiltDeg()).isEqualTo(20.0);
+        assertThat(result.getRepTrunkLeans().get(0).getAvgTiltDeg()).isEqualTo(35.0);
         assertThat(result.getRepTrunkLeans().get(0).getTiltScore()).isEqualTo(100);
     }
 
@@ -130,8 +130,8 @@ class SquatTrunkLeanAnalysisCalculatorTest {
 
     private String gradeFor(int targetScore) {
         double tilt = targetScore >= 60
-                ? 20 + (100 - targetScore) / 40.0 * 15
-                : 35 + (60 - targetScore) / 3.0;
+                ? 35 + (100 - targetScore) / 40.0 * 10
+                : 45 + (60 - targetScore) / 3.0;
         TrunkLeanAnalysisDto result = calculator.calculate(squatSession, List.of(frame(1, tilt)));
         return result.getTiltGrade();
     }
@@ -141,9 +141,9 @@ class SquatTrunkLeanAnalysisCalculatorTest {
     @Test
     @DisplayName("세션 점수는 회차별 점수의 평균(반올림)")
     void sessionScore_isAverageOfRepScores() {
-        // rep1: tilt=10 -> 100점, rep2: tilt=35 -> 60점 => 평균 80
+        // rep1: tilt=30 -> 100점, rep2: tilt=45 -> 60점 => 평균 80
         TrunkLeanAnalysisDto result = calculator.calculate(
-                squatSession, List.of(frame(1, 10.0), frame(2, 35.0)));
+                squatSession, List.of(frame(1, 30.0), frame(2, 45.0)));
         assertThat(result.getTiltScore()).isEqualTo(80);
     }
 
@@ -152,9 +152,9 @@ class SquatTrunkLeanAnalysisCalculatorTest {
     @Test
     @DisplayName("코멘트 ①: 앞 회차 좋고 바로 다음 회차가 크게 나빠지면 그 두 회차를 지목한다")
     void narrative_adjacentDrop_mentionsBothReps() {
-        // rep1: tilt=10(100점) -> rep2: tilt=45(30점, 낙차 70) -> 트리거
+        // rep1: tilt=30(100점) -> rep2: tilt=55(30점, 낙차 70) -> 트리거
         TrunkLeanAnalysisDto result = calculator.calculate(
-                squatSession, List.of(frame(1, 10.0), frame(2, 45.0)));
+                squatSession, List.of(frame(1, 30.0), frame(2, 55.0)));
 
         assertThat(result.getNarrative()).anySatisfy(line ->
                 assertThat(line).contains("1회차").contains("2회차"));
@@ -164,7 +164,7 @@ class SquatTrunkLeanAnalysisCalculatorTest {
     @DisplayName("코멘트 ②: 세션 전체 등급이 FAIR 미만이면 전반적 경고 코멘트를 낸다")
     void narrative_lowOverallGrade_addsGeneralComment() {
         TrunkLeanAnalysisDto result = calculator.calculate(
-                squatSession, List.of(frame(1, 50.0), frame(2, 50.0), frame(3, 50.0)));
+                squatSession, List.of(frame(1, 60.0), frame(2, 60.0), frame(3, 60.0)));
 
         assertThat(result.getTiltScore()).isLessThan(60);
         assertThat(result.getNarrative()).anySatisfy(line -> assertThat(line).contains("전반적으로"));
@@ -174,7 +174,7 @@ class SquatTrunkLeanAnalysisCalculatorTest {
     @DisplayName("코멘트 ③: 모든 회차가 고르게 양호하면 회차 언급 없는 한 줄로 폴백한다")
     void narrative_allGood_fallsBackToSingleLine() {
         TrunkLeanAnalysisDto result = calculator.calculate(
-                squatSession, List.of(frame(1, 10.0), frame(2, 12.0), frame(3, 8.0)));
+                squatSession, List.of(frame(1, 30.0), frame(2, 32.0), frame(3, 28.0)));
 
         assertThat(result.getNarrative()).hasSize(1);
         assertThat(result.getNarrative().get(0)).contains("3회");
@@ -184,7 +184,7 @@ class SquatTrunkLeanAnalysisCalculatorTest {
     @DisplayName("코멘트는 최대 4문장")
     void narrative_cappedAtFour() {
         TrunkLeanAnalysisDto result = calculator.calculate(squatSession, List.of(
-                frame(1, 10.0), frame(2, 45.0), frame(3, 12.0), frame(4, 46.0), frame(5, 50.0)));
+                frame(1, 30.0), frame(2, 55.0), frame(3, 32.0), frame(4, 56.0), frame(5, 60.0)));
 
         assertThat(result.getNarrative()).hasSizeLessThanOrEqualTo(4);
     }

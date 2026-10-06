@@ -2,6 +2,7 @@ import axios from 'axios';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import type { PoseDetectRequest, PoseDetectResponse } from '@/types/pose';
+import { metroProxyOrigin } from './devProxy';
 
 // AI 서버(FastAPI)는 Spring(:8080)이 아니라 별도 :8000 /api/v1 로 직결한다 (분기 H2).
 //
@@ -44,6 +45,10 @@ function resolveAiBaseUrl(): string {
   // 개발: Metro 호스트(=PC LAN IP)를 그대로 쓰되 포트만 8000.
   // 안드로이드 에뮬레이터는 호스트 PC 를 10.0.2.2 로 봐야 한다.
   if (override) return override;
+
+  // EXPO_PUBLIC_API_VIA_METRO=1 이면 방화벽에 막히지 않도록 Metro 프록시(/__ai) 경유(devProxy.ts).
+  const proxyOrigin = metroProxyOrigin();
+  if (proxyOrigin) return `${proxyOrigin}/__ai/api/v1`;
 
   const hostUri = Constants.expoConfig?.hostUri ?? '';
   let host = hostUri.split(':')[0] || 'localhost';

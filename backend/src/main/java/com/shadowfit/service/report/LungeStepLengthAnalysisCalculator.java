@@ -124,7 +124,8 @@ public class LungeStepLengthAnalysisCalculator {
             RepStepLengthDto a = repStepLengths.get(i), b = repStepLengths.get(i + 1);
             int drop = a.getStepScore() - b.getStepScore();
             boolean gotShorter = b.getStaggerRatio() < a.getStaggerRatio();
-            if (a.getStepScore() >= 85 && drop >= 15 && gotShorter && drop > biggestDrop) {
+            // b가 75점 미만일 때만 경고한다 — 점수와 코멘트가 모순되지 않도록.
+            if (a.getStepScore() >= 85 && b.getStepScore() < 75 && drop >= 15 && gotShorter && drop > biggestDrop) {
                 biggestDrop = drop;
                 dropFrom = a;
                 dropTo = b;

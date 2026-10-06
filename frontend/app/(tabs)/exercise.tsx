@@ -39,9 +39,6 @@ export default function ExerciseScreen() {
   // 운동 종목 — 라우트 param 우선, 기본 1(스쿼트). 추후 종목 선택 UI 추가 시 정리.
   const [exerciseId, setExerciseId] = useState(params.exerciseId === '2' ? 2 : 1);
   const isLunge = exerciseId === 2;
-  // 스쿼트 깊이 모드(FULL/HALF, 2026-09-21). 종목 선택과 같은 화면에서 운동 시작 전에 고른다 —
-  // 녹화 중엔 종목 칩과 동일하게 잠근다(선택은 한 번, 세션 시작 시점에 고정).
-  const [squatDepthMode, setSquatDepthMode] = useState<'FULL' | 'HALF'>('FULL');
   const [lunge, setLunge] = useState<LungeProgress | null>(null);
   const [captureMessage, setCaptureMessage] = useState<string | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -181,10 +178,8 @@ export default function ExerciseScreen() {
         setLunge(null);
         setCaptureMessage(null);
         // ── 시작: 백엔드에 세션 생성 + 멘트 프리로드 ─────────
-        const res = await exercisesService.startSession({
-          exerciseId,
-          depthMode: isLunge ? undefined : squatDepthMode,
-        });
+        // 하프 스쿼트는 시연 범위에서 뺐다(2026-10-06) — depthMode 를 생략하면 백엔드가 FULL 로 취급.
+        const res = await exercisesService.startSession({ exerciseId });
         setSessionId(res.data.sessionId);
         setSessionNonce(res.data.sessionNonce);
         setAiWorkerIndex(res.data.aiWorkerIndex ?? null);
@@ -204,17 +199,8 @@ export default function ExerciseScreen() {
         setSessionNonce(null);
         setAiWorkerIndex(null);
         setSessionId(null);
-        if (id != null) {
-          if (isLunge) {
-            const sides = lunge
-              ? `왼쪽 ${lunge.left_reps}회 · 오른쪽 ${lunge.right_reps}회` +
-                (lunge.unassigned_reps ? `\n이전 기록 ${lunge.unassigned_reps}회 (좌우 정보 없음)` : '')
-              : '좌우 정보가 아직 없습니다.';
-            Alert.alert('전방 런지 종료', `총 ${repCount}회\n${sides}\n자세 점수는 측정하지 않습니다.`);
-          } else {
-            router.replace(`/report/${id}` as any);
-          }
-        }
+        // 스쿼트·런지 모두 리포트로 이동한다 — 런지도 깊이·체간·보폭 점수가 리포트에 나온다.
+        if (id != null) router.replace(`/report/${id}` as any);
       }
     } catch (e: any) {
       console.error('[exercise session] status=', e?.response?.status, 'data=', e?.response?.data);
@@ -222,14 +208,14 @@ export default function ExerciseScreen() {
         '운동 세션 오류',
         e?.response?.data?.message ?? '세션 처리 중 오류가 발생했습니다',
       );
-      // 시작 실패면 녹화 상태 유지 안 함 / 종료 실패면 일단 화면은 종료 처리됨
+      // 시작 실패면 운동 상태 유지 안 함 / 종료 실패면 일단 화면은 종료 처리됨
       if (!isRecording) setIsRecording(false);
     } finally {
       setBusy(false);
     }
   };
 
-  // 녹화 정지 시 참고 유사도, 알림, 횟수 초기화
+  // 운동 종료 시 참고 유사도, 알림, 횟수 초기화
   useEffect(() => {
     if (!isRecording) {
       setSyncRate(0);
@@ -402,6 +388,9 @@ export default function ExerciseScreen() {
         ref={cameraRef}
         style={styles.camera}
         facing="front"
+        // 운동 중 ~3fps 로 takePictureAsync 를 계속 부르는데, 기본값(true)이면 매 촬영마다 셔터
+        // 애니메이션(화면 번쩍임)이 재생된다. 분석용 프레임 캡처라 끈다(2026-10-06).
+        animateShutter={false}
         onMountError={(error) => setCameraError(error.message || '카메라 연결에 실패했습니다.')}
       >
         {/* 상단 UI 오버레이 */}
@@ -452,29 +441,13 @@ export default function ExerciseScreen() {
             </TouchableOpacity>
           ))}
         </View>
-        {!isLunge && (
-          <View style={styles.depthModePicker}>
-            {([{ id: 'FULL', label: '풀 스쿼트' }, { id: 'HALF', label: '하프 스쿼트' }] as const).map((mode) => (
-              <TouchableOpacity
-                key={mode.id}
-                accessibilityRole="button"
-                accessibilityState={{ selected: squatDepthMode === mode.id, disabled: isRecording || busy }}
-                disabled={isRecording || busy}
-                onPress={() => setSquatDepthMode(mode.id)}
-                style={[styles.depthModeChoice, squatDepthMode === mode.id && styles.exerciseSelected]}
-              >
-                <Text style={styles.exerciseChoiceText}>{mode.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
         {isLunge ? (
           <View style={styles.lungePanel}>
             <Text style={styles.lungeTitle}>전방 런지 · 횟수 측정</Text>
-            <Text style={styles.guideRow}>{captureMessage ?? lunge?.guidance ?? '옆모습과 두 발이 보이게 서주세요. 앞발을 내딛고 굽힌 뒤 원위치로 돌아오면 1회입니다.'}</Text>
+            <Text style={styles.guideRow}>{captureMessage ?? lunge?.guidance ?? '옆모습으로 서서 다리를 앞뒤로 벌리고, 무릎을 굽혔다 펴면 1회로 셉니다.'}</Text>
             {isRecording && <Text style={styles.lungeSides}>{lunge ? `왼쪽 ${lunge.left_reps}회 · 오른쪽 ${lunge.right_reps}회` : '좌우 횟수 확인 중...'}</Text>}
             {!!lunge?.unassigned_reps && <Text style={styles.guideRow}>이전 {lunge.unassigned_reps}회는 좌우 정보 없이 복원되었습니다.</Text>}
-            <Text style={styles.guideRow}>자세 점수는 측정하지 않습니다.</Text>
+            <Text style={styles.guideRow}>운동이 끝나면 깊이·상체·보폭 점수를 리포트에서 확인할 수 있어요.</Text>
           </View>
         ) : (
         <View style={styles.syncGauge}>
@@ -515,8 +488,8 @@ export default function ExerciseScreen() {
         </TouchableOpacity>
         {guideOpen && (
           <View style={styles.guidePanel}>
-            <Text style={styles.guideRow}>{isLunge ? '📐  측면에 카메라 고정 · 양쪽 무릎과 발끝이 보여야 합니다' : '📐  정면 기준 45° 위치에 카메라 고정'}</Text>
-            {isLunge && <Text style={styles.guideRow}>🦶  뒷발 위치를 유지하고 앞발을 처음 자리로 되돌려주세요</Text>}
+            <Text style={styles.guideRow}>{isLunge ? '📐  완전한 측면(옆)에 카메라 고정 · 양쪽 무릎과 발끝이 보여야 합니다' : '📐  정면 기준 45° 위치에 카메라 고정'}</Text>
+            {isLunge && <Text style={styles.guideRow}>🦵  다리를 앞뒤로 벌린 자세에서 무릎을 굽혔다 펴주세요</Text>}
             <Text style={styles.guideRow}>🧍  머리부터 발목까지 여백을 두고 촬영</Text>
             <Text style={styles.guideRow}>⏱️  시작과 종료 때 똑바로 선 자세를 2초 유지</Text>
             <Text style={styles.guideRow}>💡  밝은 조명, 단색 배경 권장</Text>
@@ -524,11 +497,11 @@ export default function ExerciseScreen() {
           </View>
         )}
 
-        {/* 하단: 기준영상 + 녹화 버튼 */}
+        {/* 하단: 기준영상 + 운동 시작/종료 버튼 */}
         <View style={styles.bottomOverlay}>
           <View style={styles.bottomCenter}>
             <Text style={styles.recordHint}>
-              {isRecording ? '운동 중...' : '버튼을 눌러 녹화를 시작하세요'}
+              {isRecording ? '운동 중... 끝나면 버튼을 눌러 종료하세요' : '버튼을 눌러 운동을 시작하세요'}
             </Text>
             <TouchableOpacity
               style={[
@@ -562,8 +535,6 @@ const styles = StyleSheet.create({
   exerciseChoice: { paddingHorizontal: 18, paddingVertical: 10, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.6)', borderWidth: 1, borderColor: 'transparent' },
   exerciseSelected: { borderColor: COLORS.primary },
   exerciseChoiceText: { color: COLORS.text, fontWeight: '700' },
-  depthModePicker: { flexDirection: 'row', gap: 8, marginHorizontal: 20, marginTop: 8 },
-  depthModeChoice: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.5)', borderWidth: 1, borderColor: 'transparent' },
   lungePanel: { margin: 20, padding: 16, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.75)', gap: 8 },
   lungeTitle: { color: COLORS.primary, fontSize: 17, fontWeight: '700' },
   lungeSides: { color: COLORS.text, fontSize: 20, fontWeight: '700' },
