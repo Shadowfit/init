@@ -15,6 +15,10 @@ import java.util.List;
 @AllArgsConstructor
 public class SessionReportResponseDto {
     private Long sessionId;
+    // 화면 헤더의 날짜 — 리포트 화면이 세션 id 만 들고 들어와 날짜를 따로 알 길이 없었다.
+    @com.fasterxml.jackson.annotation.JsonFormat(shape = com.fasterxml.jackson.annotation.JsonFormat.Shape.STRING,
+            pattern = "yyyy-MM-dd'T'HH:mm:ss")
+    private java.time.LocalDateTime startTime;
     private int avgSyncRate;
     private int totalReps;
     private int workoutMinutes;
@@ -61,6 +65,7 @@ public class SessionReportResponseDto {
     public static SessionReportResponseDto of(Session session, Report report) {
         SessionReportResponseDto dto = new SessionReportResponseDto();
         dto.setSessionId(session.getId());
+        dto.setStartTime(session.getStartTime());
         dto.setAvgSyncRate(intOrZero(session.getAvgSyncRate()));
         dto.setTotalReps(session.getTotalReps() == null ? 0 : session.getTotalReps());
         dto.setWorkoutMinutes((int) java.time.Duration.between(session.getStartTime(), session.getEndTime()).toMinutes());

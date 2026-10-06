@@ -29,6 +29,9 @@ const BASE_URL = __DEV__
   ? `http://${resolveDevHost()}:8080`
   : 'https://api.shadowfit.com'; // 추후 프로덕션 URL
 
+// 서버가 상대 경로로 주는 자원(피드 사진 "/feed-photos/…")을 <Image> 에 넣을 때 앞에 붙인다.
+export const API_BASE_URL = BASE_URL;
+
 // 백엔드 컨트롤러 prefix가 /api/v1 이 아니라 /member, /exercises, /reports 등이라
 // baseURL 에 prefix 를 붙이지 않는다.
 const api = axios.create({

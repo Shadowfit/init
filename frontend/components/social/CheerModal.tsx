@@ -9,7 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { X, ChevronRight, ChevronDown } from 'lucide-react-native';
+import { X, ChevronRight } from 'lucide-react-native';
 import { COLORS, FONT_SIZE, SPACING, RADIUS } from '@/constants/Colors';
 import Button from '@/components/ui/Button';
 
@@ -40,21 +40,24 @@ interface CheerModalProps {
 }
 
 export default function CheerModal({ visible, targetName, sending, onClose, onSend }: CheerModalProps) {
-  const [selected, setSelected] = useState<string | null>(null);
-  const [customOpen, setCustomOpen] = useState(false);
+  // 디자인대로 칩은 여러 개 고를 수 있다 — 고른 순서대로 이어 붙이고, 직접 입력은 맨 뒤에 붙는다
+  const [selected, setSelected] = useState<string[]>([]);
   const [custom, setCustom] = useState('');
 
   // 열 때마다 초기화 — 지난번 고른 칩이 남아 있으면 «보냈는데 다른 문구가 갔다» 가 된다
   useEffect(() => {
     if (visible) {
-      setSelected(null);
-      setCustomOpen(false);
+      setSelected([]);
       setCustom('');
     }
   }, [visible]);
 
-  const message = customOpen && custom.trim() ? custom.trim() : selected;
-  const canSend = !!message && !sending;
+  const toggle = (p: string) =>
+    setSelected((prev) => (prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]));
+
+  const message = [...selected, custom.trim()].filter(Boolean).join(' ');
+  const tooLong = message.length > CHEER_MAX_LENGTH;
+  const canSend = !!message && !tooLong && !sending;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -73,12 +76,12 @@ export default function CheerModal({ visible, targetName, sending, onClose, onSe
 
           <View style={styles.chips}>
             {PRESETS.map((p) => {
-              const active = selected === p && !(customOpen && custom.trim());
+              const active = selected.includes(p);
               return (
                 <TouchableOpacity
                   key={p}
                   style={[styles.chip, active && styles.chipActive]}
-                  onPress={() => setSelected(p)}
+                  onPress={() => toggle(p)}
                   activeOpacity={0.8}
                 >
                   <Text style={[styles.chipText, active && styles.chipTextActive]}>{p}</Text>
@@ -87,28 +90,23 @@ export default function CheerModal({ visible, targetName, sending, onClose, onSe
             })}
           </View>
 
-          <TouchableOpacity style={styles.customToggle} onPress={() => setCustomOpen((v) => !v)}>
-            <Text style={styles.customToggleText}>직접 입력</Text>
-            {customOpen ? (
-              <ChevronDown size={16} color={COLORS.primary} strokeWidth={2} />
-            ) : (
+          <View style={styles.customRow}>
+            <View style={styles.customLabel}>
+              <Text style={styles.customToggleText}>직접 입력</Text>
               <ChevronRight size={16} color={COLORS.primary} strokeWidth={2} />
-            )}
-          </TouchableOpacity>
-          {customOpen && (
-            <View>
-              <TextInput
-                style={styles.input}
-                placeholder="내용을 입력해주세요"
-                placeholderTextColor={COLORS.textPlaceholder}
-                selectionColor={COLORS.primary}
-                value={custom}
-                onChangeText={(t) => setCustom(t.slice(0, CHEER_MAX_LENGTH))}
-                maxLength={CHEER_MAX_LENGTH}
-                multiline
-              />
-              <Text style={styles.counter}>{custom.length}/{CHEER_MAX_LENGTH}</Text>
             </View>
+            <TextInput
+              style={styles.input}
+              placeholder="내용을 입력해주세요"
+              placeholderTextColor={COLORS.textPlaceholder}
+              selectionColor={COLORS.primary}
+              value={custom}
+              onChangeText={(t) => setCustom(t.slice(0, CHEER_MAX_LENGTH))}
+              maxLength={CHEER_MAX_LENGTH}
+            />
+          </View>
+          {tooLong && (
+            <Text style={styles.counter}>너무 길어요 ({message.length}/{CHEER_MAX_LENGTH}) — 칩을 조금 줄여주세요</Text>
           )}
 
           <View style={styles.actions}>
@@ -118,7 +116,7 @@ export default function CheerModal({ visible, targetName, sending, onClose, onSe
               size="md"
               loading={sending}
               disabled={!canSend}
-              onPress={() => message && onSend(message)}
+              onPress={() => canSend && onSend(message)}
               style={styles.sendBtn}
             />
           </View>
@@ -164,10 +162,12 @@ const styles = StyleSheet.create({
     marginTop: SPACING.lg,
     marginBottom: SPACING.sm,
   },
+  customRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginTop: SPACING.lg },
+  customLabel: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   customToggleText: { fontSize: FONT_SIZE.sm, fontWeight: '700', color: COLORS.primary },
   input: {
-    minHeight: 48,
-    maxHeight: 96,
+    flex: 1,
+    height: 44,
     backgroundColor: COLORS.card,
     borderWidth: 1,
     borderColor: COLORS.cardBorder,
@@ -176,7 +176,6 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.sm,
     color: COLORS.text,
     fontSize: FONT_SIZE.sm,
-    textAlignVertical: 'top',
   },
   counter: { alignSelf: 'flex-end', fontSize: FONT_SIZE.xs, color: COLORS.textMuted, marginTop: 2 },
   actions: { flexDirection: 'row', gap: SPACING.sm, marginTop: SPACING.lg },

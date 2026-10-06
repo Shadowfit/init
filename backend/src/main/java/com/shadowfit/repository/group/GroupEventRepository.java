@@ -19,6 +19,13 @@ public interface GroupEventRepository extends JpaRepository<GroupEvent, Long> {
     // 여기서 걸러진다. 최종 방어선은 uk_group_events_type_source(V19).
     boolean existsByGroupIdAndEventTypeAndSourceId(Long groupId, String eventType, Long sourceId);
 
+    /** 같은 원천(세션)으로 이미 글이 있는 그룹들 — 공유 화면의 «공유됨» 표시용. */
+    @org.springframework.data.jpa.repository.Query(
+            "select e.group.id from GroupEvent e where e.eventType = :eventType and e.sourceId = :sourceId")
+    List<Long> findGroupIdsByEventTypeAndSourceId(
+            @org.springframework.data.repository.query.Param("eventType") String eventType,
+            @org.springframework.data.repository.query.Param("sourceId") Long sourceId);
+
     // 피드 — 최신순 keyset(social-cheer-and-group-feed.md §4-5 ②). beforeSeq 미만을 seq 내림차순으로 size 개.
     // 백필과 같은 uk_group_events_group_seq 를 반대 방향으로 탄다.
     List<GroupEvent> findAllByGroupIdAndSeqLessThanOrderBySeqDesc(Long groupId, Long beforeSeq, Pageable pageable);

@@ -188,6 +188,10 @@ reference-video:
   dir: ${REFERENCE_VIDEO_DIR:./data/reference-videos}
   ai-dir: ${REFERENCE_VIDEO_AI_DIR:}
 
+# 모임 피드 공유 사진. compose 는 /data/feed-photos 로 넘긴다(./backend/data/feed-photos bind mount).
+feed-photo:
+  dir: ${FEED_PHOTO_DIR:./data/feed-photos}
+
 # [3] Swagger 및 기타 설정 (최상단 레벨)
 #
 # 기본은 꺼짐이고 **env var 로도 못 켠다** — 켜는 건 dev 프로파일(application-dev.yml)뿐이다.
@@ -222,6 +226,9 @@ security:
     # (decisions/token-lifecycle.md §4-2 — «요청자 기준으로 확인한다» 는 처음 안이 틀렸던 자리다)
     - "/member/reissue"
     - "/ws/**"
+    # 피드 사진 — <Image> 가 웹에서 Authorization 헤더를 못 싣는다. 파일명이 UUID 라 추측으로는 못 닿는다
+    # (링크를 아는 사람만 본다 — 모임 피드 응답에만 실리는 값).
+    - "/feed-photos/**"
     - "/actuator/health"
     - "/actuator/health/**"
     # ⚠️ 2026-08-08 — 이 줄이 필요하다는 것은 **실측으로 알았다.**

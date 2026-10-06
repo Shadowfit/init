@@ -104,6 +104,18 @@ public class NotificationService {
                 safePage, safeSize, found.getTotalElements());
     }
 
+    /** 안 읽은 알림 수 — 홈 종 아이콘 배지. */
+    @Transactional(readOnly = true)
+    public long unreadCount(Long recipientId) {
+        return notificationRepository.countByRecipientIdAndReadAtIsNull(recipientId);
+    }
+
+    /** 오늘 내가 이미 재촉한 회원 id — 화면을 다시 열어도 «재촉함» 을 유지하는 근거. 날짜는 하루 1회 판정과 같은 기준. */
+    @Transactional(readOnly = true)
+    public java.util.List<Long> nudgedToday(Long senderId, LocalDate today) {
+        return notificationRepository.findRecipientIdsBySenderIdAndTypeAndTargetDate(senderId, NotificationType.NUDGE, today);
+    }
+
     /** 읽음 처리 — 내 것이 아니거나 없으면 404, 이미 읽었으면 그대로 200. */
     @Transactional
     public NotificationDto markRead(Long recipientId, Long notificationId, LocalDateTime now) {

@@ -18,6 +18,13 @@ public final class GroupEventTypes {
      */
     public static final String SESSION_COMPLETED = "SESSION_COMPLETED";
 
+    /**
+     * 회원이 직접 올린 운동 공유 글 — {@code GroupShareService}. 발신자 = 공유한 회원, 원천 = 세션 id.
+     * 원천이 있으므로 V19 UNIQUE(group_id, event_type, source_id) 가 «같은 운동을 같은 모임에 두 번» 을 막는다.
+     * 자동 글({@link #SESSION_COMPLETED})과 타입이 달라 둘은 서로를 막지 않는다.
+     */
+    public static final String SESSION_SHARED = "SESSION_SHARED";
+
     private GroupEventTypes() {
     }
 }

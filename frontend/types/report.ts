@@ -81,8 +81,19 @@ export interface ComparisonWithPrevious {
   caloriesDiff: number;
 }
 
+/** 세트별 요약 (V26 세션 세트). 세트 도입 전 세션은 빈 배열 */
+export interface SessionSet {
+  setNo: number;
+  reps: number;
+  avgSyncRate: number;
+  startedSec: number;
+  endedSec: number;
+}
+
 export interface SessionReportResponse {
   sessionId: number;
+  startTime: string;               // "2026-10-06T11:40:33" — 헤더 날짜
+  sets: SessionSet[];
   avgSyncRate: number;
   totalReps: number;
   workoutMinutes: number;

@@ -456,6 +456,13 @@ AI = 운동 통계의 단일 진실 원천 원칙. (커밋 143a2e4)
 | `GET /groups/{groupId}/feed?beforeSeq&size` | 모임 피드 | 최신순 keyset. `beforeSeq` 생략 = 최신부터, `size` 기본 20·최대 100. 응답 `nextBeforeSeq` 를 다음 요청에(null 이면 끝) |
 | `PUT /groups/{groupId}/events/{seq}/reactions/{kind}` | 리액션 달기 | **멱등** — 이미 있어도 200. `kind` = `HEART` \| `FIRE`(밖이면 400). 같은 글에 둘 다 가능. 글 없음 404 `G009` |
 | `DELETE /groups/{groupId}/events/{seq}/reactions/{kind}` | 리액션 취소 | **멱등** — 없어도 200 |
+| `POST /groups/{groupId}/shares` | 운동 공유 (2026-10-06) | multipart — `sessionId`(필수) · `caption`(선택, 200자) · `photo`(선택, jpg·png·webp 10MB, 앞 바이트로 판정). `SESSION_SHARED` 글 → 201 + 피드 항목. **같은 운동을 같은 모임에 두 번이면 409 `G012`**(V19 UNIQUE 가 최종 판정), 다른 모임엔 가능. 내 것이 아니거나 안 끝난 세션 404 `G013`, 사진 형식 400 `G014`. payload 공개 항목은 종목·유효 횟수·운동 시간·한마디·`photoUrl` — 싱크로율 비공개 |
+| `GET /groups/shares?sessionId` | 이 운동을 이미 공유한 내 모임 | `[groupId]` — 공유 화면의 «공유됨» 잠금용 |
+| `PUT /groups/{groupId}/events/{seq}/cheers` | 피드 글 응원 한마디 | `{message}` 1~100자. **한 글에 회원당 한 줄**(V27 UNIQUE) — 다시 보내면 문구만 바뀐다. 응답 = 그 글의 응원 전부(오래된 순) |
+| `DELETE /groups/{groupId}/events/{seq}/cheers` | 내 응원 지우기 | 멱등 200 |
+| `GET /feed-photos/{name}` | 피드 사진 | **인증 없음**(웹 `<img>` 가 헤더를 못 실음). 이름이 UUID 라 추측 불가, 피드 응답에만 실린다. 30일 캐시 |
+
+피드 항목에는 `cheers: [{memberId, username, message}]` 가 함께 실린다(2026-10-06). 공유 글(`SESSION_SHARED`)과 자동 완료 글(`SESSION_COMPLETED`)은 타입이 달라 서로를 막지 않는다 — 앱은 자동 글을 한 줄 소식으로, 공유 글을 사진 카드로 그린다.
 | `GET /groups/{groupId}/events?afterSeq` | WS 재연결 백필 | `afterSeq` 이후 **전부·오름차순·무페이징**. 피드 화면용이 아니라 소켓이 끊긴 동안 놓친 것을 채우는 용도 |
 
 피드 항목은 `group_events` 행이다. 서버가 만드는 타입은 `SESSION_COMPLETED`(세션 완료 시 아웃박스를 거쳐 회원의 ACTIVE 모임마다 1건, `senderId` = 완료한 회원, `payload` = `{sessionId, memberId, username, exerciseName}`)와 `MEMBER_JOINED`(`payload` = `{memberId, username}`). 소켓 클라이언트가 보낸 임의 `type` 도 같은 표에 쌓이므로 프론트는 모르는 타입을 무시해야 한다. 리액션은 알림·소켓 발행이 없다 — 재조회로 반영된다.

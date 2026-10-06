@@ -24,4 +24,15 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
 
     // 읽음 처리 — «내 것» 만. 남의 id 는 존재하지 않는 것과 같게(404) 다룬다.
     Optional<Notification> findByIdAndRecipientId(Long id, Long recipientId);
+
+    // 종 아이콘 배지 — 안 읽은 알림 수. 인덱스 (recipient_id, created_at) 의 선두 열로 좁힌다.
+    long countByRecipientIdAndReadAtIsNull(Long recipientId);
+
+    // 오늘 내가 이미 재촉한 사람들 — 화면을 다시 열어도 «재촉함» 이 유지되게. UNIQUE 의 선두 두 열(sender, recipient)로 읽는다.
+    @org.springframework.data.jpa.repository.Query("select n.recipient.id from Notification n "
+            + "where n.sender.id = :senderId and n.type = :type and n.targetDate = :targetDate")
+    java.util.List<Long> findRecipientIdsBySenderIdAndTypeAndTargetDate(
+            @org.springframework.data.repository.query.Param("senderId") Long senderId,
+            @org.springframework.data.repository.query.Param("type") NotificationType type,
+            @org.springframework.data.repository.query.Param("targetDate") LocalDate targetDate);
 }

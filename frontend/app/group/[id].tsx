@@ -7,15 +7,18 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Share,
+  Image,
 } from 'react-native';
 import { Alert } from '@/utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Calendar, type DateData } from 'react-native-calendars';
-import { ChevronLeft, Share2, RefreshCw, Crown, Heart, Flame, LogOut, Dumbbell, UserPlus } from 'lucide-react-native';
+import { ChevronLeft, ChevronUp, Share2, RefreshCw, Crown, LogOut, Dumbbell, UserPlus } from 'lucide-react-native';
 import { COLORS, FONT_SIZE, SPACING, RADIUS } from '@/constants/Colors';
 import FriendStatusList from '@/components/social/FriendStatusList';
+import CheerModal from '@/components/social/CheerModal';
 import { groupService } from '@/services/groupService';
+import { API_BASE_URL } from '@/services/api';
 import { useAuthStore } from '@/stores/authStore';
 import {
   parseFeedPayload,
@@ -23,7 +26,6 @@ import {
   type GroupDetail,
   type GroupFeedItem,
   type MemberAttendanceStatus,
-  type ReactionKind,
 } from '@/types/social';
 
 const FEED_PAGE = 20;
@@ -137,11 +139,21 @@ export default function GroupDetailScreen() {
     ]);
   };
 
+  // 탈퇴 — 서버 규칙을 미리 알려준다. 혼자 남은 그룹장이 나가면 모임 자체가 지워져 초대 코드도 사라진다
+  // (그 코드로 다시 들어오려 하면 «유효하지 않은 초대 코드»). 일반 멤버는 같은 코드로 다시 들어올 수 있다.
   const leave = () => {
-    Alert.alert('모임 탈퇴', '정말 탈퇴할까요? 남긴 글과 리액션은 남아요.', [
+    const others = activeMembers.filter((m) => m.memberId !== me?.memberId);
+    if (isOwner && others.length > 0) {
+      Alert.alert('그룹장은 바로 탈퇴할 수 없어요', '멤버 사진을 눌러 다른 멤버에게 그룹장을 넘긴 뒤 탈퇴해주세요.');
+      return;
+    }
+    const message = isOwner
+      ? '혼자 남은 그룹장이 탈퇴하면 모임이 삭제되고 초대 코드도 사라져요. 다시 들어올 수 없어요. 탈퇴할까요?'
+      : '탈퇴해도 같은 초대 코드로 다시 들어올 수 있어요. 남긴 글과 응원은 남아요. 탈퇴할까요?';
+    Alert.alert(isOwner ? '모임 삭제' : '모임 탈퇴', message, [
       { text: '취소', style: 'cancel' },
       {
-        text: '탈퇴',
+        text: isOwner ? '삭제' : '탈퇴',
         style: 'destructive',
         onPress: async () => {
           try {
@@ -155,17 +167,60 @@ export default function GroupDetailScreen() {
     ]);
   };
 
-  // 리액션 토글 — 응답의 요약으로 그 글만 갈아끼운다 (소켓 발행 없음, 재조회로 반영 — 핸드오프 문서)
-  const toggleReaction = async (item: GroupFeedItem, kind: ReactionKind) => {
-    const mine = item.reactionSummary.myReactions.includes(kind);
+  // 그룹장 넘기기 — 그룹장만, 다른 멤버의 사진을 눌러서
+  const transferTo = (memberId: number, username: string) => {
+    if (!isOwner || memberId === me?.memberId) return;
+    Alert.alert('그룹장 넘기기', `${username}님에게 그룹장을 넘길까요? 나는 일반 멤버가 돼요.`, [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '넘기기',
+        onPress: async () => {
+          try {
+            await groupService.transferOwnership(groupId, memberId);
+            loadAll();
+          } catch (e: any) {
+            Alert.alert('넘기기 실패', errorText(e, '그룹장을 넘기지 못했어요.'));
+          }
+        },
+      },
+    ]);
+  };
+
+  // 응원 한마디 — 공유 글 하나에 회원당 한 줄. 응답(그 글의 응원 전부)으로 그 글만 갈아끼운다
+  const [cheerTarget, setCheerTarget] = useState<GroupFeedItem | null>(null);
+  const [cheerSending, setCheerSending] = useState(false);
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
+
+  const sendCheer = async (message: string) => {
+    if (!cheerTarget) return;
+    setCheerSending(true);
     try {
-      const res = mine
-        ? await groupService.removeReaction(groupId, item.seq, kind)
-        : await groupService.addReaction(groupId, item.seq, kind);
-      setFeed((prev) => prev.map((f) => (f.seq === item.seq ? { ...f, reactionSummary: res.data } : f)));
+      const res = await groupService.cheerEvent(groupId, cheerTarget.seq, message);
+      setFeed((prev) => prev.map((f) => (f.seq === cheerTarget.seq ? { ...f, cheers: res.data } : f)));
+      setCheerTarget(null);
     } catch (e: any) {
-      console.warn('[reaction] status=', e?.response?.status);
+      Alert.alert('응원 실패', errorText(e, '응원을 보내지 못했어요.'));
+    } finally {
+      setCheerSending(false);
     }
+  };
+
+  const removeMyCheer = (item: GroupFeedItem) => {
+    Alert.alert('응원 지우기', '내 응원을 지울까요?', [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '지우기',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            const res = await groupService.uncheerEvent(groupId, item.seq);
+            setFeed((prev) => prev.map((f) => (f.seq === item.seq ? { ...f, cheers: res.data } : f)));
+          } catch (e: any) {
+            Alert.alert('지우기 실패', errorText(e, '응원을 지우지 못했어요.'));
+          }
+        },
+      },
+    ]);
   };
 
   // 캘린더 마킹 — attendedCount / activeMemberCount
@@ -238,7 +293,13 @@ export default function GroupDetailScreen() {
         <Text style={styles.sectionTitle}>모임 멤버</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.memberRow}>
           {activeMembers.map((m) => (
-            <View key={m.memberId} style={styles.memberChip}>
+            <TouchableOpacity
+              key={m.memberId}
+              style={styles.memberChip}
+              onPress={() => transferTo(m.memberId, m.username)}
+              disabled={!isOwner || m.memberId === me?.memberId}
+              activeOpacity={0.7}
+            >
               <View style={styles.memberAvatar}>
                 <Text style={styles.memberAvatarText}>{m.username.slice(0, 1)}</Text>
                 {m.role === 'OWNER' && (
@@ -248,7 +309,7 @@ export default function GroupDetailScreen() {
               <Text style={styles.memberName} numberOfLines={1}>
                 {m.username}{m.memberId === me?.memberId ? ' (나)' : ''}
               </Text>
-            </View>
+            </TouchableOpacity>
           ))}
           <TouchableOpacity style={styles.memberChip} onPress={shareCode} activeOpacity={0.8}>
             <View style={[styles.memberAvatar, styles.memberAvatarAdd]}>
@@ -291,11 +352,12 @@ export default function GroupDetailScreen() {
 
         {/* 구성원 운동 현황 */}
         <Text style={styles.sectionTitle}>구성원 운동 현황</Text>
-        <Text style={styles.sectionSub}>내 친구의 운동을 응원해봐요</Text>
+        <Text style={styles.sectionSub}>오늘 아직 운동 안 한 친구를 재촉해봐요</Text>
         <View style={styles.sectionBody}>
           <FriendStatusList
-            statuses={statuses.filter((s) => s.memberId !== me?.memberId)}
-            emptyText="아직 다른 멤버가 없어요. 초대 코드를 공유해보세요"
+            statuses={statuses}
+            meId={me?.memberId}
+            emptyText="아직 멤버가 없어요. 초대 코드를 공유해보세요"
           />
         </View>
 
@@ -303,55 +365,94 @@ export default function GroupDetailScreen() {
         <Text style={styles.sectionTitle}>모임 피드</Text>
         <View style={styles.sectionBody}>
           {feed.length === 0 && !feedLoading ? (
-            <View style={styles.emptyCard}><Text style={styles.emptyText}>아직 소식이 없어요. 운동을 완료하면 자동으로 올라와요</Text></View>
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyText}>아직 소식이 없어요. 운동을 마치고 보고서에서 «모임 피드에 공유하기» 를 눌러보세요</Text>
+            </View>
           ) : (
             feed.map((item) => {
               const p = parseFeedPayload(item);
               if (p.type === 'UNKNOWN') return null;
-              const heart = item.reactionSummary.reactions.HEART ?? 0;
-              const fire = item.reactionSummary.reactions.FIRE ?? 0;
-              const myHeart = item.reactionSummary.myReactions.includes('HEART');
-              const myFire = item.reactionSummary.myReactions.includes('FIRE');
-              const isMine = p.data.memberId === me?.memberId;
+
+              // 운동 완료 자동 기록 · 새 멤버 — 한 줄 소식으로 작게
+              if (p.type !== 'SESSION_SHARED') {
+                return (
+                  <View key={item.seq} style={styles.activityRow}>
+                    {p.type === 'SESSION_COMPLETED' ? (
+                      <Dumbbell size={14} color={COLORS.primary} strokeWidth={2} />
+                    ) : (
+                      <UserPlus size={14} color={COLORS.textSecondary} strokeWidth={2} />
+                    )}
+                    <Text style={styles.activityText} numberOfLines={1}>
+                      <Text style={styles.activityName}>{p.data.username}</Text>
+                      {p.type === 'SESSION_COMPLETED' ? `님이 ${p.data.exerciseName} 운동을 마쳤어요` : '님이 모임에 들어왔어요 👋'}
+                    </Text>
+                    <Text style={styles.activityTime}>{formatFeedTime(item.occurredAt).slice(5)}</Text>
+                  </View>
+                );
+              }
+
+              // 직접 공유한 운동 — 사진 · 한마디 · 응원
+              const d = p.data;
+              const isMine = d.memberId === me?.memberId;
+              const myCheer = item.cheers.find((c) => c.memberId === me?.memberId);
+              const open = expanded.has(item.seq);
+              const cheers = open ? item.cheers : item.cheers.slice(0, 2);
               return (
                 <View key={item.seq} style={styles.feedCard}>
                   <View style={styles.feedTop}>
                     <View style={styles.feedAvatar}>
-                      <Text style={styles.feedAvatarText}>{p.data.username.slice(0, 1)}</Text>
+                      <Text style={styles.feedAvatarText}>{d.username.slice(0, 1)}</Text>
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.feedName}>{p.data.username}{isMine ? ' (나)' : ''}</Text>
+                      <Text style={styles.feedName}>{d.username}{isMine ? ' (나)' : ''}</Text>
                       <Text style={styles.feedTime}>{formatFeedTime(item.occurredAt)}</Text>
                     </View>
-                    {p.type === 'SESSION_COMPLETED' ? (
-                      <Dumbbell size={18} color={COLORS.primary} strokeWidth={2} />
-                    ) : (
-                      <UserPlus size={18} color={COLORS.textSecondary} strokeWidth={2} />
+                    {!isMine && (
+                      <TouchableOpacity style={styles.cheerBtn} onPress={() => setCheerTarget(item)} activeOpacity={0.8}>
+                        <Text style={styles.cheerBtnText}>{myCheer ? '응원 바꾸기' : '응원보내기'}</Text>
+                      </TouchableOpacity>
                     )}
                   </View>
-                  <Text style={styles.feedText}>
-                    {p.type === 'SESSION_COMPLETED'
-                      ? `오늘 ${p.data.exerciseName} 운동 완료! 💪`
-                      : '모임에 새로 참여했어요 👋'}
-                  </Text>
-                  <View style={styles.reactions}>
+                  {!!d.photoUrl && (
+                    <Image source={{ uri: `${API_BASE_URL}${d.photoUrl}` }} style={styles.feedPhoto} resizeMode="cover" />
+                  )}
+                  <Text style={styles.feedText}>{d.caption || `오늘 ${d.exerciseName} ${d.totalReps}회 완료! 💪`}</Text>
+                  <Text style={styles.feedStats}>{d.exerciseName} · {d.totalReps}회 · {d.workoutMinutes}분</Text>
+                  {item.cheers.length > 0 && (
+                    <View style={styles.cheerChips}>
+                      {cheers.map((c) => {
+                        const mine = c.memberId === me?.memberId;
+                        return (
+                          <TouchableOpacity
+                            key={c.memberId}
+                            style={[styles.cheerChip, mine && styles.cheerChipMine]}
+                            onLongPress={mine ? () => removeMyCheer(item) : undefined}
+                            disabled={!mine}
+                            activeOpacity={0.8}
+                          >
+                            <Text style={styles.cheerChipName}>{c.username}</Text>
+                            <Text style={styles.cheerChipMsg}>{c.message}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  )}
+                  {item.cheers.length > 2 && (
                     <TouchableOpacity
-                      style={[styles.reaction, myHeart && styles.reactionActive]}
-                      onPress={() => toggleReaction(item, 'HEART')}
-                      activeOpacity={0.8}
+                      style={styles.expand}
+                      onPress={() => setExpanded((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(item.seq)) next.delete(item.seq); else next.add(item.seq);
+                        return next;
+                      })}
                     >
-                      <Heart size={14} color={myHeart ? COLORS.black : COLORS.textSecondary} strokeWidth={2.25} fill={myHeart ? COLORS.black : 'transparent'} />
-                      <Text style={[styles.reactionText, myHeart && styles.reactionTextActive]}>{heart}</Text>
+                      {open ? (
+                        <ChevronUp size={18} color={COLORS.textMuted} strokeWidth={2} />
+                      ) : (
+                        <Text style={styles.expandText}>응원 {item.cheers.length - 2}개 더 보기</Text>
+                      )}
                     </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.reaction, myFire && styles.reactionActive]}
-                      onPress={() => toggleReaction(item, 'FIRE')}
-                      activeOpacity={0.8}
-                    >
-                      <Flame size={14} color={myFire ? COLORS.black : COLORS.textSecondary} strokeWidth={2.25} fill={myFire ? COLORS.black : 'transparent'} />
-                      <Text style={[styles.reactionText, myFire && styles.reactionTextActive]}>{fire}</Text>
-                    </TouchableOpacity>
-                  </View>
+                  )}
                 </View>
               );
             })
@@ -366,6 +467,14 @@ export default function GroupDetailScreen() {
 
         <View style={{ height: 60 }} />
       </ScrollView>
+
+      <CheerModal
+        visible={!!cheerTarget}
+        targetName={cheerTarget ? (parseFeedPayload(cheerTarget) as { data?: { username?: string } }).data?.username ?? '' : ''}
+        sending={cheerSending}
+        onClose={() => setCheerTarget(null)}
+        onSend={sendCheer}
+      />
     </SafeAreaView>
   );
 }
@@ -437,6 +546,21 @@ const styles = StyleSheet.create({
   reactionActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
   reactionText: { fontSize: FONT_SIZE.xs, color: COLORS.textSecondary, fontWeight: '600' },
   reactionTextActive: { color: COLORS.black },
+  activityRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, paddingVertical: SPACING.sm, paddingHorizontal: SPACING.xs, marginBottom: SPACING.xs },
+  activityText: { flex: 1, fontSize: FONT_SIZE.sm, color: COLORS.textSecondary },
+  activityName: { fontWeight: '700', color: COLORS.text },
+  activityTime: { fontSize: FONT_SIZE.xs, color: COLORS.textMuted },
+  cheerBtn: { backgroundColor: COLORS.primary, borderRadius: RADIUS.full, paddingHorizontal: SPACING.md, paddingVertical: 6 },
+  cheerBtnText: { fontSize: FONT_SIZE.xs, fontWeight: '800', color: COLORS.black },
+  feedPhoto: { width: '100%', aspectRatio: 4 / 3, borderRadius: RADIUS.md, backgroundColor: COLORS.surfaceLight },
+  feedStats: { fontSize: FONT_SIZE.xs, color: COLORS.textMuted, marginTop: -4 },
+  cheerChips: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.xs },
+  cheerChip: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: RADIUS.full, borderWidth: 1, borderColor: COLORS.cardBorder, backgroundColor: COLORS.surface, paddingHorizontal: SPACING.md, paddingVertical: 5, maxWidth: '100%' },
+  cheerChipMine: { borderColor: COLORS.primary },
+  cheerChipName: { fontSize: FONT_SIZE.xs, color: COLORS.textMuted },
+  cheerChipMsg: { fontSize: FONT_SIZE.sm, color: COLORS.text, flexShrink: 1 },
+  expand: { alignItems: 'center', paddingTop: SPACING.xs },
+  expandText: { fontSize: FONT_SIZE.xs, color: COLORS.textMuted },
   moreBtn: { alignItems: 'center', paddingVertical: SPACING.md },
   moreText: { fontSize: FONT_SIZE.sm, color: COLORS.primary, fontWeight: '700' },
 });

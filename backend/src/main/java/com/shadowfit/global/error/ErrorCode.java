@@ -172,6 +172,12 @@ public enum ErrorCode {
     OWNER_MUST_TRANSFER_FIRST(409, "G010", "그룹장은 다른 멤버에게 양도한 뒤 탈퇴할 수 있습니다."),
     // 양도 대상이 이 모임의 ACTIVE 멤버가 아님 — 요청자 본인의 권한 문제(G002/G007)와 구분한다.
     GROUP_MEMBER_NOT_FOUND(404, "G011", "모임의 멤버가 아닌 회원입니다."),
+    // 같은 운동을 같은 모임에 두 번 공유 — uk_group_events_type_source(V19) 가 최종 판정한다.
+    SESSION_ALREADY_SHARED(409, "G012", "이미 이 모임에 공유한 운동입니다."),
+    // 공유 대상 세션이 내 것이 아니거나 아직 끝나지 않음 — 남의 세션도 «없음» 과 같게.
+    SHAREABLE_SESSION_NOT_FOUND(404, "G013", "공유할 수 있는 운동 기록이 없습니다."),
+    // jpg·png·webp 가 아니거나 비었거나 10MB 초과.
+    INVALID_FEED_PHOTO(400, "G014", "사진은 10MB 이하의 jpg · png · webp 만 올릴 수 있습니다."),
 
     // --- 알림·재촉 (social-cheer-and-group-feed.md §3-C) ---
     // 남의 알림 id 도 «없음» 과 같게 404 — 세션 삭제(본인 것 아니면 404)와 같은 모양.

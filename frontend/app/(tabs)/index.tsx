@@ -23,6 +23,7 @@ import { reportService } from '@/services/reportService';
 import type { CalendarMainResponse, CalendarDay, DailyActivityResponse } from '@/types/report';
 import FriendStatusList from '@/components/social/FriendStatusList';
 import { friendService } from '@/services/friendService';
+import { notificationService } from '@/services/notificationService';
 import type { MemberAttendanceStatus } from '@/types/social';
 
 function getSyncColor(rate: number) {
@@ -89,6 +90,22 @@ export default function HomeScreen() {
     }, []),
   );
 
+  // 종 아이콘 배지 — 안 읽은 알림 수. 홈에 있는 동안 30초마다, 알림함에서 돌아올 때 바로 다시 센다
+  // (푸시·소켓이 아직 없어서 새 재촉·응원을 알아챌 길이 이것뿐이다).
+  const [unread, setUnread] = useState(0);
+  useFocusEffect(
+    useCallback(() => {
+      const refresh = () =>
+        notificationService
+          .unreadCount()
+          .then((res) => setUnread(res.data.count))
+          .catch(() => {});
+      refresh();
+      const timer = setInterval(refresh, 30000);
+      return () => clearInterval(timer);
+    }, []),
+  );
+
   // 선택 날짜 변경 시 그 날의 운동 목록 조회 (없으면 오늘 자동 조회)
   useEffect(() => {
     const targetDate = selectedDate || today;
@@ -143,7 +160,12 @@ export default function HomeScreen() {
           </View>
           <View style={styles.headerIcons}>
             <TouchableOpacity onPress={() => router.push('/notifications' as any)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Bell size={24} color={COLORS.textSecondary} strokeWidth={1.75} />
+              <Bell size={24} color={unread > 0 ? COLORS.text : COLORS.textSecondary} strokeWidth={1.75} />
+              {unread > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{unread > 9 ? '9+' : unread}</Text>
+                </View>
+              )}
             </TouchableOpacity>
             <TouchableOpacity onPress={() => router.push('/(tabs)/mypage')}>
               <CircleUser size={28} color={COLORS.textSecondary} strokeWidth={1.75} />
@@ -354,6 +376,21 @@ const styles = StyleSheet.create({
   friendsAll: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: SPACING.sm },
   friendsAllText: { fontSize: FONT_SIZE.xs, fontWeight: '700', color: COLORS.primary },
   headerIcons: { flexDirection: 'row', alignItems: 'center', gap: SPACING.lg },
+  badge: {
+    position: 'absolute',
+    top: -5,
+    right: -7,
+    minWidth: 17,
+    height: 17,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    backgroundColor: COLORS.error,
+    borderWidth: 1.5,
+    borderColor: COLORS.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeText: { fontSize: 10, fontWeight: '800', color: COLORS.white },
 
   calendarContainer: {
     marginHorizontal: SPACING.xxl,

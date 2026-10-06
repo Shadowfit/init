@@ -7,6 +7,9 @@ export const notificationService = {
   list: (page = 0, size = 20) =>
     api.get<PageResponse<Notification>>('/notifications', { params: { page, size } }),
 
+  // 안 읽은 알림 수 — 홈 종 아이콘의 빨간 배지
+  unreadCount: () => api.get<{ count: number }>('/notifications/unread-count'),
+
   // 건별 읽음 처리 («모두 읽음» API 는 없다)
   markRead: (notificationId: number) =>
     api.patch<Notification>(`/notifications/${notificationId}/read`),
