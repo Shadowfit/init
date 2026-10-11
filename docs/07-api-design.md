@@ -395,6 +395,24 @@ AI = 운동 통계의 단일 진실 원천 원칙. (커밋 143a2e4)
 > 🔶 **대시보드는 b(상태별 분포)·e(활성 회원) 둘이 비용의 대부분**이다(실측 각각 ~357ms /
 > ~307ms, 나머지 셋 합쳐 5ms 미만). 캐시·인덱스 도입은 미결(§4-5-1 ④).
 
+### 관리자 웹 콘솔용 추가 API (2026-10-09)
+`admin-web/`(별도 웹 앱 — `admin-page-scope.md` §5-1 의 «표 + 페이지 번호» 형태)이 쓰는 API. 전부 관리자 권한 필수, 목록은 위와 같은 `{content, page, size, totalElements, totalPages}` 오프셋 페이징.
+
+| 메서드 · 경로 | 내용 |
+|---|---|
+| `GET /admin/members/{memberId}` | 회원 상세 — 프로필, 세션 수·완료 수·평균 싱크로율·마지막 운동, 소속 모임, 최근 세션 10건 |
+| `GET /admin/stats/daily?days=14` | 일별 추이 — 날짜별 세션 수·완료 수·완료 평균 싱크로율·신규 가입 (빈 날도 0 으로 채움, `days` 1~90) |
+| `GET /admin/stats/community` | 모임 수·활성 참여 수·공유 글·응원 한마디·오늘 재촉 |
+| `GET /admin/groups?keyword=` | 모임 목록 — 그룹장, 활성 멤버 수, 공유 글 수, 마지막 활동 |
+| `GET /admin/groups/{groupId}` | 모임 상세 — 위 요약 + 멤버(역할·상태·가입일) |
+| `DELETE /admin/groups/{groupId}` | 모임 삭제 — 멤버·초대·이벤트·응원 FK CASCADE, 공유 사진 파일도 지움 |
+| `GET /admin/feed-posts?groupId=` | 공유 글(`SESSION_SHARED`) 최신순 — 사진·캡션 검수용 |
+| `DELETE /admin/feed-posts/{postId}` | 공유 글 내리기 — 응원과 사진 파일까지 삭제 |
+
+> 🔶 날짜 직렬화가 두 가지다 — 기존 관리자 DTO(회원·세션·종목·overview)는 `[2026,10,9,20,21,0]` 배열, 이번에 추가한 DTO 는 `"2026-10-09T20:21:00"` 문자열. 앱 쪽 영향 때문에 전역 설정은 건드리지 않았고, 관리자 웹이 둘 다 받는다(`admin-web/src/format.ts`).
+>
+> 🔶 관리자 계정을 만드는 API 는 없다 — DB 에서 직접 `users.role = 'ADMIN'` 으로 지정한다(권한 신청 기능은 만들었다가 필요 없다고 해서 뺐다, 2026-10-09).
+
 ## 모임·소셜 API (2026-08~09 추가)
 
 설계 근거: [`decisions/multiuser-realtime-sync.md`](./decisions/multiuser-realtime-sync.md)(그룹 4테이블·WS 릴레이), [`decisions/social-cheer-and-group-feed.md`](./decisions/social-cheer-and-group-feed.md)(친구=같은 모임 ACTIVE 멤버, 출석=COMPLETED 세션, 재촉·푸시·자동 글·리액션). 전부 JWT 필수. 권한 규칙은 하나 — **같은 모임의 ACTIVE 멤버**(아니면 403 `G002`). 에러 코드 `G001`~`G011`·`N001`~`N003` 은 `ErrorCode` 참고.

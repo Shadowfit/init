@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import type { ColorValue } from 'react-native';
+import { Platform, type ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Home, BarChart3, CirclePlay, Users, User, type LucideIcon } from 'lucide-react-native';
 import { COLORS } from '@/constants/Colors';
@@ -20,13 +20,15 @@ export default function TabLayout() {
         tabBarStyle: {
           backgroundColor: COLORS.surface,
           borderTopColor: COLORS.border,
-          height: 60 + insets.bottom,
+          // 웹은 한글 글꼴 줄 높이가 커서 60 이면 탭 글자 칸이 9px 로 눌려 아래가 잘린다 — 웹만 6px 더 준다
+          height: (Platform.OS === 'web' ? 66 : 60) + insets.bottom,
           paddingBottom: 8 + insets.bottom,
           paddingTop: 4,
         },
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: '600',
+          ...(Platform.OS === 'web' && { lineHeight: 14 }),
         },
       }}
     >
