@@ -8,6 +8,7 @@ import com.shadowfit.dto.group.GroupResponseDto;
 import com.shadowfit.dto.group.InviteCodeResponseDto;
 import com.shadowfit.dto.group.JoinGroupRequestDto;
 import com.shadowfit.dto.group.MemberAttendanceStatusDto;
+import com.shadowfit.dto.group.TransferOwnershipRequestDto;
 import com.shadowfit.global.security.auth.CustomUserDetails;
 import com.shadowfit.repository.group.GroupEventRepository;
 import com.shadowfit.service.group.GroupAttendanceCalendarService;
@@ -110,7 +111,22 @@ public class GroupController {
         return ResponseEntity.ok(groupService.regenerateInviteCode(groupId, userDetails.getMember().getId()));
     }
 
-    @Operation(summary = "그룹 탈퇴")
+    @Operation(summary = "그룹장 양도",
+            description = "OWNER 가 다른 ACTIVE 멤버에게 그룹장을 넘긴다. 넘긴 쪽은 MEMBER 가 된다. "
+                    + "OWNER 아니면 403 G007, 대상이 멤버가 아니면 404 G011, 자기 자신이면 400.")
+    @PutMapping("/{groupId}/owner")
+    public ResponseEntity<Void> transferOwnership(
+            @PathVariable Long groupId,
+            @Valid @RequestBody TransferOwnershipRequestDto request,
+            @AuthenticationPrincipal CustomUserDetails userDetails
+    ) {
+        groupService.transferOwnership(groupId, userDetails.getMember().getId(), request.getMemberId());
+        return ResponseEntity.ok().build();
+    }
+
+    @Operation(summary = "그룹 탈퇴",
+            description = "MEMBER 는 행이 LEFT 로 남는다. OWNER 는 다른 ACTIVE 멤버가 있으면 409 G010(양도 먼저), "
+                    + "혼자 남았으면 모임 자체가 삭제된다.")
     @DeleteMapping("/{groupId}/members/me")
     public ResponseEntity<Void> leaveGroup(
             @PathVariable Long groupId,

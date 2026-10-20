@@ -103,6 +103,22 @@ public enum ErrorCode {
     CATEGORY_NOT_FOUND(404, "W013", "존재하지 않는 카테고리입니다."),
     CATEGORY_NAME_DUPLICATION(409, "W014", "이미 존재하는 카테고리 이름입니다."),
     CATEGORY_IN_USE(409, "W015", "사용 중인 카테고리는 삭제할 수 없습니다."),
+    // 관리자 mp4 업로드 → 기준 좌표 추출. 확장자·파일 머리(ftyp) 검사에 걸린 것 — C001 로 뭉개면
+    // 관리자가 «뭐가 틀렸는지» 를 못 본다.
+    INVALID_REFERENCE_VIDEO(400, "W016", "mp4 영상 파일만 등록할 수 있습니다."),
+    // AI 서킷브레이커가 OPEN 이면 파일도 DB 도 건드리기 **전에** 거부한다 (2026-09-17 confirm ㄴ). 저장은
+    // 됐는데 추출은 조용히 안 된 상태를 안 만들기 위해서다 — 재추출 API 가 없어 그 상태에서 복구하려면
+    // 관리자가 같은 파일을 다시 올려야 한다.
+    REFERENCE_EXTRACTION_UNAVAILABLE(503, "W017", "AI 서버에 연결할 수 없어 기준 영상을 등록할 수 없습니다. 잠시 후 다시 시도해 주세요."),
+    // 종목 코드(exercises.code, V25) — docs/decisions/lunge-and-set-backend.md §3-B.
+    //
+    // W018: 코드 하나 = 분석기 하나. UNIQUE 가 어차피 막지만 500 대신 이유를 준다(W014 와 같은 결).
+    // W019: 분석이 켜진 종목의 코드를 바꾸면 진행 중 세션이 다른 분석기 기준으로 넘어간다 — 먼저 끄고 바꾼다.
+    // W020: 코드가 없는 종목은 ai-server 가 어느 분석기를 쓸지 알 수 없어 StartAnalysis 를 거절한다(#147 ㄷ).
+    //       W012(기준 좌표 없음)와 나란한 «켜기 전 필요조건» 이다.
+    EXERCISE_CODE_DUPLICATION(409, "W018", "이미 사용 중인 종목 코드입니다."),
+    EXERCISE_CODE_LOCKED(409, "W019", "분석이 켜진 종목의 코드는 바꿀 수 없습니다. 분석을 끈 뒤 바꿔 주세요."),
+    EXERCISE_CODE_REQUIRED(400, "W020", "종목 코드가 없어 분석을 활성화할 수 없습니다."),
 
     // --- 시도 제한 (이슈 #394) ---
     //
@@ -152,13 +168,25 @@ public enum ErrorCode {
     INVALID_INVITE_CODE(404, "G008", "유효하지 않은 초대 코드입니다."),
     // 리액션 대상 (groupId, seq) 가 없음 — 그룹은 있는데 그 seq 의 글이 없는 경우(§4-5 ③).
     GROUP_EVENT_NOT_FOUND(404, "G009", "존재하지 않는 피드 글입니다."),
+    // OWNER 가 다른 ACTIVE 멤버를 두고 탈퇴하려 함 — 양도(PUT /groups/{id}/owner) 뒤에만 된다(#721).
+    OWNER_MUST_TRANSFER_FIRST(409, "G010", "그룹장은 다른 멤버에게 양도한 뒤 탈퇴할 수 있습니다."),
+    // 양도 대상이 이 모임의 ACTIVE 멤버가 아님 — 요청자 본인의 권한 문제(G002/G007)와 구분한다.
+    GROUP_MEMBER_NOT_FOUND(404, "G011", "모임의 멤버가 아닌 회원입니다."),
+    // 같은 운동을 같은 모임에 두 번 공유 — uk_group_events_type_source(V19) 가 최종 판정한다.
+    SESSION_ALREADY_SHARED(409, "G012", "이미 이 모임에 공유한 운동입니다."),
+    // 공유 대상 세션이 내 것이 아니거나 아직 끝나지 않음 — 남의 세션도 «없음» 과 같게.
+    SHAREABLE_SESSION_NOT_FOUND(404, "G013", "공유할 수 있는 운동 기록이 없습니다."),
+    // jpg·png·webp 가 아니거나 비었거나 10MB 초과.
+    INVALID_FEED_PHOTO(400, "G014", "사진은 10MB 이하의 jpg · png · webp 만 올릴 수 있습니다."),
 
     // --- 알림·재촉 (social-cheer-and-group-feed.md §3-C) ---
     // 남의 알림 id 도 «없음» 과 같게 404 — 세션 삭제(본인 것 아니면 404)와 같은 모양.
     NOTIFICATION_NOT_FOUND(404, "N001", "존재하지 않는 알림입니다."),
     // uk_notifications_sender_recipient_type_date(V17) 위반 — 같은 사람에게 같은 날 1회. goals 의 GL002 와 같은 결.
     NUDGE_ALREADY_SENT_TODAY(409, "N002", "오늘은 이미 재촉했습니다."),
-    NUDGE_SELF_NOT_ALLOWED(400, "N003", "자기 자신은 재촉할 수 없습니다.");
+    NUDGE_SELF_NOT_ALLOWED(400, "N003", "자기 자신은 재촉할 수 없습니다."),
+    CHEER_ALREADY_SENT_TODAY(409, "N004", "오늘은 이미 응원했습니다."),
+    CHEER_SELF_NOT_ALLOWED(400, "N005", "자기 자신에게는 응원을 보낼 수 없습니다.");
 
     private final int status;
     private final String code;

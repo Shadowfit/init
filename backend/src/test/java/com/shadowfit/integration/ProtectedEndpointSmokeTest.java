@@ -75,6 +75,12 @@ class ProtectedEndpointSmokeTest {
     }
 
     @Test
+    @DisplayName("GET /exercises — 토큰 없으면 401")
+    void exerciseCatalog_noToken_401() throws Exception {
+        mockMvc.perform(get("/exercises")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
     @DisplayName("GET /exercises/{id}/feedback-templates — 토큰 없으면 401")
     void feedbackTemplates_noToken_401() throws Exception {
         mockMvc.perform(get("/exercises/1/feedback-templates")).andExpect(status().isUnauthorized());

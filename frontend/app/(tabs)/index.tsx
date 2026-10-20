@@ -13,6 +13,7 @@ import {
   Lightbulb,
   Ban,
   ChevronRight,
+  Bell,
   type LucideIcon,
 } from 'lucide-react-native';
 import { COLORS, FONT_SIZE, SPACING, RADIUS } from '@/constants/Colors';
@@ -22,8 +23,21 @@ import { goalService } from '@/services/goalService';
 import { socialService } from '@/services/socialService';
 import { useAuthStore } from '@/stores/authStore';
 import type { CalendarMainResponse, CalendarDay, DailyActivityResponse } from '@/types/report';
+<<<<<<< HEAD
 import type { WorkoutGoal } from '@/types/goal';
 import type { FriendAttendance } from '@/types/social';
+=======
+import FriendStatusList from '@/components/social/FriendStatusList';
+import { friendService } from '@/services/friendService';
+import { notificationService } from '@/services/notificationService';
+import type { MemberAttendanceStatus } from '@/types/social';
+
+function getSyncColor(rate: number) {
+  if (rate >= 80) return COLORS.primary;
+  if (rate >= 60) return COLORS.warning;
+  return COLORS.error;
+}
+>>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
 
 // 백엔드 records 를 react-native-calendars 의 markedDates 형식으로 변환
 function buildMarkedDates(records: CalendarDay[]): Record<string, any> {
@@ -51,6 +65,7 @@ export default function HomeScreen() {
   // 선택 날짜의 운동 목록 (GET /reports/daily)
   const [daily, setDaily] = useState<DailyActivityResponse | null>(null);
   const [dailyLoading, setDailyLoading] = useState(false);
+<<<<<<< HEAD
   const [goal, setGoal] = useState<WorkoutGoal | null>(null);
   const [goalLoading, setGoalLoading] = useState(false);
   const [goalSaving, setGoalSaving] = useState(false);
@@ -117,6 +132,9 @@ export default function HomeScreen() {
       setGoalLoading(false);
     }
   };
+=======
+  const [friends, setFriends] = useState<MemberAttendanceStatus[]>([]);
+>>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
 
   // 화면 포커스 / 연·월 변경마다 캘린더 데이터 재조회
   useFocusEffect(
@@ -128,6 +146,32 @@ export default function HomeScreen() {
           console.error('[calendar] status=', e.response?.status, 'data=', e.response?.data);
         });
     }, [viewYear, viewMonth]),
+  );
+
+  // 내 모임 친구 운동 현황 — 화면 포커스마다 재조회 (재촉·응원 뒤 돌아오면 최신 상태)
+  useFocusEffect(
+    useCallback(() => {
+      friendService
+        .getStatuses()
+        .then((res) => setFriends(res.data))
+        .catch((e) => console.warn('[friends] status=', e?.response?.status));
+    }, []),
+  );
+
+  // 종 아이콘 배지 — 안 읽은 알림 수. 홈에 있는 동안 30초마다, 알림함에서 돌아올 때 바로 다시 센다
+  // (푸시·소켓이 아직 없어서 새 재촉·응원을 알아챌 길이 이것뿐이다).
+  const [unread, setUnread] = useState(0);
+  useFocusEffect(
+    useCallback(() => {
+      const refresh = () =>
+        notificationService
+          .unreadCount()
+          .then((res) => setUnread(res.data.count))
+          .catch(() => {});
+      refresh();
+      const timer = setInterval(refresh, 30000);
+      return () => clearInterval(timer);
+    }, []),
   );
 
   // 선택 날짜 변경 시 그 날의 운동 목록 조회 (없으면 오늘 자동 조회)
@@ -182,9 +226,19 @@ export default function HomeScreen() {
             <Text style={styles.appTitle}>ShadowFit</Text>
             <Text style={styles.appSubtitle}>친구와 함께 꾸준히 운동해요</Text>
           </View>
-          <TouchableOpacity onPress={() => router.push('/(tabs)/mypage')}>
-            <CircleUser size={28} color={COLORS.textSecondary} strokeWidth={1.75} />
-          </TouchableOpacity>
+          <View style={styles.headerIcons}>
+            <TouchableOpacity onPress={() => router.push('/notifications' as any)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Bell size={24} color={unread > 0 ? COLORS.text : COLORS.textSecondary} strokeWidth={1.75} />
+              {unread > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{unread > 9 ? '9+' : unread}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => router.push('/(tabs)/mypage')}>
+              <CircleUser size={28} color={COLORS.textSecondary} strokeWidth={1.75} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.goalCard}>
@@ -243,6 +297,30 @@ export default function HomeScreen() {
         <View style={styles.statsRow}>
           <StatCard Icon={Camera} value={data ? `${data.monthlyExerciseDays}일` : '—'} label={`${viewMonth}월 기록일`} />
           <StatCard Icon={Target} value={goal ? `${goal.currentValue}회` : '—'} label="최근 7일 완료" />
+        </View>
+
+        {/* 내 모임 친구 운동 현황 — GET /friends (오늘 완료 → 진행 중 → 기록 없음 순) */}
+        <View style={styles.friendsSection}>
+          <View style={styles.friendsHeader}>
+            <View>
+              <Text style={styles.friendsTitle}>최신 모임 운동 현황</Text>
+              <Text style={styles.friendsSub}>내 친구의 운동을 응원해봐요</Text>
+            </View>
+            <TouchableOpacity onPress={() => router.push('/(tabs)/groups' as any)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={styles.friendsMore}>모임 보기</Text>
+            </TouchableOpacity>
+          </View>
+          <FriendStatusList
+            statuses={friends}
+            limit={3}
+            emptyText="모임에 참여하면 친구들의 운동 현황이 여기 보여요"
+          />
+          {friends.length > 3 && (
+            <TouchableOpacity style={styles.friendsAll} onPress={() => router.push('/(tabs)/groups' as any)}>
+              <Text style={styles.friendsAllText}>친구 {friends.length}명 전체 보기</Text>
+              <ChevronRight size={14} color={COLORS.primary} strokeWidth={2} />
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* 캘린더 */}
@@ -441,6 +519,31 @@ const styles = StyleSheet.create({
   statValue: { fontSize: FONT_SIZE.xl, fontWeight: '800', color: COLORS.text, marginTop: 4 },
   statValueHighlight: { color: COLORS.primary },
   statLabel: { fontSize: FONT_SIZE.xs, color: COLORS.textSecondary, marginTop: 2 },
+
+  // 친구 운동 현황
+  friendsSection: { paddingHorizontal: SPACING.xxl, marginBottom: SPACING.lg },
+  friendsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: SPACING.sm },
+  friendsTitle: { fontSize: FONT_SIZE.md, fontWeight: '700', color: COLORS.text },
+  friendsSub: { fontSize: FONT_SIZE.xs, color: COLORS.textSecondary, marginTop: 2 },
+  friendsMore: { fontSize: FONT_SIZE.xs, fontWeight: '700', color: COLORS.primary },
+  friendsAll: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: SPACING.sm },
+  friendsAllText: { fontSize: FONT_SIZE.xs, fontWeight: '700', color: COLORS.primary },
+  headerIcons: { flexDirection: 'row', alignItems: 'center', gap: SPACING.lg },
+  badge: {
+    position: 'absolute',
+    top: -5,
+    right: -7,
+    minWidth: 17,
+    height: 17,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    backgroundColor: COLORS.error,
+    borderWidth: 1.5,
+    borderColor: COLORS.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeText: { fontSize: 10, fontWeight: '800', color: COLORS.white },
 
   calendarContainer: {
     marginHorizontal: SPACING.xxl,

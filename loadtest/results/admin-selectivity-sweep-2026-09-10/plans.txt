@@ -1,0 +1,768 @@
+───── arm=A0 status=FAILED window=1d kind=list
+  select_type: SIMPLE
+         type: index
+          key: idx_session_member_status_start
+         rows: 970837
+     filtered: 8.33
+        Extra: Using where; Using index; Using filesort
+
+───── arm=A0 status=FAILED window=1d kind=count
+  select_type: SIMPLE
+         type: index
+          key: idx_session_member_status_start
+         rows: 970837
+     filtered: 8.33
+        Extra: Using where; Using index
+
+───── arm=A0 status=FAILED window=7d kind=list
+  select_type: SIMPLE
+         type: index
+          key: idx_session_member_status_start
+         rows: 970837
+     filtered: 8.33
+        Extra: Using where; Using index; Using filesort
+
+───── arm=A0 status=FAILED window=7d kind=count
+  select_type: SIMPLE
+         type: index
+          key: idx_session_member_status_start
+         rows: 970837
+     filtered: 8.33
+        Extra: Using where; Using index
+
+───── arm=A0 status=FAILED window=30d kind=list
+  select_type: SIMPLE
+         type: index
+          key: idx_session_member_status_start
+         rows: 970837
+     filtered: 8.33
+        Extra: Using where; Using index; Using filesort
+
+───── arm=A0 status=FAILED window=30d kind=count
+  select_type: SIMPLE
+         type: index
+          key: idx_session_member_status_start
+         rows: 970837
+     filtered: 8.33
+        Extra: Using where; Using index
+
+───── arm=A0 status=FAILED window=0d kind=list
+  select_type: SIMPLE
+         type: index
+          key: idx_session_member_status_start
+         rows: 970837
+     filtered: 25.00
+        Extra: Using where; Using index; Using filesort
+
+───── arm=A0 status=FAILED window=0d kind=count
+  select_type: SIMPLE
+         type: index
+          key: idx_session_member_status_start
+         rows: 970837
+     filtered: 25.00
+        Extra: Using where; Using index
+
+───── arm=A0 status=CANCELLED window=1d kind=list
+  select_type: SIMPLE
+         type: index
+          key: idx_session_member_status_start
+         rows: 970837
+     filtered: 8.33
+        Extra: Using where; Using index; Using filesort
+
+───── arm=A0 status=CANCELLED window=1d kind=count
+  select_type: SIMPLE
+         type: index
+          key: idx_session_member_status_start
+         rows: 970837
+     filtered: 8.33
+        Extra: Using where; Using index
+
+───── arm=A0 status=CANCELLED window=7d kind=list
+  select_type: SIMPLE
+         type: index
+          key: idx_session_member_status_start
+         rows: 970837
+     filtered: 8.33
+        Extra: Using where; Using index; Using filesort
+
+───── arm=A0 status=CANCELLED window=7d kind=count
+  select_type: SIMPLE
+         type: index
+          key: idx_session_member_status_start
+         rows: 970837
+     filtered: 8.33
+        Extra: Using where; Using index
+
+───── arm=A0 status=CANCELLED window=30d kind=list
+  select_type: SIMPLE
+         type: index
+          key: idx_session_member_status_start
+         rows: 970837
+     filtered: 8.33
+        Extra: Using where; Using index; Using filesort
+
+───── arm=A0 status=CANCELLED window=30d kind=count
+  select_type: SIMPLE
+         type: index
+          key: idx_session_member_status_start
+         rows: 970837
+     filtered: 8.33
+        Extra: Using where; Using index
+
+───── arm=A0 status=CANCELLED window=0d kind=list
+  select_type: SIMPLE
+         type: index
+          key: idx_session_member_status_start
+         rows: 970837
+     filtered: 25.00
+        Extra: Using where; Using index; Using filesort
+
+───── arm=A0 status=CANCELLED window=0d kind=count
+  select_type: SIMPLE
+         type: index
+          key: idx_session_member_status_start
+         rows: 970837
+     filtered: 25.00
+        Extra: Using where; Using index
+
+───── arm=A0 status=IN_PROGRESS window=1d kind=list
+  select_type: SIMPLE
+         type: index
+          key: idx_session_member_status_start
+         rows: 970837
+     filtered: 8.33
+        Extra: Using where; Using index; Using filesort
+
+───── arm=A0 status=IN_PROGRESS window=1d kind=count
+  select_type: SIMPLE
+         type: index
+          key: idx_session_member_status_start
+         rows: 970837
+     filtered: 8.33
+        Extra: Using where; Using index
+
+───── arm=A0 status=IN_PROGRESS window=7d kind=list
+  select_type: SIMPLE
+         type: index
+          key: idx_session_member_status_start
+         rows: 970837
+     filtered: 8.33
+        Extra: Using where; Using index; Using filesort
+
+───── arm=A0 status=IN_PROGRESS window=7d kind=count
+  select_type: SIMPLE
+         type: index
+          key: idx_session_member_status_start
+         rows: 970837
+     filtered: 8.33
+        Extra: Using where; Using index
+
+───── arm=A0 status=IN_PROGRESS window=30d kind=list
+  select_type: SIMPLE
+         type: index
+          key: idx_session_member_status_start
+         rows: 970837
+     filtered: 8.33
+        Extra: Using where; Using index; Using filesort
+
+───── arm=A0 status=IN_PROGRESS window=30d kind=count
+  select_type: SIMPLE
+         type: index
+          key: idx_session_member_status_start
+         rows: 970837
+     filtered: 8.33
+        Extra: Using where; Using index
+
+───── arm=A0 status=IN_PROGRESS window=0d kind=list
+  select_type: SIMPLE
+         type: index
+          key: idx_session_member_status_start
+         rows: 970837
+     filtered: 25.00
+        Extra: Using where; Using index; Using filesort
+
+───── arm=A0 status=IN_PROGRESS window=0d kind=count
+  select_type: SIMPLE
+         type: index
+          key: idx_session_member_status_start
+         rows: 970837
+     filtered: 25.00
+        Extra: Using where; Using index
+
+───── arm=A0 status=COMPLETED window=1d kind=list
+  select_type: SIMPLE
+         type: index
+          key: idx_session_member_status_start
+         rows: 970837
+     filtered: 8.33
+        Extra: Using where; Using index; Using filesort
+
+───── arm=A0 status=COMPLETED window=1d kind=count
+  select_type: SIMPLE
+         type: index
+          key: idx_session_member_status_start
+         rows: 970837
+     filtered: 8.33
+        Extra: Using where; Using index
+
+───── arm=A0 status=COMPLETED window=7d kind=list
+  select_type: SIMPLE
+         type: index
+          key: idx_session_member_status_start
+         rows: 970837
+     filtered: 8.33
+        Extra: Using where; Using index; Using filesort
+
+───── arm=A0 status=COMPLETED window=7d kind=count
+  select_type: SIMPLE
+         type: index
+          key: idx_session_member_status_start
+         rows: 970837
+     filtered: 8.33
+        Extra: Using where; Using index
+
+───── arm=A0 status=COMPLETED window=30d kind=list
+  select_type: SIMPLE
+         type: index
+          key: idx_session_member_status_start
+         rows: 970837
+     filtered: 8.33
+        Extra: Using where; Using index; Using filesort
+
+───── arm=A0 status=COMPLETED window=30d kind=count
+  select_type: SIMPLE
+         type: index
+          key: idx_session_member_status_start
+         rows: 970837
+     filtered: 8.33
+        Extra: Using where; Using index
+
+───── arm=A0 status=COMPLETED window=0d kind=list
+  select_type: SIMPLE
+         type: index
+          key: idx_session_member_status_start
+         rows: 970837
+     filtered: 25.00
+        Extra: Using where; Using index; Using filesort
+
+───── arm=A0 status=COMPLETED window=0d kind=count
+  select_type: SIMPLE
+         type: index
+          key: idx_session_member_status_start
+         rows: 970837
+     filtered: 25.00
+        Extra: Using where; Using index
+
+───── arm=A1 status=FAILED window=1d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_session_starttime_member
+         rows: 2669
+     filtered: 25.00
+        Extra: Using index condition; Using where; Backward index scan
+
+───── arm=A1 status=FAILED window=1d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_session_starttime_member
+         rows: 2669
+     filtered: 25.00
+        Extra: Using index condition; Using where
+
+───── arm=A1 status=FAILED window=7d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_session_starttime_member
+         rows: 36540
+     filtered: 25.00
+        Extra: Using index condition; Using where; Backward index scan
+
+───── arm=A1 status=FAILED window=7d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_session_starttime_member
+         rows: 36540
+     filtered: 25.00
+        Extra: Using index condition; Using where
+
+───── arm=A1 status=FAILED window=30d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_session_starttime_member
+         rows: 156540
+     filtered: 25.00
+        Extra: Using index condition; Using where; Backward index scan
+
+───── arm=A1 status=FAILED window=30d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_session_starttime_member
+         rows: 156540
+     filtered: 25.00
+        Extra: Using index condition; Using where
+
+───── arm=A1 status=FAILED window=0d kind=list
+  select_type: SIMPLE
+         type: index
+          key: idx_session_starttime_member
+         rows: 40
+     filtered: 25.00
+        Extra: Using where; Backward index scan
+
+───── arm=A1 status=FAILED window=0d kind=count
+  select_type: SIMPLE
+         type: index
+          key: idx_session_member_status_start
+         rows: 995841
+     filtered: 25.00
+        Extra: Using where; Using index
+
+───── arm=A1 status=CANCELLED window=1d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_session_starttime_member
+         rows: 2669
+     filtered: 25.00
+        Extra: Using index condition; Using where; Backward index scan
+
+───── arm=A1 status=CANCELLED window=1d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_session_starttime_member
+         rows: 2669
+     filtered: 25.00
+        Extra: Using index condition; Using where
+
+───── arm=A1 status=CANCELLED window=7d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_session_starttime_member
+         rows: 36540
+     filtered: 25.00
+        Extra: Using index condition; Using where; Backward index scan
+
+───── arm=A1 status=CANCELLED window=7d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_session_starttime_member
+         rows: 36540
+     filtered: 25.00
+        Extra: Using index condition; Using where
+
+───── arm=A1 status=CANCELLED window=30d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_session_starttime_member
+         rows: 156540
+     filtered: 25.00
+        Extra: Using index condition; Using where; Backward index scan
+
+───── arm=A1 status=CANCELLED window=30d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_session_starttime_member
+         rows: 156540
+     filtered: 25.00
+        Extra: Using index condition; Using where
+
+───── arm=A1 status=CANCELLED window=0d kind=list
+  select_type: SIMPLE
+         type: index
+          key: idx_session_starttime_member
+         rows: 40
+     filtered: 25.00
+        Extra: Using where; Backward index scan
+
+───── arm=A1 status=CANCELLED window=0d kind=count
+  select_type: SIMPLE
+         type: index
+          key: idx_session_member_status_start
+         rows: 995841
+     filtered: 25.00
+        Extra: Using where; Using index
+
+───── arm=A1 status=IN_PROGRESS window=1d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_session_starttime_member
+         rows: 2669
+     filtered: 25.00
+        Extra: Using index condition; Using where; Backward index scan
+
+───── arm=A1 status=IN_PROGRESS window=1d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_session_starttime_member
+         rows: 2669
+     filtered: 25.00
+        Extra: Using index condition; Using where
+
+───── arm=A1 status=IN_PROGRESS window=7d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_session_starttime_member
+         rows: 36540
+     filtered: 25.00
+        Extra: Using index condition; Using where; Backward index scan
+
+───── arm=A1 status=IN_PROGRESS window=7d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_session_starttime_member
+         rows: 36540
+     filtered: 25.00
+        Extra: Using index condition; Using where
+
+───── arm=A1 status=IN_PROGRESS window=30d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_session_starttime_member
+         rows: 156540
+     filtered: 25.00
+        Extra: Using index condition; Using where; Backward index scan
+
+───── arm=A1 status=IN_PROGRESS window=30d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_session_starttime_member
+         rows: 156540
+     filtered: 25.00
+        Extra: Using index condition; Using where
+
+───── arm=A1 status=IN_PROGRESS window=0d kind=list
+  select_type: SIMPLE
+         type: index
+          key: idx_session_starttime_member
+         rows: 40
+     filtered: 25.00
+        Extra: Using where; Backward index scan
+
+───── arm=A1 status=IN_PROGRESS window=0d kind=count
+  select_type: SIMPLE
+         type: index
+          key: idx_session_member_status_start
+         rows: 995841
+     filtered: 25.00
+        Extra: Using where; Using index
+
+───── arm=A1 status=COMPLETED window=1d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_session_starttime_member
+         rows: 2669
+     filtered: 25.00
+        Extra: Using index condition; Using where; Backward index scan
+
+───── arm=A1 status=COMPLETED window=1d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_session_starttime_member
+         rows: 2669
+     filtered: 25.00
+        Extra: Using index condition; Using where
+
+───── arm=A1 status=COMPLETED window=7d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_session_starttime_member
+         rows: 36540
+     filtered: 25.00
+        Extra: Using index condition; Using where; Backward index scan
+
+───── arm=A1 status=COMPLETED window=7d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_session_starttime_member
+         rows: 36540
+     filtered: 25.00
+        Extra: Using index condition; Using where
+
+───── arm=A1 status=COMPLETED window=30d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_session_starttime_member
+         rows: 156540
+     filtered: 25.00
+        Extra: Using index condition; Using where; Backward index scan
+
+───── arm=A1 status=COMPLETED window=30d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_session_starttime_member
+         rows: 156540
+     filtered: 25.00
+        Extra: Using index condition; Using where
+
+───── arm=A1 status=COMPLETED window=0d kind=list
+  select_type: SIMPLE
+         type: index
+          key: idx_session_starttime_member
+         rows: 40
+     filtered: 25.00
+        Extra: Using where; Backward index scan
+
+───── arm=A1 status=COMPLETED window=0d kind=count
+  select_type: SIMPLE
+         type: index
+          key: idx_session_member_status_start
+         rows: 995841
+     filtered: 25.00
+        Extra: Using where; Using index
+
+───── arm=B status=FAILED window=1d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_session_status_starttime
+         rows: 60
+     filtered: 100.00
+        Extra: Using index condition; Backward index scan
+
+───── arm=B status=FAILED window=1d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_session_status_starttime
+         rows: 60
+     filtered: 100.00
+        Extra: Using where; Using index
+
+───── arm=B status=FAILED window=7d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_session_status_starttime
+         rows: 334
+     filtered: 100.00
+        Extra: Using index condition; Backward index scan
+
+───── arm=B status=FAILED window=7d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_session_status_starttime
+         rows: 334
+     filtered: 100.00
+        Extra: Using where; Using index
+
+───── arm=B status=FAILED window=30d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_session_status_starttime
+         rows: 1556
+     filtered: 100.00
+        Extra: Using index condition; Backward index scan
+
+───── arm=B status=FAILED window=30d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_session_status_starttime
+         rows: 1556
+     filtered: 100.00
+        Extra: Using where; Using index
+
+───── arm=B status=FAILED window=0d kind=list
+  select_type: SIMPLE
+         type: ref
+          key: idx_session_status_starttime
+         rows: 37310
+     filtered: 100.00
+        Extra: Using where; Backward index scan
+
+───── arm=B status=FAILED window=0d kind=count
+  select_type: SIMPLE
+         type: ref
+          key: idx_session_status_starttime
+         rows: 37310
+     filtered: 100.00
+        Extra: Using where; Using index
+
+───── arm=B status=CANCELLED window=1d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_session_status_starttime
+         rows: 210
+     filtered: 100.00
+        Extra: Using index condition; Backward index scan
+
+───── arm=B status=CANCELLED window=1d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_session_status_starttime
+         rows: 210
+     filtered: 100.00
+        Extra: Using where; Using index
+
+───── arm=B status=CANCELLED window=7d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_session_status_starttime
+         rows: 1461
+     filtered: 100.00
+        Extra: Using index condition; Backward index scan
+
+───── arm=B status=CANCELLED window=7d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_session_status_starttime
+         rows: 1461
+     filtered: 100.00
+        Extra: Using where; Using index
+
+───── arm=B status=CANCELLED window=30d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_session_status_starttime
+         rows: 6520
+     filtered: 100.00
+        Extra: Using index condition; Backward index scan
+
+───── arm=B status=CANCELLED window=30d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_session_status_starttime
+         rows: 6520
+     filtered: 100.00
+        Extra: Using where; Using index
+
+───── arm=B status=CANCELLED window=0d kind=list
+  select_type: SIMPLE
+         type: ref
+          key: idx_session_status_starttime
+         rows: 163954
+     filtered: 100.00
+        Extra: Using where; Backward index scan
+
+───── arm=B status=CANCELLED window=0d kind=count
+  select_type: SIMPLE
+         type: ref
+          key: idx_session_status_starttime
+         rows: 163954
+     filtered: 100.00
+        Extra: Using where; Using index
+
+───── arm=B status=IN_PROGRESS window=1d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_session_status_starttime
+         rows: 535
+     filtered: 100.00
+        Extra: Using index condition; Backward index scan
+
+───── arm=B status=IN_PROGRESS window=1d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_session_status_starttime
+         rows: 535
+     filtered: 100.00
+        Extra: Using where; Using index
+
+───── arm=B status=IN_PROGRESS window=7d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_session_status_starttime
+         rows: 3827
+     filtered: 100.00
+        Extra: Using index condition; Backward index scan
+
+───── arm=B status=IN_PROGRESS window=7d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_session_status_starttime
+         rows: 3827
+     filtered: 100.00
+        Extra: Using where; Using index
+
+───── arm=B status=IN_PROGRESS window=30d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_session_status_starttime
+         rows: 30592
+     filtered: 100.00
+        Extra: Using index condition; Backward index scan
+
+───── arm=B status=IN_PROGRESS window=30d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_session_status_starttime
+         rows: 30592
+     filtered: 100.00
+        Extra: Using where; Using index
+
+───── arm=B status=IN_PROGRESS window=0d kind=list
+  select_type: SIMPLE
+         type: ref
+          key: idx_session_status_starttime
+         rows: 410784
+     filtered: 100.00
+        Extra: Using where; Backward index scan
+
+───── arm=B status=IN_PROGRESS window=0d kind=count
+  select_type: SIMPLE
+         type: ref
+          key: idx_session_status_starttime
+         rows: 410784
+     filtered: 100.00
+        Extra: Using where; Using index
+
+───── arm=B status=COMPLETED window=1d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_session_status_starttime
+         rows: 1862
+     filtered: 100.00
+        Extra: Using index condition; Backward index scan
+
+───── arm=B status=COMPLETED window=1d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_session_status_starttime
+         rows: 1862
+     filtered: 100.00
+        Extra: Using where; Using index
+
+───── arm=B status=COMPLETED window=7d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_session_status_starttime
+         rows: 25020
+     filtered: 100.00
+        Extra: Using index condition; Backward index scan
+
+───── arm=B status=COMPLETED window=7d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_session_status_starttime
+         rows: 25020
+     filtered: 100.00
+        Extra: Using where; Using index
+
+───── arm=B status=COMPLETED window=30d kind=list
+  select_type: SIMPLE
+         type: range
+          key: idx_session_status_starttime
+         rows: 112756
+     filtered: 100.00
+        Extra: Using index condition; Backward index scan
+
+───── arm=B status=COMPLETED window=30d kind=count
+  select_type: SIMPLE
+         type: range
+          key: idx_session_status_starttime
+         rows: 112756
+     filtered: 100.00
+        Extra: Using where; Using index
+
+───── arm=B status=COMPLETED window=0d kind=list
+  select_type: SIMPLE
+         type: ref
+          key: idx_session_status_starttime
+         rows: 497920
+     filtered: 100.00
+        Extra: Using where; Backward index scan
+
+───── arm=B status=COMPLETED window=0d kind=count
+  select_type: SIMPLE
+         type: ref
+          key: idx_session_status_starttime
+         rows: 497920
+     filtered: 100.00
+        Extra: Using where; Using index
+

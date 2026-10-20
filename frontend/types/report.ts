@@ -82,6 +82,7 @@ export interface ComparisonWithPrevious {
   caloriesDiff: number;
 }
 
+<<<<<<< HEAD
 /* ── 스쿼트 깊이 모드 (2026-09-21) ── */
 export type SquatDepthMode = 'FULL' | 'HALF';
 export type SquatDepthGrade = 'EXCELLENT' | 'GOOD' | 'FAIR' | 'NEEDS_WORK' | 'POOR';
@@ -195,10 +196,21 @@ export interface LungeStepLengthAnalysis {
   stepGrade: StepLengthGrade;
   repStepLengths: RepStepLength[];
   narrative: string[];              // 회차별 한국어 코멘트, 최대 4문장
+=======
+/** 세트별 요약 (V26 세션 세트). 세트 도입 전 세션은 빈 배열 */
+export interface SessionSet {
+  setNo: number;
+  reps: number;
+  avgSyncRate: number;
+  startedSec: number;
+  endedSec: number;
+>>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
 }
 
 export interface SessionReportResponse {
   sessionId: number;
+  startTime: string;               // "2026-10-06T11:40:33" — 헤더 날짜
+  sets: SessionSet[];
   avgSyncRate: number;
   scoreAvailable?: boolean;
   totalReps: number;

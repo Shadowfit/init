@@ -33,8 +33,19 @@ class BackBentFeedbackCallbackTest(unittest.TestCase):
         return state
 
     def _run_rep(self, session_id: int, torso_tilt: float):
+<<<<<<< HEAD
         frames = iter(_frame(angle, torso_tilt=torso_tilt if angle == _BOTTOM else 5.0)
                       for angle in _REP_SEQUENCE)
+=======
+        # torso_tilt 는 bottom 프레임에서만 준다 — squat_counter.SquatCounter 는 standing 판정에
+        # hip_angle 도 보므로, 서 있는 프레임까지 기울이면 standing 에 도달하지 못해 rep 자체가
+        # 완성되지 않는다(이 테스트의 관심사는 등 굽음 감지이지 자세 판정이 아니다).
+        frames = iter(_frame(angle, torso_tilt=torso_tilt if angle == _BOTTOM else 5.0)
+                      for angle in _REP_SEQUENCE)
+        # SquatCounter 는 시각 기반 FSM 이라 process_frame 호출 사이의 실제 경과 시간이
+        # standing_confirm_sec/min_active_sec 판정에 들어간다. 테스트 루프의 실제 벽시계 간격은
+        # 마이크로초 단위라 그 문턱을 못 넘기므로, 3fps 를 흉내 낸 가짜 시계로 고정한다.
+>>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
         clock = {"now": 0.0}
         req = PoseRequest(image="", session_id=session_id, exercise_type="squat")
         with mock.patch.object(pose_endpoint, "base64_to_image", lambda _: _BLANK_IMAGE), \

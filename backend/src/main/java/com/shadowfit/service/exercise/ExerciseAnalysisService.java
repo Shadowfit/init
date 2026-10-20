@@ -239,22 +239,42 @@ public class ExerciseAnalysisService {
     }
 
     /**
-     * [STEP 1: 기준 데이터 등록]
-     * 사용자가 선택한 유튜브 URL에서 AI가 스켈레톤 좌표를 추출하도록 요청합니다. -- 등록하는건 관리자용
+     * 이 운동의 추출 요청이 갈 AI 채널의 서킷이 닫혀 있나(호출 가능한가).
+     *
+     * <p>mp4 업로드가 파일·DB 를 건드리기 <b>전에</b> 묻는다(2026-09-17 confirm ㄴ) — 서킷이 열려 있으면
+     * {@link #extractReferencePoses} 가 조용히 스킵하므로, 미리 안 물으면 «저장은 됐는데 추출은 안 된»
+     * 상태가 202 뒤에 숨는다. {@code tryAcquirePermission} 이 아니라 상태를 보는 이유는 HALF_OPEN 에서
+     * 허가를 소비하면 실제 호출 없이 돌려줘야 해서다.
      */
-    public void extractReferencePoses(Long exerciseId,String youtubeUrl) {
+    public boolean isAiReachable(long routingKey) {
+        CircuitBreaker.State state = aiCircuitBreaker(routingKey).getState();
+        return state != CircuitBreaker.State.OPEN && state != CircuitBreaker.State.FORCED_OPEN;
+    }
+
+    /**
+     * [STEP 1: 기준 데이터 등록]
+     * 기준 영상에서 AI 가 스켈레톤 좌표를 추출하도록 요청한다 — 관리자용.
+     *
+     * <p>{@code videoSource} 는 proto 필드 이름이 {@code youtube_url} 이지만 <b>AI 컨테이너가 열 수 있는
+     * 파일 경로</b>다. AI 가 http(s) 는 거부한다(유튜브 다운로드는 ToS 미결정,
+     * {@code exercise_servicer.py ExtractReferenceData} · youtube-coordinate-harvest.md §4-2). 관리자 mp4
+     * 업로드({@link ReferenceVideoService})가 공유 볼륨에 쓴 경로를 여기로 넘긴다.
+     */
+    public void extractReferencePoses(Long exerciseId, String videoSource) {
 
         Exercise exercise = exercisesRepository.findByIdCached(exerciseId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.EXERCISE_NOT_FOUND));
 
-        if (youtubeUrl == null || youtubeUrl.isEmpty()) {
-            log.error("전달된 기준 영상 URL이 없습니다.");
+        if (videoSource == null || videoSource.isEmpty()) {
+            log.error("전달된 기준 영상 경로가 없습니다.");
             throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
         }
 
         com.shadowfit.grpc.ExtractRequest request = com.shadowfit.grpc.ExtractRequest.newBuilder()
                 .setExerciseId(exerciseId)
-                .setYoutubeUrl(youtubeUrl) // ✅ 직접 삽입된 URL 사용
+                .setYoutubeUrl(videoSource) // 필드 이름만 youtube_url — 의미는 컨테이너 안 파일 경로
+                // 종목 코드(V25) — 기준 영상 분절에 어느 분석기를 쓸지. 코드 없는 종목은 빈 문자열(proto3 «없음»).
+                .setExerciseCode(codeOrEmpty(exercise))
                 .build();
 
         log.info("FastAPI에게 기준 좌표 추출 요청 전송 - 운동 ID: {}", exerciseId);
@@ -276,8 +296,17 @@ public class ExerciseAnalysisService {
         getAuthenticatedStub(exerciseId).extractReferenceData(request, CorrelationIds.preserving(new StreamObserver<com.shadowfit.grpc.ExtractResponse>() {
             @Override
             public void onNext(com.shadowfit.grpc.ExtractResponse value) {
+                // 응답은 «접수» 다 — 추출·저장은 AI 가 끝낸 뒤 역호출(saveReferencePoses)로 온다.
+                // success=false 는 AI 가 시작조차 못 했다는 뜻(원격 URL·파일 없음)이라, 서킷엔 성공으로
+                // 세되(상대는 멀쩡하다) 로그는 ERROR 로 남긴다. 이게 안 남으면 «202 받았는데 좌표가
+                // 안 바뀜» 을 추적할 단서가 Spring 쪽엔 하나도 없다.
                 cb.onSuccess(System.nanoTime() - callStart, TimeUnit.NANOSECONDS);
-                log.info("FastAPI 추출 시작 응답 수신 - 운동 ID: {}", value.getExerciseId());
+                if (value.getSuccess()) {
+                    log.info("FastAPI 추출 접수 응답 수신 - 운동 ID: {}", value.getExerciseId());
+                } else {
+                    log.error("FastAPI 가 기준 좌표 추출을 거부 - 운동 ID: {}, source: {} "
+                            + "(공유 볼륨 마운트·REFERENCE_VIDEO_AI_DIR 확인)", value.getExerciseId(), videoSource);
+                }
             }
             @Override
             public void onError(Throwable t) {
@@ -307,8 +336,30 @@ public class ExerciseAnalysisService {
      *                  <p>표시용 시각이 아니라서 아프다 — 이 값은 {@code pose_data} 의 멱등
      *                  앵커이자 파티션 키이고(#188 · #392), 리포트·재부착 조회가 <b>등호</b>로
      *                  찾는 바로 그 값이다. 「받은 시각 = 저장된 시각」이 성립해야 한다.
+     * @param targetRepsPerSet 세션에 확정된 세트당 목표(추천 폴백 포함, V26). 앱이 «12회 x 3세트» 를 그리고
+     *                         세트 cue 를 낼 근거다 — 세션 도중 바뀌지 않는다
+     * @param targetSets 목표 세트 수. null = 열린 세트
      */
-    public record StartedSession(Long sessionId, String sessionNonce, LocalDateTime startTime, int aiWorkerIndex) {}
+    public record StartedSession(Long sessionId, String sessionNonce, LocalDateTime startTime, int aiWorkerIndex,
+                                 Integer targetRepsPerSet, Integer targetSets) {}
+
+    /**
+     * AI 로 가는 종목 코드·세트 목표 — proto3 라 null 을 못 실어 «없음» 을 빈 문자열·0 으로 접은 꼴.
+     * {@code AnalyzeRequest}(시작)와 {@code ReattachRequest}(재부착)가 같은 변환을 쓰게 한 곳으로 모은다.
+     */
+    public record SessionTargets(String exerciseCode, int targetRepsPerSet, int targetSets) {
+        public static SessionTargets of(Session session) {
+            return new SessionTargets(
+                    codeOrEmpty(session.getExercise()),
+                    session.getTargetRepsPerSet() == null ? 0 : session.getTargetRepsPerSet(),
+                    session.getTargetSets() == null ? 0 : session.getTargetSets());
+        }
+    }
+
+    /** {@code exercises.code} 는 NULL 허용(분석기 없는 종목) — proto 로는 빈 문자열이 «없음» 이다. */
+    static String codeOrEmpty(Exercise exercise) {
+        return exercise.getCode() == null ? "" : exercise.getCode();
+    }
 
     /**
      * [STEP 2: 운동 분석 시작 - Entry Point]
@@ -330,10 +381,16 @@ public class ExerciseAnalysisService {
         Session savedSession = sessionService.createSession(appDto, currentMemberId, finalUrl);
         Long sessionId = savedSession.getId();
         String persona = member.getSelectedPersona().name();
+<<<<<<< HEAD
         // 저장된 엔티티에서 읽는다(persona와 동일한 이유) — appDto.getDepthMode()가 null이어도
         // createSession이 이미 FULL로 기본값을 채워 저장했으므로, 클라가 받는 값과 AI가 받는
         // 값이 어긋나지 않는다.
         String squatDepthMode = savedSession.getSquatDepthMode().name();
+=======
+        // AI 로 갈 종목 코드·세트 목표는 nonce 와 같은 이유로 **여기서** 확정해 넘긴다 — 클라 응답(StartedSession)과
+        // AnalyzeRequest 가 같은 엔티티의 같은 값을 보게. 비동기 워커에서 세션을 다시 읽으면 두 경로가 갈릴 수 있다.
+        SessionTargets targets = SessionTargets.of(savedSession);
+>>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
 
         // 비동기로 FastAPI에 분석 요청 — self를 거쳐야 @Async가 Spring 프록시를 타고 실제로
         // 비동기 실행됨. this.로 호출하면 자기호출(self-invocation)이라 AOP 프록시를 우회해서
@@ -349,7 +406,11 @@ public class ExerciseAnalysisService {
                     @Override
                     public void afterCommit() {
                         self.sendAnalysisRequestToFastApi(sessionId, appDto, finalUrl, persona,
+<<<<<<< HEAD
                                 savedSession.getSessionNonce(), squatDepthMode);
+=======
+                                savedSession.getSessionNonce(), targets);
+>>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
                     }
                 }
         );
@@ -358,7 +419,8 @@ public class ExerciseAnalysisService {
         // 클라가 받는 값이 DB 와 갈린다 — Session 의 @PrePersist 가 초 이하를 자르므로(#446)
         // 이 값은 이미 DB 에 박힌 것과 같은 값이다.
         return new StartedSession(sessionId, savedSession.getSessionNonce(),
-                savedSession.getStartTime(), Math.floorMod(sessionId, aiChannelPoolSize));
+                savedSession.getStartTime(), Math.floorMod(sessionId, aiChannelPoolSize),
+                savedSession.getTargetRepsPerSet(), savedSession.getTargetSets());
     }
 
     /**
@@ -368,7 +430,11 @@ public class ExerciseAnalysisService {
     @Async("applicationTaskExecutor")
     @Transactional(readOnly = true)
     public void sendAnalysisRequestToFastApi(Long sessionId, VideoRequestDto appDto, String finalUrl, String persona,
+<<<<<<< HEAD
                                              String sessionNonce, String squatDepthMode) {
+=======
+                                             String sessionNonce, SessionTargets targets) {
+>>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
         // 여기는 이미 @Async 워커 스레드 — cid 는 AsyncConfig 의 TaskDecorator 가 넘겨줬고,
         // 세션 id 는 이 흐름의 시작점인 여기서 얹는다.
         try (CorrelationIds.Scope ignored = CorrelationIds.withSession(sessionId)) {
@@ -389,7 +455,14 @@ public class ExerciseAnalysisService {
                     .setReferenceSource(finalUrl)
                     .setPersona(persona)
                     .setSessionNonce(sessionNonce == null ? "" : sessionNonce)
+<<<<<<< HEAD
                     .setDepthMode(squatDepthMode == null ? "" : squatDepthMode);
+=======
+                    // ② (lunge-and-set-backend.md §4): 종목 코드·세트 목표. AI 가 아직 안 읽어도 proto3 기본값이라 무해.
+                    .setExerciseCode(targets.exerciseCode())
+                    .setTargetRepsPerSet(targets.targetRepsPerSet())
+                    .setTargetSets(targets.targetSets());
+>>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
 
             for (ExerciseReference ref : referencePoses) {
                 requestBuilder.addReferencePoses(PoseDataRequest.newBuilder()
@@ -577,9 +650,9 @@ public class ExerciseAnalysisService {
                 return DispatchOutcome.RETRY;
             } catch (RuntimeException e) {
                 // gRPC 실패는 StatusRuntimeException 으로 오지만, 인터셉터·직렬화 등 그 바깥에서 나는
-                // 예외도 있다. 여기서 안 잡으면 "예외를 던지지 않는다"는 이 메서드의 계약이 깨지고,
-                // 발행기는 결과를 못 받아 행을 PROCESSING 으로 방치한 채 lease 만료까지(60초)
-                // 불필요하게 기다리게 된다. 원인이 무엇이든 "지금은 실패, 나중에 재시도"가 맞다.
+                // 예외도 있다. 여기서 안 잡으면 "예외를 던지지 않는다"는 이 메서드의 계약이 깨진다 —
+                // 발행기가 그 예외를 RETRY 로 세긴 하지만(#759) 서킷브레이커엔 실패가 안 남고
+                // 지표(aiStopResult)도 빠진다. 원인이 무엇이든 "지금은 실패, 나중에 재시도"가 맞다.
                 cb.onError(System.nanoTime() - callStart, TimeUnit.NANOSECONDS, e);
                 sessionMetrics.aiStopResult("error");
                 log.error("AI 서버 중단 요청 중 예기치 못한 오류 - sessionId: {}", sessionId, e);

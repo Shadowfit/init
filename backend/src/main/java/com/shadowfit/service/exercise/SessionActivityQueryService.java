@@ -6,9 +6,13 @@ import com.shadowfit.dto.report.record.CalendarMainResponseDto;
 import com.shadowfit.dto.report.record.DailyActivityResponseDto;
 import com.shadowfit.dto.report.record.DailyLogSummaryDto;
 import com.shadowfit.dto.report.record.WeeklyActivityResponseDto;
+import com.shadowfit.global.error.BusinessException;
+import com.shadowfit.global.error.ErrorCode;
 import com.shadowfit.global.util.SetSummaryFormatter;
 import com.shadowfit.model.exercise.Session;
 import com.shadowfit.repository.exercise.SessionRepository;
+import com.shadowfit.repository.exercise.SessionSetRepository;
+import com.shadowfit.model.exercise.SessionSet;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -33,6 +38,7 @@ import java.util.stream.Collectors;
 public class SessionActivityQueryService {
     private final SessionRepository sessionRepository;
     private final AttendanceService attendanceService;
+    private final SessionSetRepository sessionSetRepository;
 
     @Transactional(readOnly = true)
     public WeeklyActivityResponseDto getWeeklyActivity(Long memberId) {
@@ -76,10 +82,10 @@ public class SessionActivityQueryService {
             ));
         }
 
-        List<ExerciseSessionDto> todayDetails = weeklySessions.stream()
+        List<Session> todaySessions = weeklySessions.stream()
                 .filter(s -> s.getStartTime() != null && s.getStartTime().toLocalDate().equals(today))
-                .map(this::toSessionDto)
-                .collect(Collectors.toList());
+                .toList();
+        List<ExerciseSessionDto> todayDetails = toSessionDtos(todaySessions);
 
         return WeeklyActivityResponseDto.builder()
                 .dateRange(String.format("%d월 %d일 - %d일",
@@ -94,6 +100,11 @@ public class SessionActivityQueryService {
 
     @Transactional(readOnly = true)
     public CalendarMainResponseDto getCalendarMain(Long memberId, int year, int month) {
+        if (month < 1 || month > 12) {
+            // LocalDate.of 가 DateTimeException 으로 500 을 내기 전에 400 으로 막는다 (#733).
+            // 모임 캘린더(GroupAttendanceCalendarService.monthlyCalendar)와 같은 모양.
+            throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
+        }
         // 1. 해당 월의 모든 세션 조회
         LocalDate startOfMonth = LocalDate.of(year, month, 1);
         LocalDate endOfMonth = startOfMonth.with(java.time.temporal.TemporalAdjusters.lastDayOfMonth());
@@ -158,10 +169,9 @@ public class SessionActivityQueryService {
         List<Session> sessions = sessionRepository.findByMemberIdAndStartTimeBetween(
                 memberId, date.atStartOfDay(), date.atTime(23, 59, 59));
 
-        List<ExerciseSessionDto> details = sessions.stream()
+        List<ExerciseSessionDto> details = toSessionDtos(sessions.stream()
                 .filter(s -> s.getStartTime() != null)
-                .map(this::toSessionDto)
-                .collect(Collectors.toList());
+                .toList());
 
         return DailyActivityResponseDto.builder()
                 .date(date.toString())
@@ -170,14 +180,26 @@ public class SessionActivityQueryService {
                 .build();
     }
 
-    // Session → ExerciseSessionDto 공용 매핑 (주간 todayDetails / 일별 조회 공유)
-    private ExerciseSessionDto toSessionDto(Session s) {
+    // Session → ExerciseSessionDto 공용 매핑 (주간 todayDetails / 일별 조회 공유).
+    // 세트 행(V26)은 세션 수만큼 쿼리가 나가지 않게 IN 한 방으로 읽어 세션별로 나눈다.
+    private List<ExerciseSessionDto> toSessionDtos(List<Session> sessions) {
+        if (sessions.isEmpty()) return List.of();
+        Map<Long, List<SessionSet>> setsBySession = sessionSetRepository
+                .findBySessionIdInOrderBySessionIdAscSetNoAsc(sessions.stream().map(Session::getId).toList())
+                .stream()
+                .collect(Collectors.groupingBy(set -> set.getSession().getId()));
+        return sessions.stream()
+                .map(s -> toSessionDto(s, setsBySession.getOrDefault(s.getId(), List.of())))
+                .collect(Collectors.toList());
+    }
+
+    private ExerciseSessionDto toSessionDto(Session s, List<SessionSet> sets) {
         ExerciseSessionDto detail = new ExerciseSessionDto();
         detail.setSessionId(s.getId());
         detail.setExerciseName(s.getExercise().getName());
         // 세트 표기는 SetSummaryFormatter 한 곳에서만 만든다 — 과거 여기만 "0세트"로 어긋나
         // 같은 세션이 화면마다 0/1세트로 다르게 보였음(#69).
-        detail.setSetSummary(SetSummaryFormatter.format(s.getTotalReps()));
+        detail.setSetSummary(SetSummaryFormatter.format(sets, s.getTotalReps()));
         detail.setSyncRate(s.getAvgSyncRate() != null ? s.getAvgSyncRate().doubleValue() : 0.0);
         detail.setScoreAvailable(s.getAvgSyncRate() != null);
         return detail;

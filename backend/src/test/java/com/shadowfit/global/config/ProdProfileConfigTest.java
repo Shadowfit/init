@@ -50,8 +50,9 @@ class ProdProfileConfigTest {
     void forwardHeadersDefaultsToNone() throws IOException {
         Object value = load().getProperty("server.forward-headers-strategy");
 
-        // 이 파일은 개발 compose·로컬 bootRun 에도 적용된다(둘 다 prod 프로파일이다).
-        // 그 환경에는 프록시가 없으므로, framework 로 켠 채 두면 X-Forwarded-* 를 그대로
+        // 2026-09-11 부터 이 파일은 prod 프로파일(docker-compose.prod.yml)에서만 읽히지만, 기본값이
+        // none 이어야 하는 이유는 그대로다 — «프록시가 실제로 앞에 있는가» 는 dev/prod 가 아니라
+        // 배포 환경의 사실이라, framework 로 켠 채 두면 프록시 없는 배포에서 X-Forwarded-* 를 그대로
         // 믿어 클라이언트 IP·스킴 위조가 열린다. 켜는 것은 배포 환경의 환경변수 몫이다.
         assertThat(value.toString())
                 .as("환경변수로 받되 기본값은 어디서 돌아도 안전한 쪽이어야 한다")

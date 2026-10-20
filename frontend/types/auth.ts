@@ -43,4 +43,8 @@ export interface ReissueRequest {
 export interface AuthUser {
   email: string;
   role: UserRole;
+  // getMe 가 없어 온보딩 조회(GET /member/onboarding/{email}) 응답의 id·username 으로 채운다.
+  // 그 조회가 실패하면 undefined 로 남으니, 쓰는 쪽은 «모름» 을 감안할 것 (피드의 «(나)» 표시 정도).
+  memberId?: number;
+  username?: string;
 }

@@ -1,9 +1,10 @@
 import { Tabs } from 'expo-router';
+import { Platform, type ColorValue } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Home, BarChart3, CirclePlay, User, type LucideIcon } from 'lucide-react-native';
+import { Home, BarChart3, CirclePlay, Users, User, type LucideIcon } from 'lucide-react-native';
 import { COLORS } from '@/constants/Colors';
 
-function TabIcon({ Icon, color }: { Icon: LucideIcon; color: string }) {
+function TabIcon({ Icon, color }: { Icon: LucideIcon; color: ColorValue }) {
   return <Icon size={22} color={color} strokeWidth={2} />;
 }
 
@@ -19,13 +20,15 @@ export default function TabLayout() {
         tabBarStyle: {
           backgroundColor: COLORS.surface,
           borderTopColor: COLORS.border,
-          height: 60 + insets.bottom,
+          // 웹은 한글 글꼴 줄 높이가 커서 60 이면 탭 글자 칸이 9px 로 눌려 아래가 잘린다 — 웹만 6px 더 준다
+          height: (Platform.OS === 'web' ? 66 : 60) + insets.bottom,
           paddingBottom: 8 + insets.bottom,
           paddingTop: 4,
         },
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: '600',
+          ...(Platform.OS === 'web' && { lineHeight: 14 }),
         },
       }}
     >
@@ -48,6 +51,13 @@ export default function TabLayout() {
         options={{
           title: '운동',
           tabBarIcon: ({ color }) => <TabIcon Icon={CirclePlay} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="groups"
+        options={{
+          title: '모임',
+          tabBarIcon: ({ color }) => <TabIcon Icon={Users} color={color} />,
         }}
       />
       <Tabs.Screen

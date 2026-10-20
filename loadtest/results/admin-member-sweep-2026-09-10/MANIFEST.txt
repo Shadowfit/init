@@ -1,0 +1,29 @@
+# 관리자 회원 목록 선택도 스윕 — 측정 조건
+라운드      : admin-member-sweep-2026-09-10 (TARGET=members)
+커밋        : 13568adc0a56f33459762f87fc5950b4dec1afab
+bootstrap rc: 0
+rig rc      : 0
+시각(UTC)   : 2026-09-10T13:52:43+00:00
+
+## 박스
+인스턴스ID  : i-0a221354428b17d6c
+타입        : m6i.xlarge
+AZ          : ap-northeast-2c
+AMI         : ami-071eb8c676c4c4bf5
+vCPU        : 4
+MemTotal    : 
+커널        : 6.1.182-227.379.amzn2023.x86_64
+
+## 동거 (이 박스에서 같이 돈 것)
+컨테이너    :
+shadowfit-mysql	mysql:8.0	Up 8 minutes (healthy)
+  → ROLE=db 라 MySQL 하나만 떠 있어야 정상이다.
+
+## MySQL
+버전        : 8.0.46
+버퍼풀      : 2048 MB
+flush_method: fsync
+flush_at_trx: 1
+
+## 요금 (하루 이틀 뒤 Cost Explorer 에서 Project=shadowfit-measure 로 채운다)
+실제 청구액 : (미기입)

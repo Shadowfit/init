@@ -13,7 +13,7 @@
 #    같은 자릿수)이다 — 내용 다양성이 아니라 행 크기가 목적이라 다양화하지 않는다.
 #    [[project_synthetic_data_distribution_limit]] 와 같은 한계: 분포 의존 실험엔 못 쓴다.
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."      # loadtest/seed/ → 저장소 루트 (.env 가 거기 있다, #683)
 set -a; . ./.env; set +a
 
 TARGET_MB=${TARGET_MB:-5120}     # 목표 테이블 규모(data+index). 버퍼풀 2,048MB 의 2.5배

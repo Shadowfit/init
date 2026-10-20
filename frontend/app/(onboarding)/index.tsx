@@ -6,8 +6,8 @@ import {
   ScrollView,
   TouchableOpacity,
   Image,
-  Alert,
-} from 'react-native';
+  } from 'react-native';
+import { Alert } from '@/utils/alert';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Slider from '@react-native-community/slider';
 import { useRouter } from 'expo-router';

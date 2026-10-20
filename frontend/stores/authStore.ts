@@ -1,5 +1,9 @@
 import { create } from 'zustand';
+<<<<<<< HEAD
 import { authStorage } from '@/services/authStorage';
+=======
+import * as SecureStore from '@/services/secureStorage';
+>>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
 import { authService } from '@/services/authService';
 import { memberService } from '@/services/memberService';
 import { bumpSessionVersion } from '@/services/sessionVersion';
@@ -84,7 +88,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // 온보딩 상태 조회 (실패해도 로그인 자체는 유지)
     try {
       const onboardingRes = await memberService.getOnboarding(data.email);
-      set({ onboardingCompleted: isOnboardingCompleted(onboardingRes.data) });
+      set((s) => ({
+        onboardingCompleted: isOnboardingCompleted(onboardingRes.data),
+        user: s.user ? { ...s.user, memberId: onboardingRes.data.id, username: onboardingRes.data.username } : s.user,
+      }));
     } catch {
       // 조회 실패 시 미완료로 간주 (안전한 fallback)
       set({ onboardingCompleted: false });
@@ -145,10 +152,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         // 온보딩 상태 조회
         try {
           const onboardingRes = await memberService.getOnboarding(email);
-          set({
+          set((s) => ({
             onboardingCompleted: isOnboardingCompleted(onboardingRes.data),
             isLoading: false,
-          });
+            user: s.user ? { ...s.user, memberId: onboardingRes.data.id, username: onboardingRes.data.username } : s.user,
+          }));
         } catch {
           set({ onboardingCompleted: false, isLoading: false });
         }

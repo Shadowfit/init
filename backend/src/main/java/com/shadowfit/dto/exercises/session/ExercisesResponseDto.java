@@ -60,4 +60,8 @@ public class ExercisesResponseDto {
      */
     @Schema(description = "AI 워커 인덱스(0~N-1). POST /pose 호출 시 X-AI-Worker 헤더로 동봉할 것")
     public Integer aiWorkerIndex;
+    @Schema(description = "세트당 목표 횟수 — 요청값 또는 추천 공식으로 확정된 값. 세션 도중 바뀌지 않는다", example = "12")
+    public Integer targetRepsPerSet;
+    @Schema(description = "목표 세트 수. null = 열린 세트", example = "3")
+    public Integer targetSets;
 }

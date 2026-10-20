@@ -1,5 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+<<<<<<< HEAD
 import { View, Text, StyleSheet, TouchableOpacity, Alert, AppState, Platform, type AppStateStatus } from 'react-native';
+=======
+import { View, Text, StyleSheet, TouchableOpacity, Animated, AppState, type AppStateStatus } from 'react-native';
+import { Alert } from '@/utils/alert';
+>>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { exercisesService } from '@/services/exercisesService';

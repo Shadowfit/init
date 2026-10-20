@@ -74,6 +74,7 @@ def main() -> int:
     p.add_argument("--ai", default="http://localhost:8000")
     p.add_argument("--ai-token", required=True, help="AI_PUBLIC_TOKEN")
     p.add_argument("--exercise-id", type=int, default=1)
+<<<<<<< HEAD
     p.add_argument("--fps", type=float, default=3.0, help="전송 프레임률 (앱과 같은 3fps)")
     p.add_argument("--expected-reps", type=int, help="사람이 센 완료 횟수")
     p.add_argument("--expect-complete-coaching", action="store_true",
@@ -85,6 +86,18 @@ def main() -> int:
     p.add_argument("--expected-depth-grade",
                    choices=["EXCELLENT", "GOOD", "FAIR", "NEEDS_WORK", "POOR"],
                    help="리포트 squatDepthAnalysis.depthGrade가 이 값과 정확히 일치해야 한다")
+=======
+    p.add_argument(
+        "--target-reps-per-set", type=int, default=None,
+        help="세트당 목표 횟수(V26). 생략하면 Spring 이 추천 공식으로 채운다 — 리포트의 sets[] 로 경계를 확인한다",
+    )
+    p.add_argument(
+        "--fps",
+        type=float,
+        default=3.0,
+        help="전송 프레임률 (앱과 같은 3fps). 영상에서 고르는 간격이자 **실제로 보내는 벽시계 간격**이다 (#714)",
+    )
+>>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
     args = p.parse_args()
     if not math.isfinite(args.fps) or args.fps <= 0 or (args.expected_reps is not None and args.expected_reps < 0):
         p.error("fps must be positive and expected-reps must be nonnegative")
@@ -130,9 +143,16 @@ def main() -> int:
     log("온보딩", "200")
 
     # ── ② 세션 시작 (여기서 Spring → AI gRPC StartAnalysis 가 일어난다) ──────
+<<<<<<< HEAD
     r = http.post(f"{args.spring}/exercises/sessions",
                   json={"exerciseId": args.exercise_id, "depthMode": args.depth_mode.upper()},
                   headers=auth)
+=======
+    session_req = {"exerciseId": args.exercise_id}
+    if args.target_reps_per_set is not None:
+        session_req["targetRepsPerSet"] = args.target_reps_per_set
+    r = http.post(f"{args.spring}/exercises/sessions", json=session_req, headers=auth)
+>>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
     if r.status_code not in (200, 202):
         log("세션 시작 실패", f"{r.status_code} {r.text[:200]}")
         return 1
@@ -147,7 +167,8 @@ def main() -> int:
     # "소유권 대조 실패"로 프레임을 버리는데, 그 응답이 일부러 SESSION_NOT_FOUND 와
     # 똑같은 모양이라(session 열거 방지) 겉으로는 "배정이 안 끝났다"와 구분이 안 된다.
     session_nonce = session_body.get("sessionNonce")
-    log("세션 시작", f"{r.status_code} sessionId={session_id} aiWorker={ai_worker}")
+    log("세션 시작", f"{r.status_code} sessionId={session_id} aiWorker={ai_worker} "
+                  f"targetRepsPerSet={session_body.get('targetRepsPerSet')} targetSets={session_body.get('targetSets')}")
 
     # CLI 자체가 예외로 끝나더라도 AI 검출기 lease 를 남기지 않는다. 이전에는 출력 인코딩
     # 오류 하나로 세션이 정리되지 않아 같은 워커의 다음 E1 이 풀 소진으로 실패했다.
@@ -178,7 +199,12 @@ def main() -> int:
         return 1
 
     src_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+<<<<<<< HEAD
     log("영상", f"{args.video} ({src_fps:.2f}fps → {args.fps:g}fps 시각 기준 추출)")
+=======
+    step = max(1, int(round(src_fps / args.fps)))
+    log("영상", f"{args.video} ({src_fps:.1f}fps → {step}프레임마다, {1000 / args.fps:.0f}ms 간격으로 전송)")
+>>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
 
     sent = detected = judged = 0
     max_rep = 0
@@ -187,6 +213,15 @@ def main() -> int:
     idx = 0
     next_sample_time = 0.0
     skipped_msgs: dict[str, int] = {}
+    # 🔴 페이싱 (#714). `--fps` 는 영상에서 «몇 프레임마다 고르나» 만 정했고 보내는 속도는 영상을
+    #    읽는 속도 그대로였다 — 그러면 AI 의 유입 상한(`session_state.MIN_FRAME_INTERVAL_SEC`,
+    #    0.300s)에 걸려 프레임이 `RATE_LIMITED` 로 판정에서 빠진다(실측 11 전송 → 7 판정, rep 0).
+    #    HTTP 는 200 이라 겉으론 정상이고, rep 0 의 원인이 「영상이 못 쓴다」 로 오귀속된다.
+    #    앱은 3fps(`exercise.tsx` intervalMs=330)로 보내므로 같은 fps 를 벽시계 간격으로도 쓴다 —
+    #    새 상수를 만들지 않는다. 간격은 «직전 응답을 받은 시각» 기준이라 요청 지연이 얹혀도 상한
+    #    아래로 내려가지 않는다(상한은 서버 도착 간격으로 재기 때문).
+    send_interval = 1.0 / args.fps
+    next_send_at = 0.0
     while True:
         ok, frame = cap.read()
         if not ok:
@@ -207,6 +242,9 @@ def main() -> int:
             "session_id": session_id,
             "session_nonce": session_nonce,
         }
+        wait = next_send_at - time.monotonic()
+        if wait > 0:
+            time.sleep(wait)
         # 첫 프레임은 AI 배정이 끝날 때까지 재시도한다(위 ②-1 참고).
         attempts = 12 if sent == 0 else 1
         for attempt in range(attempts):
@@ -228,9 +266,13 @@ def main() -> int:
             if attempt == 0:
                 log("AI 배정 대기", str(body.get("message"))[:90])
             time.sleep(1.0)
+<<<<<<< HEAD
         if sent == 0 and body.get("skip_reason") in _NOT_ASSIGNED_YET:
             log("AI 배정 실패", "12회 재시도 후에도 분석기가 배정되지 않았다")
             return 1
+=======
+        next_send_at = time.monotonic() + send_interval
+>>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
         sent += 1
 
         # landmarks 는 **스킵된 프레임에도 들어 있다.** 그게 #196 이 속은 지점이라 스킵보다
@@ -262,6 +304,10 @@ def main() -> int:
     log("자세 안내", f"완료 {complete_coaching}건 · 깊이 미확인 {partial_coaching}건")
     for reason, n in skipped_msgs.items():
         log("  스킵", f"{n}회 — {reason}")
+    # 페이싱을 넣은 뒤에도 이게 0 이 아니면 «영상» 이 아니라 «드라이버» 가 원인이다 — 판정
+    # 프레임을 잘라먹은 채 rep 을 읽으면 #714 의 오귀속이 그대로 되풀이된다.
+    if skipped_msgs.get(PoseSkipReason.RATE_LIMITED.value):
+        log("  ⚠️ RATE_LIMITED", f"--fps {args.fps:g} 의 간격이 AI 유입 상한보다 짧다 — fps 를 낮춰서 다시")
 
     # ── ④ 세션 종료 ─────────────────────────────────────────────────────────
     r = http.patch(f"{args.spring}/sessions/{session_id}/end", headers=auth)
@@ -290,6 +336,7 @@ def main() -> int:
     worst = report.get("worstSection") or {}
     print(f"        worstSection       rep={worst.get('repNumber')} reason={worst.get('reason')}")
     print(f"        repTrend           {len(report.get('repTrend') or [])}건")
+<<<<<<< HEAD
     depth = report.get("squatDepthAnalysis") or {}
     if depth:
         print(f"        squatDepthAnalysis mode={depth.get('depthMode')} "
@@ -311,6 +358,14 @@ def main() -> int:
             print(f"        {name} score={block.get(score_key)} grade={block.get(grade_key)}")
             for line in block.get("narrative") or []:
                 print(f"          - {line}")
+=======
+    # 세트(V26) — Spring 이 pose_data 의 rep 집계를 ceil(rep/T) 로 묶은 것. 세트 도입 전 세션은 [].
+    details = report.get("syncRateDetails") or []
+    print(f"        setInfo            {details[0].get('setInfo') if details else None}")
+    for st in report.get("sets") or []:
+        print(f"        set {st.get('setNo')}              reps={st.get('reps')} avgSync={st.get('avgSyncRate')} "
+              f"t={st.get('startedSec')}~{st.get('endedSec')}s")
+>>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
 
     # ── 판정 ────────────────────────────────────────────────────────────────
     # 200 을 세지 않는다. #196 은 «전 구간 200 인데 전부 0» 이었다.

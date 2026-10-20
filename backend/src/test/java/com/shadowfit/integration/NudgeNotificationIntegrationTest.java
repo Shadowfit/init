@@ -23,6 +23,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -124,12 +125,68 @@ class NudgeNotificationIntegrationTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").value(ErrorCode.NOTIFICATION_NOT_FOUND.getMessage()));
 
+        // 배지 — 받은 사람은 안 읽은 1건, 보낸 사람은 0
+        mockMvc.perform(get("/notifications/unread-count").header("Authorization", "Bearer " + tokenFor(friend)))
+                .andExpect(jsonPath("$.count").value(1));
+        mockMvc.perform(get("/notifications/unread-count").header("Authorization", "Bearer " + tokenFor(me)))
+                .andExpect(jsonPath("$.count").value(0));
+        // 오늘 재촉한 사람 — 화면을 다시 열어도 «재촉함» 을 유지하는 근거
+        mockMvc.perform(get("/friends/nudged-today").header("Authorization", "Bearer " + tokenFor(me)))
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0]").value(friend.getId()));
+        mockMvc.perform(get("/friends/nudged-today").header("Authorization", "Bearer " + tokenFor(friend)))
+                .andExpect(jsonPath("$", hasSize(0)));
+
         mockMvc.perform(patch("/notifications/" + notificationId + "/read")
                         .header("Authorization", "Bearer " + tokenFor(friend)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.read").value(true));
         mockMvc.perform(get("/notifications").header("Authorization", "Bearer " + tokenFor(friend)))
                 .andExpect(jsonPath("$.content[0].read").value(true));
+        mockMvc.perform(get("/notifications/unread-count").header("Authorization", "Bearer " + tokenFor(friend)))
+                .andExpect(jsonPath("$.count").value(0));
+    }
+
+    @Test
+    @DisplayName("POST /friends/{id}/cheer — 본문 저장·알림함에 message, 재촉과 별개로 하루 1회, 빈 본문 400")
+    void cheer_then_inbox() throws Exception {
+        mockMvc.perform(post("/friends/" + friend.getId() + "/nudge")
+                        .header("Authorization", "Bearer " + tokenFor(me)))
+                .andExpect(status().isCreated());
+        // 같은 날 재촉이 있어도 응원은 따로 한 번 된다
+        mockMvc.perform(post("/friends/" + friend.getId() + "/cheer")
+                        .header("Authorization", "Bearer " + tokenFor(me))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"  오늘도 힘내!  \"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.type").value("CHEER"))
+                .andExpect(jsonPath("$.message").value("오늘도 힘내!"));
+        mockMvc.perform(post("/friends/" + friend.getId() + "/cheer")
+                        .header("Authorization", "Bearer " + tokenFor(me))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"한 번 더\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value(ErrorCode.CHEER_ALREADY_SENT_TODAY.getMessage()));
+        mockMvc.perform(post("/friends/" + friend.getId() + "/cheer")
+                        .header("Authorization", "Bearer " + tokenFor(me))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"   \"}"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/friends/" + me.getId() + "/cheer")
+                        .header("Authorization", "Bearer " + tokenFor(me))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"message\":\"나한테\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(ErrorCode.CHEER_SELF_NOT_ALLOWED.getMessage()));
+
+        // 받은 사람 알림함: 응원(최신) → 재촉 순, 재촉의 message 는 null
+        mockMvc.perform(get("/notifications").header("Authorization", "Bearer " + tokenFor(friend)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", hasSize(2)))
+                .andExpect(jsonPath("$.content[0].type").value("CHEER"))
+                .andExpect(jsonPath("$.content[0].message").value("오늘도 힘내!"))
+                .andExpect(jsonPath("$.content[1].type").value("NUDGE"))
+                .andExpect(jsonPath("$.content[1].message", nullValue()));
     }
 
     @Test
@@ -159,14 +216,14 @@ class NudgeNotificationIntegrationTest {
     @DisplayName("UNIQUE(sender, recipient, type, target_date) — 존재 확인을 우회한 두 번째 INSERT 는 DB 가 막는다")
     void uniqueConstraint_isRealInTestSchema() {
         LocalDate day = LocalDate.of(2026, 9, 12);
-        notificationWriter.insert(me, friend, NotificationType.NUDGE, day);
+        notificationWriter.insert(me, friend, NotificationType.NUDGE, day, null);
 
-        assertThatThrownBy(() -> notificationWriter.insert(me, friend, NotificationType.NUDGE, day))
+        assertThatThrownBy(() -> notificationWriter.insert(me, friend, NotificationType.NUDGE, day, null))
                 .isInstanceOf(DataIntegrityViolationException.class);
 
         // 다른 날·다른 상대는 막히지 않는다
-        notificationWriter.insert(me, friend, NotificationType.NUDGE, day.plusDays(1));
-        notificationWriter.insert(friend, me, NotificationType.NUDGE, day);
+        notificationWriter.insert(me, friend, NotificationType.NUDGE, day.plusDays(1), null);
+        notificationWriter.insert(friend, me, NotificationType.NUDGE, day, null);
     }
 
     private Member save(String username) {

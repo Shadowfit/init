@@ -71,27 +71,45 @@
 
 ## 운동 API
 
-### GET /exercises - 운동 종목 목록
+### GET /exercises - 운동 종목 목록 (2026-09-22 구현 — 그 전엔 문서에만 있었다)
+종목 선택 화면용. 인증 필요. `analysisSupported=false` 인 종목도 내려온다 — 그 종목으로 `POST /exercises/sessions` 를 부르면 W007. 화면이 «준비 중» 을 그릴지 숨길지 고른다 ([`decisions/lunge-and-set-backend.md`](./decisions/lunge-and-set-backend.md) §3-C).
+`code` 는 AI 분석기 키(`exercises.code`, V25) — null 이면 분석기가 없는 종목이라 관리자가 분석을 켤 수 없다(W020).
 ```json
 // Response 200
 [
   {
     "id": 1,
+    "code": "SQUAT",
     "name": "스쿼트",
-    "category": "LOWER",
+    "categoryId": 1,
+    "categoryName": "LOWER",
     "description": "하체 전체 운동",
-    "syncThresholdBeginner": 60.0,
-    "syncThresholdAdvanced": 85.0
+    "preferredUrl": "https://www.youtube.com/watch?v=q6hBSSis_60",
+    "expectedDurationMinutes": 15,
+    "analysisSupported": true
+  },
+  {
+    "id": 2,
+    "code": "LUNGE",
+    "name": "런지",
+    "categoryId": 1,
+    "categoryName": "LOWER",
+    "description": null,
+    "preferredUrl": "https://www.youtube.com/watch?v=U4s4mEQ5ovM",
+    "expectedDurationMinutes": 15,
+    "analysisSupported": false
   }
 ]
 ```
 
 ### POST /exercises/sessions - 운동 세션 시작
+`targetRepsPerSet`·`targetSets` 는 선택(2026-09-22, V26). `targetRepsPerSet` 을 생략하면 `GET /recommendations/next-session` 과 같은 공식(페르소나·레벨)으로 채우고, `targetSets` 는 사용자 값만(생략 = 열린 세트). 응답의 두 값이 **세션에 확정된 값**이며 도중에 바꿀 수 없다 — 세트 경계가 «rep 이 이 값에 닿는 순간」 이라 바꾸면 이미 저장된 프레임의 세트가 흔들린다([`decisions/lunge-and-set-backend.md`](./decisions/lunge-and-set-backend.md) §7). 세트 설정 API 는 따로 없다.
 ```json
 // Request
 {
   "exerciseId": 1,
-  "referenceSource": "youtube:https://youtu.be/xxx"
+  "targetRepsPerSet": 12,   // 선택
+  "targetSets": 3           // 선택
 }
 
 // Response 202 Accepted (비동기 - gRPC 호출이 백그라운드로 진행)
@@ -99,17 +117,36 @@
   "sessionId": 42,
   "exerciseId": 1,
   "startTime": "2026-03-30T14:00:00",
-  "status": "IN_PROGRESS"
+  "status": "IN_PROGRESS",
+  "sessionNonce": "…",
+  "aiWorkerIndex": 0,
+  "targetRepsPerSet": 12,
+  "targetSets": 3
 }
 ```
+`GET /sessions/active` 도 같은 두 필드를 돌려준다(이어하기 화면이 «12회 x 3세트」 를 복원할 근거).
 > 내부 흐름: Spring 이 DB에 세션 생성 → 즉시 202 응답 → `@Async` 로 gRPC `StartAnalysis` 송신 (AI 가 기준 좌표 받아 분석 시작). 결합 상세는 [`architecture/ai-backend-integration.md`](./architecture/ai-backend-integration.md).
 
-### POST /exercises/{exerciseId}/reference - 기준 좌표 추출 요청 (관리자)
+### POST /admin/exercises/{exerciseId}/reference-video - 기준 영상(mp4) 업로드 → 기준 좌표 추출 (관리자, 2026-09-17)
 ```
-POST /exercises/1/reference?youtubeUrl=https://youtu.be/xxx
+POST /admin/exercises/1/reference-video
+Content-Type: multipart/form-data; file=<mp4>
+
+// Response 202 — «추출이 시작됐다» 이지 «끝났다» 가 아니다. 좌표는 AI 역호출로 exercise_references 를 교체할 때 바뀐다
+{ "id": 1, "referenceVideoPath": "1/6f9a1c2e-….mp4", ... AdminExerciseDetailDto 전 필드 }
+
+// 400 W016 — 비었거나 .mp4 가 아니거나 파일 머리(ftyp)가 아님 · 413 C007 — 50MB 초과 · 503 W017 — AI 서킷 OPEN(파일·DB 안 건드림)
+```
+> 영상은 공유 볼륨(`/data/reference-videos/{id}/{uuid}.mp4`)에 운동당 1개 보관·교체되고, 경로가 `exercises.reference_video_path` 에 남는다. 결합 상세·트랜잭션 경계는 [`architecture/ai-backend-integration.md` §3-3](./architecture/ai-backend-integration.md).
+
+### POST /exercises/{exerciseId}/reference - 기준 좌표 추출 요청 (관리자) — ⚠️ 유튜브 URL 은 동작하지 않는다
+```
+POST /exercises/1/reference?youtubeUrl=<AI 컨테이너 안 파일 경로>
 
 // Response 202
 "운동 ID [1]에 대한 기준 좌표 추출이 시작되었습니다."
+```
+> 파라미터 이름만 `youtubeUrl` 이다 — AI 가 http(s) 를 거부한다(유튜브 다운로드 ToS 미결정, `decisions/youtube-coordinate-harvest.md` §4-2). 위 mp4 업로드 API 가 실사용 경로다.
 ```
 유튜브 URL → AI 가 MediaPipe로 프레임마다 관절 좌표 추출 → Spring 콜백으로 `exercise_references` 테이블 영속화.
 
@@ -212,9 +249,16 @@ AI = 운동 통계의 단일 진실 원천 원칙. (커밋 143a2e4)
     "syncRateChange": +5.2,
     "repChange": +3
   },
-  "syncRateTimeline": [82.5, 80.1, 75.0, ...]
+  "repTrend": [{ "repNumber": 1, "syncRate": 82.5, "timeStamp": "00:05" }, ...],   // 회차 추이 — 예전 문서의 syncRateTimeline 은 오기
+  "syncRateDetails": [{ "exerciseId": 1, "name": "스쿼트", "setInfo": "3세트 x 12회 (마지막 7회)", "syncRate": 78.5 }],
+  "sets": [                              // 2026-09-22, V26. 세트 도입 전 세션은 []
+    { "setNo": 1, "reps": 12, "avgSyncRate": 80.1, "startedSec": 3.2, "endedSec": 41.0 },
+    { "setNo": 2, "reps": 12, "avgSyncRate": 78.9, "startedSec": 95.4, "endedSec": 133.7 },
+    { "setNo": 3, "reps": 7,  "avgSyncRate": 74.2, "startedSec": 190.0, "endedSec": 214.5 }
+  ]
 }
 ```
+`sets`·`setInfo` 는 AI 가 보낸 값이 아니라 완료 시점에 `pose_data` 의 rep 별 집계를 `ceil(rep_number / targetRepsPerSet)` 로 묶은 것이다(싱크 통계 #75 와 같은 원칙). 마지막 세트만 목표 미달일 수 있어 `setInfo` 는 «N세트 x T회」 또는 «N세트 x T회 (마지막 r회)」 두 꼴뿐이다.
 
 ### ~~GET /reports/weekly~~ → **GET /reports/weekly-summary 로 합쳤다** (2026-08-23, #352)
 
@@ -277,6 +321,12 @@ AI = 운동 통계의 단일 진실 원천 원칙. (커밋 143a2e4)
 `ttsSpeed` 는 0.5~2.0 범위. device TTS 재생 시 클라이언트가 이 값을 그대로 `expo-speech` 의 `rate` 로 전달. ([`11-tts-youtube-guide.md`](./11-tts-youtube-guide.md))
 
 ## 관리자 API (2026-05 추가)
+
+### 종목 코드 `code` (2026-09-22, V25)
+`POST /admin/exercises`·`PATCH /admin/exercises/{id}` 가 `code`(선택, `^[A-Z][A-Z0-9_]{1,31}$`) 를 받고, 목록·상세 응답에 실린다.
+- 중복이면 **409 W018** (UNIQUE 가 어차피 막지만 500 대신 이유를 준다)
+- `analysisSupported=true` 인 종목의 코드 변경은 **409 W019** — 끄고 → 바꾸고 → 기준 영상 다시 올려 → 켠다
+- `PATCH …/analysis-support` 로 켤 때 코드가 없으면 **400 W020** (기준 좌표 없음 W012 와 나란한 필요조건, 코드 검사가 먼저)
 
 ### PATCH /admin/exercises/{exerciseId}/thresholds - 싱크로율 임계값 변경
 관리자 권한(`ROLE_ADMIN`) 필수. 신규 세션부터 적용.
@@ -345,9 +395,27 @@ AI = 운동 통계의 단일 진실 원천 원칙. (커밋 143a2e4)
 > 🔶 **대시보드는 b(상태별 분포)·e(활성 회원) 둘이 비용의 대부분**이다(실측 각각 ~357ms /
 > ~307ms, 나머지 셋 합쳐 5ms 미만). 캐시·인덱스 도입은 미결(§4-5-1 ④).
 
+### 관리자 웹 콘솔용 추가 API (2026-10-09)
+`admin-web/`(별도 웹 앱 — `admin-page-scope.md` §5-1 의 «표 + 페이지 번호» 형태)이 쓰는 API. 전부 관리자 권한 필수, 목록은 위와 같은 `{content, page, size, totalElements, totalPages}` 오프셋 페이징.
+
+| 메서드 · 경로 | 내용 |
+|---|---|
+| `GET /admin/members/{memberId}` | 회원 상세 — 프로필, 세션 수·완료 수·평균 싱크로율·마지막 운동, 소속 모임, 최근 세션 10건 |
+| `GET /admin/stats/daily?days=14` | 일별 추이 — 날짜별 세션 수·완료 수·완료 평균 싱크로율·신규 가입 (빈 날도 0 으로 채움, `days` 1~90) |
+| `GET /admin/stats/community` | 모임 수·활성 참여 수·공유 글·응원 한마디·오늘 재촉 |
+| `GET /admin/groups?keyword=` | 모임 목록 — 그룹장, 활성 멤버 수, 공유 글 수, 마지막 활동 |
+| `GET /admin/groups/{groupId}` | 모임 상세 — 위 요약 + 멤버(역할·상태·가입일) |
+| `DELETE /admin/groups/{groupId}` | 모임 삭제 — 멤버·초대·이벤트·응원 FK CASCADE, 공유 사진 파일도 지움 |
+| `GET /admin/feed-posts?groupId=` | 공유 글(`SESSION_SHARED`) 최신순 — 사진·캡션 검수용 |
+| `DELETE /admin/feed-posts/{postId}` | 공유 글 내리기 — 응원과 사진 파일까지 삭제 |
+
+> 🔶 날짜 직렬화가 두 가지다 — 기존 관리자 DTO(회원·세션·종목·overview)는 `[2026,10,9,20,21,0]` 배열, 이번에 추가한 DTO 는 `"2026-10-09T20:21:00"` 문자열. 앱 쪽 영향 때문에 전역 설정은 건드리지 않았고, 관리자 웹이 둘 다 받는다(`admin-web/src/format.ts`).
+>
+> 🔶 관리자 계정을 만드는 API 는 없다 — DB 에서 직접 `users.role = 'ADMIN'` 으로 지정한다(권한 신청 기능은 만들었다가 필요 없다고 해서 뺐다, 2026-10-09).
+
 ## 모임·소셜 API (2026-08~09 추가)
 
-설계 근거: [`decisions/multiuser-realtime-sync.md`](./decisions/multiuser-realtime-sync.md)(그룹 4테이블·WS 릴레이), [`decisions/social-cheer-and-group-feed.md`](./decisions/social-cheer-and-group-feed.md)(친구=같은 모임 ACTIVE 멤버, 출석=COMPLETED 세션, 재촉·푸시·자동 글·리액션). 전부 JWT 필수. 권한 규칙은 하나 — **같은 모임의 ACTIVE 멤버**(아니면 403 `G002`). 에러 코드 `G001`~`G009`·`N001`~`N003` 은 `ErrorCode` 참고.
+설계 근거: [`decisions/multiuser-realtime-sync.md`](./decisions/multiuser-realtime-sync.md)(그룹 4테이블·WS 릴레이), [`decisions/social-cheer-and-group-feed.md`](./decisions/social-cheer-and-group-feed.md)(친구=같은 모임 ACTIVE 멤버, 출석=COMPLETED 세션, 재촉·푸시·자동 글·리액션). 전부 JWT 필수. 권한 규칙은 하나 — **같은 모임의 ACTIVE 멤버**(아니면 403 `G002`). 에러 코드 `G001`~`G011`·`N001`~`N003` 은 `ErrorCode` 참고.
 
 ### 모임
 
@@ -358,7 +426,8 @@ AI = 운동 통계의 단일 진실 원천 원칙. (커밋 143a2e4)
 | `GET /groups/mine` | 내 모임 목록 | ACTIVE 인 것만 |
 | `GET /groups/{groupId}` | 모임 상세 | `members[]`(memberId·username·role·status·joinedAt) 포함 |
 | `POST /groups/{groupId}/invite-code` | 초대 코드 재발급 | OWNER 만(403 `G007`). 이전 코드 즉시 무효 |
-| `DELETE /groups/{groupId}/members/me` | 탈퇴 | 행은 LEFT 로 남고(재가입 시 되살림), 남긴 글·리액션은 그대로 |
+| `PUT /groups/{groupId}/owner` | 그룹장 양도 | `{memberId}`. OWNER 만(403 `G007`). 대상이 ACTIVE 멤버 아니면 404 `G011`, 자기 자신이면 400. 넘긴 쪽은 MEMBER |
+| `DELETE /groups/{groupId}/members/me` | 탈퇴 | MEMBER: 행은 LEFT 로 남고(재가입 시 되살림), 남긴 글·리액션은 그대로. **OWNER**: 다른 ACTIVE 멤버가 있으면 409 `G010`(양도 먼저), 혼자면 **모임 삭제**(멤버·초대·피드 CASCADE) — #721 |
 | `POST /groups/{groupId}/invitations` | 초대 발송 | `{inviteeId}`. ACTIVE 멤버 누구나. 이미 대기중 409 `G006` |
 | `GET /invitations/mine` | 내게 온 대기중 초대 | |
 | `POST /invitations/{id}/accept` · `/decline` | 수락·거절 | 수락 = 코드 참여와 같은 가입 경로(`MEMBER_JOINED` 발행). 이미 응답 409 `G005` |
@@ -377,6 +446,7 @@ AI = 운동 통계의 단일 진실 원천 원칙. (커밋 143a2e4)
 | `GET /groups/{groupId}/members/status` | 구성원 운동 현황 | ACTIVE 전원의 `attendedToday`·`streak`. 정렬: 오늘 완료 → 진행 중 → 기록 없음 |
 | `GET /friends` | 친구의 운동 현황 | 내가 속한 모든 모임의 ACTIVE 멤버(나 제외, 중복 제거), 같은 항목·같은 정렬 |
 | `GET /groups/{groupId}/attendance?year&month` | 모임 출석 캘린더 | 그 달의 모든 날 × `attendedCount`(COMPLETED 세션이 있는 현재 ACTIVE 멤버 수) + `activeMemberCount`(분모). 칸 농도 매핑은 프론트 |
+| `GET /attendance/mine` | 내 스트릭 카드 (2026-09-18, streak-card-api.md) | `today`·`attendedToday`·`currentStreak(+Start)`·`longestStreak(+Start/End)`·`thisWeek`(월~일 7개 고정). 최장 기록 동률이면 최근 구간. 문구(«오늘 하면 N일째», «갱신 중» = `currentStreak == longestStreak && longestStreakEnd ≥ 어제`)는 프론트 파생 |
 
 «출석» 의 정의는 한 곳 — `AttendanceService`: **COMPLETED 세션이 있는 날**(status 무관이던 예전 캘린더 정의와 다름), streak 은 창 없이 최신순 커서로 첫 끊김에서 중단. 노출 항목은 §3-G 로 고정된 셋(오늘 여부·연속일수·합산 출석)뿐 — rep 수·칼로리·세션 상세는 남에게 안 보인다.
 
@@ -386,6 +456,17 @@ AI = 운동 통계의 단일 진실 원천 원칙. (커밋 143a2e4)
   { "memberId": 3, "username": "영희", "profileImageUrl": null, "attendedToday": false, "streak": 0 } ]
 ```
 
+```json
+// GET /attendance/mine  Response 200 — MyAttendanceResponseDto (기록 없으면 0·null, thisWeek 는 전부 false)
+{ "today": "2026-09-18", "attendedToday": false,
+  "currentStreak": 5, "currentStreakStart": "2026-09-13",
+  "longestStreak": 12, "longestStreakStart": "2026-07-01", "longestStreakEnd": "2026-07-12",
+  "thisWeek": [ { "date": "2026-09-14", "attended": true }, { "date": "2026-09-15", "attended": true },
+                { "date": "2026-09-16", "attended": true }, { "date": "2026-09-17", "attended": true },
+                { "date": "2026-09-18", "attended": false }, { "date": "2026-09-19", "attended": false },
+                { "date": "2026-09-20", "attended": false } ] }
+```
+
 ### 피드·리액션
 
 | 메서드·경로 | 요약 | 비고 |
@@ -393,6 +474,13 @@ AI = 운동 통계의 단일 진실 원천 원칙. (커밋 143a2e4)
 | `GET /groups/{groupId}/feed?beforeSeq&size` | 모임 피드 | 최신순 keyset. `beforeSeq` 생략 = 최신부터, `size` 기본 20·최대 100. 응답 `nextBeforeSeq` 를 다음 요청에(null 이면 끝) |
 | `PUT /groups/{groupId}/events/{seq}/reactions/{kind}` | 리액션 달기 | **멱등** — 이미 있어도 200. `kind` = `HEART` \| `FIRE`(밖이면 400). 같은 글에 둘 다 가능. 글 없음 404 `G009` |
 | `DELETE /groups/{groupId}/events/{seq}/reactions/{kind}` | 리액션 취소 | **멱등** — 없어도 200 |
+| `POST /groups/{groupId}/shares` | 운동 공유 (2026-10-06) | multipart — `sessionId`(필수) · `caption`(선택, 200자) · `photo`(선택, jpg·png·webp 10MB, 앞 바이트로 판정). `SESSION_SHARED` 글 → 201 + 피드 항목. **같은 운동을 같은 모임에 두 번이면 409 `G012`**(V19 UNIQUE 가 최종 판정), 다른 모임엔 가능. 내 것이 아니거나 안 끝난 세션 404 `G013`, 사진 형식 400 `G014`. payload 공개 항목은 종목·유효 횟수·운동 시간·한마디·`photoUrl` — 싱크로율 비공개 |
+| `GET /groups/shares?sessionId` | 이 운동을 이미 공유한 내 모임 | `[groupId]` — 공유 화면의 «공유됨» 잠금용 |
+| `PUT /groups/{groupId}/events/{seq}/cheers` | 피드 글 응원 한마디 | `{message}` 1~100자. **한 글에 회원당 한 줄**(V27 UNIQUE) — 다시 보내면 문구만 바뀐다. 응답 = 그 글의 응원 전부(오래된 순) |
+| `DELETE /groups/{groupId}/events/{seq}/cheers` | 내 응원 지우기 | 멱등 200 |
+| `GET /feed-photos/{name}` | 피드 사진 | **인증 없음**(웹 `<img>` 가 헤더를 못 실음). 이름이 UUID 라 추측 불가, 피드 응답에만 실린다. 30일 캐시 |
+
+피드 항목에는 `cheers: [{memberId, username, message}]` 가 함께 실린다(2026-10-06). 공유 글(`SESSION_SHARED`)과 자동 완료 글(`SESSION_COMPLETED`)은 타입이 달라 서로를 막지 않는다 — 앱은 자동 글을 한 줄 소식으로, 공유 글을 사진 카드로 그린다.
 | `GET /groups/{groupId}/events?afterSeq` | WS 재연결 백필 | `afterSeq` 이후 **전부·오름차순·무페이징**. 피드 화면용이 아니라 소켓이 끊긴 동안 놓친 것을 채우는 용도 |
 
 피드 항목은 `group_events` 행이다. 서버가 만드는 타입은 `SESSION_COMPLETED`(세션 완료 시 아웃박스를 거쳐 회원의 ACTIVE 모임마다 1건, `senderId` = 완료한 회원, `payload` = `{sessionId, memberId, username, exerciseName}`)와 `MEMBER_JOINED`(`payload` = `{memberId, username}`). 소켓 클라이언트가 보낸 임의 `type` 도 같은 표에 쌓이므로 프론트는 모르는 타입을 무시해야 한다. 리액션은 알림·소켓 발행이 없다 — 재조회로 반영된다.
@@ -418,16 +506,21 @@ AI = 운동 통계의 단일 진실 원천 원칙. (커밋 143a2e4)
 | 메서드·경로 | 요약 | 비고 |
 |---|---|---|
 | `POST /friends/{memberId}/nudge` | 재촉하기 | 같은 모임 ACTIVE 멤버에게만. **같은 사람에게 하루 1회** — 두 번째는 409 `N002`. 자기 자신 400 `N003`. 응답 = 만든 알림 → 201 |
+| `POST /friends/{memberId}/cheer` | 응원 보내기 | `{message}` 1~100자(앞뒤 공백 제거, 빈 문자열 400). 같은 모임 ACTIVE 멤버에게만. **같은 사람에게 하루 1회 — 재촉과 별개로 센다**(두 번째 409 `N004`). 자기 자신 400 `N005`. 응답 = 만든 알림(`type=CHEER`, `message` 채움) → 201. 완료한 상대에게 보내는 것이 정상 경로라 서버는 아무 조건도 안 본다 |
 | `GET /notifications?page&size` | 내 알림함 | 최신순 offset(`PageResponse`), `size` 기본 20·최대 100. 보낸 사람이 탈퇴했으면 `sender*` null |
 | `PATCH /notifications/{id}/read` | 읽음 처리 | 남의 것·없음 404 `N001`. 이미 읽었으면 처음 시각 그대로 200. «모두 읽음» 없음 |
 | `POST /push-tokens` | 푸시 토큰 등록 | `{token, platform}` — `ExponentPushToken[...]` 형식 아니면 400, `platform` = `IOS`\|`ANDROID`. **멱등 200**(신규든 갱신이든). 다른 계정이 같은 토큰을 등록하면 소유자가 옮겨감. 삭제 API 없음 — 로그아웃이 계정 단위로 지움 |
 
-재촉의 전달은 셋 — 알림 행(원천, 항상) · 접속 중이면 소켓(#7, 진행 중) · 등록된 기기가 있으면 Expo Push(아웃박스 `PUSH_NOTIFICATION` 경유, at-least-once). 서버는 «오늘 이미 완료한 상대» 재촉을 막지 않는다 — 버튼 노출은 프론트.
+재촉·응원의 전달은 셋 — 알림 행(원천, 항상) · 접속 중이면 소켓(#7, 진행 중) · 등록된 기기가 있으면 Expo Push(아웃박스 `PUSH_NOTIFICATION` 경유, at-least-once). 서버는 «오늘 이미 완료한 상대» 재촉을 막지 않는다 — 버튼 노출은 프론트.
 
 ```json
 // POST /friends/2/nudge  Response 201 — NotificationDto
 { "id": 55, "type": "NUDGE", "senderId": 1, "senderUsername": "민수", "senderProfileImageUrl": null,
   "targetDate": "2026-09-14", "read": false, "readAt": null, "createdAt": "2026-09-14T08:00:00" }
+
+// POST /friends/2/cheer  {"message":"오늘도 힘내!"}  Response 201 — NotificationDto (재촉은 message=null)
+{ "id": 56, "type": "CHEER", "senderId": 1, "senderUsername": "민수", "senderProfileImageUrl": null,
+  "targetDate": "2026-09-17", "message": "오늘도 힘내!", "read": false, "readAt": null, "createdAt": "2026-09-17T08:05:00" }
 ```
 
 ### WebSocket `/ws/groups/{groupId}?token={JWT}`

@@ -30,7 +30,6 @@ def _registry_with_live_session(session_id: int = 1):
     state.rep_state = "bottom"
     state.frame_index = 300
     state.previous_smoothed_knee = 95.5
-    state.recent_raw_knees = [95.0, 96.0, 95.5]
     state.current_rep_frames.append(
         PerRepFrame(timestamp_sec=10.0, joint_coordinates="[]", angles=[95.0])
     )

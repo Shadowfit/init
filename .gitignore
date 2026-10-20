@@ -168,3 +168,8 @@ loadtest/seed/template.sql
 #    포트폴리오 본체(one-pager, db-deep-dive, realmysql-experiments 등)는 계속 추적한다.
 docs/portfolio/application-*
 docs/portfolio/career-statement-*
+
+# ==================== 런타임 데이터 ====================
+# 관리자가 올린 기준 영상(mp4) — docker-compose 가 /data/reference-videos 로 bind mount 한다
+backend/data/
+data/

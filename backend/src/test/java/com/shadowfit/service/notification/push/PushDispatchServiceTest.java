@@ -43,7 +43,7 @@ class PushDispatchServiceTest {
 
     private void target(String... tokens) {
         when(store.load(NID)).thenReturn(Optional.of(
-                new PushTarget(NID, NotificationType.NUDGE, "철수", List.of(tokens))));
+                new PushTarget(NID, NotificationType.NUDGE, "철수", null, List.of(tokens))));
     }
 
     @Test
@@ -69,9 +69,16 @@ class PushDispatchServiceTest {
     @Test
     @DisplayName("보낸 사람이 탈퇴해 없으면 «모임 친구가 …»")
     void senderGone_fallbackName() {
-        assertThat(PushDispatchService.body(new PushTarget(NID, NotificationType.NUDGE, null, List.of())))
+        assertThat(PushDispatchService.body(new PushTarget(NID, NotificationType.NUDGE, null, null, List.of())))
                 .isEqualTo("모임 친구가 오늘 운동을 재촉했어요");
     }
+    @Test
+    @DisplayName("CHEER 는 보낸 사람 + 본문을 그대로 싣는다")
+    void cheer_bodyCarriesMessage() {
+        assertThat(PushDispatchService.body(new PushTarget(NID, NotificationType.CHEER, "철수", "오늘도 힘내!", List.of())))
+                .isEqualTo("철수님이 응원을 보냈어요: 오늘도 힘내!");
+    }
+
 
     @Test
     @DisplayName("DeviceNotRegistered 섞임 → 그 토큰만 삭제, 나머지 ok 면 SENT")

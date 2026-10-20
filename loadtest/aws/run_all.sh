@@ -14,8 +14,9 @@
 # ⚠️ nohup 없이 & 만 붙이면 SSH 가 끊길 때 같이 죽는다.
 #
 # 🔴 **끝나면 인스턴스를 스스로 끈다** (AUTO_SHUTDOWN 기본 1, 2026-08-24). 단 **업로드가
-#    성공했을 때만**이고, 정지까지 SHUTDOWN_DELAY_MIN(기본 5)분의 유예가 있다.
-#    박스를 남기려면 `AUTO_SHUTDOWN=0` 을 넘길 것.
+#    성공했고(FINAL_OK) 이번 판의 단계가 하나도 FAIL·TIMEOUT 이 아닐 때만**이고(PHASES_OK, #641),
+#    정지까지 SHUTDOWN_DELAY_MIN(기본 5)분의 유예가 있다. 2대 구성이면 리플리카(REPLICA_HOST)·
+#    대상(TARGET_HOST, #688)도 같은 조건으로 같이 끈다. 박스를 남기려면 `AUTO_SHUTDOWN=0` 을 넘길 것.
 #    ⚠️ 이것이 도는 것은 **이 스크립트로 돈 판**뿐이다. rig 을 SSH 로 직접 부르면
 #       (예: run_arms.py 를 손으로) 아무것도 안 끈다 — 그때는 사람이 꺼야 한다.
 
@@ -75,7 +76,9 @@ S3_DEST="${S3_BASE%/}/$RUN_ID"
 #        로컬에 있다는 걸 전제하는 DDL/backup 라운드용이라, p6-loader 박스(MySQL 없음)에서
 #        무조건 FAIL 한다. 그 FAIL 이 `run_all.sh`의 다른 문제와 겹치면(예: 거의 빈 결과물도
 #        업로드는 성공) `AUTO_SHUTDOWN` 이 그 성공을 「정상 종료」로 오인해 박스를 조기에
-#        꺼버릴 수 있다 — 실측을 시작도 못 한 판이 «측정 완료» 처럼 보인다.
+#        꺼버릴 수 있었다 — 실측을 시작도 못 한 판이 «측정 완료» 처럼 보인다.
+#        ⚠️ 그 오인 자체는 #641 로 막혔다 — 이제 FAIL·TIMEOUT 단계가 하나라도 있으면 안 끈다.
+#        그래도 넣지 않는다 — 안 끌 뿐 측정은 여전히 시작도 못 하고 멈춘다.
 #
 #   풀 사이징 재실험 10~20 (docs/decisions/pool-sizing-10-20-experiment-design.md, 2대 구성) —
 #   **부하기 박스에서**, httpread 와 같은 이유(TARGET_SSH 로 대상을 재기동·스크레이프한다):
@@ -197,6 +200,10 @@ SYNC_SEC=${SYNC_SEC:-300}
 #
 #    ⚠️ 이 값이 1 이어도 **업로드가 실패하면 안 끈다** — 아래 마무리 절이 FINAL_OK 를 본다.
 #       인스턴스 안에만 있는 결과를 끄는 것은 측정을 통째로 버리는 것과 같다.
+#    ⚠️ 그리고 **단계가 하나라도 FAIL·TIMEOUT 이면 안 끈다** (PHASES_OK, #641 — 사용자 승인 규칙).
+#       업로드가 성공해도 마찬가지다. 실패 로그만 올라간 판을 «정상 종료» 로 보고 끄면 원인을
+#       볼 박스가 5분 안에 사라진다 — repl_preflight(#641 최초)·R14 의 preflight(#583, 부하기 두 대)·
+#       q2(2026-09-06, #682) 에서 실제로 났다. 이때는 이 박스·리플리카·대상 **전부** 남긴다.
 #
 #    끄려면(박스를 남기고 싶으면): AUTO_SHUTDOWN=0 을 넘긴다.
 #    이미 돌고 있는 판을 취소하려면: pkill -f 'shutdown'  (아래 유예 안에)
@@ -438,13 +445,6 @@ FP_VENV=${FP_VENV:-$ROOT/ai-server/.venv/bin/python}
 # 상한은 그 2~3배로 준다 — 걸려서 끊기는 것보다 낫다.
 TIMEOUT_FP=${TIMEOUT_FP:-10800}                          # 3시간
 
-# ── 박스 보정값 (從 R11) ─────────────────────────────────────────────────
-#
-# `round-to-round-nonreproducibility.md` §2·§5 축0. R6 이 이미 쓴 것을 그대로 재사용한다
-# (`FP_VENV`·`CORES_RIG` 도 재사용 — 새 변수를 늘리지 않는다). 소요 1~2분, 새 인스턴스 0.
-CALIB_RIG=${CALIB_RIG:-$ROOT/loadtest/results/ai-path-profile-2026-08-17/profile_e2e_and_scaling.py}
-TIMEOUT_CALIB=${TIMEOUT_CALIB:-300}                       # 설계가 잰 소요의 2~3배
-
 # ── 복제 지연 · 반동기 (主 P4) ───────────────────────────────────────────
 #
 # 🔴 **이 라운드도 2대다.** 다만 P6 와 자리가 반대다 — P6 는 부하기에서 돌며 대상을
@@ -488,6 +488,10 @@ export PW DB_NAME CONTAINER
 mkdir -p "$OUTDIR" || { echo "🔴 $OUTDIR 를 못 만든다" >&2; exit 1; }
 PHASE_LOG=$OUTDIR/phases.tsv
 [ -f "$PHASE_LOG" ] || printf "phase\tstatus\tseconds\tstarted_at\n" > "$PHASE_LOG"
+# 이번 호출이 쓰기 시작하는 자리. 자동 정지 판정(PHASES_OK, #641)은 **이 뒤의 행만** 본다 —
+# OUTDIR 을 직접 줘서 같은 디렉터리로 러너를 다시 부르면(축 B 부팅 rig 처럼) 표에 **지난
+# 호출의 행**이 남아 있고, 이미 사람이 본 옛 FAIL 이 이번 판의 정지를 막으면 안 된다.
+PHASE_LOG_START=$(wc -l < "$PHASE_LOG")
 
 say() { echo; echo "════════ $* ════════"; }
 note() { echo "  $*"; }
@@ -625,9 +629,12 @@ phase_preflight() {
 # 유효 클럭이 다르면 그 서명이 그대로 나온다. 그걸 가르려면 **박스가 초당 얼마나 일하는지**를
 # 앱과 무관하게 재둔 값이 있어야 한다.
 #
-# 🔴 지금 그 값이 **어느 라운드에도 없다.** P6 1·2라운드의 보정값은 영영 못 얻는다 — 그 박스는
+# 🔴 08-26 이전 라운드에는 이 값이 **없다.** P6 1·2라운드의 보정값은 영영 못 얻는다 — 그 박스는
 #    사라졌다. 그래서 처방이 «지금부터 모든 라운드가 들고 다니게» 다
-#    (설계: docs/decisions/round-to-round-nonreproducibility.md §3 축 0).
+#    (설계: docs/decisions/round-to-round-nonreproducibility.md §3 축 0 · 인용 규칙 ㉠ §8).
+#    두 축 중 **cpu 축(iter/s)이 처리량을 설명한다** — 축 A(08-26)·축 B(09-14) 실측. infer 축은
+#    같은 부팅 안에서도 5~12% 흔들려 보정값이 못 된다. 이것과 별개로 있던 `calibration` phase
+#    (R6 rig 의 1워커 판 = infer 축과 같은 종류)는 2026-09-14 에 없앴다(#744).
 #
 # 비용은 라운드당 **10~20초**다. 실패해도 라운드를 막지 않는다 — 값이 없는 것과 라운드가
 # 죽는 것은 다른 일이다.
@@ -1482,55 +1489,6 @@ phase_framepath() {
   return 0
 }
 
-# ── 박스 보정값 (從 R11) ─────────────────────────────────────────────────
-#
-# «CPU% 는 시간이지 일의 양이 아니다» — 물리 호스트의 유효 클럭이 라운드마다 다르면
-# 같은 CPU% 로 다른 처리량이 나온다(08-17 관측: AI CPU 869.3%→869.0%인데 처리량 +17.7%,
-# `round-to-round-nonreproducibility.md`). 단일 스레드로 고정 프레임 수를 추론해 걸린
-# 시간만 재면 동시성·부하기·네트워크가 다 빠지고 **이 박스가 초당 얼마나 일하는가** 만
-# 남는다 — R6 이 이미 이 방법으로 79.9fps 를 냈다. **판정에 쓰든 안 쓰든 무조건 기록한다**
-# (설계 §3 축0) — 지금 못 걸으면 이 박스가 사라진 뒤엔 영영 못 잰다(P6 1·2라운드가 그랬다).
-#
-# 🔴 ROLE=ai-venv 전용이다 — mediapipe 가 host venv 에 바로 있어야 `import` 가 된다.
-#    도커로 띄우는 P6 대상 박스는 이 phase 로 못 돈다 — aws/README.md 의 P6 절
-#    「보정값(從 R11)」에 있는 `docker exec` 한 줄을 손으로 돌릴 것.
-phase_calibration() {
-  local out=$OUTDIR/calibration
-  mkdir -p "$out"
-
-  if [ ! -x "$FP_VENV" ]; then
-    note "🔴 venv 인터프리터가 없다: $FP_VENV — ROLE=ai-venv 부트스트랩을 안 거쳤다. 이 단계는 그 역할 전용이다"
-    return 1
-  fi
-  if [ ! -f "$CORES_RIG/frames.json" ]; then
-    note "🔴 frames.json 이 없다: $CORES_RIG — 이 판이 먹을 프레임이 없다"
-    return 1
-  fi
-
-  {
-    echo "# 박스 보정값 — $(date -Is)"
-    echo "인스턴스 타입 : $(imds instance-type)"
-    echo "인스턴스 ID   : $(imds instance-id)"
-    echo "AZ            : $(imds placement/availability-zone)"
-  } > "$out/box.txt"
-  cat "$out/box.txt"
-
-  timeout --kill-after=30 "$TIMEOUT_CALIB" \
-    env SCALING_WORKERS=1 "$FP_VENV" "$CALIB_RIG" "$CORES_RIG/frames.json" scaling \
-    > "$out/scaling_raw.txt" 2>&1
-  local rc=$?
-  cat "$out/scaling_raw.txt"
-  [ $rc -eq 0 ] || { note "🔴 보정 측정 실패(rc=$rc) — 위 원문 확인"; return 1; }
-
-  # 「   1 <스레드fps> ...」 표에서 워커=1 행만 뽑아 라운드 간 대조용 한 줄로 남긴다.
-  if ! awk '/^ *1 /{print; found=1} END{exit !found}' "$out/scaling_raw.txt" > "$out/scaling_1w.txt"; then
-    note "⚠️ 1워커 행을 못 찾았다 — scaling_raw.txt 를 직접 볼 것"
-  fi
-
-  note "보정 완료 — $out/box.txt + scaling_1w.txt 를 다른 라운드의 같은 파일과 대조할 것"
-  return 0
-}
-
 # #276 — «uk 있음 + 중복 0 + 같은 파티션» 칸을 채운다.
 #
 # 이 단계가 답하는 것은 **정상 트래픽(재전송 없음)도 데드락이 나는가** 하나다. 로컬 라운드의
@@ -1986,10 +1944,13 @@ for p in $PHASES; do
         note "🔴 프레임 경로 라운드 실패 — 게이트가 막았거나 rig 이 죽었다. run_arms.log 를 볼 것"
       } ;;
     calibration)
-      # `break`·`continue` 안 함 — 실패해도 뒤에 오는 본 측정·collect 는 그대로 간다(從 이다).
-      run_phase calibration phase_calibration || {
-        note "⚠️ 보정값 없이 진행한다 — 이 라운드는 다른 라운드와 절대값 비교가 안 될 수 있다"
-      } ;;
+      # 2026-09-14 에 없앴다(#744) — 한 번도 값을 낸 적이 없는 phase 였고(어느 라운드에도
+      # scaling_1w.txt 가 없다), 내던 값(1워커 추론 fps)은 calibrate_box 의 infer 축과 같은
+      # 종류인데 축 A·B 실측에서 그 축은 보정값이 못 된다고 나왔다. 보정값은 preflight 의
+      # calibrate_box 가 calibration.tsv 로 남긴다(cpu 축이 처리량을 설명한다). 옛 레시피가
+      # 이 단계를 적어 놓았어도 라운드는 안 막는다.
+      note "⏭  'calibration' 단계는 없어졌다(2026-09-14, #744) — 보정값은 preflight 의 calibrate_box → calibration.tsv"
+      printf "calibration\tSKIP\t0\t%s\n" "$(date -Is)" >> "$PHASE_LOG" ;;
     r276)      run_phase r276      phase_r276 ;;
     r276app)   run_phase r276app   phase_r276app ;;
     ukbp)      run_phase ukbp      phase_ukbp ;;
@@ -2046,13 +2007,70 @@ fi
 say "단계 요약"
 cat "$PHASE_LOG"
 
+# ── 자동 정지 판정 ① — 단계 (#641) ─────────────────────────────────────
+#
+# FINAL_OK 는 **«업로드가 됐다» 하나만** 뜻한다 — 그 뜻은 그대로 둔다(위 요금 절·README 가 그 이름으로
+# 인용한다). 문제는 그것만 보고 끄면 **측정이 실패했는데 업로드는 성공한 판**이 «정상 종료» 로
+# 읽힌다는 것이다 — 실패 로그 몇 줄이라도 업로드는 성공한다. repl_preflight 가 2초 만에 FAIL 한
+# 판에서 소스·리플리카가 몇 분 뒤 terminate 돼 원인 로그가 볼륨째 사라졌다(#641 최초 재현),
+# q2 가 실행권한 누락(#682)으로 즉시 FAIL 한 판도 똑같았다(2026-09-06, #641 댓글).
+# 그래서 판정을 하나 더 둔다 — 사용자 승인 규칙(#641):
+#   **이번 판의 단계가 하나라도 FAIL(rc)·TIMEOUT 이면 업로드가 성공했어도 아무 박스도 안 끈다.**
+#
+# 무엇을 실패로 세나 — run_phase 가 쓰는 상태는 OK·TIMEOUT·FAIL(rc) 셋이고, 그 밖에 이 파일이
+# 직접 쓰는 것이 SKIP 하나다. **SKIP 은 일부러 안 센다:**
+#   ㉮ 리허설·게이트가 실패해 본 측정을 막은 SKIP(backup·backup_real·repl·coresidency) — 원인인
+#      리허설/게이트 행이 **같은 표에 이미 FAIL 로 있다.** 그 행 하나로 이미 안 끈다. SKIP 을
+#      같이 세도 답은 같고, 같은 사건을 두 번 세는 것뿐이다
+#   ㉯ 일부러 건너뛴 SKIP(calibration — #744 로 없앤 단계를 옛 레시피가 적었을 때). 이건 실패가
+#      아니다. 세면 옛 레시피 한 줄 때문에 **멀쩡한 판의 박스가 밤새 켜진다**
+#   🔴 그래서 규칙은 «OK 가 아니면 실패» 가 아니라 «**OK·SKIP 이 아니면** 실패» 다. 새 상태
+#      문자열이 생기면(예: 새 게이트가 다른 말을 쓰면) 기본으로 실패 쪽에 떨어진다 — 모르는 상태에서
+#      박스를 끄는 것보다 남기는 쪽이 싸다(밤새 켜둔 c7i.4xlarge ~$17 vs 원인 로그를 잃고 부트스트랩부터 다시)
+# ⚠️ 표에 **행을 안 남기는** 경우는 이 판정이 못 본다. 둘 다 받아들인다:
+#   - preflight 류가 FAIL 해 `break` 로 안 돈 뒤쪽 단계 — 원인 FAIL 행이 있어 이미 안 끈다
+#   - PHASES 오타로 «알 수 없는 단계» 가 된 것 — 아무것도 안 돌았으니 들여다볼 박스 상태도 없다
+#     (러너 로그에 note 한 줄만 남는다. 끄는 것이 맞다)
+# ⚠️ 이번 호출의 행만 본다(PHASE_LOG_START, 위 PHASE_LOG 옆 주석) — 같은 OUTDIR 로 다시 부른
+#    판에서 지난 호출의 FAIL 이 이번 판을 막지 않게.
+FAILED_PHASES=$(tail -n +"$((PHASE_LOG_START + 1))" "$PHASE_LOG" 2>/dev/null \
+  | awk -F'\t' '$2 != "OK" && $2 != "SKIP" { printf "%s%s=%s", sep, $1, $2; sep=" " }')
+if [ -z "$FAILED_PHASES" ]; then PHASES_OK=1; else PHASES_OK=0; fi
+
+# ── 자동 정지 판정 ② — 대상 박스가 이 박스 자신인가 (#688) ──────────────
+#
+# TARGET_HOST 를 쓰는 라운드(P6 동거·httpwrite·httpread·poolsizing)는 러너가 **부하기**에서 돌고
+# 대상은 다른 박스다. 그런데 헤더 P6 절이 적은 대로 부하기를 따로 안 두면 `TARGET_SSH="bash -c"`
+# 로 선다 — 그때 «대상» 은 이 박스 자신이라, 아래에서 대상을 따로 끄면 같은 박스에 정지를 두 번 건다
+# (두 번째가 첫 번째를 덮어써 해는 없지만 «대상에 정지를 걸었다» 는 note 가 거짓이 된다).
+# 🔴 **문자열("bash -c")로 판정하지 않는다** — "sh -c" 로 줄 수도, 자기 사설 IP 로 ssh 할 수도 있다.
+#    인스턴스 ID 를 양쪽에서 읽어 비교한다(collect 가 대상 타입을 읽는 것과 같은 IMDSv2 경로).
+#    어느 한쪽이라도 못 읽으면 **«다른 박스» 로 본다** — 그러면 대상에 정지를 걸어 보는데, 실제로 같은
+#    박스였다면 위의 덮어쓰기일 뿐이고, 다른 박스였다면 그게 맞는 동작이다. 반대로 «같은 박스» 로
+#    잘못 보면 #688 로 되돌아간다(대상이 안 꺼진다). 틀려도 싼 쪽으로 떨어뜨린다.
+target_is_self() {
+  local self tgt
+  self=$(imds instance-id)
+  tgt=$($TARGET_SSH "TOK=\$(curl -sf --max-time 3 -X PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 60'); curl -sf --max-time 3 -H \"X-aws-ec2-metadata-token: \$TOK\" http://169.254.169.254/latest/meta-data/instance-id" 2>/dev/null | tr -d '\r')
+  [ -n "$self" ] && [ "$self" = "$tgt" ]
+}
+
 # 🔴 업로드가 실패했으면 **절대 안 끈다.** 인스턴스 안에만 있는 결과를 끄는 건
 #    측정을 통째로 버리는 것과 같다. 사람이 와서 회수해야 한다.
-if [ "$AUTO_SHUTDOWN" = "1" ] && [ "$FINAL_OK" = "1" ]; then
-  # 🔴 **리플리카를 먼저 끈다.** 2대 라운드(P4)에서 이 스크립트는 소스 박스에서 돌고,
-  #    소스를 먼저 끄면 리플리카를 끌 SSH 가 사라져 **그 박스가 켜진 채로 남는다.**
-  #    결과는 이미 S3 에 올라갔고(FINAL_OK) 리플리카에는 산출물이 없으므로 꺼도 잃을 것이 없다.
-  #    ⚠️ 업로드가 실패한 판(아래 elif)에서는 리플리카도 안 끈다 — 무대를 들여다볼 수 있어야 한다.
+# 🔴 단계가 실패했어도 안 끈다(#641, 위 판정 ①). 결과는 올라갔어도 **원인은 박스 안에** 있다.
+#
+# ⚠️ 이 블록이 끄는 박스는 **이 박스·REPLICA_HOST·TARGET_HOST** 셋뿐이다. 러너가 SSH 로 모는 박스가
+#    더 있는 라운드 — poolsizing 3대 구성의 DB_HOST(#812) — 는 여기서 안 끈다. (R10-b 의
+#    FP_REMOTE_TARGET 은 배선 자체가 없다 — #708 이 지웠고 #813 ㉡ 로 되살리지 않았다)
+#    그 박스는 사람이 끈다(#688 은 TARGET_HOST 만 다뤘다).
+if [ "$AUTO_SHUTDOWN" = "1" ] && [ "$FINAL_OK" = "1" ] && [ "$PHASES_OK" = "1" ]; then
+  # 🔴 **리플리카·대상을 먼저 끈다.** 2대 라운드에서 이 스크립트는 한쪽 박스(P4 는 소스, P6·http* 는
+  #    부하기)에서 돌고, 이 박스를 먼저 끄면 다른 박스를 끌 SSH 가 사라져 **그 박스가 켜진 채로 남는다.**
+  #    결과는 이미 S3 에 올라갔고(FINAL_OK) 산출물은 이 박스의 OUTDIR 에 모이므로(대상 쪽 로그·조건은
+  #    각 단계·collect 가 TARGET_SSH 로 걷어 온다) 꺼도 잃을 것이 없다.
+  #    ⚠️ 업로드나 단계가 실패한 판(아래 elif)에서는 저쪽도 안 끈다 — 무대를 들여다볼 수 있어야 한다.
+  #    ⚠️ **대상을 다음 라운드가 또 쓸 때**(예: 같은 대상에 httpwrite 뒤 httpread — 헤더 참고)는
+  #       앞 호출에 AUTO_SHUTDOWN=0 을 줄 것. 이제는 부하기만이 아니라 **대상도** 꺼진다.
   if [ -n "$REPLICA_HOST" ]; then
     if $REPLICA_SSH "shutdown -h +$SHUTDOWN_DELAY_MIN '측정 종료 — run_all.sh (소스가 껐다)'" >/dev/null 2>&1; then
       note "리플리카($REPLICA_HOST)에 정지를 걸었다 — ${SHUTDOWN_DELAY_MIN}분 후"
@@ -2060,12 +2078,32 @@ if [ "$AUTO_SHUTDOWN" = "1" ] && [ "$FINAL_OK" = "1" ]; then
       note "🔴 리플리카($REPLICA_HOST)를 못 껐다 — **직접 정지할 것.** 소스만 꺼지면 그 박스는 켜진 채 요금이 붙는다"
     fi
   fi
+  # #688 — 예전엔 이 분기가 없어서 09-08 P6 라운드의 대상(c7i.4xlarge)이 collect 뒤 2시간 24분을
+  # 켜진 채 과금됐다. 부하기(이 박스)는 정상 종료했으니 «끝났다» 로 보이는 게 함정이었다.
+  if [ -n "$TARGET_HOST" ]; then
+    if target_is_self; then
+      note "대상($TARGET_HOST)은 이 박스 자신이다 — 아래 이 박스의 정지로 같이 꺼진다"
+    elif $TARGET_SSH "shutdown -h +$SHUTDOWN_DELAY_MIN '측정 종료 — run_all.sh (부하기가 껐다)'" >/dev/null 2>&1; then
+      note "대상($TARGET_HOST)에 정지를 걸었다 — ${SHUTDOWN_DELAY_MIN}분 후"
+    else
+      note "🔴 대상($TARGET_HOST)을 못 껐다 — **직접 정지할 것.** 부하기만 꺼지면 그 박스는 켜진 채 요금이 붙는다(#688)"
+    fi
+  fi
   note "${SHUTDOWN_DELAY_MIN}분 후 정지한다 (취소: pkill -f 'shutdown')"
   shutdown -h +"$SHUTDOWN_DELAY_MIN" "측정 종료 — run_all.sh"
 elif [ "$AUTO_SHUTDOWN" = "1" ]; then
-  note "⚠️ 자동 정지가 켜져 있지만 업로드가 실패해서 **끄지 않는다.** 결과가 이 인스턴스에만 있다"
+  if [ "$FINAL_OK" != "1" ]; then
+    note "⚠️ 자동 정지가 켜져 있지만 업로드가 실패해서 **끄지 않는다.** 결과가 이 인스턴스에만 있다"
+  fi
+  if [ "$PHASES_OK" != "1" ]; then
+    note "⚠️ 자동 정지가 켜져 있지만 실패한 단계가 있어서 **끄지 않는다**(#641): $FAILED_PHASES"
+    note "   원인 로그를 볼 수 있게 박스를 남긴다. 들여다본 뒤 **직접 정지할 것** — 업로드가 됐어도 이 판은 자동으로 안 꺼진다"
+  fi
   if [ -n "$REPLICA_HOST" ]; then
     note "   리플리카($REPLICA_HOST)도 안 끈다 — 무대를 들여다볼 수 있어야 한다. 회수한 뒤 **두 대 다** 직접 정지할 것"
+  fi
+  if [ -n "$TARGET_HOST" ]; then
+    note "   대상($TARGET_HOST)도 안 끈다 — 무대를 들여다볼 수 있어야 한다. 회수한 뒤 **부하기·대상 두 대 다** 직접 정지할 것"
   fi
 else
   note "자동 정지 꺼짐 — 회수 확인 후 직접 정지할 것. AWS-RIDE-ALONG.md §5 체크리스트를 볼 것"
@@ -2073,5 +2111,8 @@ else
   #    거짓이면 run_all.sh 가 **종료코드 1** 로 끝난다(성공한 판인데도).
   if [ -n "$REPLICA_HOST" ]; then
     note "   🔴 **두 대다.** 리플리카($REPLICA_HOST)를 잊지 말 것 — 산출물이 없어서 눈에 안 띈다"
+  fi
+  if [ -n "$TARGET_HOST" ]; then
+    note "   🔴 **두 대다.** 대상($TARGET_HOST)을 잊지 말 것 — 산출물이 부하기에 모여 있어서 눈에 안 띈다(#688)"
   fi
 fi

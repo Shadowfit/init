@@ -3,6 +3,8 @@ package com.shadowfit.service.exercise;
 import com.shadowfit.dto.report.record.CalendarMainResponseDto;
 import com.shadowfit.dto.report.record.DailyActivityResponseDto;
 import com.shadowfit.dto.report.record.WeeklyActivityResponseDto;
+import com.shadowfit.global.error.BusinessException;
+import com.shadowfit.global.error.ErrorCode;
 import com.shadowfit.model.exercise.Category;
 import com.shadowfit.model.exercise.Exercise;
 import com.shadowfit.model.exercise.Session;
@@ -25,6 +27,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * {@code SessionService} 의 조회 집계 3개(getWeeklyActivity/getCalendarMain/getDailyActivity)를
@@ -163,6 +166,17 @@ class SessionActivityQueryServiceTest {
         // 평균 낼 값이 하나도 없을 때의 fallback — 운동일수는 그대로 1일로 잡혀야 한다
         assertThat(result.getTotalAvgSyncRate()).isZero();
         assertThat(result.getMonthlyExerciseDays()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("getCalendarMain — month 가 1~12 밖이면 DateTimeException(500)이 아니라 INVALID_INPUT_VALUE(400) (#733)")
+    void getCalendarMain_monthOutOfRange_isInvalidInput() {
+        for (int month : new int[]{0, 13}) {
+            assertThatThrownBy(() -> sessionActivityQueryService.getCalendarMain(member.getId(), 2026, month))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getErrorCode())
+                    .isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+        }
     }
 
     @Test

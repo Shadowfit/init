@@ -1,7 +1,7 @@
 # 라운드 매니페스트 — 조용한 박스 (①커버링 인덱스 처리량 + ②파티션 유의성 재검정)
 
 작성일: 2026-09-03
-상태: **착수 확정 (2026-09-03 사용자 결정) · 실행 전**
+상태: **실행 완료 (2026-09-06) · 결과 머지됨** — ①카드 A 처리량 [결과](../results/card-a-write-throughput-2026-09-06/README.md)(#703) · ②파티션 재검정 round4 [결과](../results/q2-partition-quiet-box-2026-08-24/round4/README.md)(#702). 아래 §3~§7 은 실행 전 계획 그대로 남긴다
 태우는 것: 主 **카드 A 후속**([설계](../../docs/decisions/covering-index-write-throughput.md)) ·
 主 **從 R12 잔여**([설계](../../docs/decisions/partition-hole-drop-significance-retest.md))
 절차 전문: [`README.md`](README.md) · 탑승 목록: [`../AWS-RIDE-ALONG.md`](../AWS-RIDE-ALONG.md)

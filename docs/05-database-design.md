@@ -42,6 +42,7 @@ CREATE TABLE users (
 CREATE TABLE exercises (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(100) NOT NULL,                          -- 스쿼트, 데드리프트, 턱걸이
+    code VARCHAR(32) NULL UNIQUE,                        -- AI 분석기 키 (SQUAT·LUNGE·PLANK). NULL = 분석기 없는 종목 (V25, 2026-09-22)
     category ENUM('LOWER', 'BACK', 'UPPER', 'CORE', 'FULL') NOT NULL,
     description TEXT,
     preferred_url VARCHAR(500),                          -- 기본 레퍼런스 영상 (코드상 컬럼명)
@@ -52,6 +53,21 @@ CREATE TABLE exercises (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ```
+
+### exercise_session_sets (세션별 세트 요약) — 2026-09-22 추가 (V26)
+```sql
+CREATE TABLE exercise_session_sets (
+    session_id    BIGINT       NOT NULL,
+    set_no        INT          NOT NULL,   -- 1-based
+    reps          INT          NOT NULL,   -- 마지막 세트만 목표 미달일 수 있다
+    avg_sync_rate DECIMAL(5,2) NOT NULL,   -- rep 가중 평균 (#75 와 같은 계산)
+    started_sec   DOUBLE       NOT NULL,   -- pose_data.timestamp_sec 과 같은 원점
+    ended_sec     DOUBLE       NOT NULL,
+    PRIMARY KEY (session_id, set_no),
+    FOREIGN KEY (session_id) REFERENCES exercise_sessions(id) ON DELETE CASCADE
+);
+```
+세션 완료 시점에 Spring 이 `pose_data` 의 rep 별 집계를 `ceil(rep_number / target_reps_per_set)` 로 묶어 채운다(`SessionSetAssembler`). `pose_data` 에 `set_index` 를 두지 않는 이유 — 세트 경계가 «목표 도달」 하나뿐이라 역산되고, 파티션 표 ALTER 를 피한다. `pose_data` 파티션은 보존 기간 뒤 드롭되므로 리포트가 세트를 계속 보여주려면 이 표가 필요하다. 설계: [`decisions/lunge-and-set-backend.md`](./decisions/lunge-and-set-backend.md) §7.
 
 ### exercise_references (운동별 기준 좌표) — 2026-04 추가
 ```sql
@@ -81,7 +97,9 @@ CREATE TABLE exercise_sessions (
     max_sync_rate DECIMAL(5,2),
     min_sync_rate DECIMAL(5,2),
     calories_burned DECIMAL(7,2),
-    difficulty_level INT DEFAULT 1,
+    difficulty_level INT DEFAULT 1,                      -- 2026-09-22 부터 세션 시작 때 추천 level 로 채움(그전엔 항상 1)
+    target_reps_per_set INT NULL,                        -- 세트당 목표 (V26). NULL = 세트 도입 전 세션
+    target_sets INT NULL,                                -- 목표 세트 수, 사용자 입력만 (V26). NULL = 열린 세트
     status ENUM('IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'FAILED') DEFAULT 'IN_PROGRESS',
     version BIGINT NOT NULL DEFAULT 0,               -- JPA @Version (낙관적 락, 2026-05 추가)
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -178,14 +196,18 @@ CREATE TABLE exercise_feedback_templates (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     exercise_id BIGINT NOT NULL,
     feedback_type VARCHAR(30) NOT NULL,    -- KNEE_OVER, BACK_BEND, GOOD_FORM, REP_COUNT 등
+    persona VARCHAR(10) NULL,              -- 페르소나별 멘트. NULL = 페르소나 행이 없을 때의 공통 fallback
+    persona_key VARCHAR(10) AS (COALESCE(persona, '')) VIRTUAL,   -- V22: UNIQUE 용 투영 (#715)
     message VARCHAR(200) NOT NULL,         -- 한국어 멘트 (예: "무릎이 발끝을 넘었습니다")
     priority INT NOT NULL DEFAULT 100,     -- 낮을수록 우선
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (exercise_id) REFERENCES exercises(id) ON DELETE CASCADE,
-    UNIQUE KEY uk_exercise_feedback (exercise_id, feedback_type)
+    UNIQUE KEY uk_exercise_feedback_persona_key (exercise_id, feedback_type, persona_key)
 );
 ```
 세션 시작 시 클라이언트가 `GET /exercises/{exerciseId}/feedback-templates` 로 받아 device TTS 로 재생. 다국어 분리 컬럼 없음 ([[project_korean_only]]).
+
+UNIQUE 가 `persona` 가 아니라 `persona_key` 에 걸린 이유(#715): MySQL 은 UNIQUE 인덱스에서 NULL 을 서로 다른 값으로 보므로 `(exercise_id, feedback_type, persona)` 로는 **fallback 행(persona NULL)만 몇 개든 들어갔다** — 제약이 제일 필요한 자리에서 안 걸렸다. `COALESCE(persona, '')` 생성 컬럼에 걸면 fallback 도 종목·결함당 한 줄이다. `persona` 는 그대로 nullable 이라 읽는 쪽(`persona IS NULL` fallback merge)은 안 바뀐다.
 
 ### session_feedback_logs (세션별 TTS 발화 이벤트 로그) — 2026-05 추가
 ```sql

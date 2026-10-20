@@ -1,0 +1,17 @@
+boot_k        : 1
+생성          : 2026-09-13T15:19:36+00:00
+boot_id       : afdb348b-283c-483f-b543-11367a33cc2f
+uptime -s     : 2026-09-13 15:15:38
+instance-id   : i-04962c061c3bd30c1
+instance-type : c7i.4xlarge
+AZ            : ap-northeast-2c
+host-id(IMDS) :    # 전용 호스트가 아니면 비어 있다(404)
+system-uuid   : ec2e2296-ee49-9ba8-8ee7-d140ca74e073
+bios          : 1.0 / 10/16/2017
+cpu model     :  Intel(R) Xeon(R) Platinum 8488C
+cpu family/model/stepping : 6 / 143 / 8
+microcode     : 0x2b000661
+cpu MHz(참고) : 3452.926   # 가상화라 신뢰 안 함(설계 §6)
+nproc         : 16
+kernel        : 6.1.182-227.379.amzn2023.x86_64
+커밋          : 838d816dbc9560a3c3088a7d32da8c12659bc9b7

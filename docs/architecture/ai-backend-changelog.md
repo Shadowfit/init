@@ -54,6 +54,7 @@ Spring은 V22의 `repetition_only` 플래그로 런지 점수를 NULL 처리한�
 2026-07-31  084fac7   ReattachAnalysis 신설 — AI 상태 소실 복구 경로
 2026-08-03  e28bc65   타임아웃으로 걷는 세션도 AI 에 통보
 2026-08-07  e027889   머지로 드러난 proto 계약 불일치 2건
+2026-09-14  (#614)    AI→Spring 완료 콜백을 상한 있는 풀로 — Spring 저하가 AI 스레드 폭증으로 번지던 경로 차단 (전달 의미론은 불변, 실패 처리 변경)
 ```
 
 네 단계로 요약:
@@ -324,6 +325,27 @@ Spring은 V22의 `repetition_only` 플래그로 런지 점수를 NULL 처리한�
 | 추적성 | 없음 | **correlation id 양방향** |
 | proto 밖 계약 | 토큰 메타데이터 | **+ `x-request-id` 메타데이터** |
 
+### #772 — feat(admin): 관리자 mp4 업로드 → 기준 좌표 추출 (2026-09-17) ⭐ proto 밖 계약 + 응답 의미 변경
+
+- **호출자가 생겼다.** `ExtractReferenceData`(Spring → AI) 는 그때까지 `POST /exercises/{id}/reference?youtubeUrl=` 하나가 불렀는데, AI 가 http(s) 를 거부하도록 좁힌 뒤(#192)로는 **사실상 아무도 못 쓰는 경로**였다. `POST /admin/exercises/{id}/reference-video`(multipart) 가 공유 볼륨에 mp4 를 쓰고 그 경로로 이 RPC 를 부른다 — [integration.md §3-3](./ai-backend-integration.md#3-3-extractreferencedata--proto-밖-계약-두-개--2026-09-17-관리자-mp4-업로드)
+- **proto 밖 계약 ①: 파일시스템.** `youtube_url` 필드에 «AI 컨테이너가 열 수 있는 경로» 가 실리고, 그 경로가 같은 파일을 가리키는 건 compose 의 bind mount(`./backend/data/reference-videos` → 양쪽 `/data/reference-videos`)가 보장한다. 필드 이름·타입은 안 바뀌어서 proto 검사가 이 계약을 못 본다 — 갱신 트리거 3번
+- **응답 의미 변경 ②: «추출됨» → «접수됨».** AI 핸들러가 동기 추출을 끝내고 응답하던 것을, 검사(원격 URL·파일 존재)만 하고 즉시 반환 + 백그라운드 1스레드 풀로 바꿨다. Spring 의 5초 데드라인에 매번 걸려 **성공한 추출이 서킷 실패로 집계**되던 것(윈도 10·최소 5 → 업로드 5번이면 그 채널 라이브 세션 거부)을 없앤다. `extracted_poses` 는 항상 빈 값 — 갱신 트리거 1번(의미 변경)·4번(실패 처리)
+- **Spring 쪽 경계.** `exercises.reference_video_path`(V23) 갱신은 tx, 파일 쓰기는 tx 앞, gRPC 는 `afterCommit`, tx 실패 시 파일 삭제(보상). 서킷 OPEN 이면 파일·DB 를 건드리기 전에 503(W017)
+- **AI 코드 변경을 동반한다** — §6 두 번째 관찰의 예외가 아니라 같은 결이다(신뢰성 문제를 AI 쪽에서 닫음). 결정 기록: 이 대화(2026-09-17)에서 사용자 confirm — 전달 ①공유 볼륨, 기록 = 컬럼 1개, 보관·교체, 상한 50MB, 서킷 ㄴ, 데드라인 A
+
+### 런지·세트 ② — proto 에 종목 코드·세트 목표 (2026-09-22) ⭐ 메시지 필드 추가, AI 미착수
+
+- **왜 지금인가.** 캡스톤 1회차 보고(09-22)가 런지·세트를 이번 학기 범위로 되돌렸고, 그 설계([`../decisions/lunge-and-set-backend.md`](../decisions/lunge-and-set-backend.md) §7)가 «종목의 정체를 DB id 에서 `exercises.code` 로」(#785)·«세트 경계 = rep 목표 도달 하나」(#786)를 박제했다. 이 커밋은 그 두 값을 AI 로 나르는 계약 — `AnalyzeRequest(7·8·9)`·`ReattachRequest(8·9·10)`·`ExtractRequest(4)`. [integration.md §3-4](./ai-backend-integration.md)
+- **결합 방향이 이례적이다.** 지금까지 계약 변경은 «AI 가 보내고 Spring 이 받는」 쪽(rep_number·smoothed_knee_angle)이 많았는데, 이번엔 **Spring 이 먼저 보내고 AI 가 나중에 읽는다.** 세트 저장·집계를 Spring 이 `pose_data` 로 하기로 해서(#75 와 같은 원칙) AI 몫이 «cue 와 레지스트리 키」 로 줄었고, 그래서 Spring 쪽을 AI 답 전에 먼저 갈 수 있었다. 필드 이름·번호는 AI 담당자와 합의 전 Spring 제안 — 바꾸자고 하면 AI 가 읽기 전에 바꾼다.
+- **원래 초안에 있던 `SessionCompleteRequest.sets`(AI → Spring 세트 요약)는 취소됐다** — ③ 착수 때 «완료 시점에 Spring 이 rep 집계로 만든다」 로 바뀌어 proto 에 안 들어갔다.
+- **AI 코드 변경 없음**(pb2 재생성만). 갱신 트리거 1번. 판정 기준(5번)은 AI 가 `exercise_code` 로 분석기를 고르기 시작할 때 다시 온다.
+
+### #759 — fix(outbox): `dispatch()` 예외를 RETRY 로 센다 (2026-09-23) ⭐ 실패 처리 변경, Spring 단독
+
+- **무엇이 새고 있었나.** 발행기는 송신이 **던진** 예외를 잡고 로그만 남겼다 — 행은 `PROCESSING` 으로 남아 lease(60초) 만료 뒤 `claimStale` 이 회수했는데, 회수는 `retry_count` 를 안 올린다. 그래서 «상한 10회 후 `FAILED`» 라는 §4 의 서술이 **RETRY 로 분류돼 돌아온 실패에만** 참이었고, 영구 예외는 상한 밖에서 영원히 돌았다(주간 리포트 차선에선 리포트가 영원히 «준비 중»).
+- **바꾼 것.** `AbstractOutboxPublisher.dispatchOne` 이 예외의 출처를 가른다 — `dispatch()` 예외 = RETRY(재시도 기록 + 백오프, 상한 초과 시 `onGivenUp` → `FAILED`), 결과 기록 단계 예외 = 예전대로 회수 대기. 예외 뒤 재시도 기록마저 실패하면 후자로 떨어져 행을 잃지 않는다.
+- **결합면 영향.** `StopAnalysis`·`ReattachAnalysis` 경로는 gRPC 실패를 이미 RETRY 로 분류해 돌려주므로(예외를 안 던지는 계약) 보통 경로는 그대로다. 달라지는 건 그 분류 밖에서 새는 예외(DB 조회 실패·gRPC 밖 런타임 예외)뿐이다 — 이제 재시도 상한을 소진한다. 갱신 트리거 2번(전달 보장)·4번(실패 처리).
+
 ---
 
 ## 5. 결합 요소별 변경 시점
@@ -346,6 +368,7 @@ Spring은 V22의 `repetition_only` 플래그로 런지 점수를 NULL 처리한�
 | **아웃박스** (상한 있는 재시도) | cb26e4a · 993dfa1 | eebf852(CAS), e28bc65·025a014(타임아웃 경로 편입) |
 | **세션 재부착** (`ReattachAnalysis`) | 084fac7 | c98d405, d440cae(타임아웃 레이스 확정) |
 | **`user.proto` / `UserService`** | (초기 — 커밋 불명) | 🔴 **한 번도 구현·호출된 적이 없다** — §6 |
+| **기준 영상 공유 볼륨** (`ExtractReferenceData` 경로 계약) | 2026-09-17 (관리자 mp4 업로드) | — |
 
 ---
 

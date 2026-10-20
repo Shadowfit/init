@@ -58,6 +58,9 @@ class SessionServiceTest {
     @Autowired private ExercisesRepository exercisesRepository;
     @Autowired private com.shadowfit.repository.exercise.CategoryRepository categoryRepository;
     @Autowired private OutboxEventRepository outboxRepository;
+    @Autowired private com.shadowfit.service.report.DailyLogService dailyLogService;
+    @Autowired private com.shadowfit.repository.report.DailyLogRepository dailyLogRepository;
+    @Autowired private jakarta.persistence.EntityManager em;
     // endSession 이 더 이상 이걸 부르지 않는다는 것 자체를 검증한다(요청 경로에 외부 호출 없음).
     @MockitoBean private ExerciseAnalysisService analysisService;
     // 발행기가 테스트 도중 돌면서 아웃박스 행을 집어가면 검증이 흔들린다 — 스케줄 실행을 막는다.
@@ -81,6 +84,62 @@ class SessionServiceTest {
     }
 
     @Nested
+    @DisplayName("deleteSession — daily_logs 추종 (#718)")
+    class DeleteSessionDailyLog {
+
+        private Session completed(LocalDateTime start, int minutes, String calories) {
+            return sessionRepository.saveAndFlush(Session.builder()
+                    .member(member).exercise(exercise)
+                    .startTime(start).endTime(start.plusMinutes(minutes))
+                    .status(Status.COMPLETED).totalReps(5).difficultyLevel(1)
+                    .avgSyncRate(new BigDecimal("70.0")).caloriesBurned(new BigDecimal(calories))
+                    .build());
+        }
+
+        @Test
+        @DisplayName("COMPLETED 세션을 지우면 그날 분·칼로리가 남은 세션 합으로 다시 계산된다")
+        void deleteCompleted_recomputesThatDay() {
+            LocalDateTime day = LocalDateTime.of(2026, 3, 31, 9, 0);
+            Session a = completed(day, 10, "30.0");
+            Session b = completed(day.plusHours(2), 25, "80.5");
+            // 완료 콜백이 하는 것과 같은 누적 — 두 세션이 더해진 상태에서 시작한다
+            dailyLogService.accumulateStats(member.getId(), day.toLocalDate(), 10, new BigDecimal("30.0"));
+            dailyLogService.accumulateStats(member.getId(), day.toLocalDate(), 25, new BigDecimal("80.5"));
+
+            sessionService.deleteSession(a.getId(), member.getId());
+
+            var log = dailyLogRepository.findByMemberIdAndLogDate(member.getId(), day.toLocalDate()).orElseThrow();
+            assertThat(log.getTotalExerciseTime()).isEqualTo(25);
+            assertThat(log.getTotalCalories()).isEqualByComparingTo("80.5");
+
+            sessionService.deleteSession(b.getId(), member.getId());
+
+            // 재계산은 네이티브 UPDATE 라 위에서 읽은 엔티티가 1차 캐시에 남는다 — 비우고 다시 읽는다
+            em.clear();
+            log = dailyLogRepository.findByMemberIdAndLogDate(member.getId(), day.toLocalDate()).orElseThrow();
+            assertThat(log.getTotalExerciseTime()).isZero();
+            assertThat(log.getTotalCalories()).isEqualByComparingTo("0");
+        }
+
+        @Test
+        @DisplayName("다른 날의 daily_logs 는 건드리지 않는다")
+        void deleteCompleted_leavesOtherDaysAlone() {
+            LocalDateTime d1 = LocalDateTime.of(2026, 3, 30, 9, 0);
+            LocalDateTime d2 = LocalDateTime.of(2026, 3, 31, 9, 0);
+            Session s1 = completed(d1, 10, "30.0");
+            completed(d2, 20, "50.0");
+            dailyLogService.accumulateStats(member.getId(), d1.toLocalDate(), 10, new BigDecimal("30.0"));
+            dailyLogService.accumulateStats(member.getId(), d2.toLocalDate(), 20, new BigDecimal("50.0"));
+
+            sessionService.deleteSession(s1.getId(), member.getId());
+
+            var other = dailyLogRepository.findByMemberIdAndLogDate(member.getId(), d2.toLocalDate()).orElseThrow();
+            assertThat(other.getTotalExerciseTime()).isEqualTo(20);
+            assertThat(other.getTotalCalories()).isEqualByComparingTo("50.0");
+        }
+    }
+
+    @Nested
     @DisplayName("createSession")
     class CreateSession {
 
@@ -94,6 +153,34 @@ class SessionServiceTest {
             assertThat(result.getId()).isNotNull();
             assertThat(result.getStatus()).isEqualTo(Status.IN_PROGRESS);
             assertThat(result.getMember().getId()).isEqualTo(member.getId());
+        }
+
+        /**
+         * 세트 목표(V26). body 에 없으면 추천 공식 — 이 회원은 workoutLevel 이 없어 level 1, BEGINNER 라 baseReps 10
+         * → targetReps 10 (RecommendationService.buildRecommendation). 추천 level 은 difficultyLevel 에도 들어간다.
+         */
+        @Test
+        @DisplayName("targetRepsPerSet 생략 → 추천 공식으로 채우고 difficultyLevel 도 추천 level 로")
+        void createSession_fillsTargetFromRecommendation() {
+            VideoRequestDto dto = VideoRequestDto.builder().exerciseId(exercise.getId()).build();
+
+            Session result = sessionService.createSession(dto, member.getId(), "https://youtu.be/dummy");
+
+            assertThat(result.getTargetRepsPerSet()).isEqualTo(10);
+            assertThat(result.getTargetSets()).as("세트 수는 공식이 없어 사용자 값만").isNull();
+            assertThat(result.getDifficultyLevel()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("targetRepsPerSet·targetSets 를 보내면 그 값이 세션에 확정된다")
+        void createSession_keepsRequestedTargets() {
+            VideoRequestDto dto = VideoRequestDto.builder()
+                    .exerciseId(exercise.getId()).targetRepsPerSet(15).targetSets(4).build();
+
+            Session result = sessionService.createSession(dto, member.getId(), "https://youtu.be/dummy");
+
+            assertThat(result.getTargetRepsPerSet()).isEqualTo(15);
+            assertThat(result.getTargetSets()).isEqualTo(4);
         }
 
         @Test

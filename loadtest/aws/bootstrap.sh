@@ -89,6 +89,65 @@ case "$ROLE" in
   *) die "모르는 ROLE 이다: '$ROLE' — db · p6-target · p6-loader · ai-venv · app 중 하나여야 한다" ;;
 esac
 
+# ── AI 메모리 캡 ≤ 호스트 RAM (#698, 처방 ㉡) ─────────────────────────────
+#
+# 🔴 **캡이 호스트 RAM 보다 크면 그 캡은 캡이 아니다.** 컨테이너가 자기 cgroup 한도에 영영
+#    못 닿으니 `OOMKilled` 는 끝까지 false 로 남고(판정 채널이 조용하다), 압력은 컨테이너가 아니라
+#    **호스트 회수 경로**로 샌다 — 스왑이 0 이면 kswapd 가 회수 못 할 페이지를 계속 훑는다.
+#    기본값 20000m(≈19.5GiB)는 c7i.4xlarge(32GiB) 기준 상수라 c7i.2xlarge(15,708MiB)에 그대로
+#    쓰면 이 조합이 된다 — 08-28·09-08 두 라운드가 실제로 그 조합이었다(#698 본문).
+#    ⚠️ 그 조합이 08-28 의 «718초 무응답» 을 **일으켰는지는 미검증**이다(#698 🔴 절 — 캡을 내린
+#       대조가 한 판도 못 돌았다). 이 게이트는 인과를 주장하지 않는다. «판정 채널이 조용해지는
+#       조합» 자체를 막을 뿐이다.
+#
+# 기본값은 **안 바꾼다** — 그건 처방 ㉠(박스 RAM 에서 유도)이고 채택되지 않았다. 여기서는 기동 시
+# 멈추기만 한다. 부트스트랩 맨 앞에서 거는 이유: 이 역할은 뒤에 빌드가 10~25분 붙는다. 그걸 다
+# 기다린 뒤에 알면 늦다.
+#
+# 🔴 같은 값도 막는다(`-ge`). MemTotal 은 커널 예약만 뺀 값이라 커널 자신·다른 컨테이너·sshd 가
+#    그 안에서 먹는다 — 캡이 MemTotal 과 같아도 컨테이너는 그 한도에 못 닿는다.
+# ⚠️ **다른 컨테이너 캡과의 합은 안 본다.** 이 역할이 같이 띄우는 MySQL(3072m)·Spring(2048m)
+#    캡은 docker-compose.yml 기본값이고 ai-nginx 는 캡이 아예 없다 — 합을 내려면 compose 기본값을
+#    여기 사본으로 두거나(조용히 어긋난다) `compose config` 를 파싱해야 하는데, 그래도 캡 없는
+#    ai-nginx·호스트 프로세스 몫이 빠져 «합 ≤ RAM» 이 안전하다는 보장이 안 된다. 그래서 게이트는
+#    «AI 캡 단독 > RAM» 이라는 **확실히 틀린** 조합만 막는다.
+#
+# docker·compose 는 메모리 표기를 go-units RAMInBytes 로 읽는다 — 단위가 **1024 배수**다
+# (20000m → 20,971,520,000B, #698 의 `docker inspect` 실측과 같다). 여기도 같게 읽는다.
+mem_to_bytes() {  # $1 = docker 메모리 표기(20000m · 8g · 1.5g · 2147483648 · 512MiB). 못 읽으면 빈 문자열
+  echo "$1" | awk '{
+    s = tolower($0)
+    if (match(s, /^[0-9]+(\.[0-9]+)?/) == 0) exit
+    n = substr(s, 1, RLENGTH); u = substr(s, RLENGTH + 1)
+    sub(/^ /, "", u); sub(/i?b$/, "", u)
+    if      (u == "")  m = 1
+    else if (u == "k") m = 1024
+    else if (u == "m") m = 1024 * 1024
+    else if (u == "g") m = 1024 * 1024 * 1024
+    else if (u == "t") m = 1024 * 1024 * 1024 * 1024
+    else exit
+    printf "%.0f", n * m
+  }'
+}
+
+if [ "$ROLE" = "p6-target" ]; then   # AI_MEM_LIMIT 을 .env 에 박아 AI 컨테이너를 띄우는 역할은 이것뿐이다
+  _ai_cap_b=$(mem_to_bytes "$AI_MEM_LIMIT")
+  _ram_b=$(awk '/^MemTotal:/ { printf "%.0f", $2 * 1024 }' /proc/meminfo 2>/dev/null)
+  [ -n "$_ai_cap_b" ] || die "AI_MEM_LIMIT 을 못 읽는다: '$AI_MEM_LIMIT' — docker 메모리 표기(예: <MiB>m)로 줄 것"
+  [ -n "$_ram_b" ]    || die "/proc/meminfo 에서 MemTotal 을 못 읽는다 — AI 메모리 캡을 호스트 RAM 과 대조할 수 없다(#698)"
+  if [ "$_ai_cap_b" -ge "$_ram_b" ]; then
+    die "$(printf '%s\n' \
+      "AI_MEM_LIMIT($AI_MEM_LIMIT = $((_ai_cap_b / 1048576))MiB)이 호스트 RAM(MemTotal $((_ram_b / 1048576))MiB) 이상이다 (#698)." \
+      "   캡이 RAM 보다 크면 컨테이너가 cgroup 한도에 영영 못 닿는다 — OOMKilled 는 false 로 남고," \
+      "   압력은 호스트 회수(kswapd 스래싱)로 새서 박스 전체가 멈출 수 있다. 판정 채널이 조용해진다." \
+      "   고치는 법: AI_MEM_LIMIT=<호스트 RAM 보다 작은 MiB>m 을 넘길 것. 같이 뜨는 MySQL·Spring 캡" \
+      "   (docker-compose.yml 기본값)과 호스트 몫도 그 RAM 안에서 나눠야 한다는 것을 잊지 말 것." \
+      "   ⚠️ 캡을 내리면 POSE_DETECTOR_POOL_SIZE($POSE_DETECTOR_POOL_SIZE)가 캡에서 유도한 상한으로 깎일 수" \
+      "   있다(mediapipe_detector.py 가 경고 후 낮춘다) — 그 값도 측정 조건이니 결과에 적을 것.")"
+  fi
+  echo "  AI 메모리 캡 $AI_MEM_LIMIT ($((_ai_cap_b / 1048576))MiB) < 호스트 RAM $((_ram_b / 1048576))MiB ✅ (#698)"
+fi
+
 # ── root SSH (다른 박스가 이 박스로 root@ 로 붙는 라운드용, #642) ──────────
 #
 # 🔴 P4·P6·R10-b 처럼 인스턴스 2대를 쓰는 라운드는 한 박스가 다른 박스로
@@ -112,15 +171,25 @@ done
 if [ -n "$LOGIN_USER" ]; then
   mkdir -p /root/.ssh
   touch /root/.ssh/authorized_keys
-  cat "/home/$LOGIN_USER/.ssh/authorized_keys" >> /root/.ssh/authorized_keys
-  sort -u /root/.ssh/authorized_keys -o /root/.ssh/authorized_keys
+  # AL2023·Ubuntu 클라우드 이미지는 /root/.ssh/authorized_keys 에 **같은 키를 강제명령 접두**
+  # (`command="echo 'Please login as the user ...';...exit 142" ssh-rsa ...`)로 이미 넣어 둔다.
+  # 뒤에 붙이기만 하면 sshd 가 앞 줄(강제명령)을 먼저 매치해 exit 142 로 끊는다 — 추가가 아니라
+  # 치환이어야 한다(#743, #681). 그 줄만 걷어내고 로그인 사용자의 키를 합친다.
+  grep -v '^command=' /root/.ssh/authorized_keys > /root/.ssh/authorized_keys.new || true
+  cat "/home/$LOGIN_USER/.ssh/authorized_keys" >> /root/.ssh/authorized_keys.new
+  sort -u /root/.ssh/authorized_keys.new -o /root/.ssh/authorized_keys
+  rm -f /root/.ssh/authorized_keys.new
   chmod 700 /root/.ssh
   chmod 600 /root/.ssh/authorized_keys
   sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
   grep -q '^PermitRootLogin' /etc/ssh/sshd_config || echo 'PermitRootLogin prohibit-password' >> /etc/ssh/sshd_config
   systemctl restart sshd 2>/dev/null || systemctl restart ssh 2>/dev/null \
     || echo "  ⚠️ sshd 재시작 실패 — 수동으로 확인할 것"
-  echo "  $LOGIN_USER 의 authorized_keys 를 root 로 복사, PermitRootLogin prohibit-password"
+  if grep -q '^command=' /root/.ssh/authorized_keys; then
+    echo "  🔴 강제명령 줄이 아직 남아 있다 — root SSH 가 exit 142 로 막힌다 (#743)"
+  else
+    echo "  $LOGIN_USER 의 authorized_keys 를 root 로 복사(강제명령 줄 제거), PermitRootLogin prohibit-password"
+  fi
 else
   echo "  ⚠️ ec2-user/ubuntu 의 authorized_keys 를 못 찾았다 — root SSH 는 그대로 막혀 있을 수 있다"
 fi
@@ -226,10 +295,16 @@ DB_PASSWORD=$PW
 #    **새로 늘면서** ROLE=db 가 다시 깨졌다 — 즉 이건 «한 번 고치면 끝» 이 아니라
 #    **compose 에 `:?` 가 늘 때마다 여기가 따라와야 하는** 자리다.
 #
-#    값은 아무 문자열이어도 된다. 이 역할은 AI 를 안 띄우므로 아무도 이 토큰으로 인증하지 않는다.
-#    ⚠️ p6-target 은 아래에서 **진짜 값으로 덮어쓴다**(양쪽이 같아야 하는 자리라 거기선 생성한다).
-AI_PUBLIC_TOKEN=${AI_PUBLIC_TOKEN:-unused-in-this-role}
-INTERNAL_API_TOKEN=${INTERNAL_API_TOKEN:-unused-in-this-role}
+#    이 역할은 AI 를 안 띄우므로 값 자체는 아무도 인증에 안 쓴다. 하지만 두 토큰이 같으면
+#    `shadowfit-ai` 가 기동 시 `INTERNAL_API_TOKEN 과 AI_PUBLIC_TOKEN 이 같다` 로 죽는다(#230) —
+#    ROLE=db 뒤 (의도된 시나리오는 아니지만) 손으로 전체 스택을 올리면 재현된다(#578).
+#    그래서 고정 문자열 대신 **항상 독립적으로 랜덤 생성**해(heredoc 바로 위) 둘이 우연히도 같아질
+#    구조를 없앤다.
+#    ⚠️ p6-target 은 이 값을 그대로 쓴다 — 거기서 다시 만들면 아래 준비 완료 echo 와 값이 어긋난다.
+#    (#708 이 이 자리를 `unused-in-this-role` 고정값 + 옛 주석으로 되돌렸었다 — 위의 랜덤 생성이
+#     먼저 돌아서 동작은 안 깨졌지만 주석이 거꾸로 말하고 있었다. #813 에서 복구)
+AI_PUBLIC_TOKEN=$AI_PUBLIC_TOKEN
+INTERNAL_API_TOKEN=$INTERNAL_API_TOKEN
 EOF
 echo "  MYSQL_ROOT_PASSWORD 를 rig 기본값과 맞췄다 (+ 해석만 되면 되는 변수들)"
 
@@ -243,9 +318,7 @@ fi
 echo "  compose 해석 확인 ✅ (mysql 만 띄워도 파일 전체가 해석된다)"
 
 if [ "$ROLE" = "p6-target" ]; then
-  # 토큰은 없으면 만든다 — 값 자체는 아무 문자열이어도 되지만 **양쪽이 같아야** 한다.
-  [ -n "$AI_PUBLIC_TOKEN" ]    || AI_PUBLIC_TOKEN=$(head -c 24 /dev/urandom | base64 | tr -d '/+=')
-  [ -n "$INTERNAL_API_TOKEN" ] || INTERNAL_API_TOKEN=$(head -c 24 /dev/urandom | base64 | tr -d '/+=')
+  # 토큰은 위 .env 블록에서 이미 만들었다(없으면 랜덤 생성) — 여기서는 그 값을 그대로 쓴다.
   cat >> "$WORKDIR/.env" <<EOF
 AI_MEM_LIMIT=$AI_MEM_LIMIT
 POSE_DETECTOR_POOL_SIZE=$POSE_DETECTOR_POOL_SIZE

@@ -77,6 +77,13 @@ public class ActiveSessionResponseDto {
     @Schema(description = "AI 워커 인덱스. POST /pose 의 X-AI-Worker 헤더에 그대로 실을 것")
     private Integer aiWorkerIndex;
 
+    /** 이어하기 화면이 «12회 x 3세트» 와 세트 cue 를 복원할 근거(V26). null = 세트 도입 전 세션. */
+    @Schema(description = "세트당 목표 횟수. null 이면 세트 도입 전 세션", example = "12")
+    private Integer targetRepsPerSet;
+
+    @Schema(description = "목표 세트 수. null = 열린 세트", example = "3")
+    private Integer targetSets;
+
     /**
      * exercise 는 호출부에서 JOIN FETCH 로 미리 가져온 상태여야 한다 —
      * open-in-view: false 라 트랜잭션 밖에서 lazy 접근하면 터진다.
@@ -97,6 +104,8 @@ public class ActiveSessionResponseDto {
                 //    복구는 되는데 그 뒤 POST /pose 가 전부 거절되는 상태가 된다(2단계에서).
                 .sessionNonce(session.getSessionNonce())
                 .aiWorkerIndex(aiWorkerIndex)
+                .targetRepsPerSet(session.getTargetRepsPerSet())
+                .targetSets(session.getTargetSets())
                 .build();
     }
 }

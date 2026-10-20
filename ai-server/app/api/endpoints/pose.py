@@ -327,6 +327,7 @@ def _detect_pose(req: PoseRequest):
                 rep_count=state.rep_count,
             )
 
+<<<<<<< HEAD
         if isinstance(analyzer, (StreamingLungeAnalyzer, StreamingSquatAnalyzer)):
             angles, smoothed_knee_angle, rep_event, torso_tilt_deg, stagger_ratio = analyzer.process_frame(
                 state, landmarks, timestamp_sec=received_at,
@@ -345,6 +346,12 @@ def _detect_pose(req: PoseRequest):
         coaching_message = (state.squat_counter.coaching_event
                             if state.exercise_type == "squat" and state.squat_counter is not None
                             else None)
+=======
+        angles, smoothed_knee_angle, rep_event = analyzer.process_frame(
+            state, landmarks, timestamp_sec=received_at,
+            image_aspect_ratio=image_rgb.shape[1] / image_rgb.shape[0],
+        )
+>>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
 
         if angles is None:
             # visibility 부족 — 프레임 스킵. 🔴 success=False 다 (이슈 #267).

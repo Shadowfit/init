@@ -35,12 +35,14 @@ public class NotificationWriter {
     private final OutboxEventRepository outboxEventRepository;
 
     @Transactional
-    public Notification insert(Member sender, Member recipient, NotificationType type, LocalDate targetDate) {
+    public Notification insert(Member sender, Member recipient, NotificationType type, LocalDate targetDate,
+                               String message) {
         Notification saved = notificationRepository.saveAndFlush(Notification.builder()
                 .sender(sender)
                 .recipient(recipient)
                 .type(type)
                 .targetDate(targetDate)
+                .message(message)
                 .build());
         if (pushTokenRepository.existsByMemberId(recipient.getId())) {
             outboxEventRepository.save(OutboxEvent.pushNotification(saved.getId(), CorrelationIds.current()));

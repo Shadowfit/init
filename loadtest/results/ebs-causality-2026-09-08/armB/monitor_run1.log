@@ -1,0 +1,34 @@
+=== PULL START 2026-09-08T13:59:18Z src=/root/monitor_run1.log ===
+epoch,restart_count,status,health,oom_killed,mem_pct,cpu_pct,in_progress_sessions
+START 2026-09-08T13:57:44Z base_restart_count=0 interval=60s duration=2400s tail=600s
+1788875864,0,running,healthy,false,3.66%,0.47%,0
+1788875925,0,running,healthy,false,3.66%,0.64%,0
+1788875987,0,running,healthy,false,3.66%,0.43%,0
+1788876049,0,running,healthy,false,3.66%,0.61%,0
+1788876111,0,running,healthy,false,3.66%,0.46%,0
+1788876173,0,running,healthy,false,3.66%,0.59%,0
+1788876236,0,running,healthy,false,3.66%,7.40%,0
+1788876298,0,running,healthy,false,3.66%,0.50%,0
+1788876360,0,running,healthy,false,3.66%,0.60%,0
+1788876422,0,running,healthy,false,3.66%,0.58%,0
+1788876485,0,running,healthy,false,3.66%,0.61%,0
+1788876546,0,running,healthy,false,3.66%,0.63%,0
+1788876661,0,running,unhealthy,false,1.26%,129.43%,194
+1788876726,1,running,healthy,false,6.06%,0.66%,204
+EVENT 2026-09-08T14:12:07Z restart_count changed: 0 -> 1
+1788876787,1,running,healthy,false,6.06%,0.56%,204
+1788876849,1,running,healthy,false,6.06%,0.60%,204
+1788876911,1,running,healthy,false,6.06%,0.61%,204
+1788876972,1,running,healthy,false,6.06%,0.64%,204
+1788877035,1,running,healthy,false,6.06%,0.67%,204
+1788877097,1,running,healthy,false,6.06%,0.63%,204
+1788877160,1,running,healthy,false,6.06%,0.66%,204
+1788877222,1,running,healthy,false,6.06%,0.62%,204
+1788877285,1,running,healthy,false,6.06%,0.59%,204
+1788877347,1,running,healthy,false,6.06%,0.63%,204
+1788877409,1,running,healthy,false,6.06%,0.59%,204
+1788877470,1,running,healthy,false,6.06%,0.65%,204
+1788877706,1,running,healthy,true,0.00%,0.00%,201
+1788877797,2,running,healthy,false,14.97%,10.40%,50
+EVENT 2026-09-08T14:29:59Z restart_count changed: 1 -> 2
+1788877859,2,running,healthy,false,14.97%,0.65%,50

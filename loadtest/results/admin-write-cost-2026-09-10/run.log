@@ -1,0 +1,62 @@
+############ 관리자 인덱스 쓰기 대가 ############
+users 200000 × 3 쌍둥이 / sessions 1000000 × 2 쌍둥이
+라운드당 10000행 · 버림 3블록 + 본 12블록
+시작: 2026-09-10T14:30:58+00:00
+
+## [1/5] 스키마
+  버퍼풀: 2048 MB
+
+## [2/5] 기준 시딩
+  users_u0 ← 200000
+  users_u1 ← 200000
+  users_u2 ← 200000
+  sessions_s0 ← 1000000
+  sessions_s1 ← 1000000
+
+## [3/5] 쌍둥이 동일성
+  users_u0 ↔ users_u1                          행수 200000 · 체크섬 일치 ✅
+  users_u0 ↔ users_u2                          행수 200000 · 체크섬 일치 ✅
+  sessions_s0 ↔ sessions_s1                    행수 1000000 · 체크섬 일치 ✅
+
+## [4/5] 측정
+  [블록 1/15 · 버림] users:u0 u1 u2  sessions:s0 s1
+  [블록 2/15 · 버림] users:u2 u1 u0  sessions:s1 s0
+  [블록 3/15 · 버림] users:u1 u2 u0  sessions:s0 s1
+  [블록 4/15 · 본] users:u0 u2 u1  sessions:s1 s0
+  [블록 5/15 · 본] users:u2 u0 u1  sessions:s0 s1
+  [블록 6/15 · 본] users:u1 u0 u2  sessions:s1 s0
+  [블록 7/15 · 본] users:u0 u1 u2  sessions:s0 s1
+  [블록 8/15 · 본] users:u2 u1 u0  sessions:s1 s0
+  [블록 9/15 · 본] users:u1 u2 u0  sessions:s0 s1
+  [블록 10/15 · 본] users:u0 u2 u1  sessions:s1 s0
+  [블록 11/15 · 본] users:u2 u0 u1  sessions:s0 s1
+  [블록 12/15 · 본] users:u1 u0 u2  sessions:s1 s0
+  [블록 13/15 · 본] users:u0 u1 u2  sessions:s0 s1
+  [블록 14/15 · 본] users:u2 u1 u0  sessions:s1 s0
+  [블록 15/15 · 본] users:u1 u2 u0  sessions:s0 s1
+
+라운드당 10000행 · 본 12블록 (버림 3)
+
+════ users ════
+  팔                           중앙값     최소     최대
+  u0 보조인덱스 없음        180.47   168.8780   191.5780
+  u1 +created_at (현행)         193.085   178.9260   210.2760
+  u2 +created_at+(persona,ca)     210.305   195.4020  1122.5010
+
+  배수 (중앙값 기준):
+    현행 인덱스의 대가        u1/u0 = 1.0699
+    페르소나 복합 추가 대가   u2/u1 = 1.0892
+    둘 합쳐                   u2/u0 = 1.1653
+
+════ sessions ════
+  팔                           중앙값     최소     최대
+  s0 관리자인덱스 없음(3개)    249.075   194.8350   379.2230
+  s1 +(status,start_time) (현행)    215.577   206.0520   234.6120
+
+  배수 (중앙값 기준):
+    관리자 인덱스의 대가      s1/s0 = 0.8655
+
+블록별 원자료는 raw.tsv — 추세(테이블이 커지며 느려지는지)를 확인할 것
+
+원자료: /root/admin-write-results/raw.tsv
+종료: 2026-09-10T14:32:47+00:00

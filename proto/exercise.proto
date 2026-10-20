@@ -10,7 +10,11 @@ option java_outer_classname = "ExerciseProto";
 // [Service] 운동 분석 및 세션 관리 서비스
 service ExerciseService {
 
-  // [추가] 등록 단계: 유튜브 링크를 주면 전체 좌표를 반환 (Spring -> FastAPI)
+  // 등록 단계 (Spring -> FastAPI): 기준 영상 **파일 경로**(youtube_url 필드, 이름만 그렇다 — AI 는 http(s) 를
+  // 거부한다)를 주면 추출을 **접수**하고 즉시 돌아온다. 좌표는 이 응답이 아니라 AI -> Spring 역호출
+  // (같은 이름의 RPC)로 온다 — extracted_poses 는 항상 비어 있다 (2026-09-17, 관리자 mp4 업로드).
+  // 경로가 양쪽에서 같은 파일을 가리키는 건 proto 밖 계약(docker-compose 공유 볼륨)이다 —
+  // docs/architecture/ai-backend-integration.md §3-3.
   rpc ExtractReferenceData (ExtractRequest) returns (ExtractResponse);
 
   // [수정] 실행 단계: 세션 정보와 함께 'DB에 저장된 기준 좌표'를 전달 (Spring -> FastAPI)
@@ -50,8 +54,13 @@ enum SessionStatus {
 // 1. 등록용 메시지
 message ExtractRequest {
   int64 exercise_id = 1;
-  string youtube_url = 2;
+  string youtube_url = 2; // AI 컨테이너가 열 수 있는 영상 파일 경로 — 필드 이름은 proto 호환 때문에 남겼다
   repeated PoseDataRequest extracted_poses = 3; // <--- 요청에 리스트가 있어야 함!
+  // 종목 코드 (exercises.code, V25 — docs/decisions/lunge-and-set-backend.md §3-B B-1). 기준 영상의 rep 분절에
+  // 어느 분석기를 쓸지 고르는 키다. 지금 AI 는 analyze_video(path, "squat") 로 못박혀 있어 런지 영상을 올려도
+  // 스쿼트로 분절된다 — 이 값을 읽는 것은 AI 쪽 작업(docs/handoff/ai-lunge-and-sets-proto.md §2-1).
+  // Spring 은 DB 저장값 그대로("SQUAT") 보낸다. 빈 문자열 = 코드 없는 종목(관리자가 만든, 분석기 없는 종목).
+  string exercise_code = 4;
 }
 
 message ExtractResponse {
@@ -75,9 +84,23 @@ message AnalyzeRequest {
   // ⚠️ 1단계는 compat 다: 빈 문자열이면 AI 가 검증을 건너뛴다. 안 그러면 배포 순간
   //    아직 nonce 를 모르는 진행 중 세션이 전부 끊긴다.
   string session_nonce = 6;
+<<<<<<< HEAD
   // 스쿼트 깊이 모드 FULL/HALF (2026-09-21). 스쿼트가 아니면 무시된다.
   // 빈 문자열이면 AI측에서 FULL로 취급 — persona와 동일한 compat 규약.
   string depth_mode = 7;
+=======
+  // 종목 코드 (exercises.code, V25). AI 분석기 레지스트리의 키 — 지금 레지스트리는 exercise_id → 타입 표를
+  // DB id 하드코딩으로 들고 있어 시드가 바뀌면 조용히 틀린다(analyzer_registry.py 주석). 이 값으로 찾으면 그 표가
+  // 없어진다. Spring 은 저장값 그대로("SQUAT") 보내고 소문자 변환은 AI 경계 한 곳에서 한다.
+  // 빈 문자열 = 코드 없음 → AI 는 지금처럼 id 표로 폴백(한 릴리스 유지 뒤 제거 — 핸드오프 §2-1).
+  string exercise_code = 7;
+  // 세트당 목표 횟수 (exercise_sessions.target_reps_per_set, V26). 세트 경계는 «rep 이 이 값에 닿는 순간» 하나뿐이다.
+  // 저장·집계는 Spring 이 pose_data 로 하므로(SessionSetAssembler) AI 가 세트를 기억할 필요는 없다 — 이 값은
+  // «n세트 완료» TTS cue 와 ReportFeedbackBatch.set_no 를 위한 것이다. 0 = 세트 없음(지금 동작, set_no=1 고정).
+  int32 target_reps_per_set = 8;
+  // 목표 세트 수. 0 = 열린 세트(사용자가 끝낼 때까지). «마지막 세트» cue 에만 쓰고 세션 종료는 여전히 사용자 몫.
+  int32 target_sets = 9;
+>>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
 }
 
 message AnalyzeResponse {
@@ -104,8 +127,17 @@ message ReattachRequest {
   // 세션 상태를 버리므로, 재부착으로 상태를 다시 세울 때 nonce 도 같이 서지 않으면
   // 이어하기가 «검증은 켜졌는데 보관값이 없는» 상태가 된다.
   string session_nonce = 7;
+<<<<<<< HEAD
   // AnalyzeRequest.depth_mode와 동일 규약 — 재부착 시에도 같은 값을 다시 실어준다.
   string depth_mode = 8;
+=======
+  // AnalyzeRequest 의 7·8·9 와 같다. 재부착으로 상태를 다시 세울 때 세트 cue 가 이어지려면 AI 가
+  // initial_rep_count 와 target_reps_per_set 로 «지금 몇 세트째 몇 번째 rep 인가» 를 역산해야 한다
+  // (current_set_no = initial // T + 1, reps_in_set = initial % T — 핸드오프 §2-3).
+  string exercise_code = 8;
+  int32 target_reps_per_set = 9;
+  int32 target_sets = 10;
+>>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
 }
 
 message ReattachResponse {

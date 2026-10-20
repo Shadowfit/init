@@ -147,16 +147,133 @@ class GroupServiceTest {
         Group group = newGroup(creator);
         GroupMember membership = GroupMember.builder()
                 .group(group).member(creator).role(GroupRole.MEMBER).status(GroupMemberStatus.ACTIVE).build();
+        when(groupRepository.findByIdForUpdate(GROUP_ID)).thenReturn(Optional.of(group));
         when(groupMemberRepository.findByGroupIdAndMemberId(GROUP_ID, MEMBER_ID)).thenReturn(Optional.of(membership));
 
         groupService.leaveGroup(GROUP_ID, MEMBER_ID);
 
         assertThat(membership.getStatus()).isEqualTo(GroupMemberStatus.LEFT);
+        verify(groupRepository, never()).delete(any());
+    }
+
+    @Test
+    @DisplayName("leaveGroup — 그룹이 없으면 GROUP_NOT_FOUND")
+    void leaveGroup_noGroup_throws() {
+        when(groupRepository.findByIdForUpdate(GROUP_ID)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> groupService.leaveGroup(GROUP_ID, MEMBER_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.GROUP_NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("leaveGroup — OWNER 인데 다른 ACTIVE 멤버가 있으면 OWNER_MUST_TRANSFER_FIRST, 아무것도 안 바뀐다 (#721)")
+    void leaveGroup_ownerWithOthers_throws() {
+        Group group = newGroup(creator);
+        GroupMember membership = GroupMember.builder()
+                .group(group).member(creator).role(GroupRole.OWNER).status(GroupMemberStatus.ACTIVE).build();
+        when(groupRepository.findByIdForUpdate(GROUP_ID)).thenReturn(Optional.of(group));
+        when(groupMemberRepository.findByGroupIdAndMemberId(GROUP_ID, MEMBER_ID)).thenReturn(Optional.of(membership));
+        when(groupMemberRepository.existsByGroupIdAndStatusAndMemberIdNot(GROUP_ID, GroupMemberStatus.ACTIVE, MEMBER_ID))
+                .thenReturn(true);
+
+        assertThatThrownBy(() -> groupService.leaveGroup(GROUP_ID, MEMBER_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.OWNER_MUST_TRANSFER_FIRST);
+        assertThat(membership.getStatus()).isEqualTo(GroupMemberStatus.ACTIVE);
+        verify(groupRepository, never()).delete(any());
+    }
+
+    @Test
+    @DisplayName("leaveGroup — 혼자 남은 OWNER 가 나가면 모임을 지운다 (#721)")
+    void leaveGroup_soleOwner_deletesGroup() {
+        Group group = newGroup(creator);
+        GroupMember membership = GroupMember.builder()
+                .group(group).member(creator).role(GroupRole.OWNER).status(GroupMemberStatus.ACTIVE).build();
+        when(groupRepository.findByIdForUpdate(GROUP_ID)).thenReturn(Optional.of(group));
+        when(groupMemberRepository.findByGroupIdAndMemberId(GROUP_ID, MEMBER_ID)).thenReturn(Optional.of(membership));
+        when(groupMemberRepository.existsByGroupIdAndStatusAndMemberIdNot(GROUP_ID, GroupMemberStatus.ACTIVE, MEMBER_ID))
+                .thenReturn(false);
+
+        groupService.leaveGroup(GROUP_ID, MEMBER_ID);
+
+        verify(groupRepository).delete(group);
+    }
+
+    @Test
+    @DisplayName("transferOwnership — OWNER 가 ACTIVE 멤버에게 넘기면 역할이 맞바뀐다 (#721)")
+    void transferOwnership_swapsRoles() {
+        Group group = newGroup(creator);
+        Member next = newMember(20L, "next");
+        GroupMember ownerRow = GroupMember.builder()
+                .group(group).member(creator).role(GroupRole.OWNER).status(GroupMemberStatus.ACTIVE).build();
+        GroupMember nextRow = GroupMember.builder()
+                .group(group).member(next).role(GroupRole.MEMBER).status(GroupMemberStatus.ACTIVE).build();
+        when(groupRepository.findByIdForUpdate(GROUP_ID)).thenReturn(Optional.of(group));
+        when(groupMemberRepository.findByGroupIdAndMemberId(GROUP_ID, MEMBER_ID)).thenReturn(Optional.of(ownerRow));
+        when(groupMemberRepository.findByGroupIdAndMemberId(GROUP_ID, 20L)).thenReturn(Optional.of(nextRow));
+
+        groupService.transferOwnership(GROUP_ID, MEMBER_ID, 20L);
+
+        assertThat(ownerRow.getRole()).isEqualTo(GroupRole.MEMBER);
+        assertThat(nextRow.getRole()).isEqualTo(GroupRole.OWNER);
+    }
+
+    @Test
+    @DisplayName("transferOwnership — 자기 자신이면 INVALID_INPUT_VALUE, 조회도 안 한다")
+    void transferOwnership_self_throws() {
+        assertThatThrownBy(() -> groupService.transferOwnership(GROUP_ID, MEMBER_ID, MEMBER_ID))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+        verify(groupRepository, never()).findByIdForUpdate(any());
+    }
+
+    @Test
+    @DisplayName("transferOwnership — 요청자가 OWNER 가 아니면 NOT_GROUP_OWNER")
+    void transferOwnership_notOwner_throws() {
+        Group group = newGroup(creator);
+        GroupMember plain = GroupMember.builder()
+                .group(group).member(creator).role(GroupRole.MEMBER).status(GroupMemberStatus.ACTIVE).build();
+        when(groupRepository.findByIdForUpdate(GROUP_ID)).thenReturn(Optional.of(group));
+        when(groupMemberRepository.findByGroupIdAndMemberId(GROUP_ID, MEMBER_ID)).thenReturn(Optional.of(plain));
+
+        assertThatThrownBy(() -> groupService.transferOwnership(GROUP_ID, MEMBER_ID, 20L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.NOT_GROUP_OWNER);
+    }
+
+    @Test
+    @DisplayName("transferOwnership — 대상이 ACTIVE 멤버가 아니면(없음·LEFT) GROUP_MEMBER_NOT_FOUND, 역할은 그대로")
+    void transferOwnership_targetNotActive_throws() {
+        Group group = newGroup(creator);
+        Member gone = newMember(20L, "gone");
+        GroupMember ownerRow = GroupMember.builder()
+                .group(group).member(creator).role(GroupRole.OWNER).status(GroupMemberStatus.ACTIVE).build();
+        GroupMember leftRow = GroupMember.builder()
+                .group(group).member(gone).role(GroupRole.MEMBER).status(GroupMemberStatus.LEFT).build();
+        when(groupRepository.findByIdForUpdate(GROUP_ID)).thenReturn(Optional.of(group));
+        when(groupMemberRepository.findByGroupIdAndMemberId(GROUP_ID, MEMBER_ID)).thenReturn(Optional.of(ownerRow));
+        when(groupMemberRepository.findByGroupIdAndMemberId(GROUP_ID, 20L)).thenReturn(Optional.of(leftRow));
+        when(groupMemberRepository.findByGroupIdAndMemberId(GROUP_ID, 30L)).thenReturn(Optional.empty());
+
+        for (Long target : List.of(20L, 30L)) {
+            assertThatThrownBy(() -> groupService.transferOwnership(GROUP_ID, MEMBER_ID, target))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getErrorCode())
+                    .isEqualTo(ErrorCode.GROUP_MEMBER_NOT_FOUND);
+        }
+        assertThat(ownerRow.getRole()).isEqualTo(GroupRole.OWNER);
+        assertThat(leftRow.getRole()).isEqualTo(GroupRole.MEMBER);
     }
 
     @Test
     @DisplayName("leaveGroup — 가입 이력이 없으면 NOT_GROUP_MEMBER")
     void leaveGroup_noMembership_throws() {
+        when(groupRepository.findByIdForUpdate(GROUP_ID)).thenReturn(Optional.of(newGroup(creator)));
         when(groupMemberRepository.findByGroupIdAndMemberId(GROUP_ID, MEMBER_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> groupService.leaveGroup(GROUP_ID, MEMBER_ID))
@@ -171,6 +288,7 @@ class GroupServiceTest {
         Group group = newGroup(creator);
         GroupMember membership = GroupMember.builder()
                 .group(group).member(creator).role(GroupRole.MEMBER).status(GroupMemberStatus.LEFT).build();
+        when(groupRepository.findByIdForUpdate(GROUP_ID)).thenReturn(Optional.of(group));
         when(groupMemberRepository.findByGroupIdAndMemberId(GROUP_ID, MEMBER_ID)).thenReturn(Optional.of(membership));
 
         assertThatThrownBy(() -> groupService.leaveGroup(GROUP_ID, MEMBER_ID))

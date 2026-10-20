@@ -14,7 +14,10 @@ from collections import deque
 from dataclasses import dataclass, field
 
 from app.grpc import spring_client
+<<<<<<< HEAD
 from app.core.lunge_analyzer import LungeState
+=======
+>>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
 from app.core.squat_counter import SquatCounter
 from app.models.pose import Landmark
 
@@ -152,7 +155,10 @@ class SessionState:
 
     # 분석기 내부 상태 (StreamingSquatAnalyzer가 관리)
     rep_count: int = 0
+<<<<<<< HEAD
     lunge_state: LungeState | None = None
+=======
+>>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
     squat_counter: SquatCounter | None = None
     rep_state: str = "waiting_for_standing"
     frame_index: int = 0

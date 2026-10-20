@@ -22,6 +22,18 @@ public class Exercise {
     @Column(nullable = false, length = 100)
     private String name;
 
+    /**
+     * AI 분석기 키({@code SQUAT}·{@code LUNGE}·…). <b>NULL = 분석기가 없는 종목</b>이라 관리자가 만든
+     * 종목은 비어 있고, {@code analysis_supported} 를 켜려면 이 값이 있어야 한다
+     * ({@code AdminExerciseService.updateAnalysisSupport}). 값 규칙은 {@code ExerciseCode.PATTERN}.
+     *
+     * <p>이 컬럼이 생긴 이유는 V25 머리 주석 — DB id 를 ai-server·프론트·시드가 따로 하드코딩하던 것을
+     * 한 값으로 모은다. 분석이 켜진 종목의 코드를 바꾸면 진행 중 세션이 다른 분석기로 넘어가므로
+     * {@link #changeCode} 가 아니라 서비스가 그 조건을 막는다.
+     */
+    @Column(length = 32, unique = true)
+    private String code;
+
     // BE-04 — 카테고리가 고정 enum 에서 관리 가능한 테이블로 승격됐다(V11 마이그레이션).
     @ToString.Exclude
     @ManyToOne(fetch = FetchType.LAZY)
@@ -33,6 +45,14 @@ public class Exercise {
 
     @Column(name = "preferred_url", length = 500)
     private String preferredUrl;
+
+    /**
+     * 기준 좌표를 뽑은 업로드 영상 — 저장 루트({@code reference-video.dir}) 기준 <b>상대 경로</b>
+     * ({@code {id}/{uuid}.mp4}). NULL 이면 업로드로 등록된 영상이 없다(V4 시드 스쿼트가 그렇다).
+     * 절대 경로를 안 박는 이유는 V23 주석 — Spring 이 쓰는 경로와 AI 가 읽는 경로가 문자열로는 다를 수 있다.
+     */
+    @Column(name = "reference_video_path", length = 500)
+    private String referenceVideoPath;
 
     /**
      * SQL의 JSON 타입을 매핑합니다.
@@ -103,6 +123,26 @@ public class Exercise {
         if (preferredUrl != null) this.preferredUrl = preferredUrl;
         if (targetJoints != null) this.targetJoints = targetJoints;
         if (expectedDurationMinutes != null) this.expectedDurationMinutes = expectedDurationMinutes;
+    }
+
+    /**
+     * 종목 코드를 바꾼다. «분석이 켜진 종목은 못 바꾼다» 는 호출자({@code AdminExerciseService}) 몫이다 —
+     * 그 판단에 {@code analysisSupported} 와 로그가 같이 필요해 여기서 접지 않는다.
+     */
+    public void changeCode(String code) {
+        this.code = code;
+    }
+
+    /**
+     * 업로드된 기준 영상 경로를 바꾼다.
+     *
+     * @return 바뀌기 <b>전</b> 경로(없으면 null) — 호출자가 커밋 뒤에 이전 파일을 지워야 해서 원값을 준다.
+     *         {@link #changeAnalysisSupport} 와 같은 이유로 판정을 미리 접지 않는다.
+     */
+    public String attachReferenceVideo(String relativePath) {
+        String before = this.referenceVideoPath;
+        this.referenceVideoPath = relativePath;
+        return before;
     }
 
     /** 싱크로율 임계값 4종을 한 번에 바꾼다. beginner&lt;advanced 검증은 호출자(DTO)가 이미 했다. */

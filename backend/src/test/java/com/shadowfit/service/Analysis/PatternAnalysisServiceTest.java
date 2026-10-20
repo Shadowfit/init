@@ -40,7 +40,7 @@ class PatternAnalysisServiceTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        service = new PatternAnalysisService(sessionRepository);
+        service = new PatternAnalysisService(sessionRepository, java.time.Clock.systemDefaultZone());
     }
 
     @Test

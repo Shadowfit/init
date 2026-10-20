@@ -456,6 +456,30 @@ proto의 `int64`와 Spring DTO 타입 정렬 + REST 시대 잔재 제거.
 
 ---
 
+### 런지·세트 ② — proto 에 exercise_code·target_reps_per_set·target_sets (2026-09-22)
+
+| 축 | 변경 |
+|---|---|
+| **proto** | `AnalyzeRequest` +`exercise_code(7)`·`target_reps_per_set(8)`·`target_sets(9)` · `ReattachRequest` +`exercise_code(8)`·`target_reps_per_set(9)`·`target_sets(10)` · `ExtractRequest` +`exercise_code(4)`. 삭제·의미 변경 없음 |
+| **Spring** | `ExerciseAnalysisService.SessionTargets.of(session)` — NULL→`""`/`0` 변환 한 곳. `startAnalysis` 가 커밋 전에 확정해 `sendAnalysisRequestToFastApi(…, targets)` 로 넘김(nonce 와 같은 이유), `ReattachRequestBuilder`·`extractReferencePoses` 도 같은 값 |
+| **AI** | `exercise_pb2.py` 재생성만(`scripts/gen_proto.sh`). 필드를 읽는 코드 없음 — 핸드오프 §2-1·2-2 가 AI 몫 |
+| **Infra** | 없음 |
+
+선행: #785(V25 `exercises.code`), #786(V26 세션 목표·세트 표). 설계: `docs/decisions/lunge-and-set-backend.md` §4 ②.
+
+### #759 — 아웃박스 `dispatch()` 예외를 RETRY 로 센다 (2026-09-23)
+
+| 축 | 변경 |
+|---|---|
+| **proto** | 없음 |
+| **Spring** | `AbstractOutboxPublisher.dispatchOne` — `dispatch()` 를 `try/catch (RuntimeException)` 로 감싸 RETRY 로 접는다(스택 로그 1회). `dispatchBatch` 의 catch 는 이제 결과 기록·`onGivenUp` 단계 예외만 받는다(행은 `PROCESSING` → 회수). 테스트: `OutboxPublisherFailureInjectionTest`(«예외 → PROCESSING» 계약을 «예외 → RETRY·상한 후 FAILED» 로 교체, 기록 단계 예외 계약은 새 Nested 로 유지), `WeeklyReportLlmOutboxIntegrationTest`(영구 예외 → exhausted 로 닫힘) |
+| **AI** | 없음 |
+| **Infra** | 없음 |
+
+의미 변화: `StopAnalysis`·`ReattachAnalysis` 아웃박스 행의 «상한 10회» 가 예외 경로까지 덮는다. 설계: `docs/decisions/outbox-reliable-messaging.md` §4-3-1.
+
+---
+
 ## 보조 그룹: 직접 영향 적은 잡정리
 
 ### 0fe056e — fix: MySQL 클라이언트 charset 을 utf8mb4 로 강제 (2026-05-16)

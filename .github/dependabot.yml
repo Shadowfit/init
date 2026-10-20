@@ -98,10 +98,30 @@ updates:
     #
     # 🔴 R10-a·R10-b 가 끝나고 AI 축 기준선을 다시 세우는 날 이 항목을 지울 것.
     #    그때 상향과 **재측정은 한 묶음**이다. 막는 것과 잊는 것은 다르다.
+    #
+    # ── 2026-09-15 추가: mediapipe minor 는 «판단» 이 아니라 «불가» 가 됐다 ─────────
+    #
+    #    위 ⚠️ 는 «minor 가 오면 사람이 보고 판단» 이었는데, 실제로 온 minor(#727, 0.10.35)를
+    #    까 보니 **0.10.30 부터 휠에 mediapipe/python/solutions/ 가 없다**(0.10.30·31·35 휠 목록
+    #    확인). app/core/mediapipe_detector.py 는 mp.solutions.pose 를 쓰므로 import 에서 죽는다.
+    #    올리려면 Tasks API(PoseLandmarker) 이식이 먼저다(#606 계열) — Dependabot PR 로는 못 받는다.
+    #    그래서 versions 로 0.10.30 이상만 막는다(0.10.2x 패치가 나오면 그건 온다).
+    #
+    #    같은 핀에 묶여 지금 못 받는 것 둘도 함께 막는다 — 안 막으면 매주 같은 PR 이 되살아난다:
+    #    - grpcio-tools ≥1.63: protobuf ≥5 요구인데 mediapipe 0.10.21 이 protobuf<5 (#727 의 충돌)
+    #    - opencv-python-headless 5.x: numpy≥2 요구인데 mediapipe 0.10.21 이 numpy<2 (#695 의 충돌)
+    #
+    # 🔴 mediapipe 를 Tasks API 로 옮기는 날 아래 셋을 같이 지울 것. 막는 것과 잊는 것은 다르다.
     ignore:
       - dependency-name: "protobuf"
         update-types: ["version-update:semver-major"]
       - dependency-name: "mediapipe"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "mediapipe"
+        versions: [">=0.10.30"]
+      - dependency-name: "grpcio-tools"
+        versions: [">=1.63"]
+      - dependency-name: "opencv-python-headless"
         update-types: ["version-update:semver-major"]
       - dependency-name: "numpy"
         update-types: ["version-update:semver-major"]

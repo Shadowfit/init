@@ -37,6 +37,20 @@
    > 그것이 안전한 이유는 하나뿐이다 — **`run_all.sh` 는 S3 업로드가 성공했을 때만 끈다**
    > (`FINAL_OK`). 업로드가 실패하면 박스를 남긴다. 그 가드가 없으면 이 결정은 위험하다.
    >
+   > 🔴 **가드가 하나 더 있다 — 단계가 실패하면 안 끈다**([#641](https://github.com/Shadowfit/init/issues/641),
+   > 사용자 승인 규칙). 이번 판의 `phases.tsv` 에 `FAIL(rc)`·`TIMEOUT` 이 하나라도 있으면 **업로드가
+   > 성공했어도** 이 박스·리플리카·대상 **전부** 남긴다(`PHASES_OK`). 실패 로그만 올라간 판도 업로드는
+   > 성공하므로, `FINAL_OK` 하나로는 `repl_preflight`·`q2` 가 즉시 FAIL 한 판에서 원인 로그가 볼륨째
+   > 사라졌다. `SKIP` 은 실패로 안 센다 — 리허설·게이트 실패로 막힌 SKIP 은 원인 행이 이미 FAIL 이고,
+   > 일부러 건너뛴 SKIP(`calibration`)은 실패가 아니다. 이렇게 남은 박스는 **사람이 들여다본 뒤 직접 끈다.**
+   >
+   > 🔴 **2대 구성이면 저쪽 박스도 같은 조건으로 같이 끈다** — P4 의 `REPLICA_HOST`, 그리고
+   > P6·httpwrite·httpread·poolsizing 의 `TARGET_HOST`([#688](https://github.com/Shadowfit/init/issues/688) —
+   > 예전엔 대상을 안 꺼서 09-08 P6 라운드의 대상이 2시간 24분 초과 과금됐다). 대상이 이 박스 자신이면
+   > (`TARGET_SSH="bash -c"`) 따로 안 건다. ⚠️ 같은 대상을 **다음 라운드가 또 쓰면** 앞 호출에
+   > `AUTO_SHUTDOWN=0` 을 줄 것. ⚠️ poolsizing 3대 구성의 `DB_HOST` 는 여전히 안 끈다 —
+   > 사람이 끈다([#812](https://github.com/Shadowfit/init/issues/812)).
+   >
    > 🔴 **손으로 도는 판은 이 보호가 없다.** rig 을 SSH 로 직접 부르면(`run_arms.py` 등)
    > `run_all.sh` 를 안 거치므로 **아무것도 안 끄고, 아무것도 안 지킨다.** 그때는 사람이 끈다.
    >
@@ -404,7 +418,7 @@ nohup python3 loadtest/results/frame-path-overhead-2026-08-23/run_arms.py \
 | 팔 | A(기준) · B(구간·`lease` + 앵커) · `A@0.0005`·`A@0.05`(GIL **양방향**) · `B@0.0005`(계측×GIL **상호작용**, 2×2 를 닫는 칸) 🔴 **정본은 [설계 §13](../../docs/decisions/ai-receive-path-scaling.md) 이고 위 판 문자열은 거기서 옮긴 것이다** — 바꾸려면 설계부터 고칠 것 |
 | 배열 | **5×5 라틴 방격 + 버림 1 = 26판.** 각 팔이 **각 위치에 정확히 한 번** 온다 — 재기동이 −24%, 판 순서가 −6.4% 를 흔들기 때문(설계 §9-4) |
 | ⏱ 소요 | 판당 120초면 **52분**, 160초면 **69분** — `setup`(160세션 여는 시간)이 미측정이라 **버림판이 처음 준다.** 인스턴스 1.5시간 |
-| 🔴 **안 읽는 값** | `handler_concurrency` — 부하기가 동거해서 **절대값이 다친다.** R10-b(2대)의 몫이다(§7) |
+| 🔴 **안 읽는 값** | `handler_concurrency` — 부하기가 동거해서 **절대값이 다친다.** R10-b(2대, 아래)의 몫이다(§7) |
 | 러너 | 🟢 **`PHASES="framepath collect"` 로 돈다** — 아래 「무인으로 돌리려면」. 위 손 명령도 그대로 유효하다(회수만 손으로) |
 
 ⚠️ **이 절차로 실제로 띄워 본 적은 없다.** ROLE 은 `bash -n` 과 역할 분기 검증만 거쳤고,
@@ -464,21 +478,18 @@ ROLE=ai-venv bash bootstrap.sh
 ROLE=ai-venv bash bootstrap.sh
 ```
 
-**실행 — 부하기에서**
-
-```bash
-cd /root/init
-S3_BASE=s3://내버킷/shadowfit \
-FP_REMOTE_TARGET=<대상 사설 IP> \
-FP_REMOTE_SSH="ssh -i /root/.ssh/measure.pem -o StrictHostKeyChecking=no root@<대상 사설 IP>" \
-FP_PLAN="B,B,B#5,B#20,B#5,B#20,B,B#20,B,B#5" \
-PHASES="framepath collect" \
-  nohup bash loadtest/aws/run_all.sh > /root/run_all.log 2>&1 &
-```
+🔴 **`run_all.sh` 로는 더 못 돌린다 (2026-09-23, #813 ㉡).** R10-b 의 원격 배선
+(`FP_REMOTE_TARGET`·`FP_REMOTE_SSH`·`FP_REMOTE_ROOT`·`FP_REMOTE_PYTHON`, `fp_gate()` 여섯째 게이트,
+`phase_framepath()` 의 `--remote-*` 인자)은 #708 의 되돌리기 커밋 `3258ff0a` 가 `run_all.sh` 에서
+지웠고, R10-b 는 이미 닫힌 라운드라 **되살리지 않기로 했다.** 지금 `FP_REMOTE_TARGET` 을 넘기면
+**경고 없이 R10-a 와 같은 로컬(동거) 경로로 돈다** — 그 판을 2대 측정으로 인용하면 안 된다.
+다시 재야 하면: ① 부하기에서 `run_arms.py --remote-target <IP> --remote-ssh "..."` 를 직접
+부르거나(원격 모드는 rig 쪽에 그대로 있다 — 단 `run_all.sh` 를 안 거치므로 자동 정지·게이트·S3
+업로드가 없다) ② #649(`4f009007`)의 `run_all.sh` 배선을 되살린다. 아래 표는 **당시 판 설계의 기록**이다.
 
 | | |
 |---|---|
-| 최소 격자(사용자 확정, 2026-09-02) | **팔은 `GRPC_MAX_WORKERS` 값 하나**(계측은 켠 채 고정 — `B` 만 쓴다, `A/B` 대조는 R10-a 가 이미 닫았다). 기본(10) 대조군 + 5·20 두 값. 버림 1 + 각 3판, 위치 균형(`feedback_measure_design_needs_repeats`) — 위 `FP_PLAN` 예시가 그 배열이다 |
+| 최소 격자(사용자 확정, 2026-09-02) | **팔은 `GRPC_MAX_WORKERS` 값 하나**(계측은 켠 채 고정 — `B` 만 쓴다, `A/B` 대조는 R10-a 가 이미 닫았다). 기본(10) 대조군 + 5·20 두 값. 버림 1 + 각 3판, 위치 균형(`feedback_measure_design_needs_repeats`) — 그 배열이 `FP_PLAN="B,B,B#5,B#20,B#5,B#20,B,B#20,B,B#5"` 였다 |
 | 규모 | R10-a 와 같은 조건(160세션·90초·풀201)을 유지할 것 — 다르면 비교가 안 된다 |
 | 🔴 CPU | **판 전체 평균만**(`cpu_remote.avg_vcpu`), warmup 미제외. R10-a 의 시계열 `cpu` 와 **같은 표에 놓지 말 것** — 이 판이 진짜 답하는 것은 처리량·지연이 `GRPC_MAX_WORKERS` 로 갈리는가다 |
 | ⏱ 소요 | 미실측 — R10-a(26판·52~69분)보다 판 수는 적지만(8판) SSH 왕복(원격 기동·종료·CPU 스냅샷)이 더 걸린다. 축소 리허설로 먼저 잰다 |
@@ -492,64 +503,40 @@ R10-a 의 GIL 반증에 이어 이 후보도 지워지고 「16 중 9.5」는 **
 종류였다. 🔴 **깨진 채 남은 것**: 원격 CPU 계측(`cpu_remote`)이 전 판 실패
 ([#647](https://github.com/Shadowfit/init/issues/647)) · 리허설도 `run_all.sh` 를 그대로
 태우면 AUTO_SHUTDOWN 대상이 되는데 **러너(부하기) 쪽에 취소용 root SSH 가 없었다**
-([#648](https://github.com/Shadowfit/init/issues/648), 아래 리허설 명령에 `AUTO_SHUTDOWN=0`
-을 넣은 이유).
+([#648](https://github.com/Shadowfit/init/issues/648) — 그래서 리허설 명령에 `AUTO_SHUTDOWN=0`
+을 박아뒀었다. 그 실행·리허설 명령은 위 🔴 때문에 걷었다).
 
-⚠️ **리허설은 `AUTO_SHUTDOWN=0` 을 꼭 넣을 것** — `PHASES` 에 무엇을 넣든 `run_all.sh` 를
-직접 부르면 끝에 자동종료 로직을 그대로 탄다(#648). 축소 리허설로 먼저 밟고, 문제없으면
-본판(위 「실행」 명령, `AUTO_SHUTDOWN` 기본값 1)을 돌린다.
-
-```bash
-cd /root/init
-AUTO_SHUTDOWN=0 \
-FP_REMOTE_TARGET=<대상 사설 IP> \
-FP_REMOTE_SSH="ssh -i /root/.ssh/measure.pem -o StrictHostKeyChecking=no root@<대상 사설 IP>" \
-FP_SESSIONS=8 FP_DUR=15 FP_PLAN="B,B,B#5,B#20" \
-PHASES="framepath" \
-  bash loadtest/aws/run_all.sh
-```
-
-### 보정값 (從 R11) — 2026-09-02 부터 `calibration` 단계로 상설화
+### 보정값 (從 R11) — `calibrate_box` 가 모든 라운드에서 자동으로 남긴다
 
 [`round-to-round-nonreproducibility.md`](../../docs/decisions/round-to-round-nonreproducibility.md) §2·§5
 축0. **CPU% 는 시간이지 일의 양이 아니다** — 물리 호스트의 유효 클럭이 라운드마다 다르면
 같은 CPU% 로 다른 처리량이 나온다(08-17 관측: AI CPU 869.3%→869.0%인데 처리량 +17.7%).
-단일 스레드로 고정 프레임 수를 추론해 걸린 시간만 재면 그 박스가 초당 얼마나 일하는지가
-남는다 — R6 이 이미 이 방법으로 79.9fps 를 냈다. **판정에 쓰든 안 쓰든 무조건 기록한다**:
-지금 못 걸으면 그 박스가 사라진 뒤엔 영영 못 잰다(P6 1·2라운드 보정값을 그렇게 잃었다).
+그래서 **이 박스가 초당 얼마나 일하는가**를 앱과 무관한 고정 작업으로 재둔다. **판정에 쓰든
+안 쓰든 무조건 기록한다**: 지금 못 걸으면 그 박스가 사라진 뒤엔 영영 못 잰다(P6 1·2라운드
+보정값을 그렇게 잃었다).
 
-🟢 **ROLE=ai-venv 라운드(R10-a·R10-b)는 `PHASES` 에 `calibration` 만 추가하면 된다**
-(소요 1~2분, 새 인스턴스 0):
+**손댈 것이 없다** — [`loadtest/calibrate_box.py`](../calibrate_box.py) 가 두 자리에서 알아서 돈다:
 
-```bash
-PHASES="framepath calibration collect"
-```
+| 자리 | 산출물 | 비고 |
+|---|---|---|
+| `phase_preflight` 의 `calibrate_box` | `<OUTDIR>/calibration.tsv` | 어느 역할이든. 실패해도 라운드를 안 막고 ⚠️ 한 줄 남긴다 |
+| `bootstrap.sh` ROLE=ai-venv | `/root/calibration.tsv` → `ai_venv_conditions.txt` 에 붙음 | `framepath` phase 가 그 파일을 결과에 복사한다 |
 
-산출물은 `<OUTDIR>/calibration/` — `box.txt`(인스턴스 타입·ID·AZ) · `scaling_raw.txt`(전체
-표) · `scaling_1w.txt`(워커=1 행만, 라운드 간 대조용). 게이트: `FP_VENV` 실행 파일 존재
-(venv 3.12) · `CORES_RIG/frames.json` 존재 — 둘 다 R10 라운드가 이미 요구하는 것이라 추가
-준비가 없다.
+두 축을 낸다 — **`cpu`**(의존성 0 · 고정 반복 루프 · iter/s)와 **`infer`**(mediapipe 1스레드
+100프레임 · fps, venv·`frames.json` 없으면 사유 적고 건너뜀). 🔑 **인용은 `cpu` 축이다** —
+축 A(08-26, 박스 2대 동시)·축 B(09-14, 같은 박스 stop→start 6부팅) 둘 다 `cpu` 축이 처리량비를
+3%p 안에서 설명했고, `infer` 축은 같은 부팅 안 전·후로도 5~12% 흔들려 보정값이 못 된다. 쓰는 법은
+인용 규칙 ㉠([설계 §8](../../docs/decisions/round-to-round-nonreproducibility.md#8--채택--인용-규칙--2026-09-14-사용자-결정)) —
+절대 수치엔 `cpu` 값을 같은 줄에 병기, 라운드 간 비교는 처리량비÷보정비.
 
-🔴 **P6(도커) 대상 박스는 이 phase 로 못 돈다** — mediapipe 가 host venv 가 아니라
-`shadowfit-ai` 컨테이너 안에 있다. 대상 박스에서 손으로 돌린다(부트스트랩 뒤, 측정 전후
-아무 때나 — 판정에 안 섞이므로 순서가 중요하지 않다):
-
-```bash
-# 대상 박스에서 — frames.json 을 컨테이너로 복사하고 그 안에서 돌린다
-docker cp loadtest/results/coresidency-2026-08-15/frames.json shadowfit-ai:/tmp/frames.json
-docker exec -i -e SCALING_WORKERS=1 -w /app shadowfit-ai \
-  python - /tmp/frames.json scaling < loadtest/results/ai-path-profile-2026-08-17/profile_e2e_and_scaling.py \
-  | tee coresidency/calibration_scaling.txt
-```
-
-✅ **2026-09-08 검증 완료** — 별도 `c7i.4xlarge` 1대(ROLE=p6-target 단독, 코레지던시 부하 없이
-box 보정만 목적)에서 위 두 줄을 그대로 돌렸다. `docker cp` rc=0 · `docker exec` rc=0, 출력은
-ai-venv 경로와 동일한 표 형식(1워커 행: **스레드 67.2 fps · 프로세스 66.5 fps**)이라
-`run_all.sh`의 `awk '/^ *1 /{...}'` 추출도 그대로 통과 확인. `tee coresidency/...` 부분은 그
-디렉터리가 미리 있어야 한다(`mkdir -p`) — 원문은 `docker exec` 표준출력 리다이렉트로
-대체해서 확인했다. ⚠️ **이 67.2 fps 는 검증용으로 새로 띄운 별개 인스턴스 값**이라 08-17·09-08
-등 기존 라운드의 박스 보정용으로는 못 쓴다(그 박스들은 이미 종료됨) — 앞으로 P6 라운드를
-띄울 때 **그 라운드의 대상 박스 자신**에서 한 번 더 걸어야 한다.
+> 🔴 **2026-09-14 정정 — `calibration` phase 는 없앴다(#744).** 09-02 에 상설화했다던 그 phase
+> (R6 rig `profile_e2e_and_scaling.py scaling` 의 1워커 판 → `calibration/scaling_1w.txt`)는
+> 저장소 루트 cwd 에서 `app.core` 를 못 찾아 **어느 라운드에서도 값을 낸 적이 없다**(결과
+> 디렉터리 어디에도 `scaling_1w.txt` 가 없다). 고치더라도 내는 값이 `infer` 축과 같은 종류라
+> 보정값이 못 되므로 phase 를 지우고 `calibrate_box` 로 일원화했다. 옛 레시피의 `PHASES` 에
+> `calibration` 이 남아 있어도 ⏭ 한 줄 찍고 건너뛴다. P6(도커) 대상 박스용 `docker exec` 손 명령도
+> 같은 이유로 더는 필요 없다 — `cpu` 축은 host `python3` 로 어디서든 돈다(09-08 검증 때 그 명령이
+> 낸 1워커 67.2 fps 는 별개 인스턴스 값이라 어차피 못 썼다).
 
 ## 설정
 
@@ -563,17 +550,12 @@ ai-venv 경로와 동일한 표 형식(1워커 행: **스레드 67.2 fps · 프�
 | `REPL_AZ_MODE` | (없음) | P4 — 조건 칸에 그대로 들어간다. 비면 경고(막지는 않는다) |
 | `REPL_SESSIONS` | `13334` | P4 무대 = 1,000만 행 |
 | `TIMEOUT_REPL_GATE` / `TIMEOUT_REPL` | `10800` / `14400` | 3시간 / 4시간 |
-| `FP_REMOTE_TARGET` | (없음) | R10-b — 대상 사설 IP. 비면 R10-a 와 같은 로컬(동거) 경로 |
-| `FP_REMOTE_SSH` | `ssh root@$FP_REMOTE_TARGET` | R10-b — 키를 쓰면 직접 지정 |
-| `FP_REMOTE_ROOT` | `/root/init` | R10-b — 대상의 저장소 루트 |
-| `AUTO_SHUTDOWN` | **`1`** | **업로드 성공 시에만** 정지. 기본이 켜짐(2026-08-24 결정) — 박스를 남기려면 `0` |
-| `SHUTDOWN_DELAY_MIN` | `5` | 정지까지의 유예(분). 취소: 박스 안에서 `pkill -f 'shutdown'`. ⚠️ **취소하려면 그 박스에 SSH 로 들어가야 하는데, 리허설을 `run_all.sh` 로 직접 돌리면 러너(예: R10-b 의 부하기)가 대상이 아닌 경우가 있다**(#648) — 2026-09-02부터 부트스트랩이 role 과 무관하게 모든 박스에 `root@` 접근을 열어두므로(#642), 어느 박스가 러너든 `measure.pem` 으로 들어가 취소할 수 있다 |
+| `AUTO_SHUTDOWN` | **`1`** | **업로드 성공 + 실패 단계 없음(FAIL·TIMEOUT 0개, #641)일 때만** 정지 — `REPLICA_HOST`·`TARGET_HOST`(#688)도 같이. 기본이 켜짐(2026-08-24 결정) — 박스를 남기려면 `0` |
+| `SHUTDOWN_DELAY_MIN` | `5` | 정지까지의 유예(분). 취소: 박스 안에서 `pkill -f 'shutdown'`. ⚠️ **취소하려면 그 박스에 SSH 로 들어가야 하는데, 리허설을 `run_all.sh` 로 직접 돌리면 러너(예: 2026-09-02 R10-b 구성의 부하기, 지금은 run_all.sh 로 못 돈다 — #813)가 대상이 아닌 경우가 있다**(#648) — 2026-09-02부터 부트스트랩이 role 과 무관하게 모든 박스에 `root@` 접근을 열어두므로(#642), 어느 박스가 러너든 `measure.pem` 으로 들어가 취소할 수 있다 |
 | `SYNC_SEC` | `300` | S3 주기 업로드 간격 |
 | `WRITER_MAX_SEC` | `14400` | ⚠️ rig 기본은 5,400. 아래 참고 |
 | `TIMEOUT_DDL` | `43200` | 12시간 (로컬 추정 5.9시간 × 2) |
 | `REHEARSAL_SESSIONS` | `134` | 10만 행 |
-| `CALIB_RIG` | `results/ai-path-profile-2026-08-17/profile_e2e_and_scaling.py` | 從 R11 보정값 rig 경로 |
-| `TIMEOUT_CALIB` | `300` | 從 R11 — 실측 1~2분의 여유폭 |
 
 ---
 

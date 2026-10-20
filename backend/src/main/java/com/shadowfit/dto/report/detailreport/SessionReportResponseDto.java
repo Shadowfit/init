@@ -15,6 +15,10 @@ import java.util.List;
 @AllArgsConstructor
 public class SessionReportResponseDto {
     private Long sessionId;
+    // 화면 헤더의 날짜 — 리포트 화면이 세션 id 만 들고 들어와 날짜를 따로 알 길이 없었다.
+    @com.fasterxml.jackson.annotation.JsonFormat(shape = com.fasterxml.jackson.annotation.JsonFormat.Shape.STRING,
+            pattern = "yyyy-MM-dd'T'HH:mm:ss")
+    private java.time.LocalDateTime startTime;
     private int avgSyncRate;
     // 횟수만 측정한 운동의 0 기본값을 점수로 표시하지 않도록 구분한다.
     private boolean scoreAvailable;
@@ -66,6 +70,12 @@ public class SessionReportResponseDto {
 
     private List<ExerciseSyncRateDto> syncRateDetails;
 
+    /**
+     * 세트별 요약(V26) — set_no 오름차순. 세트 도입 전 세션은 빈 리스트.
+     * {@code syncRateDetails[0].setInfo} 가 한 줄 표기라면 이것은 세트마다 한 행이다.
+     */
+    private List<SessionSetDto> sets = List.of();
+
     private ComparisonWithPreviousDto comparisonWithPrevious;
 
     /**
@@ -87,6 +97,7 @@ public class SessionReportResponseDto {
     public static SessionReportResponseDto of(Session session, Report report) {
         SessionReportResponseDto dto = new SessionReportResponseDto();
         dto.setSessionId(session.getId());
+        dto.setStartTime(session.getStartTime());
         dto.setAvgSyncRate(intOrZero(session.getAvgSyncRate()));
         dto.setScoreAvailable(session.getAvgSyncRate() != null);
         dto.setTotalReps(session.getTotalReps() == null ? 0 : session.getTotalReps());
