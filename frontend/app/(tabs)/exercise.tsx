@@ -6,7 +6,9 @@ import { exercisesService } from '@/services/exercisesService';
 import { aiService, aiConfigError } from '@/services/aiService';
 import type { FeedbackTemplate } from '@/types/feedback';
 import { FEEDBACK_TYPE_LABEL } from '@/types/feedback';
-import type { AiFeedbackType, LungeProgress } from '@/types/pose';
+import type { AiFeedbackType, LungeProgress, PoseSkipReason, SquatProgress } from '@/types/pose';
+import ReadinessBanner, { deriveReadiness } from '@/components/exercise/ReadinessBanner';
+import MannequinDemo from '@/components/exercise/MannequinDemo';
 import {
   Camera as CameraIcon,
   ChevronLeft,
@@ -15,7 +17,8 @@ import {
   Zap,
   ChevronUp,
   ChevronDown,
-  Play,
+  Box,
+  X,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { COLORS, FONT_SIZE, SPACING, RADIUS } from '@/constants/Colors';
@@ -40,14 +43,27 @@ export default function ExerciseScreen() {
   const [exerciseId, setExerciseId] = useState(params.exerciseId === '2' ? 2 : 1);
   const isLunge = exerciseId === 2;
   const [lunge, setLunge] = useState<LungeProgress | null>(null);
+  // 운동 시작 전/중 «지금 뭘 해야 하는지» 배너용 상태 (ReadinessBanner)
+  const [squat, setSquat] = useState<SquatProgress | null>(null);
+  const [lastSkip, setLastSkip] = useState<PoseSkipReason | null>(null);
+  const [gotResponse, setGotResponse] = useState(false);
+  const [aiError, setAiError] = useState(false);
+  // 횟수가 올라간 순간 화면 중앙에 잠깐 띄우는 «✓ N회»
+  const [repFlash, setRepFlash] = useState<number | null>(null);
   const [captureMessage, setCaptureMessage] = useState<string | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [cameraRetryKey, setCameraRetryKey] = useState(0);
+  // 분석용 촬영 해상도(안드로이드). 지정하지 않으면 폰이 12MP(4000x3000) 원본을 찍는다 —
+  // 2026-10-06 실기기에서 프레임 간격이 1.3~2초(≈0.5fps)로 늘어져 횟수를 못 셌다. 같은 사진을
+  // 960px 로 줄여도 MediaPipe 관절 가시성은 유지(오히려 12MP 에서 검출 실패하던 프레임도 검출됨)된다.
+  const [pictureSize, setPictureSize] = useState<string | undefined>(undefined);
 
   const [permission, requestPermission] = useCameraPermissions();
   const [isRecording, setIsRecording] = useState(false);
   const [syncRate, setSyncRate] = useState(0);
   const [guideOpen, setGuideOpen] = useState(false);
+  // 3D 목각인형 시범 패널. 카메라와 같이 돌면 폰이 버벅일 수 있어 운동 중에는 띄우지 않는다.
+  const [demoOpen, setDemoOpen] = useState(false);
 
   // 백엔드 세션 (POST /exercises/sessions → PATCH /sessions/{id}/end)
   const [sessionId, setSessionId] = useState<number | null>(null);
@@ -79,6 +95,34 @@ export default function ExerciseScreen() {
   const [repCount, setRepCount] = useState(0);
   // 카메라 ref (takePictureAsync 호출용)
   const cameraRef = useRef<CameraView | null>(null);
+
+  // 카메라가 준비되면 분석에 충분한 가장 작은 4:3 촬영 크기를 고른다(긴 변 1024px 이상).
+  // 비율을 맞추는 이유: pictureSize 를 주면 ratio 설정이 무시돼, 미리보기와 다른 비율을 고르면
+  // 사진이 미리보기와 다른 영역으로 잘린다. getAvailablePictureSizesAsync 는 안드로이드 전용이라
+  // iOS 는 건드리지 않는다(기존 동작 유지). 실패해도 운동은 기존처럼 원본 해상도로 진행한다.
+  const handleCameraReady = async () => {
+    if (Platform.OS !== 'android') return;
+    try {
+      const sizes = (await cameraRef.current?.getAvailablePictureSizesAsync()) ?? [];
+      const candidates = sizes
+        .map((label) => {
+          const [w, h] = label.split('x').map(Number);
+          return { label, w, h };
+        })
+        .filter((s) => s.w > 0 && s.h > 0 && Math.abs(s.w / s.h - 4 / 3) < 0.02 && Math.max(s.w, s.h) >= 1024)
+        .sort((a, b) => a.w * a.h - b.w * b.h);
+      if (__DEV__) {
+        // eslint-disable-next-line no-console
+        console.log('[camera] pictureSize 선택:', candidates[0]?.label ?? '없음(원본 유지)', '/ 후보:', sizes.join(','));
+      }
+      if (candidates[0]) setPictureSize(candidates[0].label);
+    } catch (e) {
+      if (__DEV__) {
+        // eslint-disable-next-line no-console
+        console.warn('[camera] pictureSize 조회 실패 — 원본 해상도 유지:', (e as Error).message);
+      }
+    }
+  };
 
   // 앱 포그라운드 여부 — 백그라운드에서는 폴링만 멈춘다. 세션은 끝내지 않는다(재개로 이어간다).
   const [isForeground, setIsForeground] = useState(true);
@@ -224,8 +268,27 @@ export default function ExerciseScreen() {
       setRepCount(0);
       setLunge(null);
       setCaptureMessage(null);
+      setSquat(null);
+      setLastSkip(null);
+      setGotResponse(false);
+      setAiError(false);
+      setRepFlash(null);
     }
   }, [isRecording]);
+
+  // 횟수가 올라가면 «✓ N회» 를 1.2초 띄운다 — 폰 화면만 봐도 방금 인식된 걸 알 수 있게.
+  const previousRepCount = useRef(0);
+  useEffect(() => {
+    if (repCount > previousRepCount.current) {
+      setRepFlash(repCount);
+      const timer = setTimeout(() => setRepFlash(null), 1200);
+      previousRepCount.current = repCount;
+      return () => clearTimeout(timer);
+    }
+    previousRepCount.current = repCount;
+  }, [repCount]);
+
+  const readiness = deriveReadiness({ isRecording, isLunge, gotResponse, aiError, lastSkip, squat, lunge });
 
   // 자세 결함 토스트 — 4초 후 자동 사라짐
   useEffect(() => {
@@ -261,21 +324,30 @@ export default function ExerciseScreen() {
     let inFlight = false;
     const exerciseType = exerciseTypeOf(exerciseId);
     const intervalMs = 330; // ~3fps — takePictureAsync 부담 고려
+    // 2026-10-06 실기기(안드로이드) 첫 시험에서 프레임 간격이 1.3~2초(≈0.6fps)였다 — 카운팅 상수가
+    // 3fps 기준이라 이 속도면 횟수를 못 센다. 원인 후보는 takePictureAsync 의 후처리(skipProcessing=false).
+    // 끄면 EXIF 방향만 달린 사진이 올라오는데, 서버(cv2.imdecode)가 EXIF 방향을 반영하고 EXIF 가 없어도
+    // MediaPipe 검출은 유지됨을 실험으로 확인했다. 기기 검증 전이라 기본은 기존대로 두고 환경변수로 켠다.
+    const fastCapture = process.env.EXPO_PUBLIC_FAST_CAPTURE === '1';
+    let frameNo = 0;
 
     const tick = async () => {
       if (cancelled || inFlight) return;
       inFlight = true;
       try {
         let image: string | undefined;
+        const captureStartedAt = Date.now();
+        let captureMs = 0;
         try {
           const cam = cameraRef.current;
           if (cam) {
             const snap = await cam.takePictureAsync({
               base64: true,
               quality: 0.4, // 분석엔 충분, 페이로드 줄임
-              skipProcessing: false, // 분석 좌표계가 기기 회전과 일치하도록 처리
+              skipProcessing: fastCapture, // false: 분석 좌표계가 기기 회전과 일치하도록 처리(기본)
               shutterSound: false,
             });
+            captureMs = Date.now() - captureStartedAt;
             if (snap?.base64) image = snap.base64;
           }
         } catch (e) {
@@ -294,6 +366,7 @@ export default function ExerciseScreen() {
           // timestamp_sec 은 더 보내지 않는다 (이슈 #156). 여기서 보내던 Date.now()/1000 은
           // epoch 라 «세션 시작 기준 경과 초» 가 아니었고, 변환하는 곳이 한 군데도 없어 그대로
           // 리포트까지 흘러 시각 표시가 무의미해졌다. 이제 서버가 도착 시각으로 만든다.
+          const aiStartedAt = Date.now();
           const res = await aiService.detectPose(
             {
               image,
@@ -305,10 +378,24 @@ export default function ExerciseScreen() {
           );
           if (cancelled) return;
           const r = res.data;
+          if (__DEV__ && ++frameNo % 5 === 1) {
+            // 실기기 시험용 — 5프레임마다 캡처/AI 소요(ms)와 판정 결과를 Metro 터미널에 남긴다.
+            // eslint-disable-next-line no-console
+            console.log(
+              `[frame ${frameNo}] capture=${captureMs}ms ai=${Date.now() - aiStartedAt}ms ` +
+                `size=${Math.round(image.length / 1024)}KB fast=${fastCapture} ` +
+                `success=${r.success} skip=${r.skip_reason ?? '-'} reps=${r.rep_count ?? '-'}`,
+            );
+          }
+          setGotResponse(true);
+          setAiError(false);
           if (r.lunge) setLunge(r.lunge);
+          if (r.squat) setSquat(r.squat);
           if (r.success === false) {
             if (r.skip_reason !== 'RATE_LIMITED') {
               setCaptureMessage(r.lunge?.guidance ?? r.message ?? '전신이 보이도록 위치를 조정해주세요.');
+              // RATE_LIMITED 는 건강한 세션에서도 나는 서버의 의도적 스킵이라 «안 보임» 으로 읽지 않는다.
+              setLastSkip(r.skip_reason ?? null);
             }
             // success 는 «판정에 들어갔는가» 다(#267) — RATE_LIMITED·NO_POSE·LOW_VISIBILITY 는
             // 정상 동작 중에도 나는 스킵이라 폴링을 유지한다. 세션·순서 문제만 치명적이다.
@@ -326,6 +413,7 @@ export default function ExerciseScreen() {
             return;
           }
           setCaptureMessage(null);
+          setLastSkip(null);
           if (r.sync_rate != null) setSyncRate(Math.round(r.sync_rate));
           if (r.message) {
             setCoachingNotice({ message: r.message, success: r.rep_completed === true });
@@ -336,7 +424,10 @@ export default function ExerciseScreen() {
           }
           if (r.rep_count != null) setRepCount(r.rep_count);
         } catch (e: any) {
-          if (!cancelled) setCaptureMessage('AI 연결을 확인하고 있습니다. 잠시 원위치에서 기다려주세요.');
+          if (!cancelled) {
+            setCaptureMessage('AI 연결을 확인하고 있습니다. 잠시 원위치에서 기다려주세요.');
+            setAiError(true);
+          }
           if (__DEV__) {
             // eslint-disable-next-line no-console
             console.warn('[ai pose] status=', e?.response?.status, e?.message);
@@ -391,6 +482,8 @@ export default function ExerciseScreen() {
         // 운동 중 ~3fps 로 takePictureAsync 를 계속 부르는데, 기본값(true)이면 매 촬영마다 셔터
         // 애니메이션(화면 번쩍임)이 재생된다. 분석용 프레임 캡처라 끈다(2026-10-06).
         animateShutter={false}
+        pictureSize={pictureSize}
+        onCameraReady={handleCameraReady}
         onMountError={(error) => setCameraError(error.message || '카메라 연결에 실패했습니다.')}
       >
         {/* 상단 UI 오버레이 */}
@@ -441,10 +534,11 @@ export default function ExerciseScreen() {
             </TouchableOpacity>
           ))}
         </View>
+        {/* 지금 뭘 해야 하는지 — 몸이 보이는지, 준비 자세를 인식했는지, 운동 중인지 */}
+        <ReadinessBanner readiness={readiness} />
         {isLunge ? (
           <View style={styles.lungePanel}>
             <Text style={styles.lungeTitle}>전방 런지 · 횟수 측정</Text>
-            <Text style={styles.guideRow}>{captureMessage ?? lunge?.guidance ?? '옆모습으로 서서 다리를 앞뒤로 벌리고, 무릎을 굽혔다 펴면 1회로 셉니다.'}</Text>
             {isRecording && <Text style={styles.lungeSides}>{lunge ? `왼쪽 ${lunge.left_reps}회 · 오른쪽 ${lunge.right_reps}회` : '좌우 횟수 확인 중...'}</Text>}
             {!!lunge?.unassigned_reps && <Text style={styles.guideRow}>이전 {lunge.unassigned_reps}회는 좌우 정보 없이 복원되었습니다.</Text>}
             <Text style={styles.guideRow}>운동이 끝나면 깊이·상체·보폭 점수를 리포트에서 확인할 수 있어요.</Text>
@@ -497,7 +591,27 @@ export default function ExerciseScreen() {
           </View>
         )}
 
-        {/* 하단: 기준영상 + 운동 시작/종료 버튼 */}
+        {/* 횟수가 인식된 순간 «✓ N회» */}
+        {repFlash != null && (
+          <View pointerEvents="none" style={styles.repFlash}>
+            <Text style={styles.repFlashText}>✓ {repFlash}회</Text>
+          </View>
+        )}
+
+        {/* 3D 목각인형 시범 */}
+        {demoOpen && !isRecording && (
+          <View style={styles.demoPanel}>
+            <View style={styles.demoHeader}>
+              <Text style={styles.demoTitle}>{isLunge ? '전방 런지' : '스쿼트'} 3D 시범</Text>
+              <TouchableOpacity onPress={() => setDemoOpen(false)} style={styles.demoClose} accessibilityLabel="시범 닫기">
+                <X size={18} color={COLORS.text} strokeWidth={2} />
+              </TouchableOpacity>
+            </View>
+            <MannequinDemo exercise={isLunge ? 'lunge' : 'squat'} />
+          </View>
+        )}
+
+        {/* 하단: 3D 시범 + 운동 시작/종료 버튼 */}
         <View style={styles.bottomOverlay}>
           <View style={styles.bottomCenter}>
             <Text style={styles.recordHint}>
@@ -519,10 +633,10 @@ export default function ExerciseScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* 기준 영상 미리보기 */}
-          {!isLunge && <TouchableOpacity style={styles.refVideoBtn} activeOpacity={0.7}>
-            <Play size={14} color={COLORS.primary} strokeWidth={2} fill={COLORS.primary} />
-            <Text style={styles.refVideoText}>기준 영상</Text>
+          {/* 3D 시범 열기 */}
+          {!isRecording && <TouchableOpacity style={styles.refVideoBtn} activeOpacity={0.7} onPress={() => setDemoOpen((open) => !open)}>
+            <Box size={18} color={COLORS.primary} strokeWidth={2} />
+            <Text style={styles.refVideoText}>3D 시범</Text>
           </TouchableOpacity>}
         </View>
       </CameraView>
@@ -535,6 +649,16 @@ const styles = StyleSheet.create({
   exerciseChoice: { paddingHorizontal: 18, paddingVertical: 10, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.6)', borderWidth: 1, borderColor: 'transparent' },
   exerciseSelected: { borderColor: COLORS.primary },
   exerciseChoiceText: { color: COLORS.text, fontWeight: '700' },
+  repFlash: {
+    position: 'absolute',
+    top: '38%',
+    alignSelf: 'center',
+    paddingHorizontal: 28,
+    paddingVertical: 14,
+    borderRadius: 24,
+    backgroundColor: 'rgba(76,175,80,0.92)',
+  },
+  repFlashText: { color: '#fff', fontSize: 40, fontWeight: '900' },
   lungePanel: { margin: 20, padding: 16, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.75)', gap: 8 },
   lungeTitle: { color: COLORS.primary, fontSize: 17, fontWeight: '700' },
   lungeSides: { color: COLORS.text, fontSize: 20, fontWeight: '700' },
@@ -710,6 +834,32 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   refVideoText: { color: COLORS.textSecondary, fontSize: FONT_SIZE.xs },
+
+  // 3D 시범 패널
+  demoPanel: {
+    position: 'absolute',
+    left: SPACING.lg,
+    right: SPACING.lg,
+    top: '20%',
+    height: 340,
+    borderRadius: RADIUS.lg,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(13,15,21,0.94)',
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+  },
+  demoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingLeft: SPACING.lg,
+    paddingRight: SPACING.sm,
+    paddingVertical: SPACING.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.divider,
+  },
+  demoTitle: { color: COLORS.text, fontSize: FONT_SIZE.md, fontWeight: '700' },
+  demoClose: { padding: SPACING.xs },
 
   // 촬영 가이드
   guideToggle: {

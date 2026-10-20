@@ -14,6 +14,15 @@ export interface LungeProgress {
   score_available: boolean;
 }
 
+// 스쿼트 카운터의 현재 단계 (AI SquatProgress). 화면이 «준비됐는지/지금 뭘 해야 하는지»를 보여준다.
+//   waiting_for_standing  똑바로 선 자세를 아직 못 봤다
+//   ready                 준비 완료 — 스쿼트를 시작해도 된다
+//   descending·bottom     동작 중
+export interface SquatProgress {
+  stage: string;
+  guidance: string;
+}
+
 // 실시간 포즈 감지 요청
 export interface PoseDetectRequest {
   image: string; // base64 인코딩 프레임
@@ -59,6 +68,7 @@ export interface PoseDetectResponse {
   rep_count?: number | null;
   rep_completed?: boolean;
   lunge?: LungeProgress | null;
+  squat?: SquatProgress | null;
   feedback_type?: AiFeedbackType | null;
   angles?: number[] | null;
   message?: string | null;
