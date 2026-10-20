@@ -1,5 +1,5 @@
 import axios from 'axios';
-import * as SecureStore from 'expo-secure-store';
+import { authStorage } from './authStorage';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
@@ -50,7 +50,7 @@ if (__DEV__) {
 
 // 요청 인터셉터: JWT accessToken 자동 첨부
 api.interceptors.request.use(async (config) => {
-  const token = await SecureStore.getItemAsync('accessToken');
+  const token = await authStorage.getItemAsync('accessToken');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
     // 이 요청이 **어느 세션의 것인지** 같이 찍는다 (이슈 #170).
@@ -114,7 +114,7 @@ async function reissueOnce(): Promise<ReissueResult> {
     reissuePromiseVersion = startedVersion;
     reissuePromise = (async (): Promise<ReissueResult> => {
       try {
-        const refreshToken = await SecureStore.getItemAsync('refreshToken');
+        const refreshToken = await authStorage.getItemAsync('refreshToken');
         if (!refreshToken) return { status: 'failed' };
 
         const res = await reissueClient.post('/member/reissue', { refreshToken });
@@ -134,8 +134,8 @@ async function reissueOnce(): Promise<ReissueResult> {
         // 이 순서에서는 «옛 access + 새 refresh» 가 남는다 — 옛 access 는 곧 401 을 받고
         // 그때 새 refresh 로 재발급이 성공하니 **스스로 복구된다.** 반대로 access 를 먼저
         // 쓰면 «새 access + 폐기된 refresh» 가 남아 다음 재발급이 세션을 끊는다.
-        await SecureStore.setItemAsync('refreshToken', rotated);
-        await SecureStore.setItemAsync('accessToken', accessToken);
+        await authStorage.setItemAsync('refreshToken', rotated);
+        await authStorage.setItemAsync('accessToken', accessToken);
 
         const { useAuthStore } = require('@/stores/authStore');
         useAuthStore.getState().applyReissuedTokens(accessToken, rotated);

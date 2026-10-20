@@ -1,13 +1,12 @@
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Calendar, type DateData } from 'react-native-calendars';
 import { useCallback, useEffect, useState } from 'react';
 import {
   CircleUser,
-  Flame,
   Target,
-  Trophy,
+  Users,
   Camera,
   Ruler,
   PersonStanding,
@@ -19,37 +18,28 @@ import {
 import { COLORS, FONT_SIZE, SPACING, RADIUS } from '@/constants/Colors';
 import Button from '@/components/ui/Button';
 import { reportService } from '@/services/reportService';
+import { goalService } from '@/services/goalService';
+import { socialService } from '@/services/socialService';
+import { useAuthStore } from '@/stores/authStore';
 import type { CalendarMainResponse, CalendarDay, DailyActivityResponse } from '@/types/report';
-
-function getSyncColor(rate: number) {
-  if (rate >= 80) return COLORS.primary;
-  if (rate >= 60) return COLORS.warning;
-  return COLORS.error;
-}
+import type { WorkoutGoal } from '@/types/goal';
+import type { FriendAttendance } from '@/types/social';
 
 // 백엔드 records 를 react-native-calendars 의 markedDates 형식으로 변환
 function buildMarkedDates(records: CalendarDay[]): Record<string, any> {
   const marked: Record<string, any> = {};
   for (const r of records) {
     if (!r.hasRecord) continue;
-    // 80% 이상 = 정석(primary) / 60~80% = 교정(warning) / <60% = 부상(error)
-    const sync = r.dailyAvgSyncRate;
-    const dotColor =
-      sync == null
-        ? COLORS.primary
-        : sync >= 80
-        ? COLORS.primary
-        : sync >= 60
-        ? COLORS.warning
-        : COLORS.error;
-    marked[r.date] = { marked: true, dotColor };
+    marked[r.date] = { marked: true, dotColor: COLORS.primary };
   }
   return marked;
 }
 
 export default function HomeScreen() {
   const router = useRouter();
-  const today = new Date().toISOString().split('T')[0];
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const localToday = new Date();
+  const today = `${localToday.getFullYear()}-${String(localToday.getMonth() + 1).padStart(2, '0')}-${String(localToday.getDate()).padStart(2, '0')}`;
   const [selectedDate, setSelectedDate] = useState('');
 
   // 캘린더가 가리키는 연/월 (사용자가 ◀▶ 눌러 바꿈)
@@ -61,6 +51,72 @@ export default function HomeScreen() {
   // 선택 날짜의 운동 목록 (GET /reports/daily)
   const [daily, setDaily] = useState<DailyActivityResponse | null>(null);
   const [dailyLoading, setDailyLoading] = useState(false);
+  const [goal, setGoal] = useState<WorkoutGoal | null>(null);
+  const [goalLoading, setGoalLoading] = useState(false);
+  const [goalSaving, setGoalSaving] = useState(false);
+  const [goalError, setGoalError] = useState(false);
+  const [goalEditing, setGoalEditing] = useState(false);
+  const [friends, setFriends] = useState<FriendAttendance[]>([]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!isAuthenticated) {
+        setGoal(null);
+        setGoalError(false);
+        setGoalLoading(false);
+        setFriends([]);
+        return;
+      }
+      let active = true;
+      setGoalLoading(true);
+      Promise.allSettled([goalService.getGoals(), socialService.getFriends()]).then(([goals, friendStatuses]) => {
+        if (!active) return;
+        if (goals.status === 'fulfilled') {
+          setGoal(goals.value.data.find((item) => item.goalType === 'WEEKLY_SESSIONS') ?? null);
+          setGoalError(false);
+        } else {
+          setGoalError(true);
+        }
+        if (friendStatuses.status === 'fulfilled') setFriends(friendStatuses.value.data);
+        setGoalLoading(false);
+      });
+      return () => { active = false; };
+    }, [isAuthenticated]),
+  );
+
+  const saveGoal = async (targetValue: number) => {
+    if (!isAuthenticated) {
+      router.push('/(auth)/login');
+      return;
+    }
+    if (goalSaving) return;
+    setGoalSaving(true);
+    try {
+      const response = goal
+        ? await goalService.updateGoal(goal.id, targetValue)
+        : await goalService.createWeeklySessionsGoal(targetValue);
+      setGoal(response.data);
+      setGoalError(false);
+      setGoalEditing(false);
+    } catch (error: any) {
+      Alert.alert('목표를 저장하지 못했습니다', error?.response?.data?.message ?? '연결을 확인하고 다시 시도해주세요.');
+    } finally {
+      setGoalSaving(false);
+    }
+  };
+
+  const retryGoal = async () => {
+    setGoalLoading(true);
+    try {
+      const response = await goalService.getGoals();
+      setGoal(response.data.find((item) => item.goalType === 'WEEKLY_SESSIONS') ?? null);
+      setGoalError(false);
+    } catch {
+      setGoalError(true);
+    } finally {
+      setGoalLoading(false);
+    }
+  };
 
   // 화면 포커스 / 연·월 변경마다 캘린더 데이터 재조회
   useFocusEffect(
@@ -124,31 +180,69 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <View>
             <Text style={styles.appTitle}>ShadowFit</Text>
-            <Text style={styles.appSubtitle}>AI 자세 교정 트레이너</Text>
+            <Text style={styles.appSubtitle}>친구와 함께 꾸준히 운동해요</Text>
           </View>
           <TouchableOpacity onPress={() => router.push('/(tabs)/mypage')}>
             <CircleUser size={28} color={COLORS.textSecondary} strokeWidth={1.75} />
           </TouchableOpacity>
         </View>
 
-        {/* 상단 통계 카드 - 백엔드 CalendarMainResponse 의 monthly* 사용 */}
+        <View style={styles.goalCard}>
+          <View style={styles.goalHeading}>
+            <Target size={20} color={COLORS.primary} strokeWidth={2} />
+            <Text style={styles.goalEyebrow}>나의 운동 약속</Text>
+          </View>
+          {goalLoading ? (
+            <Text style={styles.goalDescription}>목표를 불러오는 중...</Text>
+          ) : goal ? (
+            <>
+              <Text style={styles.goalTitle}>최근 7일 {goal.currentValue} / {goal.targetValue}회 완료</Text>
+              <View style={styles.goalTrack}>
+                <View style={[styles.goalFill, { width: `${Math.min(100, (goal.currentValue / goal.targetValue) * 100)}%` }]} />
+              </View>
+              <Text style={styles.goalDescription}>
+                {goal.status === 'ACHIEVED' ? '이번 목표를 채웠어요! 다음 운동도 내 페이스로 이어가요.' : '짧게 운동해도 한 번의 완료로 기록돼요.'}
+              </Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.goalTitle}>{isAuthenticated ? '최근 7일 목표를 정해볼까요?' : '운동 약속을 만들어보세요'}</Text>
+              <Text style={styles.goalDescription}>{goalError ? '목표를 불러오지 못했습니다. 연결을 확인해주세요.' : '매일 운동할 필요는 없어요. 내 일정에 맞춰 시작하세요.'}</Text>
+            </>
+          )}
+          {goalError ? (
+            <TouchableOpacity accessibilityRole="button" onPress={() => void retryGoal()} style={styles.goalEditButton}>
+              <Text style={styles.goalEditText}>다시 불러오기</Text>
+            </TouchableOpacity>
+          ) : isAuthenticated && (goalEditing || !goal) ? (
+            <View style={styles.goalOptions}>
+              {[2, 3, 4].map((target) => (
+                <TouchableOpacity
+                  key={target}
+                  accessibilityRole="button"
+                  disabled={goalSaving || goalLoading}
+                  onPress={() => saveGoal(target)}
+                  style={[styles.goalOption, goal?.targetValue === target && styles.goalOptionSelected]}
+                >
+                  <Text style={styles.goalOptionText}>{target}회</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : goal ? (
+            <TouchableOpacity accessibilityRole="button" onPress={() => setGoalEditing(true)} style={styles.goalEditButton}>
+              <Text style={styles.goalEditText}>목표 변경</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity accessibilityRole="button" onPress={() => router.push('/(auth)/login')} style={styles.goalEditButton}>
+              <Text style={styles.goalEditText}>로그인하고 시작하기</Text>
+            </TouchableOpacity>
+          )}
+          <Text style={styles.goalFootnote}>완료한 운동 세션만 셉니다. 쉬는 날에도 목표 설정은 유지돼요.</Text>
+        </View>
+
         <View style={styles.statsRow}>
-          <StatCard
-            Icon={Flame}
-            value={`${data?.monthlyExerciseDays ?? 0}일`}
-            label="이번 달"
-          />
-          <StatCard
-            Icon={Target}
-            value={`${data?.totalAvgSyncRate ?? 0}%`}
-            label="평균 싱크로율"
-            highlight
-          />
-          <StatCard
-            Icon={Trophy}
-            value={`${data?.consecutiveDays ?? 0}일`}
-            label="연속 기록"
-          />
+          <StatCard Icon={Camera} value={data ? `${data.monthlyExerciseDays}일` : '—'} label={`${viewMonth}월 기록일`} />
+          <StatCard Icon={Target} value={goal ? `${goal.currentValue}회` : '—'} label="최근 7일 완료" />
         </View>
 
         {/* 캘린더 */}
@@ -201,20 +295,44 @@ export default function HomeScreen() {
             key={s.sessionId}
             style={styles.dailyCard}
             activeOpacity={0.7}
-            onPress={() => router.push(`/report/${s.sessionId}` as any)}
+            onPress={() => s.scoreAvailable === false
+              ? Alert.alert(s.exerciseName, `${s.setSummary}\n자세 점수는 측정하지 않았습니다.`)
+              : router.push(`/report/${s.sessionId}` as any)}
           >
             <View style={styles.dailyCardLeft}>
               <Text style={styles.dailyCardName}>{s.exerciseName}</Text>
               <Text style={styles.dailyCardSets}>{s.setSummary}</Text>
             </View>
             <View style={styles.dailyCardRight}>
-              <Text style={[styles.dailyCardSync, { color: getSyncColor(s.syncRate) }]}>
-                {Math.round(s.syncRate)}%
-              </Text>
+              <Text style={styles.dailyCardSync}>{s.scoreAvailable === false ? '횟수 기록' : '기록 보기'}</Text>
               <ChevronRight size={14} color={COLORS.textMuted} strokeWidth={2} />
             </View>
           </TouchableOpacity>
         ))}
+
+        <TouchableOpacity
+          style={styles.friendsCard}
+          accessibilityRole="button"
+          onPress={() => router.push('/friends')}
+        >
+          <View style={styles.friendsHeading}>
+            <Users size={19} color={COLORS.primary} strokeWidth={2} />
+            <Text style={styles.friendsTitle}>친구와 함께</Text>
+            <ChevronRight size={17} color={COLORS.textMuted} strokeWidth={2} />
+          </View>
+          {friends.length > 0 ? (
+            friends.slice(0, 3).map((friend) => (
+              <View key={friend.memberId} style={styles.friendPreviewRow}>
+                <Text style={styles.friendName}>{friend.username}</Text>
+                <Text style={[styles.friendStatus, friend.attendedToday && styles.friendDone]}>
+                  {friend.attendedToday ? '오늘 운동 완료' : '오늘 기록 전'}
+                </Text>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.friendsEmpty}>모임을 만들거나 초대 코드로 친구와 운동을 시작해보세요.</Text>
+          )}
+        </TouchableOpacity>
 
         {/* 촬영 가이드 */}
         <View style={styles.guideBox}>
@@ -222,10 +340,10 @@ export default function HomeScreen() {
             <Camera size={16} color={COLORS.text} strokeWidth={2} />
             <Text style={styles.guideHeader}>운동 촬영 가이드</Text>
           </View>
-          <GuideItem Icon={Ruler} text="정면 또는 측면(45°)에서 촬영" />
-          <GuideItem Icon={PersonStanding} text="전신이 보이도록 1.5m 이상 거리 확보" />
-          <GuideItem Icon={Lightbulb} text="밝은 조명, 단색 배경 권장" />
-          <GuideItem Icon={Ban} text="거울 반사, 여러 사람이 보이는 환경은 피해주세요" />
+          <GuideItem Icon={Ruler} text="스쿼트는 정면 기준 45° · 런지는 측면에 카메라 고정" />
+          <GuideItem Icon={PersonStanding} text="머리부터 발목까지 담고 시작·종료 자세를 2초 유지" />
+          <GuideItem Icon={Lightbulb} text="밝은 조명에서 관절이 선명하게 보이도록 촬영" />
+          <GuideItem Icon={Ban} text="무릎을 가리는 랙·기구와 여러 사람 환경은 피해주세요" />
         </View>
 
         {/* 운동 시작 버튼 */}
@@ -281,6 +399,29 @@ const styles = StyleSheet.create({
   appTitle: { fontSize: FONT_SIZE.xl, fontWeight: '800', color: COLORS.primary },
   appSubtitle: { fontSize: FONT_SIZE.xs, color: COLORS.textSecondary, marginTop: 2 },
 
+  goalCard: {
+    marginHorizontal: SPACING.xxl,
+    marginTop: SPACING.md,
+    padding: SPACING.xl,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.card,
+  },
+  goalHeading: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+  goalEyebrow: { color: COLORS.primary, fontSize: FONT_SIZE.sm, fontWeight: '700' },
+  goalTitle: { color: COLORS.text, fontSize: FONT_SIZE.xl, fontWeight: '800', marginTop: SPACING.md },
+  goalDescription: { color: COLORS.textSecondary, fontSize: FONT_SIZE.sm, lineHeight: 20, marginTop: SPACING.sm },
+  goalTrack: { height: 9, borderRadius: RADIUS.full, backgroundColor: COLORS.surfaceLight, overflow: 'hidden', marginTop: SPACING.lg },
+  goalFill: { height: '100%', backgroundColor: COLORS.primary, borderRadius: RADIUS.full },
+  goalOptions: { flexDirection: 'row', gap: SPACING.sm, marginTop: SPACING.lg },
+  goalOption: { flex: 1, borderWidth: 1, borderColor: COLORS.cardBorder, borderRadius: RADIUS.sm, paddingVertical: SPACING.md, alignItems: 'center' },
+  goalOptionSelected: { borderColor: COLORS.primary, backgroundColor: COLORS.primaryDim },
+  goalOptionText: { color: COLORS.text, fontSize: FONT_SIZE.md, fontWeight: '700' },
+  goalEditButton: { alignSelf: 'flex-start', marginTop: SPACING.md, paddingVertical: SPACING.sm },
+  goalEditText: { color: COLORS.primary, fontSize: FONT_SIZE.sm, fontWeight: '700' },
+  goalFootnote: { color: COLORS.textMuted, fontSize: FONT_SIZE.xs, marginTop: SPACING.md, lineHeight: 17 },
+
   statsRow: {
     flexDirection: 'row',
     paddingHorizontal: SPACING.xxl,
@@ -333,7 +474,24 @@ const styles = StyleSheet.create({
   dailyCardName: { fontSize: FONT_SIZE.md, fontWeight: '700', color: COLORS.text },
   dailyCardSets: { fontSize: FONT_SIZE.xs, color: COLORS.textSecondary, marginTop: 2 },
   dailyCardRight: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
-  dailyCardSync: { fontSize: FONT_SIZE.lg, fontWeight: '800' },
+  dailyCardSync: { fontSize: FONT_SIZE.sm, fontWeight: '700', color: COLORS.textSecondary },
+
+  friendsCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    marginHorizontal: SPACING.xxl,
+    marginBottom: SPACING.xl,
+    padding: SPACING.lg,
+  },
+  friendsHeading: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.sm },
+  friendsTitle: { flex: 1, color: COLORS.text, fontSize: FONT_SIZE.md, fontWeight: '700' },
+  friendsEmpty: { color: COLORS.textSecondary, fontSize: FONT_SIZE.sm, lineHeight: 20 },
+  friendPreviewRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: SPACING.sm },
+  friendName: { color: COLORS.text, fontSize: FONT_SIZE.sm },
+  friendStatus: { color: COLORS.textMuted, fontSize: FONT_SIZE.sm },
+  friendDone: { color: COLORS.primary },
 
   scrollContent: {
     paddingBottom: SPACING.xxxl,

@@ -1,0 +1,21 @@
+require('./register.cjs');
+const fs = require('fs'), path = require('path');
+const { prepareReference } = require('./reference');
+const { compareRecording } = require('./analysis');
+const { cleanRecording } = require('./preprocess');
+const { featuresFromLandmarks, standingBaseline, withDrop } = require('./features');
+const FIX = path.join(__dirname, 'fixtures');
+const load = (n) => JSON.parse(fs.readFileSync(path.join(FIX, n), 'utf8'));
+const sq = prepareReference(load('reference_squat.json').cycles[0]);
+const rec = load(process.argv[2] || 'squat_normal_02.json');
+const c = compareRecording(rec, { squat: sq });
+const r = c.reps.find((x) => x.status === 'ok' && x.repNumber === 2);
+console.log('rep2 지표 평균|오차|:', r.metrics.map((m) => `${m.key} ${m.meanAbs.toFixed(1)}${m.unit}(부호 ${m.meanSigned.toFixed(1)})`).join(', '));
+const clean = cleanRecording(rec);
+console.log('프레임별: t / 사용자(무릎평균,고관절평균,체간,엉덩이높이) / 기준 매칭(t) / 오차');
+r.frameIndex.forEach((fi, k) => {
+  const f = featuresFromLandmarks(clean[fi].lm, rec.aspect, clean[fi].t);
+  const e = r.frameError[k];
+  console.log(` ${r.userT[k].toFixed(2)}s  U(knee ${((f.kneeL + f.kneeR) / 2).toFixed(0)}, hip ${((f.hipL + f.hipR) / 2).toFixed(0)}, trunk ${f.trunk.toFixed(0)}, hipH ${f.hipH.toFixed(2)})  ref t=${r.refTime[k].toFixed(2)} ${r.segment[k]}  err ${Object.entries(e).map(([k2, v]) => k2 + ' ' + v.toFixed(2)).join(' ')}`);
+});
+console.log('기준 drop 최대', Math.max(...sq.feats.map((f) => f.drop)).toFixed(2), ' 기준 knee/hip/trunk 최저·최대', Math.min(...sq.feats.map((f) => (f.kneeL + f.kneeR) / 2)).toFixed(0), Math.min(...sq.feats.map((f) => (f.hipL + f.hipR) / 2)).toFixed(0), Math.max(...sq.feats.map((f) => f.trunk)).toFixed(0));

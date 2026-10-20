@@ -96,6 +96,7 @@ function RootLayoutNav() {
         <Stack.Screen name="(onboarding)" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="report/[id]" />
+        <Stack.Screen name="friends" />
         <Stack.Screen name="board/notice" />
         <Stack.Screen name="board/qna" />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />

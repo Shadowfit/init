@@ -125,6 +125,10 @@ class PoseResponse(BaseModel):
     # success=False 일 때 «왜» 다. 성공이면 None.
     skip_reason: PoseSkipReason | None = None
     landmarks: list[Landmark] | None = None
+    # landmarks 의 x 는 이미지 너비, y 는 높이로 정규화돼 있다. 각도·거리를 맞게 재려면 두 축의
+    # 실제 길이 비(너비/높이)가 필요한데 앱은 서버가 디코딩한 이미지(EXIF 회전 반영)의 크기를 알 수
+    # 없어서 같이 내려준다 (3D 운동 비교, 2026-10-20).
+    image_aspect_ratio: float | None = None
     angles: list[float] | None = None
     message: str | None = None
     rep_count: int | None = None

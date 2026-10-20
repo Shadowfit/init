@@ -127,6 +127,23 @@ class SquatProgressInResponseTest(unittest.TestCase):
         self.assertIn("ready", stages)
         self.assertTrue(all(r.squat.guidance for r in responses if r.squat is not None))
 
+    def test_응답에_이미지_가로세로_비율이_실린다(self) -> None:
+        # 앱이 좌표(x=너비 기준, y=높이 기준)로 각도를 재려면 서버가 디코딩한 이미지의 비율이 필요하다.
+        get_registry().create(session_id=9305, exercise_id=1, reference_angles=[])
+        self.addCleanup(get_registry().remove, 9305)
+        frames = iter(_frame(172.0) for _ in range(3))
+        clock = {"now": 0.0}
+        req = PoseRequest(image="", session_id=9305, exercise_type="squat")
+        with mock.patch.object(pose_endpoint, "base64_to_image", lambda _: _BLANK_IMAGE),             mock.patch.object(pose_endpoint, "lease_detector", _fake_lease(lambda _img: next(frames))),             mock.patch.object(pose_endpoint, "accept_frame", lambda _s, _n: True),             mock.patch.object(pose_endpoint.time, "monotonic", lambda: clock["now"]),             mock.patch.object(pose_endpoint.spring_client, "report_pose_data_batch"):
+            responses = []
+            for i in range(3):
+                clock["now"] = i / 3
+                responses.append(pose_endpoint.detect_pose(req))
+        expected = _BLANK_IMAGE.shape[1] / _BLANK_IMAGE.shape[0]
+        for r in responses:
+            self.assertIsNotNone(r.landmarks)
+            self.assertAlmostEqual(r.image_aspect_ratio, expected)
+
 
 if __name__ == "__main__":
     unittest.main()

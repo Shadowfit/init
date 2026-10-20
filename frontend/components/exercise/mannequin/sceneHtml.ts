@@ -20,6 +20,9 @@ export const SCENE_TEMPLATE = `<!DOCTYPE html>
           background: rgba(0,0,0,.45); text-shadow: none; }
   .dot { width: 8px; height: 8px; border-radius: 4px; }
   #hint { right: 10px; top: 8px; font-size: 10px; color: rgba(255,255,255,.6); }
+  /* 3D 운동 비교 화면(window.__COMPARE__)에서는 시범용 HUD 를 숨기고 자체 안내를 쓴다 */
+  body.cmp #top, body.cmp #legend, body.cmp #hint { display: none; }
+  #cmpHud { left: 8px; top: 8px; font-size: 11px; line-height: 1.5; padding: 4px 8px; border-radius: 8px; background: rgba(0,0,0,.45); text-shadow: none; }
 </style>
 </head>
 <body>
@@ -218,6 +221,7 @@ export const SCENE_TEMPLATE = `<!DOCTYPE html>
     M.leg = M.thigh + M.shin;
     M.restWQ = {};
     for (n in B) M.restWQ[n] = B[n].getWorldQuaternion(new Q());
+    if (window.__ON_MODEL__) window.__ON_MODEL__();
     requestAnimationFrame(frame);
   }
 
@@ -371,13 +375,13 @@ export const SCENE_TEMPLATE = `<!DOCTYPE html>
       aim('lowerarm_' + s, 'hand_' + s, el.clone().addScaledVector(foreDir, M.farm));
     });
 
-    paint(p);
+    if (!window.__COMPARE__) paint(p);
     phaseEl.textContent = p.phase;
     subEl.textContent = '무릎 ' + Math.round(minKnee) + '°' + (minKnee <= 115 ? ' ✓ 깊이 충족' : '');
   }
 
   // ── 카메라: 45도 앞에서 (앱이 권하는 촬영 각도와 같다) + 드래그 회전 ──
-  var azimuth = Math.PI / 4, targetAz = azimuth, elev = 0.16, dist = 3.85, dragging = false, lastX = 0, idle = 0;
+  var azimuth = Math.PI / 4, targetAz = azimuth, elev = 0.16, dist = 3.85, dragging = false, lastX = 0, idle = 0, camX = 0, camZ = 0;
   function onDown(x) { dragging = true; lastX = x; idle = 0; }
   function onMove(x) { if (!dragging) return; targetAz -= (x - lastX) * 0.01; lastX = x; }
   function onUp() { dragging = false; }
@@ -399,20 +403,24 @@ export const SCENE_TEMPLATE = `<!DOCTYPE html>
   window.addEventListener('resize', resize);
   resize();
 
+  /*__EXT__*/
+
   var start = performance.now(), last = start;
   function frame(now) {
     var dt = (now - last) / 1000; last = now;
+    if (window.__EXT_TICK__) window.__EXT_TICK__(now, dt);
     var t = typeof window.__FIXED_T__ === 'number' ? window.__FIXED_T__ : (now - start) / 1000;
     if (typeof window.__FIXED_AZ__ === 'number') { targetAz = azimuth = window.__FIXED_AZ__; }
     else if (!dragging) {
       idle += dt;
       // 손을 떼고 3초 지나면 45도 시점으로 천천히 되돌아온다
-      if (idle > 3) targetAz += (Math.PI / 4 - targetAz) * Math.min(1, dt * 0.8);
+      if (idle > 3 && !window.__COMPARE__) targetAz += (Math.PI / 4 - targetAz) * Math.min(1, dt * 0.8);
     }
     azimuth += (targetAz - azimuth) * Math.min(1, dt * 8);
-    camera.position.set(Math.sin(azimuth) * dist * Math.cos(elev), 0.8 + Math.sin(elev) * dist, Math.cos(azimuth) * dist * Math.cos(elev));
-    camera.lookAt(0, 0.86, 0.12);
+    camera.position.set(camX + Math.sin(azimuth) * dist * Math.cos(elev), 0.8 + Math.sin(elev) * dist, camZ + Math.cos(azimuth) * dist * Math.cos(elev));
+    camera.lookAt(camX, 0.86, camZ + 0.12);
     apply(EXERCISE === 'lunge' ? poseLunge(t) : poseSquat(t));
+    if (window.__EXT_FRAME__) window.__EXT_FRAME__(now, dt);
     renderer.render(scene, camera);
     requestAnimationFrame(frame);
   }

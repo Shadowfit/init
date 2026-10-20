@@ -200,6 +200,7 @@ def _detect_pose(req: PoseRequest):
         frame_path.mark_leased()
         landmarks = detector.detect(image_rgb)
     frame_path.mark_inferred()
+    image_aspect = image_rgb.shape[1] / image_rgb.shape[0]
 
     if not landmarks:
         # Only the owner may invalidate an in-flight repetition.
@@ -228,9 +229,9 @@ def _detect_pose(req: PoseRequest):
                 _, _, angles = lunge_geometry(landmarks, image_rgb.shape[1] / image_rgb.shape[0])
             except ValueError:
                 return PoseResponse(success=False, skip_reason=PoseSkipReason.LOW_VISIBILITY)
-            return PoseResponse(success=True, landmarks=landmarks, angles=angles)
+            return PoseResponse(success=True, landmarks=landmarks, image_aspect_ratio=image_aspect, angles=angles)
         angles = extract_angles(landmarks, req.exercise_type)
-        return PoseResponse(success=True, landmarks=landmarks, angles=angles)
+        return PoseResponse(success=True, landmarks=landmarks, image_aspect_ratio=image_aspect, angles=angles)
 
     state = get_registry().get(req.session_id)
     if state is None:
@@ -321,6 +322,7 @@ def _detect_pose(req: PoseRequest):
                 success=False,
                 skip_reason=PoseSkipReason.RATE_LIMITED,
                 landmarks=landmarks,
+                image_aspect_ratio=image_aspect,
                 message="유입 속도 상한 초과 — 분석 스킵",
                 rep_count=state.rep_count,
             )
@@ -355,6 +357,7 @@ def _detect_pose(req: PoseRequest):
                 success=False,
                 skip_reason=PoseSkipReason.LOW_VISIBILITY,
                 landmarks=landmarks,
+                image_aspect_ratio=image_aspect,
                 message="가시성 부족으로 분석 스킵",
                 rep_count=state.rep_count,
                 lunge=lunge_progress,
@@ -382,6 +385,7 @@ def _detect_pose(req: PoseRequest):
             return PoseResponse(
                 success=True,
                 landmarks=landmarks,
+                image_aspect_ratio=image_aspect,
                 angles=angles,
                 rep_count=state.rep_count,
                 lunge=lunge_progress,
@@ -489,6 +493,7 @@ def _detect_pose(req: PoseRequest):
     return PoseResponse(
         success=True,
         landmarks=landmarks,
+        image_aspect_ratio=image_aspect,
         angles=angles,
         rep_count=state.rep_count,
         rep_completed=True,
