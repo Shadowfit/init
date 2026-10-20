@@ -8,6 +8,7 @@ import { reportService } from '@/services/reportService';
 import { exercisesService } from '@/services/exercisesService';
 import type { SessionReportResponse } from '@/types/report';
 import { DEPTH_GRADE_LABEL } from '@/types/report';
+import CoachingSummary from '@/components/report/CoachingSummary';
 import type { SessionFeedbackSummary } from '@/types/feedback';
 import { FEEDBACK_TYPE_LABEL } from '@/types/feedback';
 
@@ -98,6 +99,8 @@ export default function ReportScreen() {
                 <Text style={styles.muted}>운동 시간</Text>
               </View>
             </View>
+
+            <CoachingSummary report={report} />
 
             {hasScore ? (
               <View style={styles.card}>
