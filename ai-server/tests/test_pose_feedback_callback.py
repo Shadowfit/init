@@ -101,5 +101,32 @@ class BackBentFeedbackCallbackTest(unittest.TestCase):
         mock_pose.assert_not_called()
 
 
+class SquatProgressInResponseTest(unittest.TestCase):
+    """앱이 «준비됐는지/지금 뭘 해야 하는지»를 화면에 보여주려면 응답에 스쿼트 단계가 실려야 한다."""
+
+    def test_응답에_스쿼트_단계가_실리고_서면_준비_완료가_된다(self) -> None:
+        state = get_registry().create(session_id=9304, exercise_id=1, reference_angles=[])
+        self.addCleanup(get_registry().remove, 9304)
+        sequence = [172.0] * 4 + [90.0] * 6 + [172.0] * 4
+        frames = iter(_frame(angle) for angle in sequence)
+        clock = {"now": 0.0}
+        req = PoseRequest(image="", session_id=9304, exercise_type="squat")
+        with mock.patch.object(pose_endpoint, "base64_to_image", lambda _: _BLANK_IMAGE), \
+            mock.patch.object(pose_endpoint, "lease_detector", _fake_lease(lambda _img: next(frames))), \
+            mock.patch.object(pose_endpoint, "accept_frame", lambda _s, _n: True), \
+            mock.patch.object(pose_endpoint.time, "monotonic", lambda: clock["now"]), \
+            mock.patch.object(pose_endpoint.spring_client, "report_pose_data_batch"), \
+            mock.patch.object(pose_endpoint.spring_client, "report_feedback_batch") as mock_fb:
+            mock_fb.return_value = (spring_client.FeedbackBatchOutcome.OK, 1)
+            responses = []
+            for i in range(len(sequence)):
+                clock["now"] = i / 3
+                responses.append(pose_endpoint.detect_pose(req))
+        stages = [r.squat.stage for r in responses if r.squat is not None]
+        self.assertTrue(stages, "스쿼트 응답에 squat 진행 상태가 없다")
+        self.assertIn("ready", stages)
+        self.assertTrue(all(r.squat.guidance for r in responses if r.squat is not None))
+
+
 if __name__ == "__main__":
     unittest.main()

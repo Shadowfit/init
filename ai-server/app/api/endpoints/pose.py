@@ -29,7 +29,7 @@ from app.grpc.session_state import (
     elapsed_sec,
     get_registry,
 )
-from app.models.pose import Landmark, PoseRequest, PoseResponse, PoseSkipReason
+from app.models.pose import Landmark, PoseRequest, PoseResponse, PoseSkipReason, SquatProgress
 from app.observability import frame_path
 from app.utils.image_utils import base64_to_image
 
@@ -335,6 +335,11 @@ def _detect_pose(req: PoseRequest):
             torso_tilt_deg = None
             stagger_ratio = None
         lunge_progress = state.lunge_state.progress() if state.lunge_state is not None else None
+        # 앱이 «준비됐는지/지금 뭘 해야 하는지»를 화면에 보여주도록 스쿼트 단계와 안내를 같이 싣는다.
+        squat_progress = (
+            SquatProgress(stage=state.squat_counter.stage, guidance=state.squat_counter.guidance)
+            if state.exercise_type == "squat" and state.squat_counter is not None else None
+        )
         coaching_message = (state.squat_counter.coaching_event
                             if state.exercise_type == "squat" and state.squat_counter is not None
                             else None)
@@ -353,6 +358,7 @@ def _detect_pose(req: PoseRequest):
                 message="가시성 부족으로 분석 스킵",
                 rep_count=state.rep_count,
                 lunge=lunge_progress,
+                squat=squat_progress,
             )
 
         # 프레임 시각은 **서버가 만든다** (이슈 #156). 예전에는 두 갈래였고 둘 다 틀렸다:
@@ -379,6 +385,7 @@ def _detect_pose(req: PoseRequest):
                 angles=angles,
                 rep_count=state.rep_count,
                 lunge=lunge_progress,
+                squat=squat_progress,
                 message=coaching_message,
             )
 
@@ -487,5 +494,6 @@ def _detect_pose(req: PoseRequest):
         rep_completed=True,
         sync_rate=rep_event.sync_rate if state.exercise_type != "lunge" else None,
         lunge=lunge_progress,
+        squat=squat_progress,
         message=coaching_message,
     )

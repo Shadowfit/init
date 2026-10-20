@@ -97,6 +97,18 @@ class LungeProgress(BaseModel):
     score_available: bool = False
 
 
+class SquatProgress(BaseModel):
+    """스쿼트 카운터의 현재 단계 — 앱이 «지금 뭘 해야 하는지»를 화면에 보여주려고 싣는다.
+
+    stage 는 SquatCounter.stage 그대로다: waiting_for_standing(똑바로 선 자세를 아직 못 봄) →
+    ready(준비 완료, 스쿼트를 시작해도 됨) → descending → bottom. guidance 는 서버가 단계에
+    맞춰 만든 안내 문장이다(2026-10-06).
+    """
+
+    stage: str
+    guidance: str
+
+
 class PoseResponse(BaseModel):
     """포즈 감지 응답."""
 
@@ -119,3 +131,4 @@ class PoseResponse(BaseModel):
     rep_completed: bool = False
     sync_rate: float | None = None
     lunge: LungeProgress | None = None
+    squat: SquatProgress | None = None
