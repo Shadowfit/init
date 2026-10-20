@@ -46,6 +46,7 @@ import math
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from app.core.stance import stance_features
 from app.models.pose import Landmark, LungeProgress
 
 if TYPE_CHECKING:
@@ -66,13 +67,17 @@ class LungeThresholds:
     smoothing_sec: float = 0.06
     # 두 발목 사이 거리 / 어깨-골반 길이. 이 값으로 "런지 스탠스(다리가 앞뒤로 벌어짐)"와
     # "스쿼트 스탠스(발이 나란함)"를 가른다 — 발 이동 여부는 더 이상 보지 않으므로 이 값이
-    # 사실상 유일한 구분 신호다.
+    # 사실상 유일한 구분 신호였다 — 2026-10-19부터는 바닥 근처의 허벅지 비대칭까지 함께 본다
+    # (split_stance_* 아래, app/core/stance.py).
     #
     # 2026-09-22 실촬영 4개(lunge_normal_01·45degree_01·sallow_01·walking_01) 검증: 무릎이
     # 실제로 굽혀진 순간의 비율이 전부 0.74~1.70이었고, 가만히 선 자세는 0~0.45였다. 그
     # 사이인 0.55를 문턱으로 쓴다. 스쿼트(발이 나란한) 실촬영으로는 아직 재검증하지 않았다
     # — 발이 나란해도 몸통이 기울면 이 비율이 올라갈 수 있어, 오탐 여지가 남아 있다.
     stagger_min: float = 0.55
+    # 바닥 근처(가장 굽은 무릎이 bottom_angle + split_check_margin 이하)에서 한 번이라도
+    # «발 간격 ≥ 0.74 그리고 허벅지 기울기 차이 ≥ 25°» 가 보여야 1회로 인정한다.
+    split_check_margin: float = 15.0
 
 
 @dataclass
@@ -89,6 +94,9 @@ class LungeState:
     return_since: float | None = None
     started_at: float | None = None
     knees: list[float] = field(default_factory=list)
+    # 이번 반복의 바닥 근처에서 «앞뒤로 벌린 런지 자세»(app/core/stance.py)가 한 번이라도
+    # 보였는가. 안 보였으면 다시 일어서도 세지 않는다 — 스쿼트를 런지로 세던 문제(2026-10-19).
+    split_seen: bool = False
     guidance: str = "완전한 측면에서 런지 자세가 보이면 바로 인식합니다."
 
     def invalidate(self, message: str) -> None:
@@ -97,6 +105,7 @@ class LungeState:
         self.bottom_since = self.return_since = None
         self.started_at = None
         self.knees.clear()
+        self.split_seen = False
         self.guidance = message
 
     def progress(self) -> LungeProgress:
@@ -189,6 +198,14 @@ class StreamingLungeAnalyzer:
         # 원위치에 고정된 채 굽혔다 펴는 이 앱의 런지 특성상 한 rep 안에서 stagger는 거의
         # 변하지 않으므로 별도 최솟값 집계 없이 프레임값 그대로 대표로 쓴다.
         stagger_ratio = round(stagger, 3)
+        near_bottom = min(s.knees) <= t.bottom_angle + t.split_check_margin
+        if near_bottom:
+            stance = stance_features(p)
+            if stance is not None and stance.is_split():
+                s.split_seen = True
+        elif s.phase == "ready":
+            # 바닥 근처를 벗어난 준비 단계 — 이전 시도의 증거를 다음 반복으로 넘기지 않는다.
+            s.split_seen = False
 
         if s.phase == "ready":
             if not lunge_stance:
@@ -245,6 +262,12 @@ class StreamingLungeAnalyzer:
         if now - s.return_since < t.recovery_confirm_sec and dt < t.recovery_confirm_sec:
             return angles, lead_knee, None, torso_tilt, stagger_ratio
         event = None
+        if not s.split_seen:
+            # 무릎은 굽었다 폈지만 다리를 앞뒤로 벌린 자세가 한 번도 안 보였다 — 스쿼트 동작.
+            s.phase, s.lead_leg = "ready", None
+            s.bottom_since = s.return_since = None
+            s.guidance = "스쿼트 자세로 인식돼 이번 동작은 세지 않았어요. 다리를 앞뒤로 벌려주세요."
+            return angles, lead_knee, None, torso_tilt, stagger_ratio
         if now - s.started_at >= t.min_rep_sec:
             state.rep_count += 1
             if s.lead_leg == "left":
@@ -254,5 +277,6 @@ class StreamingLungeAnalyzer:
             event = LungeRepEvent(state.rep_count, s.lead_leg)
         s.phase, s.lead_leg = "ready", None
         s.bottom_since = s.return_since = None
+        s.split_seen = False
         s.guidance = "다시 일어선 것을 확인했습니다. 다음 런지를 시작하세요."
         return angles, lead_knee, event, torso_tilt, stagger_ratio

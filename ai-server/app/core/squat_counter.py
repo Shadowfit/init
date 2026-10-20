@@ -10,6 +10,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field, replace
 
+from app.core.stance import StanceFeatures, stance_features
 from app.models.pose import Landmark
 
 
@@ -94,6 +95,9 @@ class SquatObservation:
     ankles: tuple[tuple[float, float] | None, tuple[float, float] | None]
     torso_length: float
     visible_sides: tuple[bool, bool]
+    # 양쪽 다리가 다 보일 때만 계산된다(한쪽만 보이면 None). 런지 동작을 걸러내는 데 쓴다 —
+    # app/core/stance.py 참고.
+    stance: StanceFeatures | None = None
 
     @property
     def knee_angle(self) -> float:
@@ -155,6 +159,7 @@ def observe_squat(landmarks: list[Landmark], aspect_ratio: float, visibility: fl
         torso_tilt=abs(math.degrees(math.atan2(shoulders[0] - hips[0], hips[1] - shoulders[1]))),
         hip_height=hips[1], ankles=(p.get(27), p.get(28)), torso_length=torso_length,
         visible_sides=(0 in visible_sides, 1 in visible_sides),
+        stance=stance_features(p) if len(valid) == 2 else None,
     )
 
 
@@ -178,6 +183,9 @@ class SquatCounter:
     coaching_event: str | None = None
     ankle_outlier_since: float | None = None
     tracked_sides: tuple[bool, bool] = (False, False)
+    # 이번 시도 중 바닥 근처에서 «앞뒤로 벌린 런지 자세» 가 한 번이라도 보였는가.
+    # True 면 일어서도 횟수에 넣지 않는다(2026-10-19, 스쿼트 선택 후 런지를 하면 세지던 문제).
+    attempt_split_stance: bool = False
 
     def invalidate(self, message="영상이 끊겼습니다. 똑바로 서서 다시 준비해주세요."):
         # 완성된 횟수와 시각 단조성은 보존한다.
@@ -189,6 +197,7 @@ class SquatCounter:
         self.attempt_max_hip_drop = 0.0
         self.coaching_event = None
         self.tracked_sides = (False, False)
+        self.attempt_split_stance = False
         self.guidance = message
 
     def update(self, landmarks: list[Landmark] | None, timestamp_sec: float,
@@ -276,7 +285,13 @@ class SquatCounter:
             self.stage, self.started_at = "descending", now
             self.standing_since = self.bottom_since = self.bottom_band_since = None
             self.attempt_max_hip_drop = 0.0
+            self.attempt_split_stance = False
             self.guidance = "편안한 범위에서 무릎과 고관절을 굽혀주세요."
+
+        if (self.stage in ("descending", "bottom") and raw.stance is not None
+                and min(raw.knees) <= t.bottom_knee + t.bottom_knee_margin
+                and raw.stance.is_split()):
+            self.attempt_split_stance = True
 
         if self.stage == "descending":
             self.attempt_max_hip_drop = max(
@@ -297,6 +312,7 @@ class SquatCounter:
                     self.coaching_event = "이번 동작에서 충분히 내려간 장면을 확인하지 못했어요."
                 self.stage = "ready"
                 self.top_hip_height = raw.hip_height
+                self.attempt_split_stance = False
                 self.guidance = "이번 동작은 세지 않았습니다. 준비 자세에서 다시 시작하세요."
             return raw, False
 
@@ -329,6 +345,18 @@ class SquatCounter:
                 if ((now - self.standing_since >= t.standing_confirm_sec
                      or dt >= t.standing_confirm_sec)
                         and now - self.started_at >= t.min_active_sec):
+                    if self.attempt_split_stance:
+                        # 런지 자세로 굽혔다 편 동작 — 스쿼트 1회로 세지 않는다.
+                        self.stage = "ready"
+                        self.top_hip_height = raw.hip_height
+                        self.anchors, self.scale = raw.ankles, raw.torso_length
+                        self.tracked_sides = raw.visible_sides
+                        self.standing_since = self.bottom_since = self.bottom_band_since = self.started_at = None
+                        self.attempt_max_hip_drop = 0.0
+                        self.attempt_split_stance = False
+                        self.coaching_event = "런지 자세로 인식돼 이번 동작은 세지 않았어요."
+                        self.guidance = "두 발을 나란히 두고 스쿼트해주세요."
+                        return raw, False
                     self.rep_count += 1
                     self.stage = "ready"
                     self.top_hip_height = raw.hip_height
