@@ -16,7 +16,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
@@ -55,8 +54,6 @@ class SessionCreateConcurrencyTest {
                 .name("스쿼트")
                 .category(category)
                 .expectedDurationMinutes(15)
-                .syncThresholdBeginner(new BigDecimal("60.00"))
-                .syncThresholdAdvanced(new BigDecimal("85.00"))
                 .analysisSupported(true)  // 기본값 false — createSession이 W007로 막히므로 명시 필요
                 .build());
         Long exerciseId = exercise.getId();

@@ -56,7 +56,11 @@ class Settings(BaseSettings):
     AI_WORKER_COUNT: int = 1
 
     # DTW 설정
-    DTW_WINDOW_SIZE: int = 10  # Sakoe-Chiba band 크기
+    DTW_WINDOW_SIZE: int = 10  # 비대칭 DTW 에서 사용자 한 프레임 사이에 기준이 건너뛸 수 있는 최대 프레임 수
+    # 싱크로율 = 100 × exp(−합성 거리(도) / τ), 합성 거리 = 0.6·최저점 무릎 차 + 0.2·최저점 고관절 차 + 0.2·궤적 평균 차
+    # (dtw_calculator.compute_sync_distance). 실촬영(2026-10-20, 스쿼트 3개 영상)으로 맞춘 값 — 최저점이 기준과 8° 안쪽이면
+    # 90 안팎, 20° 얕으면 70 안팎, 35° 얕으면 50 안팎.
+    SYNC_RATE_TAU_DEG: float = 30.0
 
     # 영상 전처리 설정
     VIDEO_MAX_FPS: int = 30

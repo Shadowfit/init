@@ -12,7 +12,7 @@ import java.util.List;
  * {@link SessionDetailedAnalysis}에 실려 precompute-on-write로 저장된다.
  *
  * <p>런지 세션(exercise_id=2)이면서 유효한 좌우 구분 깊이 데이터가 있을 때만 만들어진다 —
- * 스쿼트 세션·구버전 데이터·좌우 정보가 없는 세션(V24 이전에 완료된 런지 등)은 이 필드
+ * 스쿼트 세션·구버전 데이터·좌우 정보가 없는 세션(V30 이전에 완료된 런지 등)은 이 필드
  * 자체가 null이다({@link SessionReportResponseDto}의 {@code scoreAvailable}과 같은 널 가드 규약).
  *
  * <p>목표선(100도)의 근거는 {@code docs/decisions/lunge-repetition-counting.md} §2·§3 —

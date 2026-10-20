@@ -121,10 +121,14 @@
   "sessionNonce": "…",
   "aiWorkerIndex": 0,
   "targetRepsPerSet": 12,
-  "targetSets": 3
+  "targetSets": 3,
+  "syncGoodThreshold": 80.0,   // 2026-10-21, V34 — 싱크로율 ≥ 이 값 = 정석
+  "syncWarnThreshold": 60.0    //                  ≥ 이 값 = 교정 필요, 미만 = 위험
 }
 ```
 `GET /sessions/active` 도 같은 두 필드를 돌려준다(이어하기 화면이 «12회 x 3세트」 를 복원할 근거).
+
+`syncGoodThreshold`·`syncWarnThreshold` 는 세션 종목의 판정 기준 한 쌍이다(`exercises.sync_good_threshold`/`sync_warn_threshold`, 관리자가 `PATCH /admin/exercises/{id}/thresholds` 로 바꾼다). **같은 값이 `AnalyzeRequest`(11·12)로 AI 에도 가서** 앱이 점수를 칠하는 기준과 AI 가 «자세 양호» 를 판정하는 기준이 한 값이다. 페르소나와 무관하다(페르소나는 트레이너 말투로만 쓴다). `GET /sessions/active`·`POST /sessions/{id}/reattach`(재부착 요청 `ReattachRequest` 12·13 에 실은 값)·`GET /reports/session/{id}` 도 같은 두 필드를 싣는다.
 > 내부 흐름: Spring 이 DB에 세션 생성 → 즉시 202 응답 → `@Async` 로 gRPC `StartAnalysis` 송신 (AI 가 기준 좌표 받아 분석 시작). 결합 상세는 [`architecture/ai-backend-integration.md`](./architecture/ai-backend-integration.md).
 
 ### POST /admin/exercises/{exerciseId}/reference-video - 기준 영상(mp4) 업로드 → 기준 좌표 추출 (관리자, 2026-09-17)
@@ -138,6 +142,8 @@ Content-Type: multipart/form-data; file=<mp4>
 // 400 W016 — 비었거나 .mp4 가 아니거나 파일 머리(ftyp)가 아님 · 413 C007 — 50MB 초과 · 503 W017 — AI 서킷 OPEN(파일·DB 안 건드림)
 ```
 > 영상은 공유 볼륨(`/data/reference-videos/{id}/{uuid}.mp4`)에 운동당 1개 보관·교체되고, 경로가 `exercises.reference_video_path` 에 남는다. 결합 상세·트랜잭션 경계는 [`architecture/ai-backend-integration.md` §3-3](./architecture/ai-backend-integration.md).
+>
+> **추출 결과 확인 (2026-10-21, V34)** — 업로드 트랜잭션이 등록 상태를 `EXTRACTING` 으로 바꾸고, AI 역호출(성공 → `READY`, `error_message`·좌표 0개 → `FAILED`, 기존 기준은 그대로)이나 접수 실패(파일 없음·통신 실패·서킷 OPEN → `FAILED`)가 닫는다. 관리자 화면은 `GET /admin/exercises/{id}/reference` 의 `extractionStatus`·`extractionError` 로 본다.
 
 ### POST /exercises/{exerciseId}/reference - 기준 좌표 추출 요청 (관리자) — ⚠️ 유튜브 URL 은 동작하지 않는다
 ```
@@ -249,6 +255,8 @@ AI = 운동 통계의 단일 진실 원천 원칙. (커밋 143a2e4)
     "syncRateChange": +5.2,
     "repChange": +3
   },
+  "syncGoodThreshold": 80.0,             // 2026-10-21, V34 — 세션 종목의 «현재» 판정 기준(정석 ≥ good, 교정 필요 ≥ warn, 위험 < warn)
+  "syncWarnThreshold": 60.0,
   "repTrend": [{ "repNumber": 1, "syncRate": 82.5, "timeStamp": "00:05" }, ...],   // 회차 추이 — 예전 문서의 syncRateTimeline 은 오기
   "syncRateDetails": [{ "exerciseId": 1, "name": "스쿼트", "setInfo": "3세트 x 12회 (마지막 7회)", "syncRate": 78.5 }],
   "sets": [                              // 2026-09-22, V26. 세트 도입 전 세션은 []
@@ -328,23 +336,25 @@ AI = 운동 통계의 단일 진실 원천 원칙. (커밋 143a2e4)
 - `analysisSupported=true` 인 종목의 코드 변경은 **409 W019** — 끄고 → 바꾸고 → 기준 영상 다시 올려 → 켠다
 - `PATCH …/analysis-support` 로 켤 때 코드가 없으면 **400 W020** (기준 좌표 없음 W012 와 나란한 필요조건, 코드 검사가 먼저)
 
-### PATCH /admin/exercises/{exerciseId}/thresholds - 싱크로율 임계값 변경
-관리자 권한(`ROLE_ADMIN`) 필수. 신규 세션부터 적용.
+### PATCH /admin/exercises/{exerciseId}/thresholds - 싱크로율 판정 기준 변경
+관리자 권한(`ROLE_ADMIN`) 필수. 신규 세션부터 적용 — 세션 시작 때 `AnalyzeRequest` 로 AI 에, 시작 응답으로 앱에 같이 나간다.
+2026-10-21(V34) **«하나로 통일»**: 예전 페르소나별 4개(`beginner/advanced/diet/rehab`)는 읽는 곳이 없어 없앴고, 종목당 한 쌍이다. 페르소나는 트레이너 말투로만 남는다.
 ```json
 // Request
 {
-  "syncThresholdBeginner": 65.0,
-  "syncThresholdAdvanced": 88.0
+  "good": 80,   // 싱크로율 ≥ good = 정석
+  "warn": 60    // ≥ warn = 교정 필요, < warn = 위험
 }
-// 제약: beginner < advanced
+// 제약: 0 < warn < good ≤ 100 — 위반 400 W022 · 값이 빠지면 400 C001
 
 // Response 200
 {
   "exerciseId": 1,
-  "syncThresholdBeginner": 65.0,
-  "syncThresholdAdvanced": 88.0
+  "syncGoodThreshold": 80.0,
+  "syncWarnThreshold": 60.0
 }
 ```
+현재 값은 `GET /admin/exercises/{id}` 의 `syncGoodThreshold`·`syncWarnThreshold` 로 본다(신규 종목은 80/60 에서 시작).
 
 ### GET /admin/members - 회원 목록 조회 (2026-08 추가)
 관리자 권한(`ROLE_ADMIN`) 필수. 필터 5종의 **임의 조합**(32가지) + 정렬 3종 + offset 페이징.
@@ -408,6 +418,8 @@ AI = 운동 통계의 단일 진실 원천 원칙. (커밋 143a2e4)
 | `DELETE /admin/groups/{groupId}` | 모임 삭제 — 멤버·초대·이벤트·응원 FK CASCADE, 공유 사진 파일도 지움 |
 | `GET /admin/feed-posts?groupId=` | 공유 글(`SESSION_SHARED`) 최신순 — 사진·캡션 검수용 |
 | `DELETE /admin/feed-posts/{postId}` | 공유 글 내리기 — 응원과 사진 파일까지 삭제 |
+| `GET /admin/exercises/{id}/reference` | 싱크로율 기준 좌표 요약 — `{frameCount, source: MANNEQUIN_3D·VIDEO·null, durationSec, minKneeDeg, minHipDeg, depthVerdict: LENIENT·OK·STRICT·null, extractionStatus: NONE·EXTRACTING·READY·FAILED, extractionError, extractionAt: "yyyy-MM-ddTHH:mm:ss"·null}` (2026-10-20, 깊이·등록 상태는 2026-10-21 V34). `minKneeDeg`/`minHipDeg` 는 AI 와 같은 2D 각도(x 에 `index=-1` 표식의 `image_aspect_ratio` 를 곱함, 좌우 평균)의 전 프레임 최솟값(소수 1자리). `depthVerdict` 는 무릎 최솟값 60° 미만 `STRICT`(기준이 너무 깊어 대부분 감점) · 95° 초과 `LENIENT`(얕은 스쿼트도 만점) · 그 사이 `OK`, 프레임이 없으면 null. `extractionStatus` 는 가장 최근 등록 시도 — `NONE` 은 시도 없음, `EXTRACTING` 이 10분 넘게 그대로면 `FAILED`(«AI 응답이 10분 넘게 없어요. 영상을 다시 올려주세요.») 로 보인다 |
+| `PUT /admin/exercises/{id}/reference-poses` | 기준 좌표 직접 등록(교체) — 관리자 웹의 «3D 시범을 기준으로 등록». body `{source, frames:[{timestampSec, jointCoordinates}]}` 4~2000프레임, 형식 오류 400 `W021`. 영상 업로드(`POST …/reference-video`)와 달리 AI 추출을 거치지 않는다 — 등록 상태는 바로 `READY`, 응답은 위 요약과 같은 모양 |
 
 > 🔶 날짜 직렬화가 두 가지다 — 기존 관리자 DTO(회원·세션·종목·overview)는 `[2026,10,9,20,21,0]` 배열, 이번에 추가한 DTO 는 `"2026-10-09T20:21:00"` 문자열. 앱 쪽 영향 때문에 전역 설정은 건드리지 않았고, 관리자 웹이 둘 다 받는다(`admin-web/src/format.ts`).
 >

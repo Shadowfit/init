@@ -50,15 +50,12 @@ class ReportServiceTest {
     @Mock private SessionRepository sessionRepository;
     @Mock private PoseDataRepository poseDataRepository;
     @Mock private SessionAnalysisCalculator sessionAnalysisCalculator;
-<<<<<<< HEAD
     @Mock private SquatDepthAnalysisCalculator squatDepthAnalysisCalculator;
     @Mock private LungeDepthAnalysisCalculator lungeDepthAnalysisCalculator;
     @Mock private SquatTrunkLeanAnalysisCalculator squatTrunkLeanAnalysisCalculator;
     @Mock private LungeTrunkLeanAnalysisCalculator lungeTrunkLeanAnalysisCalculator;
     @Mock private LungeStepLengthAnalysisCalculator lungeStepLengthAnalysisCalculator;
-=======
     @Mock private com.shadowfit.repository.exercise.SessionSetRepository sessionSetRepository;
->>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
 
     private ReportService reportService;
 
@@ -72,19 +69,14 @@ class ReportServiceTest {
         MockitoAnnotations.openMocks(this);
         // 실제 JSON 직렬화/역직렬화 동작이 검증 대상이라 ObjectMapper는 모킹하지 않고 실사용
         reportService = new ReportService(reportRepository, sessionRepository, poseDataRepository,
-<<<<<<< HEAD
                 sessionAnalysisCalculator, squatDepthAnalysisCalculator, lungeDepthAnalysisCalculator,
                 squatTrunkLeanAnalysisCalculator, lungeTrunkLeanAnalysisCalculator,
-                lungeStepLengthAnalysisCalculator, new ObjectMapper());
-=======
-                sessionAnalysisCalculator, new ObjectMapper(), sessionSetRepository);
->>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
+                lungeStepLengthAnalysisCalculator, new ObjectMapper(), sessionSetRepository);
 
         Member member = Member.builder().id(MEMBER_ID).email("t@t.com").username("u").password("p").build();
         Category category = Category.builder().id(1L).name("LOWER").build();
         Exercise exercise = Exercise.builder().id(1L).name("스쿼트").category(category)
                 .expectedDurationMinutes(15)
-                .syncThresholdBeginner(new BigDecimal("60.00")).syncThresholdAdvanced(new BigDecimal("85.00"))
                 .build();
         session = Session.builder()
                 .id(SESSION_ID).member(member).exercise(exercise)
@@ -156,6 +148,31 @@ class ReportServiceTest {
         verify(poseDataRepository, never()).findFramesBySessionId(anyLong(), any());
         verify(sessionAnalysisCalculator, never()).calculate(any(), any());
         verify(sessionAnalysisCalculator, never()).calculateRepTrend(any());
+    }
+
+    @Test
+    @DisplayName("리포트에 세션 종목의 판정 기준(syncGoodThreshold·syncWarnThreshold)이 실린다 — V34")
+    void report_carriesExerciseThresholds() throws Exception {
+        Exercise custom = Exercise.builder().id(2L).name("런지").category(session.getExercise().getCategory())
+                .expectedDurationMinutes(15)
+                .syncGoodThreshold(new BigDecimal("85.00")).syncWarnThreshold(new BigDecimal("55.50"))
+                .build();
+        Session customSession = Session.builder()
+                .id(SESSION_ID).member(session.getMember()).exercise(custom)
+                .startTime(LocalDateTime.now().minusMinutes(20)).endTime(LocalDateTime.now())
+                .status(Status.COMPLETED).totalReps(3).avgSyncRate(new BigDecimal("70.0"))
+                .build();
+        when(sessionRepository.findSessionWithExerciseByIdAndMemberId(SESSION_ID, MEMBER_ID))
+                .thenReturn(Optional.of(customSession));
+        SessionDetailedAnalysis stored = new SessionDetailedAnalysis(null,
+                List.of(new RepSyncRateDto(1, 70.0, "00:05")), null, null, null, null, null);
+        report.setDetailedAnalysis(new ObjectMapper().writeValueAsString(stored));
+        when(reportRepository.findBySessionId(SESSION_ID)).thenReturn(Optional.of(report));
+
+        SessionReportResponseDto result = reportService.getSessionReport(SESSION_ID, MEMBER_ID);
+
+        assertThat(result.getSyncGoodThreshold()).isEqualTo(85.0);
+        assertThat(result.getSyncWarnThreshold()).isEqualTo(55.5);
     }
 
     @Test

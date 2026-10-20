@@ -6,13 +6,11 @@ import time
 from dataclasses import dataclass, replace
 
 from app.core.angle_calculator import extract_angles
-from app.core.dtw_calculator import compute_sync_rate
+from app.core.dtw_calculator import compute_sync_rate, resolve_sync_thresholds
 from app.core.squat_counter import DEPTH_MODE_THRESHOLDS, SquatCounter, SquatThresholds
 from app.models.pose import Landmark
 from app.models.video import SquatAnalysisResult, SquatFrameMetrics
-from app.utils.constants import LANDMARK, SYNC_THRESHOLDS
-
-_LOW_CUT_RATIO = 40 / 70
+from app.utils.constants import LANDMARK
 
 
 def _mean_landmark(landmarks_by_index: dict[int, Landmark], left_name: str, right_name: str):
@@ -35,10 +33,13 @@ def analyze_squat_frames(
     fps: float = 3.0,
     timestamps_sec: list[float] | None = None,
     image_aspect_ratio: float = 1.0,
+    reject_split_stance: bool = True,
 ) -> tuple[list[SquatFrameMetrics | None], SquatAnalysisResult]:
     """영상에서도 실시간과 같은 단계 기계를 사용한다.
 
     fps를 알면 전달해야 한다. 횟수 하한은 초 단위다.
+    reject_split_stance: False 면 «런지 자세» 로 보인 반복도 센다 — 관리자 기준 영상 추출 전용
+        (SquatCounter.reject_split_stance 참고). 사용자 영상 경로는 기본값(True)을 그대로 쓴다.
     """
     if not math.isfinite(fps) or fps <= 0:
         raise ValueError("fps must be positive")
@@ -46,7 +47,7 @@ def analyze_squat_frames(
         raise ValueError("timestamps must match frames")
     thresholds = replace(SquatThresholds(), bottom_knee=bottom_threshold,
                          standing_knee=standing_threshold)
-    counter = SquatCounter(thresholds)
+    counter = SquatCounter(thresholds, reject_split_stance=reject_split_stance)
     result_frames: list[SquatFrameMetrics | None] = []
     valid_frames = 0
     deepest = 180.0
@@ -107,12 +108,8 @@ class StreamingSquatAnalyzer:
     def process_frame(self, state, landmarks: list[Landmark], *,
                       timestamp_sec: float | None = None,
                       image_aspect_ratio: float = 1.0
-<<<<<<< HEAD
                       ) -> tuple[list[float] | None, float | None, StreamingRepEvent | None,
                                  float | None, float | None]:
-=======
-                      ) -> tuple[list[float] | None, float | None, StreamingRepEvent | None]:
->>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
         now = time.monotonic() if timestamp_sec is None else timestamp_sec
         if state.squat_counter is None:
             # 세션의 depth_mode로 임계값을 고른다. 인식 못 하는 값(또는 이 필드가 없는 옛
@@ -128,20 +125,15 @@ class StreamingSquatAnalyzer:
         state.frame_index += 1
         if obs is None:
             state.current_rep_frames.clear()
-<<<<<<< HEAD
             return None, None, None, None, None
-=======
-            return None, None, None
->>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
         if before != "waiting_for_standing" and counter.stage == "waiting_for_standing":
             state.current_rep_frames.clear()
         if (before == "ready" and counter.stage == "descending"
                 or before == "descending" and counter.stage == "ready" and not completed):
             state.current_rep_frames.clear()
-        angles = extract_angles(landmarks, self.exercise_type)
+        angles = extract_angles(landmarks, self.exercise_type, image_aspect_ratio)
         knee = round(obs.knee_angle, 2)
         state.previous_smoothed_knee = knee
-<<<<<<< HEAD
         # 체간 기울기 점수(TrunkLeanAnalysisCalculator)용 — obs.torso_tilt는 이미 매 프레임
         # 계산되고 있었지만(squat_counter.py) 지금까지는 버려졌다. BACK_BENT 실시간 판정
         # (pose.py)과는 별개 경로이니 여기서 새로 계산하지 않고 이미 있는 값만 흘려보낸다.
@@ -152,12 +144,6 @@ class StreamingSquatAnalyzer:
             return angles, knee, None, torso_tilt, None
         state.rep_count = counter.rep_count
         return angles, knee, self._summarize_rep(state, angles), torso_tilt, None
-=======
-        if not completed:
-            return angles, knee, None
-        state.rep_count = counter.rep_count
-        return angles, knee, self._summarize_rep(state, angles)
->>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
 
     def _summarize_rep(self, state, terminal_angles: list[float]) -> StreamingRepEvent:
         # 최종 선 프레임은 HTTP 경로에서 process_frame 반환 후 버퍼에 들어간다.
@@ -169,10 +155,16 @@ class StreamingSquatAnalyzer:
                 score = 0.
         else:
             score = 0.
-        threshold = SYNC_THRESHOLDS.get(state.persona, SYNC_THRESHOLDS["BEGINNER"])
-        if score >= threshold:
+        # 임계값은 운동별 한 쌍(2026-10-21) — 세션 생성 때 Spring 이 준 값이 state 에 있다.
+        # 이 필드가 없는 옛 상태 객체는 기본값으로 폴백한다(depth_mode 와 같은 처리).
+        # 🔴 세 문구는 바꾸지 말 것 — pose.py 의 BACK_BENT 게이트가 `!= "자세 양호"` 로 비교한다.
+        good, warn = resolve_sync_thresholds(
+            getattr(state, "sync_good_threshold", None),
+            getattr(state, "sync_warn_threshold", None),
+        )
+        if score >= good:
             message = "자세 양호"
-        elif score >= threshold * _LOW_CUT_RATIO:
+        elif score >= warn:
             message = "자세 보정 필요"
         else:
             message = "즉시 자세 수정 필요"

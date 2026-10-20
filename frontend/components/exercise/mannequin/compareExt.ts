@@ -21,7 +21,8 @@ if (window.__COMPARE__) {
                   lKnee: 'calf_l', rKnee: 'calf_r', lAnkle: 'foot_l', rAnkle: 'foot_r' };
   function send(msg) {
     var s = JSON.stringify(msg);
-    if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(s);
+    if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(s);          // 폰: react-native-webview
+    else if (window.parent && window.parent !== window) window.parent.postMessage(s, '*');   // 웹: iframe → 앱 (MotionCompareView.web)
     if (window.__OUT__) window.__OUT__(msg);
   }
   function clamp(x, a, b) { return Math.max(a, Math.min(b, x)); }

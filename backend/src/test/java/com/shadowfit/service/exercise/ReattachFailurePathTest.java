@@ -80,7 +80,8 @@ class ReattachFailurePathTest {
                 new ReattachRequestBuilder(sessionService, poseDataRepository, referenceRepository);
         service = new ExerciseAnalysisService(sessionRepository, exercisesRepository,
                 memberRepository, sessionService, referenceRepository,
-                circuitBreakerRegistry, metrics, outboxEventRepository, reattachRequestBuilder);
+                circuitBreakerRegistry, metrics, outboxEventRepository, reattachRequestBuilder,
+                mock(ReferenceExtractionStatusService.class));
         ReflectionTestUtils.setField(service, "internalToken", "test-token");
         ReflectionTestUtils.setField(service, "aiChannelPoolSize", 1);
         ReflectionTestUtils.setField(service, "aiBlockingStubPool", List.of(blockingStub));
@@ -203,6 +204,49 @@ class ReattachFailurePathTest {
         assertThat(captor.getValue().getExerciseCode()).isEqualTo("LUNGE");
         assertThat(captor.getValue().getTargetRepsPerSet()).isEqualTo(12);
         assertThat(captor.getValue().getTargetSets()).isEqualTo(3);
+    }
+
+    /**
+     * 판정 기준 한 쌍(V34) — 재부착으로 세운 AI 상태도 시작 때와 같은 기준을 쓰고(proto 12·13), 이어하기 화면도
+     * 응답으로 같은 값을 받는다. 앱이 칠하는 기준과 AI 가 판정하는 기준이 갈리지 않는지가 핵심이다.
+     */
+    @Test
+    @DisplayName("판정 기준(good/warn)이 재부착 요청과 응답에 같은 값으로 실린다")
+    void 판정기준이_재부착_요청과_응답에_실린다() {
+        Session custom = Session.builder()
+                .id(SESSION_ID).member(session().getMember())
+                .exercise(Exercise.builder().id(3L).code("SQUAT").expectedDurationMinutes(15)
+                        .syncGoodThreshold(new java.math.BigDecimal("85.50"))
+                        .syncWarnThreshold(new java.math.BigDecimal("55.00")).build())
+                .startTime(LocalDateTime.now()).build();
+        when(sessionService.findReattachableSession(SESSION_ID, MEMBER_ID)).thenReturn(custom);
+        when(blockingStub.reattachAnalysis(any(ReattachRequest.class)))
+                .thenReturn(ReattachResponse.newBuilder().setSuccess(true).setSessionId(SESSION_ID).build());
+        org.mockito.ArgumentCaptor<ReattachRequest> captor =
+                org.mockito.ArgumentCaptor.forClass(ReattachRequest.class);
+
+        var result = service.reattachSession(SESSION_ID, MEMBER_ID);
+
+        verify(blockingStub).reattachAnalysis(captor.capture());
+        assertThat(captor.getValue().getSyncGoodThreshold()).isEqualTo(85.5);
+        assertThat(captor.getValue().getSyncWarnThreshold()).isEqualTo(55.0);
+        assertThat(result.getSyncGoodThreshold()).isEqualTo(85.5);
+        assertThat(result.getSyncWarnThreshold()).isEqualTo(55.0);
+    }
+
+    @Test
+    @DisplayName("판정 기준을 안 바꾼 종목은 기본값 80/60 이 실린다")
+    void 판정기준_기본값() {
+        when(blockingStub.reattachAnalysis(any(ReattachRequest.class)))
+                .thenReturn(ReattachResponse.newBuilder().setSuccess(true).setSessionId(SESSION_ID).build());
+        org.mockito.ArgumentCaptor<ReattachRequest> captor =
+                org.mockito.ArgumentCaptor.forClass(ReattachRequest.class);
+
+        service.reattachSession(SESSION_ID, MEMBER_ID);
+
+        verify(blockingStub).reattachAnalysis(captor.capture());
+        assertThat(captor.getValue().getSyncGoodThreshold()).isEqualTo(80.0);
+        assertThat(captor.getValue().getSyncWarnThreshold()).isEqualTo(60.0);
     }
 
     /**

@@ -51,6 +51,12 @@ class VideoAnalysisResult(BaseModel):
     duration: float = Field(description="Video duration in seconds")
     frames: list[FrameResult]
     squat_analysis: SquatAnalysisResult | None = None
+    # 영상의 너비/높이 — 기준 좌표(exercise_references)에 표식으로 실어 2D 각도의 x 축 눈금을 맞춘다 (2026-10-20)
+    image_aspect_ratio: float = 1.0
+    # 실제로 디코드해 포즈 검출에 넣은(샘플링한) 프레임 수 (2026-10-21). 0 이면 영상을 한 장도 못 읽었다는
+    # 뜻이다 — 기준 영상 추출이 «열 수 없음» 과 «사람이 안 보임» 을 가르는 근거다(analyzed_frames 는
+    # 사람이 잡힌 프레임만 센다).
+    sampled_frames: int = 0
 
 
 class VideoUploadRequest(BaseModel):

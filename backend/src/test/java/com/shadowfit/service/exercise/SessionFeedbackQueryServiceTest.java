@@ -50,7 +50,6 @@ class SessionFeedbackQueryServiceTest {
         Category category = Category.builder().id(1L).name("LOWER").build();
         Exercise exercise = Exercise.builder().id(1L).name("스쿼트").category(category)
                 .expectedDurationMinutes(15)
-                .syncThresholdBeginner(new BigDecimal("60.00")).syncThresholdAdvanced(new BigDecimal("85.00"))
                 .build();
         session = Session.builder().id(SESSION_ID).member(owner).exercise(exercise)
                 .startTime(LocalDateTime.now()).status(Status.COMPLETED).build();

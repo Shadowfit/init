@@ -18,9 +18,52 @@ import type {
  * DTW 는 «시간축을 맞추는» 알고리즘이라, 속도 차이는 DTW 거리에 넣지 않고 원본 타임스탬프로 따로 잰다.
  */
 
-// ── 설계값(실측으로 정한 값이 아니다) ─────────────────────────────────────────────
-/** 점수 환산: 점수 = 100 × exp(−평균거리 / TAU). 평균거리 1 = «눈금 기준 30° 상당의 평균 차이». */
-export const SCORE_TAU = 1.0;
+// ── 설계값 ─────────────────────────────────────────────────────────────────────
+/**
+ * 궤적 점수 환산: 100 × exp(−평균거리 / TAU). 평균거리 1 = «눈금 기준 30° 상당의 평균 차이».
+ * 2026-10-20 실촬영 보정: τ=1 에서는 기준과 거의 같은 자세(최저점 무릎 75° vs 72°)의 정상 스쿼트가
+ * 3fps 프레임 잡음만으로 평균거리 0.7 → 49점이 됐다. 궤적은 보조 지표로 내리고(아래 POSTURE_WEIGHT)
+ * τ 도 1.5 로 완화했다.
+ */
+export const SCORE_TAU = 1.5;
+/**
+ * 자세 점수의 축 — «최저점에서 얼마나 다른가» 를 본다(프레임 평균이 아니라 극값). 각 축은 tol 까지 감점 없음,
+ * max 에서 0점, 그 사이는 선형. 값은 피드백 문장 문턱(feedback.ts: 무릎 10°·고관절 12°·상체 8°)과 같은 눈금으로
+ * 잡은 설계값이다 — 단안 2D 각도는 촬영 방향에 따라 몇 도씩 흔들리므로 그 안쪽은 «같다» 로 본다.
+ *   무릎  : 기준보다 20° 얕게 앉으면 0.56, 35° 이상 다르면 0
+ *   고관절: 엉덩이를 접는 정도 (스쿼트 힙힌지 / 런지 앞다리)
+ *   상체  : 서 있을 때 대비 최대 숙임의 차이
+ */
+export const POSTURE_AXES: Record<MotionExercise, Array<{ key: 'knee' | 'hip' | 'trunk'; tol: number; max: number; weight: number }>> = {
+  squat: [
+    { key: 'knee', tol: 8, max: 35, weight: 0.5 },
+    { key: 'hip', tol: 10, max: 40, weight: 0.25 },
+    { key: 'trunk', tol: 8, max: 30, weight: 0.25 },
+  ],
+  lunge: [
+    { key: 'knee', tol: 8, max: 35, weight: 0.5 },
+    { key: 'hip', tol: 10, max: 40, weight: 0.2 },
+    { key: 'trunk', tol: 8, max: 30, weight: 0.3 },
+  ],
+};
+/** 최종 점수 = POSTURE_WEIGHT × 자세 + (1 − POSTURE_WEIGHT) × 궤적 */
+export const POSTURE_WEIGHT = 0.7;
+
+/**
+ * 자세 점수 0~1 — 최저점 무릎·고관절, 상체 최대 숙임이 기준보다 **나쁜 방향으로** 얼마나 다른지로 계산.
+ * 기준보다 더 깊게 앉거나(무릎·고관절 각도가 더 작음) 상체를 덜 숙인 것은 감점하지 않는다 — 기준은 과녁이 아니라
+ * 넘어야 할 바닥이다. 절댓값으로 깎으면 자세가 좋은 사람이 «기준과 다르다» 고 손해를 본다(2026-10-20).
+ */
+export function postureScore(exercise: MotionExercise, ext: { kneeMin: Extreme; hipMin: Extreme; trunkMax: Extreme }): number {
+  let total = 0;
+  for (const a of POSTURE_AXES[exercise]) {
+    // delta = 사용자 − 기준. 무릎·고관절은 커질수록(얕을수록), 상체는 커질수록(더 숙일수록) 나쁘다
+    const d = Math.max(0, a.key === 'knee' ? ext.kneeMin.delta : a.key === 'hip' ? ext.hipMin.delta : ext.trunkMax.delta);
+    const penalty = Math.max(0, Math.min(1, (d - a.tol) / (a.max - a.tol)));
+    total += a.weight * (1 - (Number.isFinite(penalty) ? penalty : 1));
+  }
+  return total;
+}
 /** 반복 앞뒤의 «서 있는» 프레임을 자르는 기준 — 무릎이 시작 자세보다 이만큼(도) 굽혀지면 동작 시작으로 본다. */
 const ONSET_KNEE_DEG = 10;
 /** 동작 구간 안에 이만큼은 있어야 비교한다(3fps 에서 약 1.3초 — 실촬영 반복이 1.3~2초라 더 높이면 절반이 빠진다). */
@@ -99,8 +142,12 @@ export interface RepComparison {
   lead: Side | null;
   /** 다듬은 뒤 쓴 프레임 수 */
   frames: number;
-  /** 0~100. 점수 = 100 × exp(−meanDistance / SCORE_TAU) */
+  /** 0~100. 점수 = 100 × (POSTURE_WEIGHT × 자세 + (1−POSTURE_WEIGHT) × 궤적) */
   similarity: number;
+  /** 0~100. 최저점 자세(무릎·고관절·상체)의 기준 대비 차이 — postureScore() */
+  postureScore: number;
+  /** 0~100. 100 × exp(−meanDistance / SCORE_TAU) — DTW 로 정렬한 궤적의 평균 거리 */
+  trajectoryScore: number;
   meanDistance: number;
   /** 사용자 프레임(다듬은 목록 기준) ↔ 기준 프레임 와핑 경로 */
   path: Array<[number, number]>;
@@ -254,6 +301,35 @@ function trimToMotion(knee: number[]): [number, number] {
   return [Math.max(0, first - 1), Math.min(n - 1, last + 1)];
 }
 
+/** 포물선 보간으로 극값을 넘어 추정할 수 있는 최대 폭(도). 3fps 에서 한 프레임 사이 무릎은 30° 넘게 움직이므로 이 정도는 실제로 생긴다. */
+const EXTREME_REFINE_MAX_DEG = 25;
+
+/**
+ * 표본 사이에 떨어진 극값 추정 — 극값 프레임과 양옆 이웃 세 점을 지나는 포물선의 꼭짓점.
+ * 3fps 로 찍으면 가장 깊은 순간이 두 프레임 사이에 있기 일쑤라, 표본 최솟값만 쓰면 깊이를 늘 얕게 잰다
+ * («자세는 좋은데 점수가 안 나온다» 의 한 원인). 꼭짓점이 이웃 구간 밖이거나 표본값보다 덜 극단이면 표본값을 쓴다.
+ */
+export function refineExtreme(t: number[], v: number[], min: boolean): number {
+  const n = v.length;
+  if (!n) return NaN;
+  let i = 0;
+  for (let k = 1; k < n; k++) if (min ? v[k] < v[i] : v[k] > v[i]) i = k;
+  if (i === 0 || i === n - 1) return v[i];
+  const [x0, x1, x2] = [t[i - 1] - t[i], 0, t[i + 1] - t[i]];
+  const [y0, y1, y2] = [v[i - 1], v[i], v[i + 1]];
+  // 세 점을 지나는 포물선 y = a·x² + b·x + c (x 는 극값 프레임 기준 상대 시각)
+  const denom = (x0 - x1) * (x0 - x2) * (x1 - x2);
+  if (Math.abs(denom) < 1e-9) return v[i];
+  const a = (x2 * (y1 - y0) + x1 * (y0 - y2) + x0 * (y2 - y1)) / denom;
+  const b = (x2 * x2 * (y0 - y1) + x1 * x1 * (y2 - y0) + x0 * x0 * (y1 - y2)) / denom;
+  if ((min && a <= 0) || (!min && a >= 0)) return v[i];   // 볼록한 방향이 아니면 표본값
+  const xv = -b / (2 * a);
+  if (xv < x0 || xv > x2) return v[i];
+  const yv = a * xv * xv + b * xv + y1;
+  const bounded = min ? Math.max(yv, y1 - EXTREME_REFINE_MAX_DEG) : Math.min(yv, y1 + EXTREME_REFINE_MAX_DEG);
+  return min ? Math.min(y1, bounded) : Math.max(y1, bounded);
+}
+
 /** 프레임 하나가 «맡는» 시간 — 안쪽은 앞뒤 간격의 절반씩, 양 끝은 이웃과의 간격 하나. */
 function frameWeights(t: number[]): number[] {
   const n = t.length;
@@ -328,7 +404,8 @@ function summarize(
 
   const mk = (pickU: (v: Record<MetricKey, number>) => number, pickR: (v: Record<MetricKey, number>) => number, min: boolean): Extreme => {
     const f = min ? Math.min : Math.max;
-    const user = f(...userVals.map(pickU)), r = f(...refFullVals.map(pickR));
+    // 사용자는 3fps 라 진짜 극값이 프레임 사이에 떨어진다 — 이웃 3점 포물선으로 보간해 추정(refineExtreme). 기준은 0.1초 간격이라 그대로.
+    const user = refineExtreme(userT, userVals.map(pickU), min), r = f(...refFullVals.map(pickR));
     return { user, ref: r, delta: user - r };
   };
   return {
@@ -382,11 +459,16 @@ export function compareRecording(rec: MotionRecording, refs: ReferenceSet): Sess
     const user = raw.map((r) => scaledVector(r, exercise));
     const gaps = feats.slice(1).map((f, i) => f.t - feats[i].t).filter((g) => g > 0);
     const res = dtwAsymmetric(user, ref.scaled, { weights: weightsOf(exercise) });
-    const similarity = Math.round(Math.max(0, Math.min(100, 100 * Math.exp(-res.meanDistance / SCORE_TAU))));
     const s = summarize(exercise, lead, ref, ref, feats, res.path);
+    // 점수: 최저점 자세가 주(70%), DTW 궤적 거리가 보조(30%). 프레임 평균 거리만 쓰면 3fps 잡음이 자세 차이를 덮어서
+    // «기준과 같은 자세가 49점, 20° 얕은 자세가 44점» 처럼 구분이 안 됐다(2026-10-20 실촬영).
+    const trajectory = Math.max(0, Math.min(1, Math.exp(-res.meanDistance / SCORE_TAU)));
+    const posture = postureScore(exercise, s);
+    const similarity = Math.round(100 * (POSTURE_WEIGHT * posture + (1 - POSTURE_WEIGHT) * trajectory));
     results.push({
       status: 'ok', repNumber: win.repNumber, lead, frames: feats.length,
-      similarity, meanDistance: res.meanDistance, path: res.path,
+      similarity, postureScore: Math.round(100 * posture), trajectoryScore: Math.round(100 * trajectory),
+      meanDistance: res.meanDistance, path: res.path,
       frameIndex, userT: feats.map((f) => f.t), frameDt: gaps.length ? median(gaps) : 0,
       interpolatedFrames: frameIndex.filter((i) => clean[i].interpolated).length,
       ...s,
@@ -403,9 +485,9 @@ export function compareRecording(rec: MotionRecording, refs: ReferenceSet): Sess
       interpolatedFrames: clean.filter((f) => f.interpolated).length,
     },
     scoring: {
-      formula: '동작 유사도 = 100 × exp( −d̄ / τ ),  τ = 1',
+      formula: '동작 유사도 = 70% × 최저점 자세 + 30% × 궤적(100 × exp(−d̄ / 1.5))',
       tau: SCORE_TAU,
-      note: 'd̄ 는 DTW 로 정렬한 두 동작의 평균 거리입니다. 각도 30° 차이를 거리 1로 두고, 무릎 1.0·고관절 0.8·상체 0.8·엉덩이 높이 0.6 가중치를 줍니다. 평균 거리 1은 약 37점입니다. 가중치·τ 는 검증 중인 설계값입니다.',
+      note: '최저점 자세는 무릎(50%)·고관절(25%)·상체 숙임(25%)이 기준과 얼마나 다른지로 매깁니다 — 무릎 8°·고관절 10°·상체 8° 안쪽 차이는 감점하지 않습니다. d̄ 는 DTW 로 정렬한 궤적의 평균 거리입니다. 눈금·가중치는 실촬영 7개로 맞춘 설계값입니다.',
     },
   };
 }

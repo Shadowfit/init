@@ -112,11 +112,7 @@ class StreamingDepthMetricTests(unittest.TestCase):
 
         measured = []
         for i, knee_angle in enumerate(descent):
-<<<<<<< HEAD
             _, smoothed, _, _, _ = analyzer.process_frame(state, _frame(knee_angle), timestamp_sec=i / 3)
-=======
-            _, smoothed, _ = analyzer.process_frame(state, _frame(knee_angle), timestamp_sec=i / 3)
->>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
             measured.append(smoothed)
 
         self.assertEqual(len(set(measured)), len(measured), "프레임마다 값이 달라야 한다")
@@ -135,11 +131,7 @@ class StreamingDepthMetricTests(unittest.TestCase):
 
         for i, knee_angle in enumerate((170, 170)):
             analyzer.process_frame(state, _frame(knee_angle), timestamp_sec=i / 30)
-<<<<<<< HEAD
         _, smoothed, _, _, _ = analyzer.process_frame(state, _frame(80), timestamp_sec=2 / 30)
-=======
-        _, smoothed, _ = analyzer.process_frame(state, _frame(80), timestamp_sec=2 / 30)
->>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
 
         # 원시값이면 ~80 이 나와야 하지만 최근 3프레임 평균이라 훨씬 완만하다
         self.assertGreater(smoothed, 100.0)

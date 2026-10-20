@@ -11,7 +11,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -44,7 +43,6 @@ class SquatDepthAnalysisCalculatorTest {
         Exercise exercise = Exercise.builder()
                 .id(exerciseId).name(exerciseId == 1L ? "스쿼트" : "전방 런지").category(category)
                 .expectedDurationMinutes(15)
-                .syncThresholdBeginner(new BigDecimal("60.00")).syncThresholdAdvanced(new BigDecimal("85.00"))
                 .build();
         return Session.builder()
                 .id(1L).exercise(exercise).startTime(LocalDateTime.now())

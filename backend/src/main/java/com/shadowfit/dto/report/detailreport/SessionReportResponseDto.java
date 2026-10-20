@@ -27,6 +27,14 @@ public class SessionReportResponseDto {
     private int caloriesBurned;
     private String aiSafetyReport;
 
+    /**
+     * 싱크로율 판정 기준 한 쌍(V34) — 세션 종목의 <b>현재</b> 값. 리포트 화면이 점수·회차 추이를
+     * «정석(≥ good) / 교정 필요(≥ warn) / 위험(&lt; warn)» 으로 칠하는 근거다(세션 시작 응답과 같은 의미).
+     * 세션별로 박제하지 않으므로 관리자가 기준을 바꾸면 지난 리포트의 색도 새 기준을 따른다.
+     */
+    private Double syncGoodThreshold;
+    private Double syncWarnThreshold;
+
     private WorstSectionDto worstSection;
 
     /**
@@ -45,13 +53,13 @@ public class SessionReportResponseDto {
     private SquatDepthAnalysisDto squatDepthAnalysis;
 
     /**
-     * 런지 깊이 정확도 리포트(2026-09-27). 스쿼트 세션·구버전 세션(V24 이전)·좌우 구분 깊이
+     * 런지 깊이 정확도 리포트(2026-09-27). 스쿼트 세션·구버전 세션(V30 이전)·좌우 구분 깊이
      * 데이터가 없는 세션은 null — 위와 같은 널 가드 규약이다.
      */
     private LungeDepthAnalysisDto lungeDepthAnalysis;
 
     /**
-     * 스쿼트 체간 기울기 정확도 리포트(2026-09-28). 런지 세션·구버전 세션(V25 이전)·체간 기울기
+     * 스쿼트 체간 기울기 정확도 리포트(2026-09-28). 런지 세션·구버전 세션(V31 이전)·체간 기울기
      * 데이터가 없는 세션은 null — 위와 같은 널 가드 규약이다.
      */
     private TrunkLeanAnalysisDto squatTrunkLeanAnalysis;
@@ -63,7 +71,7 @@ public class SessionReportResponseDto {
     private TrunkLeanAnalysisDto lungeTrunkLeanAnalysis;
 
     /**
-     * 런지 보폭 정확도 리포트(2026-09-28). 스쿼트 세션(보폭 개념 없음)·구버전 세션(V26 이전)·
+     * 런지 보폭 정확도 리포트(2026-09-28). 스쿼트 세션(보폭 개념 없음)·구버전 세션(V32 이전)·
      * 보폭 데이터가 없는 세션은 null — 위와 같은 널 가드 규약이다.
      */
     private LungeStepLengthAnalysisDto lungeStepLengthAnalysis;
@@ -104,7 +112,16 @@ public class SessionReportResponseDto {
         dto.setWorkoutMinutes((int) java.time.Duration.between(session.getStartTime(), session.getEndTime()).toMinutes());
         dto.setCaloriesBurned(intOrZero(session.getCaloriesBurned()));
         dto.setAiSafetyReport(report.getImprovementTips());
+        // 호출부(ReportService)가 exercise 를 JOIN FETCH 로 읽어 온다 — open-in-view: false 라 여기서 lazy 를 타면 안 된다.
+        if (session.getExercise() != null) {
+            dto.setSyncGoodThreshold(doubleOrNull(session.getExercise().getSyncGoodThreshold()));
+            dto.setSyncWarnThreshold(doubleOrNull(session.getExercise().getSyncWarnThreshold()));
+        }
         return dto;
+    }
+
+    private static Double doubleOrNull(java.math.BigDecimal value) {
+        return value == null ? null : value.doubleValue();
     }
 
     private static int intOrZero(java.math.BigDecimal value) {

@@ -88,13 +88,15 @@ public class ReattachRequestBuilder {
                 .setInitialRepCount(restoredRepCount)
                 .setElapsedSec(elapsedSec)
                 .setSessionNonce(sessionNonce == null ? "" : sessionNonce)
-<<<<<<< HEAD
-                .setDepthMode(session.getSquatDepthMode().name());
-=======
                 .setExerciseCode(targets.exerciseCode())
                 .setTargetRepsPerSet(targets.targetRepsPerSet())
-                .setTargetSets(targets.targetSets());
->>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
+                .setTargetSets(targets.targetSets())
+                // AnalyzeRequest.depth_mode(10) 와 같은 규약 — 시작 때와 같은 깊이 모드를 다시 실어준다.
+                .setDepthMode(session.getSquatDepthMode().name())
+                // 판정 기준 한 쌍(V34, proto 12·13) — AnalyzeRequest 11·12 와 같다. 종목의 «지금» 값이라 그사이
+                // 관리자가 바꿨으면 재부착 이후는 새 기준을 쓴다(앱도 재부착 응답으로 같은 값을 받는다).
+                .setSyncGoodThreshold(targets.syncGoodThreshold())
+                .setSyncWarnThreshold(targets.syncWarnThreshold());
 
         // 기준 좌표는 AI 가 보관하지 않는다 — 시작 때와 똑같이 Spring 이 DB 에서 읽어 실어 보낸다.
         for (ExerciseReference ref : referenceRepository.findByExerciseId(exerciseId)) {

@@ -119,8 +119,13 @@ class ReferenceVideoUploadIntegrationTest {
                 .andExpect(jsonPath("$.referenceVideoPath").isString())
                 .andReturn();
 
-        String relative = exercisesRepository.findById(exercise.getId()).orElseThrow().getReferenceVideoPath();
+        Exercise saved = exercisesRepository.findById(exercise.getId()).orElseThrow();
+        String relative = saved.getReferenceVideoPath();
         assertThat(relative).startsWith(exercise.getId() + "/").endsWith(".mp4");
+        // V34 — 경로와 같은 트랜잭션에서 «추출 중» 이 된다. READY/FAILED 는 AI 역호출이 닫는다(여기선 gRPC 가 대역)
+        assertThat(saved.getReferenceExtractionStatus())
+                .isEqualTo(com.shadowfit.model.exercise.ReferenceExtractionStatus.EXTRACTING);
+        assertThat(saved.getReferenceExtractionAt()).isNotNull();
         assertThat(result.getResponse().getContentAsString()).contains(relative);
         assertThat(Files.readAllBytes(Paths.get(properties.getDir()).resolve(relative))).isEqualTo(MP4_HEAD);
 
@@ -217,6 +222,8 @@ class ReferenceVideoUploadIntegrationTest {
 
     private void assertNothingStored() {
         assertThat(exercisesRepository.findById(exercise.getId()).orElseThrow().getReferenceVideoPath()).isNull();
+        // 거부된 업로드는 등록 «시도» 로 남지 않는다 — 상태가 NONE 그대로여야 관리자 화면이 거짓말을 안 한다
+        assertThat(exercisesRepository.findById(exercise.getId()).orElseThrow().getReferenceExtractionStatus()).isNull();
         assertThat(exerciseDir()).doesNotExist();
         verify(analysisService, never()).extractReferencePoses(anyLong(), org.mockito.ArgumentMatchers.anyString());
     }

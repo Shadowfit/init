@@ -898,3 +898,23 @@
 **Spring 측** — `AbstractOutboxPublisher`(`dispatchOne` 이 `dispatch()` 예외를 RETRY 로 접음), 테스트 `OutboxPublisherFailureInjectionTest`·`WeeklyReportLlmOutboxIntegrationTest`
 
 **결합 결과**: `StopAnalysis`·`ReattachAnalysis` 행의 «상한 10회 후 `FAILED`» 가 던진 예외에도 적용된다. 전엔 예외가 lease 회수(`retry_count` 불변)로 빠져 상한 밖에서 무한 반복할 수 있었다. 결과 기록 단계(DB) 예외는 그대로 회수 대기.
+
+## 2026-10 — 병합 복구·채점 재보정·판정 기준 통일 (결합 계약에 영향 준 것만)
+
+### 10-20 — 두 갈래 병합 복구 (양쪽)
+
+**proto** — `depth_mode` 를 `AnalyzeRequest` 10·`ReattachRequest` 11 로 이동(7번 충돌). **Spring 측** — Flyway V22~V26 중복분을 V28~V32 로, V33 추가. **FastAPI 측** — pb2 재생성. 상세: [changelog 2026-10-20](./ai-backend-changelog.md).
+
+### 10-20 — 싱크로율 채점 기준 변경 (FastAPI 주도)
+
+**FastAPI 측** — `angle_calculator`(2D + 너비/높이 보정), `dtw_calculator`(비대칭 DTW·최저점 주축·한쪽 감점), `video_processor`·`exercise_servicer`(기준 좌표 끝 `index=-1` 비율 표식). **Spring 측** — 변경 없음(표식은 좌표 JSON 안). **결합 결과**: proto 밖 계약 하나 추가 — 기준 좌표 JSON 의 표식 항목.
+
+### 10-21 — 판정 기준 종목당 하나 + 기준 영상 추출 상태 (양쪽)
+
+**proto** — `AnalyzeRequest` 11·12 / `ReattachRequest` 12·13 `sync_good_threshold`·`sync_warn_threshold`, `ExtractRequest` 5 `error_message`.
+
+**Spring 측** — V34(`exercises` 기준 두 컬럼 + 추출 상태 세 컬럼, 페르소나 컬럼 4개 삭제), `ExerciseAnalysisService`·`ReattachRequestBuilder`(기준 실어 보냄), `PoseDataService`·`ExerciseGrpcService`(실패 역호출 처리), `ReferenceExtractionStatusService`(접수 거부·오류·서킷 열림 → FAILED), `ReferenceDepth`(AI 와 같은 각도 계산·깊이 판정), 시작·재부착·활성·리포트 응답에 기준 두 값.
+
+**FastAPI 측** — `SYNC_THRESHOLDS` 삭제 → `DEFAULT_SYNC_GOOD/WARN`, `resolve_sync_thresholds`, `SessionState` 기준 보관, `analyze_video(reference=True)`(ROI·너비·벌린 다리 필터 끔), `ReferenceExtractionError`·`spring_client.send_reference_failure`.
+
+**결합 결과**: «Spring 쪽에 완료 신호가 없다» 던 #772 의 빈칸이 채워졌다 — 추출 결과가 성공·실패 모두 같은 역호출로 돌아온다. 원격 URL·파일 없음 같은 **접수 단계 거부는 여전히 사유 없이** `success=false` 라, Spring 은 일반 문구로 FAILED 처리한다. 상세: [changelog 2026-10-21](./ai-backend-changelog.md).

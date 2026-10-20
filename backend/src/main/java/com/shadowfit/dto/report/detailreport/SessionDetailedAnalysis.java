@@ -42,13 +42,13 @@ public class SessionDetailedAnalysis {
 
     /**
      * 런지 깊이 정확도 리포트 (2026-09-27). 런지가 아니거나 좌우 구분 깊이 데이터가 없으면
-     * null — 위와 같은 하위호환 규약(V24 이전에 완료된 런지 세션도 이 필드가 null이 된다).
+     * null — 위와 같은 하위호환 규약(V30 이전에 완료된 런지 세션도 이 필드가 null이 된다).
      */
     private LungeDepthAnalysisDto lungeDepthAnalysis;
 
     /**
      * 스쿼트 체간 기울기 정확도 리포트 (2026-09-28). 스쿼트가 아니거나 체간 기울기 데이터가
-     * 없으면 null — 위와 같은 하위호환 규약(V25 이전에 완료된 세션도 이 필드가 null이 된다).
+     * 없으면 null — 위와 같은 하위호환 규약(V31 이전에 완료된 세션도 이 필드가 null이 된다).
      */
     private TrunkLeanAnalysisDto squatTrunkLeanAnalysis;
 
@@ -60,7 +60,7 @@ public class SessionDetailedAnalysis {
 
     /**
      * 런지 보폭 정확도 리포트 (2026-09-28). 런지가 아니거나 보폭 데이터가 없으면 null —
-     * 위와 같은 하위호환 규약(V26 이전에 완료된 세션도 이 필드가 null이 된다). 스쿼트는
+     * 위와 같은 하위호환 규약(V32 이전에 완료된 세션도 이 필드가 null이 된다). 스쿼트는
      * 보폭 개념이 없어 대응 필드 자체가 없다.
      */
     private LungeStepLengthAnalysisDto lungeStepLengthAnalysis;

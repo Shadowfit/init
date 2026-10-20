@@ -62,21 +62,37 @@ public class Exercise {
     @Column(columnDefinition = "json")
     private String targetJoints;
 
+    /**
+     * 싱크로율 판정 기준 한 쌍(V34, 2026-10-21 «하나로 통일»). 점수 ≥ good = 정석, ≥ warn = 교정 필요,
+     * 그 아래 = 위험. 페르소나와 무관하다(페르소나는 트레이너 말투로만 남는다).
+     *
+     * <p>예전 페르소나별 4컬럼(beginner/advanced/diet/rehab)은 관리자 API 로 바꿀 수만 있고 읽는 곳이 없었다.
+     * 이 한 쌍은 AI({@code AnalyzeRequest}·{@code ReattachRequest})와 앱(세션 시작·재부착·진행 중 세션·리포트
+     * 응답)으로 같이 흐른다 — {@code ExerciseAnalysisService.SessionTargets} 가 그 변환 한 곳이다.
+     */
     @Builder.Default
-    @Column(precision = 5, scale = 2)
-    private BigDecimal syncThresholdBeginner = new BigDecimal("60.00");
+    @Column(name = "sync_good_threshold", nullable = false, precision = 5, scale = 2)
+    private BigDecimal syncGoodThreshold = new BigDecimal("80.00");
 
     @Builder.Default
-    @Column(precision = 5, scale = 2)
-    private BigDecimal syncThresholdAdvanced = new BigDecimal("85.00");
+    @Column(name = "sync_warn_threshold", nullable = false, precision = 5, scale = 2)
+    private BigDecimal syncWarnThreshold = new BigDecimal("60.00");
 
-    @Builder.Default
-    @Column(precision = 5, scale = 2)
-    private BigDecimal syncThresholdDiet = new BigDecimal("70.00");
+    /**
+     * 기준 좌표 등록의 가장 최근 시도 결과(V34). NULL = 등록 시도가 없었다 — 관리자 화면엔 NONE.
+     * 영상 업로드는 EXTRACTING 으로 시작해 AI 역호출(또는 접수 실패)이 READY/FAILED 로 닫는다.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "reference_extraction_status", length = 16)
+    private ReferenceExtractionStatus referenceExtractionStatus;
 
-    @Builder.Default
-    @Column(precision = 5, scale = 2)
-    private BigDecimal syncThresholdRehab = new BigDecimal("50.00");
+    /** FAILED 사유 — 관리자에게 그대로 보여준다. 다른 상태에선 null. */
+    @Column(name = "reference_extraction_error", length = 500)
+    private String referenceExtractionError;
+
+    /** 위 상태가 바뀐 시각. EXTRACTING 이 오래 그대로면 조회 쪽이 FAILED 로 보여주는 기준이다. */
+    @Column(name = "reference_extraction_at")
+    private LocalDateTime referenceExtractionAt;
 
     @Builder.Default
     @Column(nullable = false)
@@ -145,12 +161,41 @@ public class Exercise {
         return before;
     }
 
-    /** 싱크로율 임계값 4종을 한 번에 바꾼다. beginner&lt;advanced 검증은 호출자(DTO)가 이미 했다. */
-    public void updateThresholds(BigDecimal beginner, BigDecimal advanced, BigDecimal diet, BigDecimal rehab) {
-        this.syncThresholdBeginner = beginner;
-        this.syncThresholdAdvanced = advanced;
-        this.syncThresholdDiet = diet;
-        this.syncThresholdRehab = rehab;
+    /**
+     * 싱크로율 판정 기준 한 쌍을 바꾼다. {@code 0 < warn < good ≤ 100} 검증은 호출자(서비스)가 이미 했다.
+     * 컬럼이 DECIMAL(5,2) 라 소수 둘째 자리에서 반올림해 둔다 — DB 가 조용히 자르는 값과 응답 값이 같게.
+     */
+    public void updateThresholds(BigDecimal good, BigDecimal warn) {
+        this.syncGoodThreshold = good.setScale(2, java.math.RoundingMode.HALF_UP);
+        this.syncWarnThreshold = warn.setScale(2, java.math.RoundingMode.HALF_UP);
+    }
+
+    // ─── 기준 좌표 등록 상태 (V34) ─────────────────────────────────────────────
+
+    /** {@code reference_extraction_error} 컬럼 길이 — 넘는 사유는 잘라서 저장한다. */
+    public static final int REFERENCE_EXTRACTION_ERROR_MAX = 500;
+
+    /** 영상 업로드가 AI 추출을 요청했다 — 결과는 역호출이 READY/FAILED 로 닫는다. */
+    public void markReferenceExtracting() {
+        this.referenceExtractionStatus = ReferenceExtractionStatus.EXTRACTING;
+        this.referenceExtractionError = null;
+        this.referenceExtractionAt = LocalDateTime.now();
+    }
+
+    /** 기준 좌표가 교체됐다(영상 추출 완료 또는 3D 시범 직접 등록). */
+    public void markReferenceReady() {
+        this.referenceExtractionStatus = ReferenceExtractionStatus.READY;
+        this.referenceExtractionError = null;
+        this.referenceExtractionAt = LocalDateTime.now();
+    }
+
+    /** 추출이 실패했다. 기존 기준 좌표는 건드리지 않는 것이 호출자 몫이다. 사유는 500자에서 자른다. */
+    public void markReferenceFailed(String reason) {
+        String r = reason == null || reason.isBlank() ? "알 수 없는 이유로 추출에 실패했어요." : reason.strip();
+        this.referenceExtractionStatus = ReferenceExtractionStatus.FAILED;
+        this.referenceExtractionError = r.length() > REFERENCE_EXTRACTION_ERROR_MAX
+                ? r.substring(0, REFERENCE_EXTRACTION_ERROR_MAX) : r;
+        this.referenceExtractionAt = LocalDateTime.now();
     }
 
     /**

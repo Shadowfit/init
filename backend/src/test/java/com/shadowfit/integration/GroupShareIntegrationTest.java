@@ -31,7 +31,6 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
-import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
@@ -87,8 +86,8 @@ class GroupShareIntegrationTest {
         cheolsu = save("공유철수");
         category = categoryRepository.saveAndFlush(Category.builder().name("SHARE_LOWER").build());
         squat = exercisesRepository.saveAndFlush(Exercise.builder().name("스쿼트").category(category)
-                .expectedDurationMinutes(15).syncThresholdBeginner(new BigDecimal("60.00"))
-                .syncThresholdAdvanced(new BigDecimal("85.00")).analysisSupported(true).build());
+                .expectedDurationMinutes(15)
+                .analysisSupported(true).build());
     }
 
     @AfterEach

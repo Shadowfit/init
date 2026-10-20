@@ -1,14 +1,3 @@
-<<<<<<< HEAD
-export interface FriendAttendance {
-  memberId: number;
-  username: string;
-  profileImageUrl: string | null;
-  attendedToday: boolean;
-  streak: number;
-}
-
-export interface WorkoutGroup {
-=======
 // 백엔드 dto/group/*, dto/notification/* 와 1:1 매칭되는 프론트 타입.
 // 계약 원본: docs/07-api-design.md «모임·소셜 API», docs/tasks/35-frontend-api-handoff.md
 
@@ -51,7 +40,6 @@ export type GroupRole = 'OWNER' | 'MEMBER';
 export type GroupMemberStatus = 'ACTIVE' | 'LEFT';
 
 export interface Group {
->>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
   id: number;
   name: string;
   description: string | null;
@@ -59,8 +47,6 @@ export interface Group {
   createdById: number;
   createdAt: string;
 }
-<<<<<<< HEAD
-=======
 
 export interface GroupMember {
   memberId: number;
@@ -187,4 +173,3 @@ export function parseFeedPayload(item: GroupFeedItem): FeedPayload {
   }
   return { type: 'UNKNOWN' };
 }
->>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473

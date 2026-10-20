@@ -79,7 +79,8 @@ export interface FeatureDef {
 
 /**
  * ⚠️ scale·weight 는 실측으로 정한 값이 아니라 설계값이다.
- *  - scale: 각도 30° 차이, 몸통 기울기 15° 차이, 엉덩이 내려간 정도 0.2(서 있을 때 높이의 20%) 차이를 «거리 1» 로 둔다.
+ *  - scale: 각도 30° 차이, 몸통 기울기 25° 차이, 엉덩이 내려간 정도 0.3(서 있을 때 높이의 30%) 차이를 «거리 1» 로 둔다.
+ *    (2026-10-20 실촬영 보정: 기울기 15°·높이 0.2 로는 기준과 같은 자세의 정상 스쿼트가 프레임 잡음만으로 49점이 됐다)
  *  - weight: 운동의 핵심 관절(무릎)을 1.0 으로 두고, 엉덩이·몸통·높이는 이보다 낮게 줬다.
  *    런지 뒷다리 무릎은 앞다리보다 덜 중요해서 0.6.
  * 실촬영으로 정상/얕은 동작이 갈리는지만 확인했고(run-tests.cjs), 값 자체의 최적성은 검증 전이다.
@@ -88,14 +89,14 @@ export const FEATURE_DEFS: Record<MotionExercise, FeatureDef[]> = {
   squat: [
     { key: 'knee', label: '무릎 각도', unit: '°', scale: 30, weight: 1.0 },
     { key: 'hip', label: '고관절 각도', unit: '°', scale: 30, weight: 0.8 },
-    { key: 'lean', label: '상체 숙임', unit: '°', scale: 15, weight: 0.8 },
-    { key: 'drop', label: '엉덩이 내려간 정도', unit: '', scale: 0.2, weight: 0.6 },
+    { key: 'lean', label: '상체 숙임', unit: '°', scale: 25, weight: 0.8 },
+    { key: 'drop', label: '엉덩이 내려간 정도', unit: '', scale: 0.3, weight: 0.6 },
   ],
   lunge: [
     { key: 'leadKnee', label: '앞다리 무릎 각도', unit: '°', scale: 30, weight: 1.0 },
     { key: 'trailKnee', label: '뒷다리 무릎 각도', unit: '°', scale: 30, weight: 0.6 },
-    { key: 'lean', label: '상체 숙임', unit: '°', scale: 15, weight: 0.8 },
-    { key: 'drop', label: '엉덩이 내려간 정도', unit: '', scale: 0.2, weight: 0.6 },
+    { key: 'lean', label: '상체 숙임', unit: '°', scale: 25, weight: 0.8 },
+    { key: 'drop', label: '엉덩이 내려간 정도', unit: '', scale: 0.3, weight: 0.6 },
   ],
 };
 

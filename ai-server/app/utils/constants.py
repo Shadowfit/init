@@ -40,10 +40,14 @@ EXERCISE_ANGLES = {
     ],
 }
 
-# 동기화율 임계값 (페르소나별). sync_rate와 동일하게 0~100 스케일.
-SYNC_THRESHOLDS = {
-    "BEGINNER": 60.0,
-    "ADVANCED": 85.0,
-    "DIET": 70.0,
-    "REHAB": 50.0,
-}
+# 싱크로율 판정 임계값의 기본값. sync_rate와 동일하게 0~100 스케일 (2026-10-21 사용자 결정).
+#
+# 임계값은 **운동마다 한 쌍**이다 — «양호»(good) 이상이면 "자세 양호", «주의»(warn) 이상이면
+# "자세 보정 필요", 그 아래는 "즉시 자세 수정 필요". 값은 Spring 이 StartAnalysis/ReattachAnalysis 의
+# sync_good_threshold/sync_warn_threshold 로 내려준다. 이 두 상수는 그 값이 안 왔을 때(proto3 0.0)나
+# 말이 안 될 때(≤0, >100, warn ≥ good) 쓰는 대체값이다.
+#
+# ⚠️ 예전에는 페르소나별 표(BEGINNER 60 · ADVANCED 85 · DIET 70 · REHAB 50)와 그 40/70 비율로
+#    두 번째 문턱을 만들었다. 이제 페르소나는 트레이너 말투만 정하고 임계값에는 관여하지 않는다.
+DEFAULT_SYNC_GOOD = 80.0
+DEFAULT_SYNC_WARN = 60.0

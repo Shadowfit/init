@@ -22,18 +22,18 @@ package com.shadowfit.dto.report;
  * 프레임의 {@code jointCoordinates} 하나만 <b>PK로 다시 조회</b>하기 위한 열쇠다 — 여기서
  * 값을 직접 싣지 않는 이유는 그대로다(대부분의 프레임은 대표로 안 뽑혀 그 비용이 버려진다).
  *
- * <p>{@code leadLeg} 는 V24(2026-09-27)로 추가됐다 — 런지에서 {@code smoothedKneeAngle} 이
+ * <p>{@code leadLeg} 는 V30(2026-09-27)로 추가됐다 — 런지에서 {@code smoothedKneeAngle} 이
  * "앞다리 무릎각"이 되면서(좌우 평균이 아니라), 그 값이 어느 다리의 것인지 없이는 좌/우로 나눠
  * 채점할 수 없다. {@code "left"}·{@code "right"} 둘 중 하나거나, 스쿼트·구버전 행이면 {@code null}
  * 이다.
  *
- * <p>{@code torsoTiltDeg} 는 V25(2026-09-28)로 추가됐다 — 어깨 중점-엉덩이 중점 벡터가 수직에서
+ * <p>{@code torsoTiltDeg} 는 V31(2026-09-28)로 추가됐다 — 어깨 중점-엉덩이 중점 벡터가 수직에서
  * 벗어난 각도(도), 스쿼트·런지 공용. {@link com.shadowfit.service.report.SquatTrunkLeanAnalysisCalculator}/
  * {@link com.shadowfit.service.report.LungeTrunkLeanAnalysisCalculator} 가 rep 내 평균으로
  * "그 회차 내내 체간 자세가 얼마나 무너졌는가"를 채점하는 근거값이다. 구버전 행이면
  * {@code null}(0과 구분 — 0은 "완전 직립"이라는 유효한 각도값이라 별도 미상 마커가 필요하다).
  *
- * <p>{@code staggerRatio} 는 V26(2026-09-28)로 추가됐다 — 두 발목 사이 거리 / 어깨-엉덩이 길이,
+ * <p>{@code staggerRatio} 는 V32(2026-09-28)로 추가됐다 — 두 발목 사이 거리 / 어깨-엉덩이 길이,
  * 런지 전용("보폭이 얼마나 벌어졌는가"). {@link com.shadowfit.service.report.LungeStepLengthAnalysisCalculator}
  * 가 짧은 보폭일수록 깊은 무릎 굴곡 구간에서 슬개대퇴 관절 부하가 커진다는 문헌 근거로 채점한다.
  * 스쿼트·구버전 행이면 {@code null}이다.

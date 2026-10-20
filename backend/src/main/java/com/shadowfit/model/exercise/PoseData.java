@@ -75,7 +75,7 @@ public class PoseData {
 
     /**
      * 이 프레임(rep)이 속한 앞다리 — {@code "left"} | {@code "right"}, 스쿼트·구버전 행은
-     * {@code null}(V24, 2026-09-27). 런지에서는 {@link #smoothedKneeAngle}이 좌우 평균이 아니라
+     * {@code null}(V30, 2026-09-27). 런지에서는 {@link #smoothedKneeAngle}이 좌우 평균이 아니라
      * 이 다리의 무릎각이라(ai-server app/core/lunge_analyzer.py), 좌/우로 나눠 채점하려면
      * 이 값이 있어야 한다. proto3 빈 문자열은 저장 계층(PoseDataService)에서 null로 접는다 —
      * "런지인데 판정 전"과 "이 개념 자체가 없음(스쿼트)"을 구분하기 위해서다.
@@ -85,7 +85,7 @@ public class PoseData {
 
     /**
      * 어깨 중점-엉덩이 중점 벡터가 수직에서 벗어난 각도(도). 0=완전 직립, 스쿼트·런지 공용
-     * (V25, 2026-09-28). {@link com.shadowfit.service.report.SquatTrunkLeanAnalysisCalculator}/
+     * (V31, 2026-09-28). {@link com.shadowfit.service.report.SquatTrunkLeanAnalysisCalculator}/
      * {@code LungeTrunkLeanAnalysisCalculator}가 rep 내 평균으로 체간 자세 점수를 매기는 근거값이다.
      * 구버전 행이면 {@code null} — 0은 "완전 직립"이라는 유효한 값이라 leadLeg처럼 빈 문자열을
      * null로 접는 변환이 필요 없다(proto3 기본값 0.0을 그대로 저장해도 뜻이 통한다).
@@ -95,7 +95,7 @@ public class PoseData {
 
     /**
      * 두 발목 사이 거리 / 어깨-엉덩이 길이 — 런지 전용 "보폭이 얼마나 벌어졌는가" 비율
-     * (V26, 2026-09-28). {@link com.shadowfit.service.report.LungeStepLengthAnalysisCalculator}가
+     * (V32, 2026-09-28). {@link com.shadowfit.service.report.LungeStepLengthAnalysisCalculator}가
      * 짧은 보폭일수록 깊은 무릎 굴곡 구간에서 슬개대퇴 관절 부하가 커진다는 문헌 근거로 채점한다.
      * 스쿼트·구버전 행이면 {@code null}.
      */

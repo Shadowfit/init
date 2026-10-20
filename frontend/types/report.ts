@@ -82,7 +82,6 @@ export interface ComparisonWithPrevious {
   caloriesDiff: number;
 }
 
-<<<<<<< HEAD
 /* ── 스쿼트 깊이 모드 (2026-09-21) ── */
 export type SquatDepthMode = 'FULL' | 'HALF';
 export type SquatDepthGrade = 'EXCELLENT' | 'GOOD' | 'FAIR' | 'NEEDS_WORK' | 'POOR';
@@ -196,20 +195,23 @@ export interface LungeStepLengthAnalysis {
   stepGrade: StepLengthGrade;
   repStepLengths: RepStepLength[];
   narrative: string[];              // 회차별 한국어 코멘트, 최대 4문장
-=======
+}
+
 /** 세트별 요약 (V26 세션 세트). 세트 도입 전 세션은 빈 배열 */
 export interface SessionSet {
   setNo: number;
   reps: number;
-  avgSyncRate: number;
+  avgSyncRate: number | null;     // null = 채점된 rep 이 없는 세트(횟수만 세는 종목, V33)
   startedSec: number;
   endedSec: number;
->>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
 }
 
 export interface SessionReportResponse {
   sessionId: number;
   startTime: string;               // "2026-10-06T11:40:33" — 헤더 날짜
+  // 이 종목의 싱크로율 판정 기준(정석·위험) — 색 구분에 쓴다. 구버전 서버는 없음 → 80/60
+  syncGoodThreshold?: number | null;
+  syncWarnThreshold?: number | null;
   sets: SessionSet[];
   avgSyncRate: number;
   scoreAvailable?: boolean;

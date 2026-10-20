@@ -148,13 +148,10 @@ public class SessionService {
                 .startTime(LocalDateTime.now().withNano(0))
                 .status(Status.IN_PROGRESS)
                 .sessionNonce(sessionNonceGenerator.generate())
-<<<<<<< HEAD
                 .squatDepthMode(appDto.getDepthMode() != null ? appDto.getDepthMode() : SquatDepthMode.FULL)
-=======
                 .difficultyLevel(recommendation.difficultyLevel())
                 .targetRepsPerSet(targetRepsPerSet)
                 .targetSets(appDto.getTargetSets())
->>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
                 .build();
 
         return sessionRepository.save(session);

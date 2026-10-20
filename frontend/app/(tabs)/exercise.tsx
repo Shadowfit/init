@@ -1,10 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-<<<<<<< HEAD
-import { View, Text, StyleSheet, TouchableOpacity, Alert, AppState, Platform, type AppStateStatus } from 'react-native';
-=======
-import { View, Text, StyleSheet, TouchableOpacity, Animated, AppState, type AppStateStatus } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, AppState, Platform, type AppStateStatus } from 'react-native';
 import { Alert } from '@/utils/alert';
->>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { exercisesService } from '@/services/exercisesService';
@@ -14,6 +10,9 @@ import { FEEDBACK_TYPE_LABEL } from '@/types/feedback';
 import type { AiFeedbackType, LungeProgress, PoseSkipReason, SquatProgress } from '@/types/pose';
 import ReadinessBanner, { deriveReadiness } from '@/components/exercise/ReadinessBanner';
 import MannequinDemo from '@/components/exercise/MannequinDemo';
+import { motionRecorder } from '@/lib/motion/recorder';
+import * as Haptics from 'expo-haptics';
+import { DEFAULT_SYNC_THRESHOLDS, syncColor as syncColorOf, syncThresholdsFrom, type SyncThresholds } from '@/constants/sync';
 import {
   Camera as CameraIcon,
   ChevronLeft,
@@ -66,6 +65,8 @@ export default function ExerciseScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [isRecording, setIsRecording] = useState(false);
   const [syncRate, setSyncRate] = useState(0);
+  // 이 종목의 판정 기준(정석·위험) — 세션 시작·재부착 응답으로 받는다. 관리자 › 운동 종목에서 정한 값.
+  const [thresholds, setThresholds] = useState<SyncThresholds>(DEFAULT_SYNC_THRESHOLDS);
   const [guideOpen, setGuideOpen] = useState(false);
   // 3D 목각인형 시범 패널. 카메라와 같이 돌면 폰이 버벅일 수 있어 운동 중에는 띄우지 않는다.
   const [demoOpen, setDemoOpen] = useState(false);
@@ -156,6 +157,7 @@ export default function ExerciseScreen() {
         setSessionId(r.sessionId);
         setSessionNonce(r.sessionNonce);
         setAiWorkerIndex(r.aiWorkerIndex ?? null);
+        setThresholds(syncThresholdsFrom(r));
         setRepCount(r.restoredRepCount);
         setIsRecording(true);
         if (r.analyzerStateReset) {
@@ -230,8 +232,11 @@ export default function ExerciseScreen() {
         // 하프 스쿼트는 시연 범위에서 뺐다(2026-10-06) — depthMode 를 생략하면 백엔드가 FULL 로 취급.
         const res = await exercisesService.startSession({ exerciseId });
         setSessionId(res.data.sessionId);
+        // 3D 동작 비교용 관절 좌표 기록 시작(스쿼트·런지만 기록한다 — recorder 가 종목을 보고 거른다)
+        motionRecorder.start(res.data.sessionId, exerciseTypeOf(exerciseId));
         setSessionNonce(res.data.sessionNonce);
         setAiWorkerIndex(res.data.aiWorkerIndex ?? null);
+        setThresholds(syncThresholdsFrom(res.data));
         // 멘트 프리로드는 실패해도 운동은 진행
         exercisesService
           .getFeedbackTemplates(exerciseId)
@@ -294,6 +299,22 @@ export default function ExerciseScreen() {
   }, [repCount]);
 
   const readiness = deriveReadiness({ isRecording, isLunge, gotResponse, aiError, lastSkip, squat, lunge });
+  const liveSyncColor = syncColorOf(syncRate, thresholds);
+
+  // 싱크로율이 위험 기준(warn) 아래로 떨어지면 진동 — 화면을 보지 않아도 알 수 있게.
+  // 싱크로율은 반복 1회가 끝날 때 갱신되므로(AI 가 rep 단위로 채점) 진동도 반복마다 한 번이다.
+  // 0 은 «아직 측정 전» 이라 진동하지 않는다. 런지는 횟수만 세는 종목이라 싱크로율이 없다.
+  const prevSyncRef = useRef(syncRate);
+  useEffect(() => {
+    const prev = prevSyncRef.current;
+    prevSyncRef.current = syncRate;
+    if (!isRecording || isLunge || syncRate <= 0 || syncRate === prev || Platform.OS === 'web') return;
+    if (syncRate < thresholds.warn) {
+      // 위험 구간에 처음 들어오면 경고 진동, 계속 머물면 약한 진동
+      if (prev >= thresholds.warn || prev <= 0) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+      else Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    }
+  }, [syncRate, isRecording, isLunge, thresholds]);
 
   // 자세 결함 토스트 — 4초 후 자동 사라짐
   useEffect(() => {
@@ -383,6 +404,14 @@ export default function ExerciseScreen() {
           );
           if (cancelled) return;
           const r = res.data;
+          // 3D 동작 비교 — 스킵 프레임도 시간 간격을 남기려고 그대로 넣는다(좌표 없으면 lm=null)
+          motionRecorder.push(sessionId, {
+            atMs: Date.now(),
+            landmarks: r.landmarks,
+            aspect: r.image_aspect_ratio,
+            repCount: r.rep_count,
+            lead: r.lunge?.lead_leg ?? null,
+          });
           if (__DEV__ && ++frameNo % 5 === 1) {
             // 실기기 시험용 — 5프레임마다 캡처/AI 소요(ms)와 판정 결과를 Metro 터미널에 남긴다.
             // eslint-disable-next-line no-console
@@ -550,8 +579,18 @@ export default function ExerciseScreen() {
           </View>
         ) : (
         <View style={styles.syncGauge}>
-          <Text style={styles.syncLabel}>동작 유사도 · 참고용</Text>
-          <Text style={styles.syncValue}>{isRecording && syncRate > 0 ? `${syncRate}%` : '측정 전'}</Text>
+          {/* 색: 정석(≥ good) 라임 · 교정 필요(≥ warn) 주황 · 위험 빨강 — 기준은 종목별 관리자 설정 */}
+          <Zap size={14} color={isRecording && syncRate > 0 ? liveSyncColor : COLORS.textMuted} strokeWidth={2}
+            fill={isRecording && syncRate > 0 ? liveSyncColor : 'transparent'} />
+          <Text style={styles.syncLabel}>싱크로율</Text>
+          <View style={styles.syncBarBg}>
+            {isRecording && syncRate > 0 && (
+              <View style={[styles.syncBarFill, { width: `${Math.min(100, syncRate)}%`, backgroundColor: liveSyncColor }]} />
+            )}
+          </View>
+          <Text style={[styles.syncValue, isRecording && syncRate > 0 && { color: liveSyncColor }]}>
+            {isRecording && syncRate > 0 ? `${syncRate}%` : '측정 전'}
+          </Text>
         </View>
         )}
 
@@ -733,6 +772,8 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
   },
   syncLabel: { color: COLORS.textSecondary, fontSize: FONT_SIZE.xs },
+  syncBarBg: { flex: 1, height: 6, backgroundColor: COLORS.surfaceLight, borderRadius: 3, overflow: 'hidden' },
+  syncBarFill: { height: 6, borderRadius: 3 },
   syncValue: {
     fontSize: FONT_SIZE.md,
     fontWeight: '800',

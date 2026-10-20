@@ -110,14 +110,9 @@ public interface PoseDataRepository extends JpaRepository<PoseData, Long> {
      * ({@code SessionSetAssembler})이 같은 rep 목록에서 나오므로 두 집계가 한 쿼리를 나눠 쓴다 —
      * 싱크 통계와 세트 평균이 서로 다른 rep 집합을 보는 일이 구조적으로 없다.
      */
-<<<<<<< HEAD
-    @Query("SELECT AVG(p.syncRate) FROM PoseData p " +
-           "WHERE p.session.id = :sessionId AND p.createdAt = :sessionAnchor AND p.repNumber > 0 AND p.syncRate IS NOT NULL " +
-=======
     @Query("SELECT p.repNumber AS repNumber, AVG(p.syncRate) AS avgSyncRate, " +
            "MIN(p.timestampSec) AS startedSec, MAX(p.timestampSec) AS endedSec FROM PoseData p " +
            "WHERE p.session.id = :sessionId AND p.createdAt = :sessionAnchor AND p.repNumber > 0 " +
->>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
            "GROUP BY p.repNumber ORDER BY p.repNumber")
     List<RepSummaryProjection> findRepSummaries(@Param("sessionId") Long sessionId,
                                                 @Param("sessionAnchor") LocalDateTime sessionAnchor);
@@ -129,6 +124,20 @@ public interface PoseDataRepository extends JpaRepository<PoseData, Long> {
         Double getStartedSec();
         Double getEndedSec();
     }
+
+    /**
+     * {@link #findRepSummaries} 의 sync_rate 전용 축약 — rep 별 평균만 필요한 호출부용(2026-09-21 계통).
+     *
+     * <p>{@code syncRate IS NOT NULL} 을 거는 이유: 횟수만 세는 종목({@code ExerciseAnalysisCapabilities.isCountOnly})
+     * 은 프레임에 sync_rate 가 없다. 그 행이 섞이면 {@code AVG} 가 null 인 rep 이 생겨 "미측정" 이 통계에 끼어든다.
+     * {@link #findRepSummaries} 는 세트 경계(시작·끝 시각)도 같이 쓰므로 거기서는 거르지 않고, 호출부
+     * ({@code SessionCompletionTx.resolveSyncStats})가 null 을 건너뛴다 — 두 쿼리의 통계 의미는 같다.
+     */
+    @Query("SELECT AVG(p.syncRate) FROM PoseData p " +
+           "WHERE p.session.id = :sessionId AND p.createdAt = :sessionAnchor AND p.repNumber > 0 AND p.syncRate IS NOT NULL " +
+           "GROUP BY p.repNumber ORDER BY p.repNumber")
+    List<Double> findRepAverageSyncRates(@Param("sessionId") Long sessionId,
+                                         @Param("sessionAnchor") LocalDateTime sessionAnchor);
 
     // 회원 탈퇴 시 pose_data 참조무결성 대체(FK CASCADE 제거로 인한 애플리케이션 정리).
     // PoseDataCleanupService에서 afterCommit 이후 비동기로 호출됨.

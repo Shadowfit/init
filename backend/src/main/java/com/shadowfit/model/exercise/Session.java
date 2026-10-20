@@ -89,7 +89,7 @@ public class Session {
 
     /**
      * 스쿼트 깊이 모드 FULL/HALF (2026-09-21). 종목 선택과 같은 화면에서 세션 시작 시 고른다.
-     * 스쿼트가 아닌 세션에는 의미가 없지만 항상 채워진다(V23이 NOT NULL DEFAULT 'FULL') —
+     * 스쿼트가 아닌 세션에는 의미가 없지만 항상 채워진다(V29가 NOT NULL DEFAULT 'FULL') —
      * {@code SquatDepthAnalysisCalculator}가 스쿼트 세션에서만 이 값을 읽는다.
      */
     @Enumerated(EnumType.STRING)

@@ -125,7 +125,8 @@ SessionMetricsRecordingTest {
 
             service = new ExerciseAnalysisService(sessionRepository, exercisesRepository,
                     memberRepository, sessionService, referenceRepository,
-                    circuitBreakerRegistry, metrics, outboxEventRepository, reattachRequestBuilder);
+                    circuitBreakerRegistry, metrics, outboxEventRepository, reattachRequestBuilder,
+                    mock(ReferenceExtractionStatusService.class));
             ReflectionTestUtils.setField(service, "internalToken", "test-token");
             ReflectionTestUtils.setField(service, "aiChannelPoolSize", 1);
             ReflectionTestUtils.setField(service, "aiAsyncStubPool", List.of(stub));
@@ -144,12 +145,8 @@ SessionMetricsRecordingTest {
             circuitBreakerRegistry.circuitBreaker("aiServer-0").transitionToOpenState();
             when(sessionService.markAsFailedIfStillInProgress(eq(1L), any(LocalDateTime.class))).thenReturn(true);
 
-<<<<<<< HEAD
-            service.sendAnalysisRequestToFastApi(1L, dto(), "https://youtu.be/dummy", "BEGINNER", "test-nonce", "FULL");
-=======
-            service.sendAnalysisRequestToFastApi(1L, dto(), "https://youtu.be/dummy", "BEGINNER", "test-nonce",
-                    new ExerciseAnalysisService.SessionTargets("SQUAT", 10, 0));
->>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
+            service.sendAnalysisRequestToFastApi(1L, dto(), "https://youtu.be/dummy", "BEGINNER", "test-nonce", "FULL",
+                    new ExerciseAnalysisService.SessionTargets("SQUAT", 10, 0, 80.0, 60.0));
 
             assertThat(transitions(Status.FAILED, "circuit-open")).isEqualTo(1.0);
             // 원인이 다른 FAILED와 섞이면 안 된다 — source 태그가 존재 이유이므로
@@ -162,12 +159,8 @@ SessionMetricsRecordingTest {
             circuitBreakerRegistry.circuitBreaker("aiServer-0").transitionToOpenState();
             when(sessionService.markAsFailedIfStillInProgress(eq(1L), any(LocalDateTime.class))).thenReturn(false);
 
-<<<<<<< HEAD
-            service.sendAnalysisRequestToFastApi(1L, dto(), "https://youtu.be/dummy", "BEGINNER", "test-nonce", "FULL");
-=======
-            service.sendAnalysisRequestToFastApi(1L, dto(), "https://youtu.be/dummy", "BEGINNER", "test-nonce",
-                    new ExerciseAnalysisService.SessionTargets("SQUAT", 10, 0));
->>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
+            service.sendAnalysisRequestToFastApi(1L, dto(), "https://youtu.be/dummy", "BEGINNER", "test-nonce", "FULL",
+                    new ExerciseAnalysisService.SessionTargets("SQUAT", 10, 0, 80.0, 60.0));
 
             assertThat(transitions(Status.FAILED, "circuit-open")).isZero();
         }
@@ -178,7 +171,8 @@ SessionMetricsRecordingTest {
             org.mockito.ArgumentCaptor<AnalyzeRequest> captor =
                     org.mockito.ArgumentCaptor.forClass(AnalyzeRequest.class);
 
-            service.sendAnalysisRequestToFastApi(3L, dto(), "https://youtu.be/dummy", "BEGINNER", "test-nonce", "HALF");
+            service.sendAnalysisRequestToFastApi(3L, dto(), "https://youtu.be/dummy", "BEGINNER", "test-nonce", "HALF",
+                    new ExerciseAnalysisService.SessionTargets("SQUAT", 10, 0, 80.0, 60.0));
 
             verify(stub).startAnalysis(captor.capture(), any());
             assertThat(captor.getValue().getDepthMode()).isEqualTo("HALF");
@@ -190,7 +184,8 @@ SessionMetricsRecordingTest {
             org.mockito.ArgumentCaptor<AnalyzeRequest> captor =
                     org.mockito.ArgumentCaptor.forClass(AnalyzeRequest.class);
 
-            service.sendAnalysisRequestToFastApi(4L, dto(), "https://youtu.be/dummy", "BEGINNER", "test-nonce", null);
+            service.sendAnalysisRequestToFastApi(4L, dto(), "https://youtu.be/dummy", "BEGINNER", "test-nonce", null,
+                    new ExerciseAnalysisService.SessionTargets("SQUAT", 10, 0, 80.0, 60.0));
 
             verify(stub).startAnalysis(captor.capture(), any());
             assertThat(captor.getValue().getDepthMode()).isEmpty();
@@ -211,12 +206,8 @@ SessionMetricsRecordingTest {
                 return null;
             }).when(stub).startAnalysis(any(AnalyzeRequest.class), any());
 
-<<<<<<< HEAD
-            service.sendAnalysisRequestToFastApi(2L, dto(), "https://youtu.be/dummy", "BEGINNER", "test-nonce", "FULL");
-=======
-            service.sendAnalysisRequestToFastApi(2L, dto(), "https://youtu.be/dummy", "BEGINNER", "test-nonce",
-                    new ExerciseAnalysisService.SessionTargets("SQUAT", 10, 0));
->>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
+            service.sendAnalysisRequestToFastApi(2L, dto(), "https://youtu.be/dummy", "BEGINNER", "test-nonce", "FULL",
+                    new ExerciseAnalysisService.SessionTargets("SQUAT", 10, 0, 80.0, 60.0));
 
             assertThat(transitions(Status.FAILED, "grpc-error")).isEqualTo(1.0);
             assertThat(transitions(Status.FAILED, "circuit-open")).isZero();
@@ -225,17 +216,39 @@ SessionMetricsRecordingTest {
         /** ② — 시작 요청에 종목 코드·세트 목표가 실린다. AnalyzeRequest 는 afterCommit 뒤 비동기로 나가
          *  통합 테스트에선 못 잡으므로(ExerciseAnalysisServiceTest 주석) 여기서 stub 캡처로 본다. */
         @Test
-        @DisplayName("StartAnalysis 요청에 exercise_code·target_reps_per_set·target_sets 가 실린다")
+        @DisplayName("StartAnalysis 요청에 exercise_code·target_reps_per_set·target_sets·판정 기준이 실린다")
         void startAnalysis_carriesCodeAndTargets() {
             org.mockito.ArgumentCaptor<AnalyzeRequest> captor = org.mockito.ArgumentCaptor.forClass(AnalyzeRequest.class);
             doAnswer(invocation -> null).when(stub).startAnalysis(captor.capture(), any());
 
-            service.sendAnalysisRequestToFastApi(3L, dto(), "https://youtu.be/dummy", "BEGINNER", "test-nonce",
-                    new ExerciseAnalysisService.SessionTargets("LUNGE", 12, 3));
+            service.sendAnalysisRequestToFastApi(3L, dto(), "https://youtu.be/dummy", "BEGINNER", "test-nonce", "FULL",
+                    new ExerciseAnalysisService.SessionTargets("LUNGE", 12, 3, 85.5, 55.0));
 
             assertThat(captor.getValue().getExerciseCode()).isEqualTo("LUNGE");
             assertThat(captor.getValue().getTargetRepsPerSet()).isEqualTo(12);
             assertThat(captor.getValue().getTargetSets()).isEqualTo(3);
+            // V34 — 판정 기준 한 쌍(proto 11·12). 페르소나와 무관하게 종목 값이 그대로 간다.
+            assertThat(captor.getValue().getSyncGoodThreshold()).isEqualTo(85.5);
+            assertThat(captor.getValue().getSyncWarnThreshold()).isEqualTo(55.0);
+        }
+
+        /** 판정 기준이 «세션의 종목» 에서 나오는지 — SessionTargets.of 가 AnalyzeRequest·ReattachRequest·시작 응답의 공통 출처다. */
+        @Test
+        @DisplayName("SessionTargets.of — 종목의 판정 기준 한 쌍을 double 로 꺼낸다(기본값 80/60)")
+        void sessionTargets_readsExerciseThresholds() {
+            com.shadowfit.model.exercise.Exercise custom = com.shadowfit.model.exercise.Exercise.builder()
+                    .id(1L).code("SQUAT").syncGoodThreshold(new java.math.BigDecimal("90.00"))
+                    .syncWarnThreshold(new java.math.BigDecimal("70.00")).build();
+            com.shadowfit.model.exercise.Exercise defaults = com.shadowfit.model.exercise.Exercise.builder()
+                    .id(2L).code("SQUAT").build();
+
+            var t1 = ExerciseAnalysisService.SessionTargets.of(Session.builder().exercise(custom).build());
+            var t2 = ExerciseAnalysisService.SessionTargets.of(Session.builder().exercise(defaults).build());
+
+            assertThat(t1.syncGoodThreshold()).isEqualTo(90.0);
+            assertThat(t1.syncWarnThreshold()).isEqualTo(70.0);
+            assertThat(t2.syncGoodThreshold()).isEqualTo(80.0);
+            assertThat(t2.syncWarnThreshold()).isEqualTo(60.0);
         }
 
         @Test

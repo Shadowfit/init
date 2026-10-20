@@ -23,6 +23,9 @@ interface StartSessionResponse {
   // AI 워커 인덱스(0~N-1, 2026-08-26). POST /pose 마다 X-AI-Worker 헤더로 동봉할 것 —
   // 안 보내면 프레임이 세션 시작 때와 다른 AI 프로세스로 갈 수 있어 NO_LEASE로 거절된다.
   aiWorkerIndex: number | null;
+  // 이 종목의 싱크로율 판정 기준(정석·위험, 2026-10-21 «하나로 통일»). 구버전 서버는 안 보낸다 → 80/60.
+  syncGoodThreshold?: number | null;
+  syncWarnThreshold?: number | null;
 }
 
 // 백엔드 ActiveSessionResponseDto (GET /sessions/active, 200 또는 204)
@@ -52,6 +55,9 @@ export interface ReattachSessionResponse {
   message: string;
   sessionNonce: string | null;
   aiWorkerIndex: number | null;
+  // 세션 시작 응답과 같은 판정 기준 — 이어하기에서도 같은 색·진동 기준을 쓴다
+  syncGoodThreshold?: number | null;
+  syncWarnThreshold?: number | null;
 }
 
 export const exercisesService = {

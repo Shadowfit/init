@@ -98,14 +98,27 @@ class PoseTargetTracker:
         self,
         max_center_jump: float = 0.28,
         roi: NormalizedRoi | None = DEFAULT_SQUAT_ROI,
+        *,
+        min_width: float = 0.1,
+        max_width: float = 0.34,
+        max_aspect_ratio: float = 0.9,
     ) -> None:
         self.max_center_jump = max_center_jump
         self.roi = roi
+        self.min_width = min_width
+        self.max_width = max_width
+        self.max_aspect_ratio = max_aspect_ratio
         self._last_center: tuple[float, float] | None = None
 
     def filter(self, landmarks: list[Landmark] | None) -> list[Landmark] | None:
         """Return landmarks only when they look like the tracked squat subject."""
-        if landmarks is None or not is_plausible_squat_pose(landmarks, roi=self.roi):
+        if landmarks is None or not is_plausible_squat_pose(
+            landmarks,
+            min_width=self.min_width,
+            max_width=self.max_width,
+            max_aspect_ratio=self.max_aspect_ratio,
+            roi=self.roi,
+        ):
             return None
 
         bounds = get_squat_pose_bounds(landmarks)
@@ -119,3 +132,27 @@ class PoseTargetTracker:
 
         self._last_center = center
         return landmarks
+
+
+# 관리자 기준 영상 전용 판별 완화값 (2026-10-21).
+#
+# 위 기본값은 «헬스장 랙·기구를 사람으로 잘못 잡는» 오검출을 막으려고 사용자 영상 기준으로 좁게 잡혀
+# 있다(ROI 가 화면 가운데 · 하체 폭 0.1~0.34 · 폭/높이 ≤0.9). 관리자가 고른 기준 영상은 사정이 다르다:
+#   - 가까이·세로로 찍으면 바닥 자세에서 하체 폭이 0.34·비율이 0.9 를 넘는다 → 상한을 0.6·1.3 으로.
+#   - 측면에서 찍으면 선 자세의 하체 폭이 0.02 안팎이다(3D 마네킹 측면 영상 실측) → 하한 0.1 에 걸려
+#     «선 자세» 를 한 장도 못 봐 반복 0회가 된다. 그래서 폭 하한을 없앤다(높이 하한 0.2 는 유지).
+#   - ROI 는 걸지 않는다 — 사람이 화면 어디에 있든 영상 전체가 그 사람이다.
+# 가시성 하한(0.65)은 그대로 둔다 — 관절이 안 보이는 프레임이 정답지에 섞이면 안 된다.
+REFERENCE_MIN_WIDTH = 0.0
+REFERENCE_MAX_WIDTH = 0.6
+REFERENCE_MAX_ASPECT_RATIO = 1.3
+
+
+def reference_pose_tracker() -> PoseTargetTracker:
+    """관리자 기준 영상 추출용 트래커 — ROI 없음 · 폭/비율 완화 · 가시성 검사 유지."""
+    return PoseTargetTracker(
+        roi=None,
+        min_width=REFERENCE_MIN_WIDTH,
+        max_width=REFERENCE_MAX_WIDTH,
+        max_aspect_ratio=REFERENCE_MAX_ASPECT_RATIO,
+    )

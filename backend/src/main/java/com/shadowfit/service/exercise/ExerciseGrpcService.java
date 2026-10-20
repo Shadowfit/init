@@ -276,8 +276,12 @@ public class ExerciseGrpcService extends ExerciseServiceGrpc.ExerciseServiceImpl
     }
 
     /**
-     * [AI -> Spring] 유튜브 영상에서 추출된 '정석 기준 좌표' 전체를 수신하여 저장합니다.
+     * [AI -> Spring] 기준 영상에서 추출된 '정석 기준 좌표' 전체를 수신하여 저장합니다.
      * 운동 종목 등록 시 AI 서버가 추출한 좌표 데이터를 DB에 영속화하는 역할을 합니다.
+     *
+     * <p>{@code error_message} 가 있으면 AI 가 백그라운드 추출에 실패했다는 통보다(2026-10-21) — 좌표는 비어 오고,
+     * 기존 기준은 그대로 둔 채 실패 사유만 종목 행에 남긴다({@code PoseDataService.saveReferencePoses}). 그 기록도
+     * «접수 완료» 라 응답은 success=true 다 — AI 가 재시도할 일이 아니다.
      */
     @Override
     public void extractReferenceData(com.shadowfit.grpc.ExtractRequest request,
@@ -288,7 +292,8 @@ public class ExerciseGrpcService extends ExerciseServiceGrpc.ExerciseServiceImpl
         try {
             log.info("기준 좌표 추출 데이터 수신 시작 - 운동 ID: {}", request.getExerciseId());
 
-            poseDataService.saveReferencePoses(request.getExerciseId(), request.getExtractedPosesList());
+            poseDataService.saveReferencePoses(request.getExerciseId(), request.getExtractedPosesList(),
+                    request.getErrorMessage());
 
             ExtractResponse extractResponse = ExtractResponse.newBuilder()
                     .setSuccess(true)
@@ -297,7 +302,8 @@ public class ExerciseGrpcService extends ExerciseServiceGrpc.ExerciseServiceImpl
 
             responseObserver.onNext(extractResponse);
             responseObserver.onCompleted();
-            log.info("기준 좌표 저장 완료 - 운동 ID: {}", request.getExerciseId());
+            log.info("기준 좌표 역호출 처리 완료 - 운동 ID: {} ({})", request.getExerciseId(),
+                    request.getErrorMessage().isBlank() ? "저장" : "실패 기록");
         } catch (com.shadowfit.global.error.BusinessException e) {
             rejectWith("기준 좌표 저장", request.getExerciseId(), e, responseObserver);
         } catch (Exception e) {

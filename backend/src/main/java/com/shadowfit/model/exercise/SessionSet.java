@@ -48,8 +48,15 @@ public class SessionSet {
     @Column(nullable = false)
     private Integer reps;
 
-    /** rep 가중 평균 — 싱크 통계(#75)와 같은 계산. */
-    @Column(name = "avg_sync_rate", nullable = false, precision = 5, scale = 2)
+    /**
+     * rep 가중 평균 — 싱크 통계(#75)와 같은 계산.
+     *
+     * <p>{@code null} = 이 세트에 채점된 rep 이 없다(V33). 횟수만 세는 종목
+     * ({@code ExerciseAnalysisCapabilities.isCountOnly}, V28)은 프레임에 sync_rate 가 없어 세트 평균도 없다 —
+     * 세션 통계({@code SyncStats.none()})와 같은 규약으로 0 이 아니라 null 을 둔다. 0 을 쓰면 «미측정» 이
+     * «싱크로율 0%» 로 둔갑한다.
+     */
+    @Column(name = "avg_sync_rate", precision = 5, scale = 2)
     private BigDecimal avgSyncRate;
 
     /** 세트 첫 rep 의 첫 프레임 {@code timestamp_sec} (pose_data 와 같은 원점). */

@@ -64,4 +64,14 @@ public class ExercisesResponseDto {
     public Integer targetRepsPerSet;
     @Schema(description = "목표 세트 수. null = 열린 세트", example = "3")
     public Integer targetSets;
+
+    /**
+     * 싱크로율 판정 기준 한 쌍(V34, 2026-10-21 «하나로 통일»). 같은 값이 AnalyzeRequest 로 AI 에도 간다 —
+     * 앱이 점수를 칠하는 기준과 AI 가 «자세 양호» 를 판정하는 기준이 한 값이어야 해서다.
+     * 점수 ≥ good = 정석, ≥ warn = 교정 필요, &lt; warn = 위험. 페르소나와 무관하다.
+     */
+    @Schema(description = "정석 기준 — 싱크로율이 이 점수 이상이면 정석", example = "80.0")
+    public Double syncGoodThreshold;
+    @Schema(description = "위험 기준 — 이 점수 이상이면 교정 필요, 미만이면 위험", example = "60.0")
+    public Double syncWarnThreshold;
 }

@@ -19,6 +19,10 @@ import java.util.List;
  * <p>rep 번호에 빈틈이 있으면(다운샘플·유실로 어떤 rep 의 행이 하나도 안 남은 경우) 그 rep 은 세지 않지만
  * <b>세트 번호는 rep 번호로 정한다</b>. 즉 rep 13 이 없어도 rep 14 는 2세트(T=12)에 들어간다 — «몇 번째
  * 세트인가» 는 AI 가 매긴 rep 번호의 함수이지, 남은 행 수의 함수가 아니다.
+ *
+ * <p>세트 평균은 <b>채점된 rep 만</b> 으로 낸다. 횟수만 세는 종목({@code ExerciseAnalysisCapabilities.isCountOnly})
+ * 은 sync_rate 가 없어 rep 평균이 null 로 오는데, 그 세트의 평균은 0 이 아니라 null 이다(V33) — 세션 통계
+ * ({@code SessionCompletionTx.resolveSyncStats})와 같은 «미측정 ≠ 0%» 규약. 횟수·시각은 채점과 무관하게 남긴다.
  */
 public final class SessionSetAssembler {
 
@@ -38,6 +42,7 @@ public final class SessionSetAssembler {
         List<SessionSet> sets = new ArrayList<>();
         int currentSetNo = 0;
         int reps = 0;
+        int scoredReps = 0;
         double syncSum = 0.0;
         double startedSec = 0.0;
         double endedSec = 0.0;
@@ -46,29 +51,37 @@ public final class SessionSetAssembler {
             int setNo = (rep.getRepNumber() + target - 1) / target; // ceil(rep / T)
             if (setNo != currentSetNo) {
                 if (currentSetNo > 0) {
-                    sets.add(build(session, currentSetNo, reps, syncSum, startedSec, endedSec));
+                    sets.add(build(session, currentSetNo, reps, scoredReps, syncSum, startedSec, endedSec));
                 }
                 currentSetNo = setNo;
                 reps = 0;
+                scoredReps = 0;
                 syncSum = 0.0;
                 startedSec = rep.getStartedSec();
             }
             reps++;
-            syncSum += rep.getAvgSyncRate();
+            // 채점 없는 rep(횟수만 세는 종목·sync_rate 전부 null)은 평균에서 빼고 횟수만 센다
+            if (rep.getAvgSyncRate() != null) {
+                scoredReps++;
+                syncSum += rep.getAvgSyncRate();
+            }
             endedSec = rep.getEndedSec();
         }
-        sets.add(build(session, currentSetNo, reps, syncSum, startedSec, endedSec));
+        sets.add(build(session, currentSetNo, reps, scoredReps, syncSum, startedSec, endedSec));
         return sets;
     }
 
-    private static SessionSet build(Session session, int setNo, int reps, double syncSum,
+    private static SessionSet build(Session session, int setNo, int reps, int scoredReps, double syncSum,
                                     double startedSec, double endedSec) {
         return SessionSet.builder()
                 .session(session)
                 .setNo(setNo)
                 .reps(reps)
-                // rep 가중 평균 — 각 rep 의 값이 이미 그 rep 프레임들의 평균이므로 여기선 rep 수로 나눈다
-                .avgSyncRate(BigDecimal.valueOf(syncSum / reps).setScale(2, RoundingMode.HALF_UP))
+                // rep 가중 평균 — 각 rep 의 값이 이미 그 rep 프레임들의 평균이므로 여기선 채점된 rep 수로 나눈다.
+                // 채점된 rep 이 없으면 null(«미측정 ≠ 0%»).
+                .avgSyncRate(scoredReps == 0
+                        ? null
+                        : BigDecimal.valueOf(syncSum / scoredReps).setScale(2, RoundingMode.HALF_UP))
                 .startedSec(startedSec)
                 .endedSec(endedSec)
                 .build();

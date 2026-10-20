@@ -308,10 +308,11 @@ if (!refSquatFile || !refLungeFile) {
     assert.equal(results.squat_shallow_01.analyzed, 0);
     assert.equal(results.squat_shallow_01.similarity, null);
   });
-  test('런지: 정상 > 얕음 > 걷기 순으로 유사도가 낮아진다(같은 기준으로)', () => {
+  test('런지: 정상이 얕음·걷기보다 10점 이상 높다(같은 기준으로)', () => {
+    // 얕음(깊이 16° 부족)과 걷기(상체 20° 숙임·이동)는 결함의 종류가 달라 서로 순위를 매기지 않는다 — 둘 다 정상보다 뚜렷이 낮으면 된다
     const [a, b, c] = ['lunge_normal_01', 'lunge_sallow_01', 'lunge_walking_01'].map((n) => results[n].similarity);
-    console.log(`      정상 ${a} > 얕음 ${b} > 걷기 ${c}`);
-    assert.ok(a > b && b > c);
+    console.log(`      정상 ${a} · 얕음 ${b} · 걷기 ${c}`);
+    assert.ok(a - b >= 10 && a - c >= 10, `정상 ${a} 얕음 ${b} 걷기 ${c}`);
   });
   test('런지: 한 영상에서 왼쪽 5회·오른쪽 5회로 앞다리가 바뀐다(자세에서 읽은 앞다리)', () => {
     const sides = oks(results.lunge_normal_01).map((r) => r.lead);
@@ -334,7 +335,9 @@ if (!refSquatFile || !refLungeFile) {
     const base = results.squat_normal_02, cmp = compareRecording(holes, REAL);
     console.log(`      결측 없음 ${base.similarity} / 20% 결측 ${cmp.similarity} (분석 ${cmp.analyzed}회, 보간 ${cmp.quality.interpolatedFrames}프레임)`);
     assert.ok(cmp.analyzed >= 3);
-    assert.ok(Math.abs(cmp.similarity - base.similarity) <= 15);
+    // 지워진 프레임이 하필 최저점이면 그 반복의 깊이는 얕게 읽힌다(보간은 양옆 직선이라 복원 못 함) — 20점 안쪽이면 받아들인다.
+    // 점수의 주축이 최저점 자세라 프레임 평균 때(±5)보다 결측에 민감해진 것은 의도한 교환이다(2026-10-20).
+    assert.ok(Math.abs(cmp.similarity - base.similarity) <= 20, `결측으로 ${base.similarity} → ${cmp.similarity}`);
   });
   test('실촬영 피드백 문장에는 실제로 잰 수치가 들어 있고 위험 단정이 없다', () => {
     for (const n of Object.keys(results)) {

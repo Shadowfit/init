@@ -77,18 +77,14 @@ public class ReportService {
         attachJointCoordinates(worstSection, session);
         responseDto.setWorstSection(worstSection);
         responseDto.setRepTrend(analysis.getRepTrend() == null ? List.of() : analysis.getRepTrend());
-<<<<<<< HEAD
         responseDto.setSquatDepthAnalysis(analysis.getSquatDepthAnalysis());
         responseDto.setLungeDepthAnalysis(analysis.getLungeDepthAnalysis());
         responseDto.setSquatTrunkLeanAnalysis(analysis.getSquatTrunkLeanAnalysis());
         responseDto.setLungeTrunkLeanAnalysis(analysis.getLungeTrunkLeanAnalysis());
         responseDto.setLungeStepLengthAnalysis(analysis.getLungeStepLengthAnalysis());
-        responseDto.setSyncRateDetails(buildSyncRateDetails(session));
-=======
         List<SessionSet> sets = sessionSetRepository.findBySessionIdOrderBySetNo(session.getId());
         responseDto.setSyncRateDetails(buildSyncRateDetails(session, sets));
         responseDto.setSets(sets.stream().map(SessionSetDto::from).toList());
->>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
         lastSession.ifPresent(last ->
                 responseDto.setComparisonWithPrevious(buildComparisonWithPrevious(session, last))
         );

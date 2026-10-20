@@ -47,12 +47,19 @@ CREATE TABLE exercises (
     description TEXT,
     preferred_url VARCHAR(500),                          -- 기본 레퍼런스 영상 (코드상 컬럼명)
     target_joints JSON,                                  -- 분석 대상 관절 목록
-    sync_threshold_beginner DECIMAL(5,2) DEFAULT 60.00,  -- 헬린이 기준
-    sync_threshold_advanced DECIMAL(5,2) DEFAULT 85.00,  -- 헬창 기준
+    sync_good_threshold DECIMAL(5,2) NOT NULL DEFAULT 80.00,  -- 싱크로율 ≥ 이 값 = 정석 (V34)
+    sync_warn_threshold DECIMAL(5,2) NOT NULL DEFAULT 60.00,  -- ≥ 이 값 = 교정 필요, 미만 = 위험 (V34)
     expected_duration_minutes INT DEFAULT 15,            -- 세션 타임아웃 산정용 (2026-05 추가, 커밋 136f0e6)
+    reference_extraction_status VARCHAR(16) NULL,        -- 기준 좌표 등록 최근 시도: EXTRACTING|READY|FAILED. NULL = 시도 없음 (V34)
+    reference_extraction_error VARCHAR(500) NULL,        -- FAILED 사유 (관리자 화면에 그대로) (V34)
+    reference_extraction_at DATETIME NULL,               -- 위 상태가 바뀐 시각 (V34)
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ```
+
+> **판정 기준 «하나로 통일» (V34, 2026-10-21)** — 예전 페르소나별 4컬럼(`sync_threshold_beginner/advanced/diet/rehab`, V1)은 관리자 API 로 바꿀 수만 있고 읽는 곳이 없어 **삭제**했다. 지금은 종목당 한 쌍(`sync_good_threshold` 80 · `sync_warn_threshold` 60)이고, 페르소나는 트레이너 말투로만 남는다. 이 한 쌍은 `AnalyzeRequest`(11·12)·`ReattachRequest`(12·13)로 AI 에, 세션 시작·재부착·진행 중 세션·세션 리포트 응답으로 앱에 같이 흐른다.
+>
+> **기준 좌표 등록 상태 (V34)** — 영상 업로드(`POST /admin/exercises/{id}/reference-video`)가 `EXTRACTING` 으로 시작하고, AI 역호출(`ExtractReferenceData`, 성공 → `READY` / `error_message` 있음·좌표 0개 → `FAILED`, 이때 기존 `exercise_references` 는 그대로)이나 접수 실패(파일 없음·통신 실패·서킷 OPEN → `FAILED`)가 닫는다. 3D 시범 직접 등록(`PUT …/reference-poses`)은 바로 `READY`. `EXTRACTING` 이 10분 넘게 그대로면 조회(`GET …/reference`)가 `FAILED` 로 보여준다(저장값은 안 바꾼다).
 
 ### exercise_session_sets (세션별 세트 요약) — 2026-09-22 추가 (V26)
 ```sql

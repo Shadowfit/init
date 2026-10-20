@@ -6,6 +6,8 @@ import com.shadowfit.dto.admin.AdminExerciseDetailDto;
 import com.shadowfit.dto.admin.AdminExerciseListItemDto;
 import com.shadowfit.dto.admin.AdminExerciseSearchCondition;
 import com.shadowfit.dto.admin.AdminExerciseSortKey;
+import com.shadowfit.dto.admin.AdminReferencePosesDto;
+import com.shadowfit.dto.admin.AdminReferenceSummaryDto;
 import com.shadowfit.dto.admin.ExerciseCreateDto;
 import com.shadowfit.dto.admin.ExerciseThresholdResponseDto;
 import com.shadowfit.dto.admin.ExerciseUpdateDto;
@@ -15,6 +17,7 @@ import com.shadowfit.global.error.BusinessException;
 import com.shadowfit.global.error.ErrorCode;
 import com.shadowfit.model.exercise.Category;
 import com.shadowfit.model.exercise.Exercise;
+import com.shadowfit.model.exercise.ExerciseReference;
 import com.shadowfit.repository.exercise.CategoryRepository;
 import com.shadowfit.repository.exercise.ExerciseQueryRepository;
 import com.shadowfit.repository.exercise.ExerciseReferenceRepository;
@@ -23,6 +26,7 @@ import com.shadowfit.repository.exercise.SessionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -80,8 +84,8 @@ public class AdminExerciseService {
      * 운동 종목 등록.
      *
      * <p><b>{@code analysisSupported} 는 서버가 {@code false} 로 고정한다</b> — 엔티티 기본값을
-     * 그대로 쓰고 DTO 에 받는 자리를 두지 않는다({@link ExerciseCreateDto} 주석). 임계값 4종도
-     * 같은 이유로 기본값(60/85/70/50)에서 시작한다.
+     * 그대로 쓰고 DTO 에 받는 자리를 두지 않는다({@link ExerciseCreateDto} 주석). 판정 기준 한 쌍도
+     * 같은 이유로 기본값(정석 80 / 위험 60)에서 시작한다.
      *
      * <p>캐시 무효화가 없는 것은 의도다 — 새 id 는 {@code exercises} 캐시에 있을 수 없다.
      */
@@ -171,6 +175,9 @@ public class AdminExerciseService {
                                                        Consumer<String> afterCommit) {
         Exercise exercise = findOrThrow(exerciseId);
         String previous = exercise.attachReferenceVideo(relativePath);
+        // 같은 트랜잭션에서 «추출 중» 으로 바꾼다 — 커밋 뒤 AI 의 역호출(PoseDataService.saveReferencePoses)이나
+        // 접수 실패(ReferenceExtractionStatusService)가 READY/FAILED 로 닫는다. 롤백되면 상태도 같이 안 바뀐다.
+        exercise.markReferenceExtracting();
 
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
@@ -183,31 +190,39 @@ public class AdminExerciseService {
         return AdminExerciseDetailDto.fromEntity(exercise);
     }
 
-    // findById(캐시 미적용) 유지 — 캐시된 findByIdCached는 detached 엔티티를 반환해
-    // 아래 setter가 dirty-checking에 안 잡히고 조용히 무시됨. evict만 캐시에 반영.
+    /**
+     * 싱크로율 판정 기준 한 쌍(정석 good · 위험 warn, V34)을 바꾼다. 신규 세션부터 적용된다 — 세션 시작 때
+     * AnalyzeRequest 로 AI 에 실려 가고 앱 응답에도 같이 나간다(진행 중 세션의 AI 상태는 시작 때 값을 쓴다).
+     *
+     * <p>{@code findById}(캐시 미적용) 유지 — 캐시된 {@code findByIdCached} 는 detached 엔티티를 반환해 아래 변경이
+     * dirty-checking 에 안 잡히고 조용히 무시된다. {@code @CacheEvict} 는 세션 시작 경로({@code findByIdCached})가
+     * 새 값을 바로 보게 하려는 것이다 — 없으면 최대 1시간 동안 옛 기준으로 채점된다.
+     */
     @Transactional
     @CacheEvict(cacheNames = "exercises", key = "#exerciseId")
     public ExerciseThresholdResponseDto updateThresholds(Long exerciseId, ThresholdUpdateDto dto) {
-        // beginner < advanced만 검증. diet/rehab은 숙련도 축이 아니라 목적(체중감량/안전)이 달라
-        // beginner·advanced와 순서 관계를 강제할 이유가 없음 — 개별 범위(0~100)만 DTO에서 검증.
-        if (dto.beginner().compareTo(dto.advanced()) >= 0) {
-            throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
+        // 0 < warn < good ≤ 100. 두 값의 관계라 DTO 필드별 제약이 아니라 여기 한 곳에서 본다(ThresholdUpdateDto 주석).
+        // good = 100 은 허용한다(«만점만 정석» 도 운영자가 고를 수 있는 선택이다).
+        if (dto.warn().signum() <= 0
+                || dto.warn().compareTo(dto.good()) >= 0
+                || dto.good().compareTo(MAX_SYNC_THRESHOLD) > 0) {
+            log.warn("판정 기준 거부 — 0 < warn < good ≤ 100 위반: exerciseId={}, good={}, warn={}",
+                    exerciseId, dto.good(), dto.warn());
+            throw new BusinessException(ErrorCode.INVALID_SYNC_THRESHOLDS);
         }
 
         Exercise exercise = exercisesRepository.findById(exerciseId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.EXERCISE_NOT_FOUND));
 
-        log.info("운동 {} 임계값 변경: beginner {} -> {}, advanced {} -> {}, diet {} -> {}, rehab {} -> {}",
-                exerciseId,
-                exercise.getSyncThresholdBeginner(), dto.beginner(),
-                exercise.getSyncThresholdAdvanced(), dto.advanced(),
-                exercise.getSyncThresholdDiet(), dto.diet(),
-                exercise.getSyncThresholdRehab(), dto.rehab());
+        log.info("운동 {} 판정 기준 변경: good {} -> {}, warn {} -> {}", exerciseId,
+                exercise.getSyncGoodThreshold(), dto.good(), exercise.getSyncWarnThreshold(), dto.warn());
 
-        exercise.updateThresholds(dto.beginner(), dto.advanced(), dto.diet(), dto.rehab());
+        exercise.updateThresholds(dto.good(), dto.warn());
 
         return ExerciseThresholdResponseDto.fromEntity(exercise);
     }
+
+    private static final java.math.BigDecimal MAX_SYNC_THRESHOLD = new java.math.BigDecimal("100");
 
     // ─── 분석 활성화 ────────────────────────────────────────────────────────────────
 
@@ -386,6 +401,112 @@ public class AdminExerciseService {
             }
             throw e;
         }
+    }
+
+    /**
+     * 기준 좌표 직접 등록(3D 시범) — {@code exercise_references} 를 «교체» 한다. 영상 추출 경로
+     * ({@code PoseDataService.saveReferencePoses})와 같은 이유로 추가가 아니라 교체다(#220): AI 는 이 표를 순서대로
+     * 훑어 각도 시퀀스 하나로 만들므로 두 벌이 이어붙으면 한 벌처럼 읽힌다.
+     */
+    @Transactional
+    @Caching(evict = {
+            @CacheEvict(cacheNames = "exerciseReferences", key = "#exerciseId"),
+            // 등록 상태(READY)가 종목 행에 있다 — 캐시된 종목이 옛 상태를 들고 있지 않게
+            @CacheEvict(cacheNames = "exercises", key = "#exerciseId")
+    })
+    public AdminReferenceSummaryDto replaceReferencePoses(Long exerciseId, AdminReferencePosesDto dto) {
+        Exercise exercise = findOrThrow(exerciseId);
+        java.util.List<ExerciseReference> rows = new java.util.ArrayList<>(dto.frames().size());
+        double previous = -1;
+        for (AdminReferencePosesDto.Frame f : dto.frames()) {
+            try {
+                if (!objectMapper.readTree(f.jointCoordinates()).isArray()) {
+                    throw new BusinessException(ErrorCode.INVALID_REFERENCE_POSES);
+                }
+            } catch (JsonProcessingException e) {
+                throw new BusinessException(ErrorCode.INVALID_REFERENCE_POSES);
+            }
+            if (f.timestampSec() < previous) {
+                throw new BusinessException(ErrorCode.INVALID_REFERENCE_POSES);
+            }
+            previous = f.timestampSec();
+            rows.add(ExerciseReference.builder()
+                    .exercise(exercise)
+                    .timestampSec(f.timestampSec())
+                    .jointCoordinates(f.jointCoordinates())
+                    .build());
+        }
+        long removed = exerciseReferenceRepository.deleteByExerciseId(exerciseId);
+        exerciseReferenceRepository.saveAll(rows);
+        // 직접 등록은 AI 를 거치지 않아 그 자리에서 끝난다 — 진행 중이던 영상 추출이 있었다면 이 등록이 최신이다.
+        exercise.markReferenceReady();
+        log.info("운동 ID {} : 기준 좌표 {}개 직접 등록 (출처 {}, 기존 {}개 교체)", exerciseId, rows.size(), dto.source(), removed);
+        return summarizeReference(rows, exercise);
+    }
+
+    @Transactional(readOnly = true)
+    public AdminReferenceSummaryDto referenceSummary(Long exerciseId) {
+        Exercise exercise = findOrThrow(exerciseId);
+        return summarizeReference(exerciseReferenceRepository.findByExerciseId(exerciseId), exercise);
+    }
+
+    /**
+     * 추출 중(EXTRACTING) 이 이만큼 넘게 그대로면 조회 때 FAILED 로 보여준다 — AI 가 죽었거나 역호출이 유실된 것이다.
+     * 저장값은 바꾸지 않는다(읽기 경로라서). 영상 추출은 보통 수십 초라 10분이면 «기다리면 된다» 가 아니다.
+     */
+    static final java.time.Duration REFERENCE_EXTRACTION_STALE_AFTER = java.time.Duration.ofMinutes(10);
+    static final String REFERENCE_EXTRACTION_STALE_MESSAGE = "AI 응답이 10분 넘게 없어요. 영상을 다시 올려주세요.";
+
+    /**
+     * 기준 좌표 요약 — 프레임 수·출처·길이 + 기준 깊이(무릎·고관절 최솟값, 판정) + 가장 최근 등록 시도 결과.
+     *
+     * <p>출처는 마지막 프레임 JSON 의 {@code index=-1} 표식({@code source})으로 알아낸다 — 영상 추출분엔 그 값이 없다.
+     * 깊이는 {@link ReferenceDepth}(AI 와 같은 각도 정의).
+     */
+    private AdminReferenceSummaryDto summarizeReference(java.util.List<ExerciseReference> rows, Exercise exercise) {
+        long frameCount = rows == null ? 0 : rows.size();
+        String source = null;
+        Double duration = null;
+        if (frameCount > 0) {
+            double min = Double.MAX_VALUE, max = -Double.MAX_VALUE;
+            for (ExerciseReference r : rows) {
+                if (r.getTimestampSec() == null) continue;
+                min = Math.min(min, r.getTimestampSec());
+                max = Math.max(max, r.getTimestampSec());
+            }
+            duration = min <= max ? Math.round((max - min) * 1000) / 1000.0 : null;
+            source = AdminReferenceSummaryDto.SOURCE_VIDEO;
+            // H2(테스트)의 json 컬럼은 문자열을 JSON 문자열 리터럴로 돌려줄 수 있다 — readArray 가 한 번 더 풀어 배열로 읽는다.
+            // 깨진 JSON 이면 출처를 모르는 것뿐 — 요약은 낸다.
+            com.fasterxml.jackson.databind.JsonNode root =
+                    ReferenceDepth.readArray(rows.get(rows.size() - 1).getJointCoordinates(), objectMapper);
+            if (root != null) {
+                for (com.fasterxml.jackson.databind.JsonNode item : root) {
+                    if (item.path("index").asInt(0) == -1 && "mannequin-3d-joints".equals(item.path("source").asText(null))) {
+                        source = AdminReferenceSummaryDto.SOURCE_MANNEQUIN;
+                    }
+                }
+            }
+        }
+        ReferenceDepth.Result depth = ReferenceDepth.measure(rows, objectMapper);
+
+        // 등록 상태 — NULL 은 «시도 없음»(NONE). EXTRACTING 이 오래되면 읽을 때만 FAILED 로 접는다.
+        String status = AdminReferenceSummaryDto.EXTRACTION_NONE;
+        String error = exercise.getReferenceExtractionError();
+        java.time.LocalDateTime at = exercise.getReferenceExtractionAt();
+        if (exercise.getReferenceExtractionStatus() != null) {
+            status = exercise.getReferenceExtractionStatus().name();
+            if (exercise.getReferenceExtractionStatus() == com.shadowfit.model.exercise.ReferenceExtractionStatus.EXTRACTING
+                    && at != null
+                    && at.isBefore(java.time.LocalDateTime.now().minus(REFERENCE_EXTRACTION_STALE_AFTER))) {
+                status = com.shadowfit.model.exercise.ReferenceExtractionStatus.FAILED.name();
+                error = REFERENCE_EXTRACTION_STALE_MESSAGE;
+            }
+        }
+
+        return new AdminReferenceSummaryDto(frameCount, source, duration,
+                depth.minKneeDeg(), depth.minHipDeg(), ReferenceDepth.verdict(depth.minKneeDeg()),
+                status, error, at);
     }
 
     private Exercise findOrThrow(Long exerciseId) {

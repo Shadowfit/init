@@ -9,6 +9,8 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    // 3D 시범 장면(frontend/components/exercise/mannequin)을 앱과 같은 파일로 쓴다 — 저장소 루트까지 서빙 허용
+    fs: { allow: ['..'] },
     proxy: {
       '/api': { target, changeOrigin: true, rewrite: (p) => p.replace(/^\/api/, '') },
     },

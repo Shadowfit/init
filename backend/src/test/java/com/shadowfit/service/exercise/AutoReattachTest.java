@@ -86,7 +86,8 @@ class AutoReattachTest {
                 new ReattachRequestBuilder(sessionService, poseDataRepository, referenceRepository);
         service = new ExerciseAnalysisService(sessionRepository, exercisesRepository,
                 memberRepository, sessionService, referenceRepository,
-                circuitBreakerRegistry, metrics, outboxEventRepository, reattachRequestBuilder);
+                circuitBreakerRegistry, metrics, outboxEventRepository, reattachRequestBuilder,
+                mock(ReferenceExtractionStatusService.class));
         ReflectionTestUtils.setField(service, "internalToken", "test-token");
         ReflectionTestUtils.setField(service, "aiChannelPoolSize", 1);
         ReflectionTestUtils.setField(service, "aiBlockingStubPool", List.of(blockingStub));

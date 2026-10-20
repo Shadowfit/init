@@ -17,6 +17,7 @@ import com.shadowfit.service.coaching.TrainerConnectionRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -356,16 +357,45 @@ public class PoseDataService {
         return deepest != null ? deepest : frames.get(start);
     }
 
+    /** 추출은 «성공» 했는데 좌표가 0개 — AI 가 사람을 못 찾은 영상 등. 관리자에게 그대로 보인다. */
+    static final String REFERENCE_EMPTY_MESSAGE = "추출된 기준 좌표가 없어요.";
+
     /**
-     * [관리자용] AI가 유튜브에서 추출한 '정석 기준 좌표'를 DB에 저장합니다.
+     * [관리자용] AI 가 기준 영상에서 추출한 '정석 기준 좌표' 역호출을 처리한다 — 성공이면 교체, 실패면 사유만 남긴다.
+     *
+     * <p>등록 상태(V34, {@code exercises.reference_extraction_*})를 <b>같은 트랜잭션에서</b> 닫는다:
+     * <ul>
+     *   <li>{@code errorMessage} 가 있으면 AI 가 백그라운드 추출에 실패한 것 — FAILED + 사유. <b>기존 기준 좌표는
+     *       건드리지 않는다</b>(실패한 재등록이 멀쩡한 정답지를 지우면 안 된다)</li>
+     *   <li>좌표가 0개면 FAILED({@value #REFERENCE_EMPTY_MESSAGE}) — 역시 기존 행은 그대로</li>
+     *   <li>그 외엔 교체(아래 #220) + READY</li>
+     * </ul>
+     * 예전엔 빈 목록을 조용히 무시해서 관리자 화면은 «등록했어요» 인데 기준은 안 바뀌는 일이 있었다.
+     *
+     * <p>{@code findById}(캐시 미적용)로 읽는다 — 캐시된 {@code findByIdCached} 는 detached 라 상태 변경이
+     * dirty-checking 에 안 잡힌다. 같은 이유로 {@code exercises} 캐시도 비운다.
+     *
+     * @param errorMessage AI 가 실은 실패 사유(proto {@code ExtractRequest.error_message}). 비었으면 성공
      */
     @Transactional
-    @CacheEvict(cacheNames = "exerciseReferences", key = "#exerciseId")
-    public void saveReferencePoses(Long exerciseId, List<com.shadowfit.grpc.PoseDataRequest> grpcList) {
-        if (grpcList == null || grpcList.isEmpty()) return;
-
-        Exercise exercise = exercisesRepository.findByIdCached(exerciseId)
+    @Caching(evict = {
+            @CacheEvict(cacheNames = "exerciseReferences", key = "#exerciseId"),
+            @CacheEvict(cacheNames = "exercises", key = "#exerciseId")
+    })
+    public void saveReferencePoses(Long exerciseId, List<com.shadowfit.grpc.PoseDataRequest> grpcList, String errorMessage) {
+        Exercise exercise = exercisesRepository.findById(exerciseId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.EXERCISE_NOT_FOUND));
+
+        if (errorMessage != null && !errorMessage.isBlank()) {
+            exercise.markReferenceFailed(errorMessage);
+            log.warn("운동 ID {} : AI 기준 좌표 추출 실패 — 기존 기준 좌표 유지 (사유: {})", exerciseId, errorMessage);
+            return;
+        }
+        if (grpcList == null || grpcList.isEmpty()) {
+            exercise.markReferenceFailed(REFERENCE_EMPTY_MESSAGE);
+            log.warn("운동 ID {} : AI 가 기준 좌표 0개를 보냄 — 기존 기준 좌표 유지", exerciseId);
+            return;
+        }
 
         List<ExerciseReference> referenceEntities = grpcList.stream()
                 .map(grpc -> ExerciseReference.builder()
@@ -382,6 +412,7 @@ public class PoseDataService {
         //    같은 트랜잭션이라 삭제·삽입이 원자적이다 — 중간에 실패해도 정답지가 비지 않는다.
         long removed = referenceRepository.deleteByExerciseId(exerciseId);
         referenceRepository.saveAll(referenceEntities);
+        exercise.markReferenceReady();
         log.info("운동 ID {} : 기준 좌표 {}개 등록 완료 (기존 {}개 교체)",
                 exerciseId, referenceEntities.size(), removed);
     }

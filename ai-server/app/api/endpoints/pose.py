@@ -51,13 +51,22 @@ router = APIRouter(prefix="/pose", tags=["포즈 감지"], default_response_clas
 _BACK_BENT_TILT_THRESHOLD = 35.0
 
 
-def _landmarks_to_json(landmarks: list[Landmark]) -> str:
-    return orjson.dumps(
-        [
-            {"index": lm.index, "x": lm.x, "y": lm.y, "z": lm.z, "visibility": lm.visibility}
-            for lm in landmarks
-        ]
-    ).decode()
+def _landmarks_to_json(landmarks: list[Landmark], image_aspect_ratio: float | None = None) -> str:
+    """랜드마크 → joint_coordinates JSON. image_aspect_ratio 를 주면 맨 뒤에 index=-1 표식 항목으로 싣는다.
+
+    기준 좌표(exercise_references)는 정규화 좌표만 저장돼 «어떤 비율의 영상에서 찍혔는지» 를 잃는다. 그러면
+    각도를 2D 로 바로 재는 지금 방식에서 기준(가로 4:3)과 사용자(세로 9:16)의 x 축 눈금이 달라 자세가 같아도
+    각도가 어긋난다. 표식은 _parse_reference_poses 가 읽고 각도 계산에서 뺀다. 사용자 프레임(pose_data)에는
+    싣지 않는다 — Spring 이 그 JSON 을 그대로 리포트 그림에 쓴다.
+    """
+    items = [
+        {"index": lm.index, "x": lm.x, "y": lm.y, "z": lm.z, "visibility": lm.visibility}
+        for lm in landmarks
+    ]
+    if image_aspect_ratio is not None and image_aspect_ratio > 0:
+        items.append({"index": -1, "x": 0.0, "y": 0.0, "z": 0.0, "visibility": 0.0,
+                      "image_aspect_ratio": round(float(image_aspect_ratio), 4)})
+    return orjson.dumps(items).decode()
 
 
 def flush_pending_feedback(state) -> None:
@@ -230,7 +239,7 @@ def _detect_pose(req: PoseRequest):
             except ValueError:
                 return PoseResponse(success=False, skip_reason=PoseSkipReason.LOW_VISIBILITY)
             return PoseResponse(success=True, landmarks=landmarks, image_aspect_ratio=image_aspect, angles=angles)
-        angles = extract_angles(landmarks, req.exercise_type)
+        angles = extract_angles(landmarks, req.exercise_type, image_aspect)
         return PoseResponse(success=True, landmarks=landmarks, image_aspect_ratio=image_aspect, angles=angles)
 
     state = get_registry().get(req.session_id)
@@ -327,7 +336,6 @@ def _detect_pose(req: PoseRequest):
                 rep_count=state.rep_count,
             )
 
-<<<<<<< HEAD
         if isinstance(analyzer, (StreamingLungeAnalyzer, StreamingSquatAnalyzer)):
             angles, smoothed_knee_angle, rep_event, torso_tilt_deg, stagger_ratio = analyzer.process_frame(
                 state, landmarks, timestamp_sec=received_at,
@@ -346,12 +354,6 @@ def _detect_pose(req: PoseRequest):
         coaching_message = (state.squat_counter.coaching_event
                             if state.exercise_type == "squat" and state.squat_counter is not None
                             else None)
-=======
-        angles, smoothed_knee_angle, rep_event = analyzer.process_frame(
-            state, landmarks, timestamp_sec=received_at,
-            image_aspect_ratio=image_rgb.shape[1] / image_rgb.shape[0],
-        )
->>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
 
         if angles is None:
             # visibility 부족 — 프레임 스킵. 🔴 success=False 다 (이슈 #267).

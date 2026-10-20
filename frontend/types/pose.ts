@@ -64,6 +64,11 @@ export interface PoseDetectResponse {
   success: boolean;
   // success=false 일 때만 채워진다.
   skip_reason?: PoseSkipReason | null;
+  // MediaPipe 랜드마크 33개 — 스킵 프레임에도 채워 온다. 3D 동작 비교(lib/motion)가 운동 중 모아 둔다.
+  // x·y 는 이미지 너비·높이 기준 0~1, z 는 단안 추정 깊이(비교에 쓰지 않는다), visibility 0~1.
+  landmarks?: Array<{ index: number; x: number; y: number; z: number; visibility: number }> | null;
+  // 서버가 디코딩한 이미지의 너비/높이 — 랜드마크 x 를 y 와 같은 길이 단위로 돌리는 데 필요하다(구버전 서버는 없음).
+  image_aspect_ratio?: number | null;
   sync_rate?: number | null;
   rep_count?: number | null;
   rep_completed?: boolean;

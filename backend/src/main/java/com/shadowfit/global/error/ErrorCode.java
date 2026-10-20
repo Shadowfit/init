@@ -119,6 +119,11 @@ public enum ErrorCode {
     EXERCISE_CODE_DUPLICATION(409, "W018", "이미 사용 중인 종목 코드입니다."),
     EXERCISE_CODE_LOCKED(409, "W019", "분석이 켜진 종목의 코드는 바꿀 수 없습니다. 분석을 끈 뒤 바꿔 주세요."),
     EXERCISE_CODE_REQUIRED(400, "W020", "종목 코드가 없어 분석을 활성화할 수 없습니다."),
+    // 기준 좌표 직접 등록(3D 시범) — 프레임의 jointCoordinates 가 JSON 배열이 아니거나 시각이 뒤로 가면 거부
+    INVALID_REFERENCE_POSES(400, "W021", "기준 좌표 형식이 올바르지 않습니다 (JSON 배열, 시각은 오름차순)."),
+    // 싱크로율 판정 기준(V34, 정석 good · 위험 warn) — 두 값의 관계(0 < warn < good ≤ 100)가 깨진 것.
+    // C001 로 뭉개면 관리자가 «어느 숫자가 틀렸는지» 를 못 본다(W016 과 같은 이유).
+    INVALID_SYNC_THRESHOLDS(400, "W022", "판정 기준은 0 < 위험 기준 < 정석 기준 ≤ 100 이어야 합니다."),
 
     // --- 시도 제한 (이슈 #394) ---
     //

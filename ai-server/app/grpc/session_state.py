@@ -14,12 +14,10 @@ from collections import deque
 from dataclasses import dataclass, field
 
 from app.grpc import spring_client
-<<<<<<< HEAD
 from app.core.lunge_analyzer import LungeState
-=======
->>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
 from app.core.squat_counter import SquatCounter
 from app.models.pose import Landmark
+from app.utils.constants import DEFAULT_SYNC_GOOD, DEFAULT_SYNC_WARN
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +123,11 @@ class SessionState:
     # 정해지고, 재부착에서는 덮어쓰지 않는다(create_if_absent의 "이미 살아있음" 분기가
     # 이 필드를 건드리지 않으므로 자동으로 보존된다). 스쿼트가 아니면 무의미하되 해롭지 않다.
     depth_mode: str = "FULL"
+    # 싱크로율 판정 임계값 — 운동별 한 쌍 (2026-10-21 사용자 결정). Spring 이 StartAnalysis/
+    # ReattachAnalysis 로 내려주고, servicer 가 0·잘못된 값을 기본값으로 바꿔 넣는다. depth_mode 와
+    # 같은 규약 — 세션 생성 시 정해지고 재부착에서는 덮어쓰지 않는다. 페르소나는 여기에 관여하지 않는다.
+    sync_good_threshold: float = DEFAULT_SYNC_GOOD
+    sync_warn_threshold: float = DEFAULT_SYNC_WARN
     # 세션 소유권 검증용 비밀값 (이슈 #187 안 (d)).
     #
     # Spring 이 세션 생성 시 만들어 ① REST 응답으로 클라에, ② StartAnalysis/ReattachAnalysis 로
@@ -155,10 +158,7 @@ class SessionState:
 
     # 분석기 내부 상태 (StreamingSquatAnalyzer가 관리)
     rep_count: int = 0
-<<<<<<< HEAD
     lunge_state: LungeState | None = None
-=======
->>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
     squat_counter: SquatCounter | None = None
     rep_state: str = "waiting_for_standing"
     frame_index: int = 0
@@ -354,6 +354,8 @@ class SessionStateRegistry:
         initial_rep_count: int = 0,
         session_nonce: str | None = None,
         depth_mode: str = "FULL",
+        sync_good_threshold: float = DEFAULT_SYNC_GOOD,
+        sync_warn_threshold: float = DEFAULT_SYNC_WARN,
     ) -> SessionState:
         with self._lock:
             state = SessionState(
@@ -365,6 +367,8 @@ class SessionStateRegistry:
                 rep_count=initial_rep_count,
                 session_nonce=session_nonce,
                 depth_mode=depth_mode,
+                sync_good_threshold=sync_good_threshold,
+                sync_warn_threshold=sync_warn_threshold,
             )
             self._sessions[session_id] = state
             return state
@@ -379,6 +383,8 @@ class SessionStateRegistry:
         initial_rep_count: int = 0,
         session_nonce: str | None = None,
         depth_mode: str = "FULL",
+        sync_good_threshold: float = DEFAULT_SYNC_GOOD,
+        sync_warn_threshold: float = DEFAULT_SYNC_WARN,
     ) -> tuple[SessionState, bool]:
         """재부착 전용. 상태가 이미 있으면 **보존하고** 그대로 돌려준다.
 
@@ -419,6 +425,8 @@ class SessionStateRegistry:
                 rep_count=initial_rep_count,
                 session_nonce=session_nonce,
                 depth_mode=depth_mode,
+                sync_good_threshold=sync_good_threshold,
+                sync_warn_threshold=sync_warn_threshold,
             )
             self._sessions[session_id] = state
             return state, False

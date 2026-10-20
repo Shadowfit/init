@@ -23,6 +23,7 @@ import exercise_pb2_grpc
 from app.config import settings
 from app.core.analyzer_registry import resolve_exercise_type, supported_exercise_ids
 from app.core.angle_calculator import extract_angles
+from app.core.dtw_calculator import resolve_sync_thresholds
 from app.grpc import spring_client
 from app.grpc.callback_pool import CallbackPool
 from app.grpc.correlation import wrap as correlation_wrap
@@ -40,11 +41,19 @@ def _parse_reference_poses(
     if exercise_type == "lunge":
         return []  # Count-only: no validated lunge reference scorer yet.
     sequences: list[list[float]] = []
+    missing_aspect = 0
     for ref in reference_poses:
         if not ref.joint_coordinates:
             continue
         try:
             raw = orjson.loads(ref.joint_coordinates)
+            # index=-1 표식 = 기준 영상의 너비/높이 (_landmarks_to_json). 2026-10-20 이전에 추출한 기준에는 없다 —
+            # 그때는 보정 없이(1.0) 재고 경고를 남긴다. 관리자 화면에서 기준 영상을 다시 올리면 표식이 생긴다.
+            aspect = next((float(item["image_aspect_ratio"]) for item in raw
+                           if item.get("index") == -1 and item.get("image_aspect_ratio")), None)
+            if aspect is None:
+                missing_aspect += 1
+                aspect = 1.0
             landmarks = [
                 Landmark(
                     index=item["index"],
@@ -54,12 +63,64 @@ def _parse_reference_poses(
                     visibility=item.get("visibility", 1.0),
                 )
                 for item in raw
+                if item.get("index", -1) >= 0
             ]
-            sequences.append(extract_angles(landmarks, exercise_type))
+            sequences.append(extract_angles(landmarks, exercise_type, aspect))
         except (orjson.JSONDecodeError, KeyError, ValueError) as e:
             logger.warning("reference 좌표 파싱 실패: %s", e)
             continue
+    if missing_aspect:
+        logger.warning("reference 좌표 %d/%d 프레임에 영상 비율 표식이 없다 — 보정 없이(1.0) 각도를 잰다. "
+                       "관리자 화면에서 기준 영상을 다시 올리면 표식이 생긴다.", missing_aspect, len(sequences))
     return sequences
+
+
+def _resolve_request_sync_thresholds(request, session_id: int, where: str) -> tuple[float, float]:
+    """StartAnalysis/ReattachAnalysis 요청의 싱크로율 임계값 한 쌍 → 쓸 값 (2026-10-21).
+
+    proto3 라 «안 보냄» 이 0.0 으로 온다. 0·범위 밖(≤0, >100)·뒤집힌 쌍(warn ≥ good)은
+    `resolve_sync_thresholds` 가 기본값(80/60)으로 바꾸고, 바뀌었으면 여기서 경고를 남긴다 —
+    Spring 이 값을 안 싣고 있다는 사실이 조용히 묻히지 않게.
+    """
+    raw_good = request.sync_good_threshold
+    raw_warn = request.sync_warn_threshold
+    good, warn = resolve_sync_thresholds(raw_good, raw_warn)
+    if (good, warn) != (raw_good, raw_warn):
+        logger.warning(
+            "세션 %s%s — 싱크로율 임계값이 없거나 잘못됨 (good=%r, warn=%r) → good=%.1f · warn=%.1f 로 대체",
+            session_id, where, raw_good, raw_warn, good, warn,
+        )
+    return good, warn
+
+
+class ReferenceExtractionError(Exception):
+    """기준 영상 추출 실패 — `message` 는 관리자 화면에 그대로 보여줄 한국어 사유다 (2026-10-21).
+
+    `_extract_and_send_reference` 가 이 예외의 메시지를 `spring_client.send_reference_failure` 로
+    Spring 에 보낸다. 그 밖의 예외는 «예상 못 한 오류» 로 보고 예외 이름만 싣는다.
+    """
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.message = message
+
+
+REFERENCE_MSG_CANNOT_OPEN = "영상을 열 수 없어요. mp4 파일인지 확인해주세요."
+REFERENCE_MSG_NO_PERSON = "영상에서 사람을 찾지 못했어요. 전신이 보이게 찍은 영상을 올려주세요."
+REFERENCE_MSG_NO_REP = (
+    "서기→앉기→서기로 이어지는 스쿼트 1회를 찾지 못했어요. "
+    "옆이나 45°에서 전신이 보이게 찍은 영상을 올려주세요."
+)
+REFERENCE_MSG_REP_WITHOUT_FRAMES = (
+    "스쿼트 1회는 찾았지만 그 구간의 관절 좌표를 읽지 못했어요. "
+    "전신이 또렷하게 보이는 영상을 다시 올려주세요."
+)
+REFERENCE_MSG_UNEXPECTED_PREFIX = "기준 좌표 추출 중 오류가 났어요: "
+
+# 반복을 못 찾았을 때, 샘플링한 프레임 중 사람이 잡힌 비율이 이보다 낮으면 «사람을 못 찾음» 으로 알린다.
+# 근거 있는 측정값이 아니라 문구를 고르는 기준일 뿐이다 — 10% 미만이면 «거의 안 보였다» 가 맞는 설명이고,
+# 그 이상이면 «사람은 보였는데 반복이 안 됐다» 가 맞다. 추출 성공·실패 자체는 이 값과 무관하다.
+_REFERENCE_MIN_PERSON_FRAME_RATIO = 0.10
 
 
 def _extract_reference_poses_from_video(path: str) -> list:
@@ -83,15 +144,38 @@ def _extract_reference_poses_from_video(path: str) -> list:
        한 번 더 눌렀다» 로 채점 기준이 미묘하게 바뀐다는 뜻이다. 크기는 작지만(±1.3 score)
        **«같은 입력에 같은 출력» 이 성립하지 않는다는 사실 자체**가, 나중에 「정답지를
        바꿨나?」를 되짚을 때 근거를 없앤다.
+
+    🔴 **기준 영상 모드로 읽는다** (2026-10-21, `analyze_video(..., reference=True)`). 관리자가 고른
+       영상이라 사용자 영상용 오검출 필터(ROI·하체 폭/비율)와 «런지 자세» 반복 버리기를 끈다 — 45° 에서
+       찍은 3D 마네킹 스쿼트가 그 둘에 걸려 반복 0회로 실패하던 문제다. 가시성 검사는 그대로다.
+
+    실패는 `ReferenceExtractionError` 로 올린다 — 메시지는 관리자 화면에 그대로 뜨는 한국어 사유다.
     """
     from app.api.endpoints.pose import _landmarks_to_json
     from app.core.reference_builder import _segment_reps
     from app.core.video_processor import analyze_video
 
-    result = analyze_video(path, "squat")
+    try:
+        result = analyze_video(path, "squat", reference=True)
+    except FileNotFoundError:
+        # cv2 가 열지 못했다 — 파일 존재는 ExtractReferenceData 가 이미 확인했으니 형식 문제다.
+        raise ReferenceExtractionError(REFERENCE_MSG_CANNOT_OPEN) from None
+    if result.sampled_frames <= 0:
+        # 열리긴 했는데 한 장도 디코드되지 않았다 — 사용자 입장에서는 «열 수 없음» 과 같다.
+        raise ReferenceExtractionError(REFERENCE_MSG_CANNOT_OPEN)
+
     segments = _segment_reps(result.frames)
     if not segments:
-        raise ValueError("기준 영상에서 유효한 스쿼트 반복을 찾지 못했다")
+        person_ratio = len(result.frames) / result.sampled_frames
+        logger.warning(
+            "[#192] 기준 영상에서 반복을 못 찾음 — 샘플 %d프레임 중 사람 %d프레임(%.0f%%) · 카운터 %s회",
+            result.sampled_frames, len(result.frames), person_ratio * 100,
+            result.squat_analysis.reps_detected if result.squat_analysis else 0,
+        )
+        # «사람이 거의 안 보임» 은 반복을 못 찾았을 때만 따진다 — 앞뒤로 빈 화면이 길어도 반복이 있으면 쓴다.
+        if person_ratio < _REFERENCE_MIN_PERSON_FRAME_RATIO:
+            raise ReferenceExtractionError(REFERENCE_MSG_NO_PERSON)
+        raise ReferenceExtractionError(REFERENCE_MSG_NO_REP)
 
     best = max(segments, key=lambda r: r.score)
     frames = [
@@ -99,17 +183,24 @@ def _extract_reference_poses_from_video(path: str) -> list:
         if best.start_frame_index <= f.frame_index <= best.end_frame_index and f.squat_metrics
     ]
     if not frames:
-        raise ValueError("선택된 rep 구간에 유효 프레임이 없다")
+        raise ReferenceExtractionError(REFERENCE_MSG_REP_WITHOUT_FRAMES)
 
+    # 최저 무릎·고관절 — extract_angles(…, 영상 비율) 의 2D 비율 보정 각도다. 사용자 rep 과 DTW 로
+    # 대조되는 바로 그 값이라(_parse_reference_poses 가 같은 함수로 다시 잰다) 정답지의 깊이를 이걸로 남긴다.
+    # 열 배치는 EXERCISE_ANGLES['squat'] 순서(무릎 L·R, 고관절 L·R).
+    min_knee = min((f.angles[0] + f.angles[1]) / 2 for f in frames)
+    min_hip = min((f.angles[2] + f.angles[3]) / 2 for f in frames)
     t0 = frames[0].timestamp
     logger.info(
-        "[#192] rep %d개 중 최고점 선택 — score=%.2f · %d프레임 · 최저무릎 %.1f°",
-        len(segments), best.score, len(frames), best.min_knee_angle,
+        "[#192] rep %d개 중 최고점 선택 — score=%.2f · %d프레임 · 최저무릎 %.1f° · 최저고관절 %.1f° "
+        "(2D 비율 보정, 영상 비율 %.3f)",
+        len(segments), best.score, len(frames), min_knee, min_hip, result.image_aspect_ratio,
     )
     return [
         exercise_pb2.PoseDataRequest(
             timestamp_sec=round(f.timestamp - t0, 3),
-            joint_coordinates=_landmarks_to_json(f.landmarks),
+            # 영상 비율 표식을 같이 싣는다 — 사용자 프레임(세로)과 x 축 눈금을 맞춰 2D 각도를 재기 위해
+            joint_coordinates=_landmarks_to_json(f.landmarks, result.image_aspect_ratio),
         )
         for f in frames
     ]
@@ -128,13 +219,16 @@ class ExerciseServicer(exercise_pb2_grpc.ExerciseServiceServicer):
                 "세션 %s — 알 수 없는 depth_mode %r, FULL로 대체", session_id, depth_mode,
             )
             depth_mode = "FULL"
+        sync_good, sync_warn = _resolve_request_sync_thresholds(request, session_id, "")
         logger.info(
             "[Spring → AI] StartAnalysis 수신 (session=%s, exercise=%s, persona=%s, "
-            "depth_mode=%s, reference_frames=%d)",
+            "depth_mode=%s, sync_good=%.1f, sync_warn=%.1f, reference_frames=%d)",
             session_id,
             exercise_id,
             persona,
             depth_mode,
+            sync_good,
+            sync_warn,
             len(request.reference_poses),
         )
 
@@ -199,6 +293,8 @@ class ExerciseServicer(exercise_pb2_grpc.ExerciseServiceServicer):
             persona=persona,
             session_nonce=request.session_nonce or None,
             depth_mode=depth_mode,
+            sync_good_threshold=sync_good,
+            sync_warn_threshold=sync_warn,
         )
 
         now = Timestamp()
@@ -283,6 +379,8 @@ class ExerciseServicer(exercise_pb2_grpc.ExerciseServiceServicer):
                 "세션 %s 재부착 — 알 수 없는 depth_mode %r, FULL로 대체", session_id, depth_mode,
             )
             depth_mode = "FULL"
+        # depth_mode 와 같은 규약 — 상태가 살아 있으면 create_if_absent 가 보관값을 유지한다.
+        sync_good, sync_warn = _resolve_request_sync_thresholds(request, session_id, " 재부착")
 
         state, already_active = get_registry().create_if_absent(
             session_id=session_id,
@@ -293,6 +391,8 @@ class ExerciseServicer(exercise_pb2_grpc.ExerciseServiceServicer):
             initial_rep_count=request.initial_rep_count,
             session_nonce=request.session_nonce or None,
             depth_mode=depth_mode,
+            sync_good_threshold=sync_good,
+            sync_warn_threshold=sync_warn,
         )
 
         if already_active:
@@ -501,16 +601,34 @@ def get_reference_extraction_pool() -> CallbackPool:
 
 
 def _extract_and_send_reference(exercise_id: int, path: str) -> None:
-    """백그라운드: 추출 → Spring 역호출. 실패는 로그로만 남는다 — 이 시점엔 돌려줄 응답이 없다."""
+    """백그라운드: 추출 → Spring 역호출.
+
+    실패도 역호출로 알린다 (2026-10-21). 이 시점엔 돌려줄 응답이 없어서 예전엔 로그로만 남았고,
+    관리자 화면에서는 «접수됨» 뒤로 아무 일도 안 일어난 것처럼 보였다. 이제 같은 RPC 에
+    `error_message` 를 실어 보낸다(`spring_client.send_reference_failure`).
+    """
     try:
         poses = _extract_reference_poses_from_video(path)
-    except Exception as e:  # noqa: BLE001 — 사유를 그대로 로그에 남긴다
-        logger.error("[#192] 기준 좌표 추출 실패 (exercise=%s, %s): %s", exercise_id, path, e)
+    except ReferenceExtractionError as e:
+        logger.warning("[#192] 기준 좌표 추출 실패 (exercise=%s, %s): %s", exercise_id, path, e.message)
+        _report_reference_failure(exercise_id, e.message)
+        return
+    except Exception as e:  # noqa: BLE001 — 예상 못 한 오류도 관리자에게 알린다
+        logger.exception("[#192] 기준 좌표 추출 중 예외 (exercise=%s, %s)", exercise_id, path)
+        _report_reference_failure(exercise_id, f"{REFERENCE_MSG_UNEXPECTED_PREFIX}{type(e).__name__}")
         return
     ok = spring_client.send_reference_poses(exercise_id, poses)
     logger.info(
         "[#192] 기준 좌표 역호출 %s (exercise=%s, %d프레임)",
         "완료" if ok else "실패", exercise_id, len(poses),
+    )
+
+
+def _report_reference_failure(exercise_id: int, message: str) -> None:
+    ok = spring_client.send_reference_failure(exercise_id, message)
+    logger.info(
+        "[#192] 기준 좌표 추출 실패 통보 %s (exercise=%s): %s",
+        "완료" if ok else "실패", exercise_id, message,
     )
 
 

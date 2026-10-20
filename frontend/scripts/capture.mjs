@@ -223,7 +223,8 @@ try {
   // 메인 계정
   await login(USER);
   await waitText('최신 모임 운동 현황');
-  await waitText('운동 완료');
+  // 친구 상태 문구는 날짜에 따라 다르다(오늘 완료 / 운동 중 / 기록 없음) — 어느 것이든 하나 뜨면 로드된 것
+  await waitText('운동 완료', { timeout: 4000 }).catch(() => waitText('운동 중', { timeout: 4000 })).catch(() => waitText('기록이 없어요'));
   await tallShot('home');
 
   await go('/notifications');
@@ -234,8 +235,20 @@ try {
   await waitText('운동 상세');
   await tallShot('activity');
 
-  // 보고서 — 활동 탭의 오늘 운동 카드에서 연다
-  await clickText('싱크로율', { exact: true });
+  // 보고서 — 오늘 싱크로율이 있는 운동이 있으면 활동 탭 카드에서, 없으면(시드 날짜가 지났을 때) API 로 최근 세션을 찾아 연다
+  const todayCard = await byText('%', { timeout: 4000 }).catch(() => null);
+  if (todayCard) {
+    await todayCard.click();
+  } else {
+    const api = BASE.includes('8083') || BASE.includes('8081') ? (process.env.API ?? 'http://localhost:8080') : process.env.API ?? 'http://localhost:8080';
+    const login = await fetch(`${api}/member/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: USER, password: PASSWORD }) }).then((r) => r.json());
+    const cal = await fetch(`${api}/reports/calendar?year=${new Date().getFullYear()}&month=${new Date().getMonth() + 1}`, { headers: { Authorization: `Bearer ${login.accessToken}` } }).then((r) => r.json());
+    const day = [...cal.records].reverse().find((d) => d.hasRecord && d.dailyAvgSyncRate > 0);
+    const daily = day ? await fetch(`${api}/reports/daily?date=${day.date}`, { headers: { Authorization: `Bearer ${login.accessToken}` } }).then((r) => r.json()) : null;
+    const session = daily?.sessions?.find((s) => s.scoreAvailable !== false && s.syncRate > 0) ?? daily?.sessions?.[0];
+    if (!session) throw new Error('보고서를 열 세션이 없다 — bash scripts/demo-seed/run.sh 로 시드를 다시 넣을 것');
+    await go(`/report/${session.sessionId}`);
+  }
   await waitText('종목별 싱크로율', { timeout: 40000 });
   await tallShot('report');
   await clickText('모임 피드에 공유하기', { exact: true });

@@ -85,16 +85,29 @@ public class ReattachSessionResponseDto {
     @Schema(description = "AI 워커 인덱스. POST /pose 의 X-AI-Worker 헤더에 그대로 실을 것")
     private Integer aiWorkerIndex;
 
+    /**
+     * 싱크로율 판정 기준 한 쌍(V34) — 재부착 요청으로 AI 에 다시 실어 보낸 값과 같다. 이어하기 화면이 점수를
+     * «정석(≥ good) / 교정 필요(≥ warn) / 위험(&lt; warn)» 으로 칠하는 근거다({@code ExercisesResponseDto} 와 같은 의미).
+     */
+    @Schema(description = "정석 기준 — 싱크로율이 이 점수 이상이면 정석", example = "80.0")
+    private Double syncGoodThreshold;
+
+    @Schema(description = "위험 기준 — 이 점수 이상이면 교정 필요, 미만이면 위험", example = "60.0")
+    private Double syncWarnThreshold;
+
     private static final String MSG_ALREADY_ACTIVE = "이미 분석이 진행 중이라 그대로 이어서 진행합니다.";
     private static final String MSG_RESTORED =
             "%d회까지 이어서 진행합니다. 자세 판정이 잠시 흔들릴 수 있습니다.";
 
     public static ReattachSessionResponseDto of(Long sessionId, int repCount, boolean alreadyActive,
-                                                String sessionNonce, int aiWorkerIndex) {
+                                                String sessionNonce, int aiWorkerIndex,
+                                                double syncGoodThreshold, double syncWarnThreshold) {
         return ReattachSessionResponseDto.builder()
                 .sessionId(sessionId)
                 .sessionNonce(sessionNonce)
                 .aiWorkerIndex(aiWorkerIndex)
+                .syncGoodThreshold(syncGoodThreshold)
+                .syncWarnThreshold(syncWarnThreshold)
                 .restoredRepCount(repCount)
                 .alreadyActive(alreadyActive)
                 .analyzerStateReset(!alreadyActive)

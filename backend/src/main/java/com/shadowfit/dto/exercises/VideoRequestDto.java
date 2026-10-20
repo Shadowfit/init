@@ -34,13 +34,13 @@ public class VideoRequestDto {
     private Long exerciseId;
 
     /**
-<<<<<<< HEAD
      * 스쿼트 깊이 모드(2026-09-21). 스쿼트가 아니거나 생략하면 FULL로 취급한다.
      * 종목 선택과 같은 화면에서 고르므로 별도 검증은 없다.
      */
     @Schema(description = "스쿼트 깊이 모드 (FULL/HALF, 생략 시 FULL)")
     private SquatDepthMode depthMode;
-=======
+
+    /**
      * 세트당 목표 횟수(선택). 생략하면 {@code RecommendationService} 공식(페르소나·레벨)으로 채운다 —
      * 화면이 «추천값 미리 채우기» 를 하려면 {@code GET /recommendations/next-session} 의 {@code targetReps}.
      * 세트 경계는 «rep 이 이 값에 닿는 순간» 이라 세션 도중 바꿀 수 없다(lunge-and-set-backend.md §7).
@@ -53,6 +53,5 @@ public class VideoRequestDto {
     @Min(value = 1, message = "목표 세트 수는 1 이상이어야 합니다.")
     @Schema(description = "목표 세트 수. 생략하면 열린 세트", example = "3")
     private Integer targetSets;
->>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
 
 }

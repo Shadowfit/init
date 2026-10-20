@@ -33,6 +33,7 @@ from app.models.sync import (
     SyncRequest,
     SyncResponse,
 )
+from app.utils.constants import DEFAULT_SYNC_GOOD, DEFAULT_SYNC_WARN
 
 router = APIRouter(prefix="/sync", tags=["sync"], deprecated=True)
 
@@ -47,11 +48,17 @@ async def calculate_sync_rate(req: SyncRequest) -> SyncResponse:
     sync_rate = compute_sync_rate(req.reference_angles, req.user_angles)
     dtw_distance = compute_dtw_distance(req.reference_angles, req.user_angles)
 
+    # 임계값은 운동별 한 쌍이고 세션 시작 때 Spring 이 준다(2026-10-21). 이 라우트는 세션도 운동도
+    # 모르므로 기본값(DEFAULT_SYNC_GOOD/WARN)으로 분류한다 — 응답 모양은 그대로다.
     return SyncResponse(
         sync_rate=sync_rate,
         dtw_distance=dtw_distance,
-        visual_cue=classify_sync_visual_cue(sync_rate),
-        haptic_cue=classify_sync_haptic_cue(sync_rate),
+        visual_cue=classify_sync_visual_cue(
+            sync_rate, good=DEFAULT_SYNC_GOOD, warn=DEFAULT_SYNC_WARN
+        ),
+        haptic_cue=classify_sync_haptic_cue(
+            sync_rate, good=DEFAULT_SYNC_GOOD, warn=DEFAULT_SYNC_WARN
+        ),
     )
 
 

@@ -361,30 +361,45 @@ def send_reference_poses(
        있다(`ExerciseGrpcService.extractReferenceData` → `PoseDataService.saveReferencePoses`).
        비어 있던 것은 이쪽 절반뿐이었다.
     """
+    request = exercise_pb2.ExtractRequest(
+        exercise_id=exercise_id,
+        extracted_poses=poses,
+    )
+    return _send_extract_callback(request, f"기준 좌표 전송 (exercise={exercise_id}, count={len(poses)})")
+
+
+def send_reference_failure(exercise_id: int, message: str) -> bool:
+    """기준 좌표 추출이 **실패했다는 사실과 그 이유**를 Spring 에 알린다 (2026-10-21).
+
+    같은 `ExtractReferenceData` RPC 로 보내되 `extracted_poses` 는 비우고 `error_message` 에 관리자에게
+    보여줄 한국어 사유를 싣는다 — «error_message 가 있고 좌표가 비었다» = 추출 실패. 예전엔 실패가
+    AI 로그에만 남아 관리자 화면에서는 «접수됨» 뒤로 아무 일도 안 일어난 것처럼 보였다.
+
+    전송 정책은 send_reference_poses 와 같다 — 호출 1회 · 데드라인 BACKEND_GRPC_TIMEOUT_SECONDS · 재시도 없음.
+    """
+    request = exercise_pb2.ExtractRequest(
+        exercise_id=exercise_id,
+        error_message=message,
+        extracted_poses=[],
+    )
+    return _send_extract_callback(request, f"기준 좌표 추출 실패 통보 (exercise={exercise_id})")
+
+
+def _send_extract_callback(request: exercise_pb2.ExtractRequest, what: str) -> bool:
+    """AI→Spring `ExtractReferenceData` 역호출 한 번. 성공·실패 통보가 같은 정책을 쓰도록 한 곳에 둔다."""
     try:
-        request = exercise_pb2.ExtractRequest(
-            exercise_id=exercise_id,
-            extracted_poses=poses,
-        )
         response = get_stub().ExtractReferenceData(
             request,
             metadata=call_metadata(),
             timeout=settings.BACKEND_GRPC_TIMEOUT_SECONDS,
         )
-        logger.info(
-            "[AI → Spring] 기준 좌표 전송 (exercise=%s, count=%d, success=%s)",
-            exercise_id,
-            len(poses),
-            response.success,
-        )
+        logger.info("[AI → Spring] %s — success=%s", what, response.success)
         metrics.record_callback("ExtractReferenceData", "ok")
         return response.success
     except grpc.RpcError as e:
         # 이 경로는 원래 재시도가 없다. 대신 **상태코드를 남긴다** — 서버가 코드를 갈라주게 된
         # 뒤로는(#209) 「우리 잘못인가 서버가 아픈가」가 로그 한 줄로 갈린다.
-        logger.error(
-            "[AI → Spring] 기준 좌표 전송 실패 (code=%s): %s", e.code(), e.details()
-        )
+        logger.error("[AI → Spring] %s 실패 (code=%s): %s", what, e.code(), e.details())
         # 이 경로는 재시도가 없다 — 실패가 곧 종착이라 outcome 을 exhausted 로 센다.
         metrics.record_callback("ExtractReferenceData", "exhausted")
         return False

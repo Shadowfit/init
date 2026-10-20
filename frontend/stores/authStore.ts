@@ -1,9 +1,5 @@
 import { create } from 'zustand';
-<<<<<<< HEAD
-import { authStorage } from '@/services/authStorage';
-=======
 import * as SecureStore from '@/services/secureStorage';
->>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
 import { authService } from '@/services/authService';
 import { memberService } from '@/services/memberService';
 import { bumpSessionVersion } from '@/services/sessionVersion';
@@ -71,9 +67,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // 버전만 어긋나, 살아 있는 세션의 401 이 전부 «죽은 세션» 으로 판정되어 재발급이 멈춘다.
     bumpSessionVersion();
 
-    await authStorage.setItemAsync('accessToken', accessToken);
-    await authStorage.setItemAsync('refreshToken', refreshToken);
-    await authStorage.setItemAsync('userEmail', data.email);
+    await SecureStore.setItemAsync('accessToken', accessToken);
+    await SecureStore.setItemAsync('refreshToken', refreshToken);
+    await SecureStore.setItemAsync('userEmail', data.email);
 
     set({
       user: { email: data.email, role },
@@ -119,9 +115,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } catch {
       // 서버 에러는 무시하고 로컬 세션은 정리
     }
-    await authStorage.deleteItemAsync('accessToken');
-    await authStorage.deleteItemAsync('refreshToken');
-    await authStorage.deleteItemAsync('userEmail');
+    await SecureStore.deleteItemAsync('accessToken');
+    await SecureStore.deleteItemAsync('refreshToken');
+    await SecureStore.deleteItemAsync('userEmail');
 
     set({
       user: null,
@@ -135,9 +131,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   restoreSession: async () => {
     try {
-      const accessToken = await authStorage.getItemAsync('accessToken');
-      const refreshToken = await authStorage.getItemAsync('refreshToken');
-      const email = await authStorage.getItemAsync('userEmail');
+      const accessToken = await SecureStore.getItemAsync('accessToken');
+      const refreshToken = await SecureStore.getItemAsync('refreshToken');
+      const email = await SecureStore.getItemAsync('userEmail');
 
       if (accessToken && email) {
         set({
@@ -164,9 +160,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         set({ isLoading: false });
       }
     } catch {
-      await authStorage.deleteItemAsync('accessToken');
-      await authStorage.deleteItemAsync('refreshToken');
-      await authStorage.deleteItemAsync('userEmail');
+      await SecureStore.deleteItemAsync('accessToken');
+      await SecureStore.deleteItemAsync('refreshToken');
+      await SecureStore.deleteItemAsync('userEmail');
       set({
         user: null,
         accessToken: null,
@@ -182,9 +178,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   // 서버에 logout API 를 호출하지 않고 로컬만 정리 (토큰 만료 케이스용)
   forceLogout: async () => {
     bumpSessionVersion();   // 이슈 #170 — logout 과 같은 이유
-    await authStorage.deleteItemAsync('accessToken');
-    await authStorage.deleteItemAsync('refreshToken');
-    await authStorage.deleteItemAsync('userEmail');
+    await SecureStore.deleteItemAsync('accessToken');
+    await SecureStore.deleteItemAsync('refreshToken');
+    await SecureStore.deleteItemAsync('userEmail');
     set({
       user: null,
       accessToken: null,

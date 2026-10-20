@@ -126,7 +126,7 @@ class WeeklySummaryMonthlyCostRaceTest extends MySqlContainerSupport {
         report.setMember(member);
         report.setSession(s);
         try {
-            report.setDetailedAnalysis(objectMapper.writeValueAsString(new SessionDetailedAnalysis(worst, repTrend)));
+            report.setDetailedAnalysis(objectMapper.writeValueAsString(new SessionDetailedAnalysis(worst, repTrend, null, null, null, null, null)));
         } catch (Exception e) {
             throw new IllegalStateException(e);
         }

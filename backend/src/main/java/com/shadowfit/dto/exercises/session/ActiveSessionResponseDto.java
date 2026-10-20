@@ -84,6 +84,13 @@ public class ActiveSessionResponseDto {
     @Schema(description = "목표 세트 수. null = 열린 세트", example = "3")
     private Integer targetSets;
 
+    /** 싱크로율 판정 기준 한 쌍(V34) — 세션 종목의 현재 값. 의미는 {@code ExercisesResponseDto} 와 같다. */
+    @Schema(description = "정석 기준 — 싱크로율이 이 점수 이상이면 정석", example = "80.0")
+    private Double syncGoodThreshold;
+
+    @Schema(description = "위험 기준 — 이 점수 이상이면 교정 필요, 미만이면 위험", example = "60.0")
+    private Double syncWarnThreshold;
+
     /**
      * exercise 는 호출부에서 JOIN FETCH 로 미리 가져온 상태여야 한다 —
      * open-in-view: false 라 트랜잭션 밖에서 lazy 접근하면 터진다.
@@ -106,6 +113,12 @@ public class ActiveSessionResponseDto {
                 .aiWorkerIndex(aiWorkerIndex)
                 .targetRepsPerSet(session.getTargetRepsPerSet())
                 .targetSets(session.getTargetSets())
+                .syncGoodThreshold(toDouble(session.getExercise().getSyncGoodThreshold()))
+                .syncWarnThreshold(toDouble(session.getExercise().getSyncWarnThreshold()))
                 .build();
+    }
+
+    private static Double toDouble(java.math.BigDecimal value) {
+        return value == null ? null : value.doubleValue();
     }
 }

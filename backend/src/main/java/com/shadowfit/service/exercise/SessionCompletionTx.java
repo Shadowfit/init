@@ -75,7 +75,7 @@ public class SessionCompletionTx {
         // 싱크 통계는 AI 가 보낸 값을 쓰지 않고 pose_data 에서 직접 집계한다 (이슈 #75).
         // 세트 요약(V26)도 같은 rep 목록에서 나온다 — 한 번 읽어 둘 다 만든다.
         List<RepSummaryProjection> reps = poseDataRepository.findRepSummaries(session.getId(), session.getStartTime());
-        SyncStats sync = resolveSyncStats(reps, request);
+        SyncStats sync = resolveSyncStats(session, reps, request);
 
         // 멱등성: FastAPI가 응답 유실로 같은 결과를 재전송한 경우(2-1, 2-2) 첫 완료 시각/기록을 보존하고
         // 즉시 종료한다. 판정은 Session.complete 안에만 있다 — 여기서 미리 한 번 더 보면 위 집계
@@ -154,18 +154,19 @@ public class SessionCompletionTx {
      * <p>rep 가중 평균을 유지하는 이유는 {@code findRepSummaries} 주석 참고 — 다운샘플 때문에
      * 프레임 단위로 평균 내면 값이 달라진다.
      */
-<<<<<<< HEAD
-    private SyncStats resolveSyncStats(Session session, SessionCompleteRequest request) {
+    private SyncStats resolveSyncStats(Session session, List<RepSummaryProjection> reps, SessionCompleteRequest request) {
+        // 횟수만 세는 종목은 sync_rate 자체가 없다 — AI 가 보낸 0.0 을 «싱크로율 0%» 로 저장하지 않도록 먼저 접는다.
+        // (세트 표는 같은 rep 목록으로 따로 만들어지므로 여기서 통계를 비워도 세트 경계에는 영향이 없다.)
         if (ExerciseAnalysisCapabilities.isCountOnly(session)) {
             return SyncStats.none();
         }
-        List<Double> repAverages = poseDataRepository.findRepAverageSyncRates(session.getId(), session.getStartTime());
+        // sync_rate 가 전부 null 인 rep 은 AVG 가 null 로 온다 — findRepAverageSyncRates 의 IS NOT NULL 과 같은 기준으로 건너뛴다.
+        List<Double> repAverages = reps.stream()
+                .map(RepSummaryProjection::getAvgSyncRate)
+                .filter(java.util.Objects::nonNull)
+                .toList();
 
         if (repAverages.isEmpty()) {
-=======
-    private SyncStats resolveSyncStats(List<RepSummaryProjection> reps, SessionCompleteRequest request) {
-        if (reps.isEmpty()) {
->>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
             // rep 단위로 셀 수 있는 프레임이 없다. 두 경우가 섞여 있고 처리가 다르다.
             if (request.getTotalReps() > 0 && request.getAvgSyncRate() > 0) {
                 // (1) AI 는 rep 을 셌는데 rep_number 가 안 남았다 = rep_number 를 안 보내는 구버전 AI.
@@ -178,8 +179,8 @@ public class SessionCompletionTx {
             return SyncStats.none();
         }
 
-        return SyncStats.from(reps.stream()
-                .mapToDouble(RepSummaryProjection::getAvgSyncRate)
+        return SyncStats.from(repAverages.stream()
+                .mapToDouble(Double::doubleValue)
                 .summaryStatistics());
     }
 

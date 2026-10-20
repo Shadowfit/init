@@ -127,18 +127,14 @@ public class SessionAnalysisCalculator {
     }
 
     /**
-<<<<<<< HEAD
      * rep 번호로 묶는다. 규칙 자체는 {@link PoseFrameGrouping#byRep}로 뽑혀 있다(2026-09-21,
-     * {@code SquatDepthAnalysisCalculator}와 공유) — {@code repNumber <= 0}인 "미상" 행을 제외하는
-     * 이유 등 자세한 배경은 그쪽 주석 참고.
-=======
-     * rep 번호로 묶는다. 입력이 rep 오름차순이라 LinkedHashMap 의 순회 순서도 rep 오름차순이다.
+     * {@code SquatDepthAnalysisCalculator}와 공유). 입력이 rep 오름차순이라 LinkedHashMap 의 순회 순서도
+     * rep 오름차순이다.
      *
      * <p>{@code repNumber <= 0} 은 <b>"미상"이라 제외한다</b> — 컬럼이 생기기 전에 저장된 행과,
      * rep_number 를 안 보내는 구버전 AI 의 행이 여기 해당한다(마이그레이션
      * {@code 2026-07-31-add-pose-data-rep-number.sql}). 섞으면 서로 다른 rep 이 하나로 뭉뚱그려져,
      * 고치려던 것과 똑같은 결함이 다시 생긴다. #75 의 {@code findRepSummaries} 도 같은 기준이다.
->>>>>>> 976c4a13c633a5dd2d66cfc732f108ca4e8d4473
      *
      * <p>그 결과 <b>미상 행만 있는 세션은 worst 를 못 낸다</b>(null). 예전 코드는 rep 을 안 봤으므로
      * 뭔가를 내놓긴 했지만, 그 값이 어느 rep 의 것인지 말할 수 없었다 — 틀린 값을 내놓느니 없다고

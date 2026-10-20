@@ -44,7 +44,6 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -109,8 +108,8 @@ class SocialJourneyIntegrationTest {
         cheolsu = save("철수");
         category = categoryRepository.saveAndFlush(Category.builder().name("LOWER").build());
         squat = exercisesRepository.saveAndFlush(Exercise.builder().name("스쿼트").category(category)
-                .expectedDurationMinutes(15).syncThresholdBeginner(new BigDecimal("60.00"))
-                .syncThresholdAdvanced(new BigDecimal("85.00")).analysisSupported(true).build());
+                .expectedDurationMinutes(15)
+                .analysisSupported(true).build());
     }
 
     @AfterEach
