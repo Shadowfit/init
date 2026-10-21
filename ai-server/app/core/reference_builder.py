@@ -74,7 +74,9 @@ def _segment_reps(frames: list[FrameResult]) -> list[RepSegment]:
         if metrics is None:
             current_frames = []
             continue
-        if metrics.cycle_stage == "descending" and not current_frames:
+        # 시도는 늘 «내려가는 중» 으로 시작한다(바닥 확정에 두 표본이 필요하다). «바닥» 도 받는 것은 방어용이다 —
+        # 시도 도중 지표가 끊겨(metrics None) 구간이 비워지면 다음 표본이 이미 «바닥» 일 수 있다(2026-10-21).
+        if metrics.cycle_stage in ("descending", "bottom") and not current_frames:
             current_frames = [frame]
         elif current_frames:
             current_frames.append(frame)

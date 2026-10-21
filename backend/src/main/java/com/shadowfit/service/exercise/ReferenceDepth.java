@@ -23,8 +23,12 @@ import java.util.Map;
  *   <li>프레임마다 구한 뒤 전 프레임의 최솟값(= 가장 깊은 순간), 소수 첫째 자리 반올림</li>
  * </ul>
  * 한쪽 랜드마크가 빠진 프레임은 있는 쪽만 쓰고, 양쪽 다 없으면 그 프레임은 건너뛴다.
+ *
+ * <p>2026-10-21 부터 리포트의 스쿼트 깊이 채점도 이 값을 쓴다({@code SquatDepthAnalysisCalculator} — 목표 = 기준
+ * 최저 무릎각 + 허용 오차). 그래서 {@link #measure} 와 {@link Result} 만 public 이다 — 판정 경계·보조 함수는 관리자
+ * 화면 전용이라 패키지 안에 둔다.
  */
-final class ReferenceDepth {
+public final class ReferenceDepth {
 
     /**
      * 깊이 판정 경계(설계값, 2026-10-21). 기준의 가장 깊은 무릎각이
@@ -44,13 +48,14 @@ final class ReferenceDepth {
     private static final int[][] KNEE = {{23, 25, 27}, {24, 26, 28}};
     private static final int[][] HIP = {{11, 23, 25}, {12, 24, 26}};
 
-    record Result(Double minKneeDeg, Double minHipDeg) {
+    /** 기준 전 프레임 중 가장 깊은 순간의 무릎각·고관절각(도, 소수 첫째 자리). 잴 수 없으면 각각 null. */
+    public record Result(Double minKneeDeg, Double minHipDeg) {
         static final Result NONE = new Result(null, null);
     }
 
     private ReferenceDepth() {}
 
-    static Result measure(List<ExerciseReference> rows, ObjectMapper objectMapper) {
+    public static Result measure(List<ExerciseReference> rows, ObjectMapper objectMapper) {
         if (rows == null || rows.isEmpty()) return Result.NONE;
         double minKnee = Double.MAX_VALUE, minHip = Double.MAX_VALUE;
         for (ExerciseReference r : rows) {

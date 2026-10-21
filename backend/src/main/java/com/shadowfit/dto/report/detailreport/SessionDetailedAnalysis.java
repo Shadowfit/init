@@ -6,6 +6,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * {@code reports.detailed_analysis}(JSON 컬럼)에 저장되는 precompute 결과 묶음.
@@ -64,4 +65,41 @@ public class SessionDetailedAnalysis {
      * 보폭 개념이 없어 대응 필드 자체가 없다.
      */
     private LungeStepLengthAnalysisDto lungeStepLengthAnalysis;
+
+    /**
+     * «미인정 시도» 수 (2026-10-21, V35) — 내려갔다 올라왔지만 횟수에 안 들어간 시도. 이 필드가 생기기 전에 저장된
+     * 행은 필드가 없어 0 으로 읽힌다(그때는 미인정 시도를 기록하지 않았다).
+     */
+    private int rejectedReps;
+
+    /**
+     * 사유별 미인정 시도 수 — 0 이 아닌 사유만, 사유 코드 선언 순({@code RejectedAttemptReason}).
+     * 예: {@code {"DEPTH_NOT_CONFIRMED": 2}}. 옛 행은 빈 맵으로 읽힌다(필드 기본값).
+     */
+    private Map<String, Integer> rejectedRepsByReason = Map.of();
+
+    /** 미인정 시도 기록 이전의 일곱 필드 — 그 시도가 없는 세션·옛 행 재현(테스트 픽스처)용. */
+    public SessionDetailedAnalysis(WorstSectionDto worstSection, List<RepSyncRateDto> repTrend,
+                                   SquatDepthAnalysisDto squatDepthAnalysis, LungeDepthAnalysisDto lungeDepthAnalysis,
+                                   TrunkLeanAnalysisDto squatTrunkLeanAnalysis, TrunkLeanAnalysisDto lungeTrunkLeanAnalysis,
+                                   LungeStepLengthAnalysisDto lungeStepLengthAnalysis) {
+        this(worstSection, repTrend, squatDepthAnalysis, lungeDepthAnalysis, squatTrunkLeanAnalysis,
+                lungeTrunkLeanAnalysis, lungeStepLengthAnalysis, 0, Map.of());
+    }
+
+    /**
+     * 실린 것이 하나라도 있는가. 쓰기 경로({@code SessionCompletionTx}, 다 비면 컬럼을 비운다)와 읽기 경로
+     * ({@code ReportService}, 다 비었으면 구버전 형식으로 보고 재계산)가 같은 판정을 쓴다. {@code get}·{@code is} 가 아니라
+     * JSON 속성으로 직렬화되지 않는다.
+     */
+    public boolean hasContent() {
+        return worstSection != null
+                || (repTrend != null && !repTrend.isEmpty())
+                || squatDepthAnalysis != null
+                || lungeDepthAnalysis != null
+                || squatTrunkLeanAnalysis != null
+                || lungeTrunkLeanAnalysis != null
+                || lungeStepLengthAnalysis != null
+                || rejectedReps > 0;
+    }
 }

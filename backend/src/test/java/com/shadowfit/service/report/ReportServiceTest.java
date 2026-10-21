@@ -26,6 +26,7 @@ import org.mockito.MockitoAnnotations;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -56,6 +57,7 @@ class ReportServiceTest {
     @Mock private LungeTrunkLeanAnalysisCalculator lungeTrunkLeanAnalysisCalculator;
     @Mock private LungeStepLengthAnalysisCalculator lungeStepLengthAnalysisCalculator;
     @Mock private com.shadowfit.repository.exercise.SessionSetRepository sessionSetRepository;
+    @Mock private com.shadowfit.repository.exercise.RejectedAttemptRepository rejectedAttemptRepository;
 
     private ReportService reportService;
 
@@ -71,7 +73,7 @@ class ReportServiceTest {
         reportService = new ReportService(reportRepository, sessionRepository, poseDataRepository,
                 sessionAnalysisCalculator, squatDepthAnalysisCalculator, lungeDepthAnalysisCalculator,
                 squatTrunkLeanAnalysisCalculator, lungeTrunkLeanAnalysisCalculator,
-                lungeStepLengthAnalysisCalculator, new ObjectMapper(), sessionSetRepository);
+                lungeStepLengthAnalysisCalculator, new ObjectMapper(), sessionSetRepository, rejectedAttemptRepository);
 
         Member member = Member.builder().id(MEMBER_ID).email("t@t.com").username("u").password("p").build();
         Category category = Category.builder().id(1L).name("LOWER").build();
@@ -147,7 +149,8 @@ class ReportServiceTest {
         // 추이를 응답에 넣으면서 pose_data 스캔이 되살아나지 않았는지가 이 테스트의 핵심이다
         verify(poseDataRepository, never()).findFramesBySessionId(anyLong(), any());
         verify(sessionAnalysisCalculator, never()).calculate(any(), any());
-        verify(sessionAnalysisCalculator, never()).calculateRepTrend(any());
+        verify(sessionAnalysisCalculator, never()).calculateRepTrend(any(), any());
+        verify(rejectedAttemptRepository, never()).findSummariesBySessionId(anyLong());
     }
 
     @Test
@@ -193,7 +196,7 @@ class ReportServiceTest {
         WorstSectionDto recomputed = new WorstSectionDto();
         recomputed.setReason("재계산됨");
         when(sessionAnalysisCalculator.calculate(session, frames)).thenReturn(recomputed);
-        when(sessionAnalysisCalculator.calculateRepTrend(frames))
+        when(sessionAnalysisCalculator.calculateRepTrend(eq(frames), any()))
                 .thenReturn(List.of(new RepSyncRateDto(1, 50.0, "00:00")));
 
         SessionReportResponseDto result = reportService.getSessionReport(SESSION_ID, MEMBER_ID);
@@ -263,5 +266,235 @@ class ReportServiceTest {
 
         assertThat(result.getComparisonWithPrevious()).isNotNull();
         assertThat(result.getComparisonWithPrevious().getSyncRateDiff()).isEqualTo(8); // 77.5 - 70.0 반올림
+        assertThat(result.getComparisonWithPrevious().getCaloriesDiff()).isEqualTo(10); // 50.0 - 40.0
+        assertThat(result.getCaloriesBurned()).isEqualTo(50);
+    }
+
+    // ── 칼로리 null 규약 (2026-10-21, CalorieEstimator) ─────────────────────
+
+    private Session previousSessionWithCalories(BigDecimal calories) {
+        return Session.builder()
+                .id(9L).member(session.getMember()).exercise(session.getExercise())
+                .startTime(LocalDateTime.now().minusDays(1).minusMinutes(30))
+                .endTime(LocalDateTime.now().minusDays(1))
+                .status(Status.COMPLETED)
+                .avgSyncRate(new BigDecimal("70.0"))
+                .caloriesBurned(calories)
+                .build();
+    }
+
+    private void givenPreviousSession(Session last) {
+        report.setDetailedAnalysis(null);
+        when(reportRepository.findBySessionId(SESSION_ID)).thenReturn(Optional.of(report));
+        when(poseDataRepository.findFramesBySessionId(eq(SESSION_ID), any())).thenReturn(List.of());
+        when(sessionRepository.findFirstByMemberIdAndExerciseIdAndStatusAndIdNotOrderByStartTimeDesc(
+                MEMBER_ID, session.getExercise().getId(), Status.COMPLETED, SESSION_ID))
+                .thenReturn(Optional.of(last));
+    }
+
+    @Test
+    @DisplayName("지난 세션 칼로리가 null(체중 모름)이면 caloriesDiff 는 0 이 아니라 null")
+    void previousCaloriesNull_diffIsNull() {
+        givenPreviousSession(previousSessionWithCalories(null));
+
+        SessionReportResponseDto result = reportService.getSessionReport(SESSION_ID, MEMBER_ID);
+
+        assertThat(result.getComparisonWithPrevious().getCaloriesDiff()).isNull();
+        assertThat(result.getComparisonWithPrevious().getSyncRateDiff()).isEqualTo(8); // 다른 차이는 그대로
+    }
+
+    @Test
+    @DisplayName("이번 세션 칼로리가 null 이면 caloriesBurned·caloriesDiff 둘 다 0 이 아니라 null — JSON 에도 null 로 실린다")
+    void currentCaloriesNull_jsonCarriesNulls() throws Exception {
+        Session noCalories = Session.builder()
+                .id(SESSION_ID).member(session.getMember()).exercise(session.getExercise())
+                .startTime(LocalDateTime.now().minusMinutes(20)).endTime(LocalDateTime.now())
+                .status(Status.COMPLETED).totalReps(10).avgSyncRate(new BigDecimal("77.5"))
+                .build();
+        when(sessionRepository.findSessionWithExerciseByIdAndMemberId(SESSION_ID, MEMBER_ID))
+                .thenReturn(Optional.of(noCalories));
+        givenPreviousSession(previousSessionWithCalories(new BigDecimal("40.0")));
+
+        SessionReportResponseDto result = reportService.getSessionReport(SESSION_ID, MEMBER_ID);
+
+        assertThat(result.getCaloriesBurned()).isNull();
+        assertThat(result.getComparisonWithPrevious().getCaloriesDiff()).isNull();
+        String json = new ObjectMapper().findAndRegisterModules().writeValueAsString(result);
+        assertThat(json).contains("\"caloriesBurned\":null", "\"caloriesDiff\":null");
+    }
+
+    @Test
+    @DisplayName("caloriesBurned 는 kcal 정수 반올림 — 10.11 → 10, 10.50 → 11 (caloriesDiff 의 반올림과 맞춘다)")
+    void caloriesBurned_roundedHalfUp() {
+        report.setDetailedAnalysis(null);
+        when(reportRepository.findBySessionId(SESSION_ID)).thenReturn(Optional.of(report));
+        when(poseDataRepository.findFramesBySessionId(eq(SESSION_ID), any())).thenReturn(List.of());
+        for (String[] c : new String[][]{{"10.11", "10"}, {"10.50", "11"}}) {
+            Session s = Session.builder()
+                    .id(SESSION_ID).member(session.getMember()).exercise(session.getExercise())
+                    .startTime(LocalDateTime.now().minusMinutes(3)).endTime(LocalDateTime.now())
+                    .status(Status.COMPLETED).totalReps(5).caloriesBurned(new BigDecimal(c[0]))
+                    .build();
+            when(sessionRepository.findSessionWithExerciseByIdAndMemberId(SESSION_ID, MEMBER_ID))
+                    .thenReturn(Optional.of(s));
+
+            assertThat(reportService.getSessionReport(SESSION_ID, MEMBER_ID).getCaloriesBurned())
+                    .isEqualTo(Integer.parseInt(c[1]));
+        }
+    }
+
+    // ── 스쿼트 깊이 targetKneeDeg (2026-10-21) — 저장된 리포트의 하위호환 ────────────
+
+    @Test
+    @DisplayName("targetKneeDeg 가 생기기 전에 저장된 리포트는 그대로 읽힌다 — 재계산 없이 targetKneeDeg 만 null")
+    void legacyStoredSquatDepth_readsAsIs_withNullTarget() throws Exception {
+        // 옛 «100도 이하 만점» 규칙으로 precompute 돼 저장된 모양 그대로 (targetKneeDeg 필드 없음)
+        report.setDetailedAnalysis("{\"worstSection\":null,"
+                + "\"repTrend\":[{\"repNumber\":1,\"syncRate\":63.5,\"timeStamp\":\"00:05\"}],"
+                + "\"squatDepthAnalysis\":{\"depthMode\":\"FULL\",\"depthScore\":100,\"depthGrade\":\"EXCELLENT\","
+                + "\"repDepths\":[{\"repNumber\":1,\"minKneeAngle\":85.0,\"depthScore\":100,\"timeStamp\":\"00:05\"}],"
+                + "\"narrative\":[\"1회 모두 목표 깊이를 안정적으로 지켰어요.\"]},"
+                + "\"lungeDepthAnalysis\":null,\"squatTrunkLeanAnalysis\":null,"
+                + "\"lungeTrunkLeanAnalysis\":null,\"lungeStepLengthAnalysis\":null}");
+        when(reportRepository.findBySessionId(SESSION_ID)).thenReturn(Optional.of(report));
+
+        SessionReportResponseDto result = reportService.getSessionReport(SESSION_ID, MEMBER_ID);
+
+        assertThat(result.getSquatDepthAnalysis().getDepthScore()).isEqualTo(100); // 저장된 점수 그대로(박제)
+        assertThat(result.getSquatDepthAnalysis().getTargetKneeDeg()).isNull();
+        verify(squatDepthAnalysisCalculator, never()).calculate(any(), any());
+        verify(poseDataRepository, never()).findFramesBySessionId(anyLong(), any());
+        String json = new ObjectMapper().findAndRegisterModules().writeValueAsString(result);
+        assertThat(json).contains("\"targetKneeDeg\":null");
+    }
+
+    @Test
+    @DisplayName("새로 저장된 리포트는 targetKneeDeg 를 싣고 응답 JSON 에 squatDepthAnalysis.targetKneeDeg 로 나간다")
+    void storedSquatDepth_withTarget_roundTripsToJson() throws Exception {
+        com.shadowfit.dto.report.detailreport.SquatDepthAnalysisDto depth =
+                new com.shadowfit.dto.report.detailreport.SquatDepthAnalysisDto();
+        depth.setDepthMode("FULL");
+        depth.setDepthScore(64);
+        depth.setDepthGrade("FAIR");
+        depth.setRepDepths(List.of(new com.shadowfit.dto.report.detailreport.RepDepthDto(1, 85.3, 64, "00:05")));
+        depth.setNarrative(List.of("1회차는 목표 깊이보다 얕았어요."));
+        depth.setTargetKneeDeg(76.2);
+        SessionDetailedAnalysis stored = new SessionDetailedAnalysis(null,
+                List.of(new RepSyncRateDto(1, 63.5, "00:05")), depth, null, null, null, null);
+        report.setDetailedAnalysis(new ObjectMapper().writeValueAsString(stored));
+        when(reportRepository.findBySessionId(SESSION_ID)).thenReturn(Optional.of(report));
+
+        SessionReportResponseDto result = reportService.getSessionReport(SESSION_ID, MEMBER_ID);
+
+        assertThat(result.getSquatDepthAnalysis().getTargetKneeDeg()).isEqualTo(76.2);
+        String json = new ObjectMapper().findAndRegisterModules().writeValueAsString(result);
+        assertThat(json).contains("\"targetKneeDeg\":76.2", "\"depthScore\":64");
+    }
+
+    // ── 미인정 시도 (V35, 2026-10-21) ────────────────────────────────────
+
+    /**
+     * 미인정 시도 기록 이전에 저장된 JSON 을 문자 그대로 넣는다(새 DTO 로 직렬화하면 새 필드가 섞여 «옛 행» 이 아니다).
+     * 없는 필드는 0·빈 값으로, 옛 점은 전부 인정 반복({@code counted=true})으로 읽혀야 한다.
+     */
+    @Test
+    @DisplayName("미인정 기록 이전에 저장된 리포트 — rejectedReps 0·빈 맵, 옛 점은 counted=true·attemptNumber null")
+    void legacyStoredReport_readsWithoutRejectedFields() throws Exception {
+        report.setDetailedAnalysis("{\"worstSection\":null,"
+                + "\"repTrend\":[{\"repNumber\":1,\"syncRate\":80.0,\"timeStamp\":\"00:05\"},"
+                + "{\"repNumber\":2,\"syncRate\":70.0,\"timeStamp\":\"00:11\"}],"
+                + "\"squatDepthAnalysis\":{\"depthMode\":\"FULL\",\"depthScore\":64,\"depthGrade\":\"FAIR\","
+                + "\"repDepths\":[{\"repNumber\":1,\"minKneeAngle\":85.3,\"depthScore\":64,\"timeStamp\":\"00:05\"}],"
+                + "\"narrative\":[\"1회차는 목표 깊이보다 얕았어요.\"],\"targetKneeDeg\":76.2},"
+                + "\"lungeDepthAnalysis\":null,"
+                + "\"squatTrunkLeanAnalysis\":{\"tiltScore\":100,\"tiltGrade\":\"EXCELLENT\","
+                + "\"repTrunkLeans\":[{\"repNumber\":1,\"avgTiltDeg\":30.0,\"tiltScore\":100,\"timeStamp\":\"00:04\"}],"
+                + "\"narrative\":[\"1회 모두 상체 자세를 잘 유지했어요.\"]},"
+                + "\"lungeTrunkLeanAnalysis\":null,\"lungeStepLengthAnalysis\":null}");
+        when(reportRepository.findBySessionId(SESSION_ID)).thenReturn(Optional.of(report));
+
+        SessionReportResponseDto result = reportService.getSessionReport(SESSION_ID, MEMBER_ID);
+
+        assertThat(result.getRejectedReps()).isZero();
+        assertThat(result.getRejectedRepsByReason()).isEmpty();
+        assertThat(result.getRepTrend()).extracting(RepSyncRateDto::getRepNumber).containsExactly(1, 2);
+        assertThat(result.getRepTrend()).allSatisfy(p -> {
+            assertThat(p.isCounted()).isTrue();
+            assertThat(p.getAttemptNumber()).isNull();
+            assertThat(p.getRejectReason()).isNull();
+            assertThat(p.getTimestampSec()).isNull();
+        });
+        assertThat(result.getSquatDepthAnalysis().getRepDepths().get(0).isCounted()).isTrue();
+        assertThat(result.getSquatDepthAnalysis().getRepDepths().get(0).getAttemptNumber()).isNull();
+        assertThat(result.getSquatTrunkLeanAnalysis().getRepTrunkLeans().get(0).isCounted()).isTrue();
+        // 저장된 것을 읽기만 한다 — 옛 리포트라고 재계산하지 않는다
+        verify(poseDataRepository, never()).findFramesBySessionId(anyLong(), any());
+        verify(rejectedAttemptRepository, never()).findSummariesBySessionId(anyLong());
+        String json = new ObjectMapper().findAndRegisterModules().writeValueAsString(result);
+        assertThat(json).contains("\"rejectedReps\":0", "\"rejectedRepsByReason\":{}");
+    }
+
+    @Test
+    @DisplayName("미인정 시도가 담긴 저장 리포트 — 응답에 rejectedReps·rejectedRepsByReason·counted=false 점이 그대로 나간다")
+    void storedReportWithRejected_roundTripsToJson() throws Exception {
+        com.shadowfit.dto.report.detailreport.SquatDepthAnalysisDto depth =
+                new com.shadowfit.dto.report.detailreport.SquatDepthAnalysisDto();
+        depth.setDepthMode("FULL");
+        depth.setDepthScore(50);
+        depth.setDepthGrade("NEEDS_WORK");
+        depth.setRepDepths(List.of(
+                new com.shadowfit.dto.report.detailreport.RepDepthDto(1, 76.0, 100, "00:05"),
+                com.shadowfit.dto.report.detailreport.RepDepthDto.rejected(1, 101.2, 0, "00:09")));
+        depth.setNarrative(List.of("1회 모두 목표 깊이를 안정적으로 지켰어요.",
+                "1회는 바닥 자세가 확인되지 않아 인정되지 않았어요 — 무릎 76° 이하까지 앉아 잠깐 멈췄다 일어나세요."));
+        depth.setTargetKneeDeg(76.2);
+        SessionDetailedAnalysis stored = new SessionDetailedAnalysis(null,
+                List.of(RepSyncRateDto.counted(1, 88.0, "00:05", 5.2),
+                        RepSyncRateDto.rejected(1, 41.5, "00:09", 9.4, "DEPTH_NOT_CONFIRMED")),
+                depth, null, null, null, null, 1, Map.of("DEPTH_NOT_CONFIRMED", 1));
+        report.setDetailedAnalysis(new ObjectMapper().writeValueAsString(stored));
+        when(reportRepository.findBySessionId(SESSION_ID)).thenReturn(Optional.of(report));
+
+        SessionReportResponseDto result = reportService.getSessionReport(SESSION_ID, MEMBER_ID);
+
+        assertThat(result.getRejectedReps()).isEqualTo(1);
+        assertThat(result.getRejectedRepsByReason()).containsExactly(Map.entry("DEPTH_NOT_CONFIRMED", 1));
+        RepSyncRateDto rejected = result.getRepTrend().get(1);
+        assertThat(rejected.getRepNumber()).isNull();
+        assertThat(rejected.getAttemptNumber()).isEqualTo(1);
+        assertThat(rejected.isCounted()).isFalse();
+        assertThat(rejected.getRejectReason()).isEqualTo("DEPTH_NOT_CONFIRMED");
+        assertThat(rejected.getTimestampSec()).isEqualTo(9.4);
+        String json = new ObjectMapper().findAndRegisterModules().writeValueAsString(result);
+        assertThat(json).contains(
+                "\"rejectedReps\":1",
+                "\"rejectedRepsByReason\":{\"DEPTH_NOT_CONFIRMED\":1}",
+                "{\"repNumber\":null,\"syncRate\":41.5,\"timeStamp\":\"00:09\",\"timestampSec\":9.4,"
+                        + "\"counted\":false,\"attemptNumber\":1,\"rejectReason\":\"DEPTH_NOT_CONFIRMED\"}",
+                "{\"repNumber\":1,\"syncRate\":88.0,\"timeStamp\":\"00:05\",\"timestampSec\":5.2,"
+                        + "\"counted\":true,\"attemptNumber\":null,\"rejectReason\":null}",
+                "{\"repNumber\":null,\"minKneeAngle\":101.2,\"depthScore\":0,\"timeStamp\":\"00:09\","
+                        + "\"counted\":false,\"attemptNumber\":1}");
+    }
+
+    @Test
+    @DisplayName("precompute 이전 리포트 재계산에도 미인정 시도가 섞인다 — 같은 조립")
+    void recompute_includesRejectedAttempts() {
+        report.setDetailedAnalysis(null);
+        when(reportRepository.findBySessionId(SESSION_ID)).thenReturn(Optional.of(report));
+        List<PoseFrameProjection> frames = List.of(new PoseFrameProjection(1L, 0.0, 50.0, 1, 100.0, null, null, null));
+        when(poseDataRepository.findFramesBySessionId(eq(SESSION_ID), any())).thenReturn(frames);
+        List<com.shadowfit.dto.report.RejectedAttemptProjection> rejected = List.of(
+                new com.shadowfit.dto.report.RejectedAttemptProjection(1,
+                        com.shadowfit.model.exercise.RejectedAttemptReason.SPLIT_STANCE, 30.0, 110.0, 20.0, 4.0));
+        when(rejectedAttemptRepository.findSummariesBySessionId(SESSION_ID)).thenReturn(rejected);
+
+        SessionReportResponseDto result = reportService.getSessionReport(SESSION_ID, MEMBER_ID);
+
+        verify(sessionAnalysisCalculator).calculateRepTrend(frames, rejected);
+        verify(squatDepthAnalysisCalculator).calculate(session, frames, rejected);
+        verify(squatTrunkLeanAnalysisCalculator).calculate(session, frames, rejected);
+        assertThat(result.getRejectedReps()).isEqualTo(1);
+        assertThat(result.getRejectedRepsByReason()).containsExactly(Map.entry("SPLIT_STANCE", 1));
     }
 }

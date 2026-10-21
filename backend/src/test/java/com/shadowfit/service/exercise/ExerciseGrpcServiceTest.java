@@ -8,6 +8,8 @@ import com.shadowfit.grpc.FeedbackBatchRequest;
 import com.shadowfit.grpc.FeedbackBatchResponse;
 import com.shadowfit.grpc.PoseDataBatchRequest;
 import com.shadowfit.grpc.PoseDataResponse;
+import com.shadowfit.grpc.RejectedAttemptRequest;
+import com.shadowfit.grpc.RejectedAttemptResponse;
 import com.shadowfit.grpc.SessionCompleteRequest;
 import com.shadowfit.grpc.SessionCompleteResponse;
 import com.shadowfit.grpc.SessionStatus;
@@ -46,12 +48,14 @@ class ExerciseGrpcServiceTest {
     @Mock private SessionService sessionService;
     @Mock private FeedbackLogService feedbackLogService;
     @Mock private SessionMetrics sessionMetrics;
+    @Mock private RejectedAttemptService rejectedAttemptService;
     private ExerciseGrpcService grpcService;
 
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        grpcService = new ExerciseGrpcService(poseDataService, sessionService, feedbackLogService, sessionMetrics);
+        grpcService = new ExerciseGrpcService(poseDataService, sessionService, feedbackLogService, sessionMetrics,
+                rejectedAttemptService);
     }
 
     @Test
@@ -305,5 +309,84 @@ class ExerciseGrpcServiceTest {
         verify(obs).onError(captor.capture());
         assertThat(((StatusRuntimeException) captor.getValue()).getStatus().getCode())
                 .isEqualTo(Status.Code.INTERNAL);
+    }
+
+    // ── SaveRejectedAttempt (V35, 2026-10-21) ─────────────────────────────
+
+    private static RejectedAttemptRequest rejectedAttempt() {
+        return RejectedAttemptRequest.newBuilder()
+                .setSessionId(1L).setAttemptNumber(1).setReason("DEPTH_NOT_CONFIRMED")
+                .setSyncRate(45.0).setMinKneeAngle(101.0).setTimestampSec(3.0).build();
+    }
+
+    private Status saveRejectedAttemptExpectingError(RejectedAttemptRequest request) {
+        @SuppressWarnings("unchecked")
+        StreamObserver<RejectedAttemptResponse> obs = mock(StreamObserver.class);
+
+        grpcService.saveRejectedAttempt(request, obs);
+
+        ArgumentCaptor<Throwable> captor = ArgumentCaptor.forClass(Throwable.class);
+        verify(obs).onError(captor.capture());
+        verify(obs, never()).onNext(any());
+        return ((StatusRuntimeException) captor.getValue()).getStatus();
+    }
+
+    @Test
+    @DisplayName("saveRejectedAttempt 성공 — success=true + onCompleted (저장·중복·늦은 도착 모두 같은 응답)")
+    void saveRejectedAttempt_success() {
+        @SuppressWarnings("unchecked")
+        StreamObserver<RejectedAttemptResponse> obs = mock(StreamObserver.class);
+        RejectedAttemptRequest request = rejectedAttempt();
+        when(rejectedAttemptService.save(request)).thenReturn(false); // 중복·종료 세션 — 그래도 성공이다
+
+        grpcService.saveRejectedAttempt(request, obs);
+
+        ArgumentCaptor<RejectedAttemptResponse> captor = ArgumentCaptor.forClass(RejectedAttemptResponse.class);
+        verify(obs).onNext(captor.capture());
+        verify(obs).onCompleted();
+        verify(obs, never()).onError(any());
+        assertThat(captor.getValue().getSuccess()).isTrue();
+        verify(rejectedAttemptService).save(request);
+    }
+
+    @Test
+    @DisplayName("saveRejectedAttempt — 형식·범위 위반은 INVALID_ARGUMENT (AI 가 재전송하지 않는다)")
+    void saveRejectedAttempt_invalid_mapsToInvalidArgument() {
+        RejectedAttemptRequest request = rejectedAttempt();
+        when(rejectedAttemptService.save(request)).thenThrow(new BusinessException(ErrorCode.INVALID_INPUT_VALUE));
+        assertThat(saveRejectedAttemptExpectingError(request).getCode()).isEqualTo(Status.Code.INVALID_ARGUMENT);
+
+        RejectedAttemptRequest outOfRange = rejectedAttempt().toBuilder().setSyncRate(150.0).build();
+        when(rejectedAttemptService.save(outOfRange)).thenThrow(new BusinessException(ErrorCode.DATA_INTEGRITY_VIOLATION));
+        Status status = saveRejectedAttemptExpectingError(outOfRange);
+        assertThat(status.getCode()).isEqualTo(Status.Code.INVALID_ARGUMENT);
+        assertThat(status.getDescription()).startsWith(ErrorCode.DATA_INTEGRITY_VIOLATION.name());
+    }
+
+    @Test
+    @DisplayName("saveRejectedAttempt — 세션 소멸은 NOT_FOUND")
+    void saveRejectedAttempt_sessionNotFound_mapsToNotFound() {
+        RejectedAttemptRequest request = rejectedAttempt();
+        when(rejectedAttemptService.save(request)).thenThrow(new BusinessException(ErrorCode.SESSION_NOT_FOUND));
+
+        assertThat(saveRejectedAttemptExpectingError(request).getCode()).isEqualTo(Status.Code.NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("saveRejectedAttempt — 잠금 경합에 진 것은 ABORTED (다시 던지면 대개 성공)")
+    void saveRejectedAttempt_lockConflict_mapsToAborted() {
+        RejectedAttemptRequest request = rejectedAttempt();
+        when(rejectedAttemptService.save(request)).thenThrow(new CannotAcquireLockException("lock wait timeout"));
+
+        assertThat(saveRejectedAttemptExpectingError(request).getCode()).isEqualTo(Status.Code.ABORTED);
+    }
+
+    @Test
+    @DisplayName("saveRejectedAttempt — 예상 못한 예외만 INTERNAL")
+    void saveRejectedAttempt_unexpected_mapsToInternal() {
+        RejectedAttemptRequest request = rejectedAttempt();
+        when(rejectedAttemptService.save(request)).thenThrow(new IllegalStateException("커넥션 풀이 죽었다"));
+
+        assertThat(saveRejectedAttemptExpectingError(request).getCode()).isEqualTo(Status.Code.INTERNAL);
     }
 }

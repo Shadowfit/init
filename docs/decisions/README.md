@@ -71,6 +71,7 @@
 ## 세션·도메인 로직
 
 - [2026-05-27-channel-and-youtube-review.md](./2026-05-27-channel-and-youtube-review.md) — 실시간 채널 심층분석 + 유튜브 좌표 활용 가능성 검토 기록 (미상)
+- [counted-reps-vs-scored-attempts.md](./counted-reps-vs-scored-attempts.md) — 센 반복만 채점하면 리포트가 좋게만 나온다 — 인정 반복·채점 시도 분리 (확정 — 2026-10-21 «2번»: 횟수는 원래 규칙, 미인정 시도를 세어 화면·리포트에 반영. «1번» 은 사람 판정과 충돌해 되돌림)
 - [feedback-238-review-triage.md](./feedback-238-review-triage.md) — PR #238 리뷰 지적 11건 분류·처리 (진행중 — 일부 반영, 수단·상한·지터 실측 등 열린 질문 다수)
 - [feedback-argmax-rules.md](./feedback-argmax-rules.md) — argmax 귀속 계산 규칙(#228) (진행중 — 결정은 났으나 정답지 기울기 실측 등 미검증 다수)
 - [feedback-batch-retransmission.md](./feedback-batch-retransmission.md) — 피드백 배치 재전송 설계(#193) (확정 — 버퍼·flush 규칙 구현 세부 확정)

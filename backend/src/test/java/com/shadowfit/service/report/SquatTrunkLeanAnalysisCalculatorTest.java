@@ -1,6 +1,7 @@
 package com.shadowfit.service.report;
 
 import com.shadowfit.dto.report.PoseFrameProjection;
+import com.shadowfit.dto.report.detailreport.RepTrunkLeanDto;
 import com.shadowfit.dto.report.detailreport.TrunkLeanAnalysisDto;
 import com.shadowfit.model.exercise.Category;
 import com.shadowfit.model.exercise.Exercise;
@@ -15,6 +16,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 /**
  * SquatTrunkLeanAnalysisCalculator 단위 테스트 (2026-09-28).
@@ -185,5 +187,51 @@ class SquatTrunkLeanAnalysisCalculatorTest {
                 frame(1, 30.0), frame(2, 55.0), frame(3, 32.0), frame(4, 56.0), frame(5, 60.0)));
 
         assertThat(result.getNarrative()).hasSizeLessThanOrEqualTo(4);
+    }
+
+    // ── 미인정 시도 (V35, 2026-10-21) ─────────────────────────────────────
+
+    private static com.shadowfit.dto.report.RejectedAttemptProjection rejected(int attemptNo, Double tilt, double timestampSec) {
+        return new com.shadowfit.dto.report.RejectedAttemptProjection(attemptNo,
+                com.shadowfit.model.exercise.RejectedAttemptReason.DEPTH_NOT_CONFIRMED, 40.0, 100.0, tilt, timestampSec);
+    }
+
+    @Test
+    @DisplayName("미인정 시도의 체간 기울기도 같은 공식으로 채점돼 시간순으로 섞이고, 세션 점수는 전체 평균 — 미상은 행 없음")
+    void rejected_scoredAndMerged() {
+        // 인정 30°·32° → 100·100 / 미인정 40° → 80, 미상 → 행 없음
+        TrunkLeanAnalysisDto result = calculator.calculate(squatSession,
+                List.of(frame(1, 30.0), frame(2, 32.0)),
+                List.of(rejected(1, 40.0, 1.5), rejected(2, null, 2.5)));
+
+        assertThat(result.getRepTrunkLeans())
+                .extracting(RepTrunkLeanDto::getRepNumber, RepTrunkLeanDto::getAttemptNumber,
+                        RepTrunkLeanDto::isCounted, RepTrunkLeanDto::getTiltScore)
+                .containsExactly(tuple(1, null, true, 100), tuple(null, 1, false, 80), tuple(2, null, true, 100));
+        assertThat(result.getRepTrunkLeans().get(1).getAvgTiltDeg()).isEqualTo(40.0);
+        assertThat(result.getTiltScore()).isEqualTo(93); // (100+80+100)/3
+        assertThat(result.getNarrative()).containsExactly("3번의 시도 모두 상체 자세를 잘 유지했어요.");
+    }
+
+    @Test
+    @DisplayName("미인정 시도만, 그것도 많이 숙였으면 세션 점수가 낮고 «전반적으로 숙여졌어요»")
+    void onlyRejected_badTilt() {
+        TrunkLeanAnalysisDto result = calculator.calculate(squatSession, List.of(), List.of(rejected(1, 55.0, 3.0)));
+
+        assertThat(result.getTiltScore()).isEqualTo(30);
+        assertThat(result.getNarrative()).singleElement().asString().startsWith("전반적으로 상체가 많이 숙여졌어요");
+    }
+
+    @Test
+    @DisplayName("미인정 시도가 없으면 예전 계산과 똑같다")
+    void noRejected_identicalToBefore() {
+        List<PoseFrameProjection> frames = List.of(frame(1, 30.0), frame(2, 44.0), frame(3, 28.0));
+
+        TrunkLeanAnalysisDto before = calculator.calculate(squatSession, frames);
+        TrunkLeanAnalysisDto after = calculator.calculate(squatSession, frames, List.of());
+
+        assertThat(after.getTiltScore()).isEqualTo(before.getTiltScore());
+        assertThat(after.getNarrative()).isEqualTo(before.getNarrative());
+        assertThat(after.getRepTrunkLeans()).extracting(RepTrunkLeanDto::getRepNumber).containsExactly(1, 2, 3);
     }
 }

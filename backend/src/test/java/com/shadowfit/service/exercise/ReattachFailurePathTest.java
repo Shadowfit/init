@@ -12,6 +12,7 @@ import com.shadowfit.model.member.SelectedPersona;
 import com.shadowfit.repository.exercise.ExerciseReferenceRepository;
 import com.shadowfit.repository.exercise.ExercisesRepository;
 import com.shadowfit.repository.exercise.PoseDataRepository;
+import com.shadowfit.repository.exercise.RejectedAttemptRepository;
 import com.shadowfit.repository.exercise.SessionRepository;
 import com.shadowfit.repository.member.MemberRepository;
 import com.shadowfit.repository.outbox.OutboxEventRepository;
@@ -59,6 +60,7 @@ class ReattachFailurePathTest {
     @Mock private ExerciseReferenceRepository referenceRepository;
     @Mock private PoseDataRepository poseDataRepository;
     @Mock private OutboxEventRepository outboxEventRepository;
+    @Mock private RejectedAttemptRepository rejectedAttemptRepository;
     private final SessionMetrics metrics = new SessionMetrics(new SimpleMeterRegistry());
     private CircuitBreakerRegistry circuitBreakerRegistry;
     private ExerciseServiceGrpc.ExerciseServiceBlockingStub blockingStub;
@@ -77,7 +79,8 @@ class ReattachFailurePathTest {
         // 실제 인스턴스를 조립해서 넘긴다 — 트랜잭션 경계는 단위 테스트의 관심사가 아니고,
         // 리포지토리가 전부 mock 이라 동작은 같다.
         ReattachRequestBuilder reattachRequestBuilder =
-                new ReattachRequestBuilder(sessionService, poseDataRepository, referenceRepository);
+                new ReattachRequestBuilder(sessionService, poseDataRepository, referenceRepository,
+                        rejectedAttemptRepository);
         service = new ExerciseAnalysisService(sessionRepository, exercisesRepository,
                 memberRepository, sessionService, referenceRepository,
                 circuitBreakerRegistry, metrics, outboxEventRepository, reattachRequestBuilder,
@@ -170,6 +173,40 @@ class ReattachFailurePathTest {
         assertThat(captor.getValue().getSessionId()).isEqualTo(SESSION_ID);
         assertThat(result.getRestoredRepCount()).isEqualTo(3);
         assertThat(result.getAnalyzerStateReset()).isTrue();
+    }
+
+    @Test
+    @DisplayName("저장된 미인정 시도 수가 initial_rejected_count 로 실리고 응답 restoredRejectedCount 로 돌아온다 — V35")
+    void 미인정_시도_수가_요청과_응답에_실린다() {
+        when(rejectedAttemptRepository.countBySessionId(SESSION_ID)).thenReturn(2L);
+        // already_active 여도 미인정 수는 요청에 실은 DB 값이다 — AI 재부착 응답에 그 필드가 없다.
+        when(blockingStub.reattachAnalysis(any(ReattachRequest.class)))
+                .thenReturn(ReattachResponse.newBuilder()
+                        .setSuccess(true).setSessionId(SESSION_ID).setRepCount(4).setAlreadyActive(true).build());
+
+        var result = service.reattachSession(SESSION_ID, MEMBER_ID);
+
+        org.mockito.ArgumentCaptor<ReattachRequest> captor =
+                org.mockito.ArgumentCaptor.forClass(ReattachRequest.class);
+        verify(blockingStub).reattachAnalysis(captor.capture());
+        assertThat(captor.getValue().getInitialRejectedCount()).isEqualTo(2);
+        assertThat(result.getRestoredRejectedCount()).isEqualTo(2);
+        assertThat(result.getRestoredRepCount()).isEqualTo(4);
+    }
+
+    @Test
+    @DisplayName("미인정 시도가 없으면 initial_rejected_count·restoredRejectedCount 는 0")
+    void 미인정_시도가_없으면_0() {
+        when(blockingStub.reattachAnalysis(any(ReattachRequest.class)))
+                .thenReturn(ReattachResponse.newBuilder().setSuccess(true).setSessionId(SESSION_ID).build());
+
+        var result = service.reattachSession(SESSION_ID, MEMBER_ID);
+
+        org.mockito.ArgumentCaptor<ReattachRequest> captor =
+                org.mockito.ArgumentCaptor.forClass(ReattachRequest.class);
+        verify(blockingStub).reattachAnalysis(captor.capture());
+        assertThat(captor.getValue().getInitialRejectedCount()).isZero();
+        assertThat(result.getRestoredRejectedCount()).isZero();
     }
 
     /**

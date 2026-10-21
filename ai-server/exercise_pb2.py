@@ -15,7 +15,7 @@ _sym_db = _symbol_database.Default()
 from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0e\x65xercise.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x93\x01\n\x0e\x45xtractRequest\x12\x13\n\x0b\x65xercise_id\x18\x01 \x01(\x03\x12\x13\n\x0byoutube_url\x18\x02 \x01(\t\x12)\n\x0f\x65xtracted_poses\x18\x03 \x03(\x0b\x32\x10.PoseDataRequest\x12\x15\n\rexercise_code\x18\x04 \x01(\t\x12\x15\n\rerror_message\x18\x05 \x01(\t\"b\n\x0f\x45xtractResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x13\n\x0b\x65xercise_id\x18\x02 \x01(\x03\x12)\n\x0f\x65xtracted_poses\x18\x03 \x03(\x0b\x32\x10.PoseDataRequest\"\xbd\x02\n\x0e\x41nalyzeRequest\x12\x13\n\x0b\x65xercise_id\x18\x01 \x01(\x03\x12\x12\n\nsession_id\x18\x03 \x01(\x03\x12\x18\n\x10reference_source\x18\x02 \x01(\t\x12)\n\x0freference_poses\x18\x04 \x03(\x0b\x32\x10.PoseDataRequest\x12\x0f\n\x07persona\x18\x05 \x01(\t\x12\x15\n\rsession_nonce\x18\x06 \x01(\t\x12\x15\n\rexercise_code\x18\x07 \x01(\t\x12\x1b\n\x13target_reps_per_set\x18\x08 \x01(\x05\x12\x13\n\x0btarget_sets\x18\t \x01(\x05\x12\x12\n\ndepth_mode\x18\n \x01(\t\x12\x1b\n\x13sync_good_threshold\x18\x0b \x01(\x01\x12\x1b\n\x13sync_warn_threshold\x18\x0c \x01(\x01\"\x9b\x01\n\x0f\x41nalyzeResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x12\n\nsession_id\x18\x02 \x01(\x03\x12\x13\n\x0b\x65xercise_id\x18\x03 \x01(\x03\x12.\n\nstart_time\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x1e\n\x06status\x18\x05 \x01(\x0e\x32\x0e.SessionStatus\"\xd4\x02\n\x0fReattachRequest\x12\x13\n\x0b\x65xercise_id\x18\x01 \x01(\x03\x12\x12\n\nsession_id\x18\x02 \x01(\x03\x12)\n\x0freference_poses\x18\x03 \x03(\x0b\x32\x10.PoseDataRequest\x12\x0f\n\x07persona\x18\x04 \x01(\t\x12\x19\n\x11initial_rep_count\x18\x05 \x01(\x05\x12\x13\n\x0b\x65lapsed_sec\x18\x06 \x01(\x01\x12\x15\n\rsession_nonce\x18\x07 \x01(\t\x12\x15\n\rexercise_code\x18\x08 \x01(\t\x12\x1b\n\x13target_reps_per_set\x18\t \x01(\x05\x12\x13\n\x0btarget_sets\x18\n \x01(\x05\x12\x12\n\ndepth_mode\x18\x0b \x01(\t\x12\x1b\n\x13sync_good_threshold\x18\x0c \x01(\x01\x12\x1b\n\x13sync_warn_threshold\x18\r \x01(\x01\"s\n\x10ReattachResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x12\n\nsession_id\x18\x02 \x01(\x03\x12\x11\n\trep_count\x18\x03 \x01(\x05\x12\x16\n\x0e\x61lready_active\x18\x04 \x01(\x08\x12\x0f\n\x07message\x18\x05 \x01(\t\"\xb8\x01\n\x16SessionCompleteRequest\x12\x12\n\nsession_id\x18\x01 \x01(\x03\x12\x12\n\ntotal_reps\x18\x02 \x01(\x05\x12\x15\n\ravg_sync_rate\x18\x03 \x01(\x01\x12\x15\n\rmax_sync_rate\x18\x04 \x01(\x01\x12\x15\n\rmin_sync_rate\x18\x05 \x01(\x01\x12\x17\n\x0f\x63\x61lories_burned\x18\x06 \x01(\x01\x12\x18\n\x10\x64ifficulty_level\x18\x07 \x01(\x05\"{\n\x17SessionCompleteResponse\x12\x12\n\nsession_id\x18\x01 \x01(\x03\x12\x1e\n\x06status\x18\x02 \x01(\x0e\x32\x0e.SessionStatus\x12,\n\x08\x65nd_time\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"\xe2\x01\n\x0fPoseDataRequest\x12\x15\n\rtimestamp_sec\x18\x01 \x01(\x01\x12\x19\n\x11joint_coordinates\x18\x02 \x01(\t\x12\x11\n\tsync_rate\x18\x03 \x01(\x01\x12\x18\n\x10\x66\x65\x65\x64\x62\x61\x63k_message\x18\x04 \x01(\t\x12\x12\n\nrep_number\x18\x05 \x01(\x05\x12\x1b\n\x13smoothed_knee_angle\x18\x06 \x01(\x01\x12\x10\n\x08lead_leg\x18\x07 \x01(\t\x12\x16\n\x0etorso_tilt_deg\x18\x08 \x01(\x01\x12\x15\n\rstagger_ratio\x18\t \x01(\x01\"O\n\x14PoseDataBatchRequest\x12\x12\n\nsession_id\x18\x01 \x01(\x03\x12#\n\tpose_data\x18\x02 \x03(\x0b\x32\x10.PoseDataRequest\"i\n\x10PoseDataResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x12\n\nsession_id\x18\x02 \x01(\x03\x12\x15\n\rtimestamp_sec\x18\x03 \x01(\x01\x12\x19\n\x11joint_coordinates\x18\x04 \x01(\t\"!\n\x0bStopRequest\x12\x12\n\nsession_id\x18\x01 \x01(\x03\"D\n\x0cStopResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x12\n\nsession_id\x18\x03 \x01(\x03\"\x89\x01\n\rFeedbackEvent\x12\x15\n\rfeedback_type\x18\x01 \x01(\t\x12\x1c\n\x14sync_rate_at_trigger\x18\x02 \x01(\x01\x12/\n\x0boccurred_at\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x12\n\nrep_number\x18\x04 \x01(\x05\"l\n\x14\x46\x65\x65\x64\x62\x61\x63kBatchRequest\x12\x12\n\nsession_id\x18\x01 \x01(\x03\x12\x0e\n\x06set_no\x18\x02 \x01(\x05\x12\x10\n\x08is_final\x18\x03 \x01(\x08\x12\x1e\n\x06\x65vents\x18\x04 \x03(\x0b\x32\x0e.FeedbackEvent\"@\n\x15\x46\x65\x65\x64\x62\x61\x63kBatchResponse\x12\x12\n\nsession_id\x18\x01 \x01(\x03\x12\x13\n\x0bsaved_count\x18\x02 \x01(\x05*;\n\rSessionStatus\x12\x0f\n\x0bIN_PROGRESS\x10\x00\x12\r\n\tCOMPLETED\x10\x01\x12\n\n\x06\x46\x41ILED\x10\x02\x32\xb2\x03\n\x0f\x45xerciseService\x12\x39\n\x14\x45xtractReferenceData\x12\x0f.ExtractRequest\x1a\x10.ExtractResponse\x12\x32\n\rStartAnalysis\x12\x0f.AnalyzeRequest\x1a\x10.AnalyzeResponse\x12\x37\n\x10ReattachAnalysis\x12\x10.ReattachRequest\x1a\x11.ReattachResponse\x12=\n\x11SavePoseDataBatch\x12\x15.PoseDataBatchRequest\x1a\x11.PoseDataResponse\x12\x45\n\x10\x43ompleteAnalysis\x12\x17.SessionCompleteRequest\x1a\x18.SessionCompleteResponse\x12+\n\x0cStopAnalysis\x12\x0c.StopRequest\x1a\r.StopResponse\x12\x44\n\x13ReportFeedbackBatch\x12\x15.FeedbackBatchRequest\x1a\x16.FeedbackBatchResponseB%\n\x12\x63om.shadowfit.grpcB\rExerciseProtoP\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0e\x65xercise.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x93\x01\n\x0e\x45xtractRequest\x12\x13\n\x0b\x65xercise_id\x18\x01 \x01(\x03\x12\x13\n\x0byoutube_url\x18\x02 \x01(\t\x12)\n\x0f\x65xtracted_poses\x18\x03 \x03(\x0b\x32\x10.PoseDataRequest\x12\x15\n\rexercise_code\x18\x04 \x01(\t\x12\x15\n\rerror_message\x18\x05 \x01(\t\"b\n\x0f\x45xtractResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x13\n\x0b\x65xercise_id\x18\x02 \x01(\x03\x12)\n\x0f\x65xtracted_poses\x18\x03 \x03(\x0b\x32\x10.PoseDataRequest\"\xbd\x02\n\x0e\x41nalyzeRequest\x12\x13\n\x0b\x65xercise_id\x18\x01 \x01(\x03\x12\x12\n\nsession_id\x18\x03 \x01(\x03\x12\x18\n\x10reference_source\x18\x02 \x01(\t\x12)\n\x0freference_poses\x18\x04 \x03(\x0b\x32\x10.PoseDataRequest\x12\x0f\n\x07persona\x18\x05 \x01(\t\x12\x15\n\rsession_nonce\x18\x06 \x01(\t\x12\x15\n\rexercise_code\x18\x07 \x01(\t\x12\x1b\n\x13target_reps_per_set\x18\x08 \x01(\x05\x12\x13\n\x0btarget_sets\x18\t \x01(\x05\x12\x12\n\ndepth_mode\x18\n \x01(\t\x12\x1b\n\x13sync_good_threshold\x18\x0b \x01(\x01\x12\x1b\n\x13sync_warn_threshold\x18\x0c \x01(\x01\"\x9b\x01\n\x0f\x41nalyzeResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x12\n\nsession_id\x18\x02 \x01(\x03\x12\x13\n\x0b\x65xercise_id\x18\x03 \x01(\x03\x12.\n\nstart_time\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x1e\n\x06status\x18\x05 \x01(\x0e\x32\x0e.SessionStatus\"\xf4\x02\n\x0fReattachRequest\x12\x13\n\x0b\x65xercise_id\x18\x01 \x01(\x03\x12\x12\n\nsession_id\x18\x02 \x01(\x03\x12)\n\x0freference_poses\x18\x03 \x03(\x0b\x32\x10.PoseDataRequest\x12\x0f\n\x07persona\x18\x04 \x01(\t\x12\x19\n\x11initial_rep_count\x18\x05 \x01(\x05\x12\x13\n\x0b\x65lapsed_sec\x18\x06 \x01(\x01\x12\x15\n\rsession_nonce\x18\x07 \x01(\t\x12\x15\n\rexercise_code\x18\x08 \x01(\t\x12\x1b\n\x13target_reps_per_set\x18\t \x01(\x05\x12\x13\n\x0btarget_sets\x18\n \x01(\x05\x12\x12\n\ndepth_mode\x18\x0b \x01(\t\x12\x1b\n\x13sync_good_threshold\x18\x0c \x01(\x01\x12\x1b\n\x13sync_warn_threshold\x18\r \x01(\x01\x12\x1e\n\x16initial_rejected_count\x18\x0e \x01(\x05\"s\n\x10ReattachResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x12\n\nsession_id\x18\x02 \x01(\x03\x12\x11\n\trep_count\x18\x03 \x01(\x05\x12\x16\n\x0e\x61lready_active\x18\x04 \x01(\x08\x12\x0f\n\x07message\x18\x05 \x01(\t\"\xb8\x01\n\x16SessionCompleteRequest\x12\x12\n\nsession_id\x18\x01 \x01(\x03\x12\x12\n\ntotal_reps\x18\x02 \x01(\x05\x12\x15\n\ravg_sync_rate\x18\x03 \x01(\x01\x12\x15\n\rmax_sync_rate\x18\x04 \x01(\x01\x12\x15\n\rmin_sync_rate\x18\x05 \x01(\x01\x12\x17\n\x0f\x63\x61lories_burned\x18\x06 \x01(\x01\x12\x18\n\x10\x64ifficulty_level\x18\x07 \x01(\x05\"{\n\x17SessionCompleteResponse\x12\x12\n\nsession_id\x18\x01 \x01(\x03\x12\x1e\n\x06status\x18\x02 \x01(\x0e\x32\x0e.SessionStatus\x12,\n\x08\x65nd_time\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"\xe2\x01\n\x0fPoseDataRequest\x12\x15\n\rtimestamp_sec\x18\x01 \x01(\x01\x12\x19\n\x11joint_coordinates\x18\x02 \x01(\t\x12\x11\n\tsync_rate\x18\x03 \x01(\x01\x12\x18\n\x10\x66\x65\x65\x64\x62\x61\x63k_message\x18\x04 \x01(\t\x12\x12\n\nrep_number\x18\x05 \x01(\x05\x12\x1b\n\x13smoothed_knee_angle\x18\x06 \x01(\x01\x12\x10\n\x08lead_leg\x18\x07 \x01(\t\x12\x16\n\x0etorso_tilt_deg\x18\x08 \x01(\x01\x12\x15\n\rstagger_ratio\x18\t \x01(\x01\"O\n\x14PoseDataBatchRequest\x12\x12\n\nsession_id\x18\x01 \x01(\x03\x12#\n\tpose_data\x18\x02 \x03(\x0b\x32\x10.PoseDataRequest\"\xc9\x01\n\x16RejectedAttemptRequest\x12\x12\n\nsession_id\x18\x01 \x01(\x03\x12\x16\n\x0e\x61ttempt_number\x18\x02 \x01(\x05\x12\x0e\n\x06reason\x18\x03 \x01(\t\x12\x11\n\tsync_rate\x18\x04 \x01(\x01\x12\x16\n\x0emin_knee_angle\x18\x05 \x01(\x01\x12\x16\n\x0etorso_tilt_deg\x18\x06 \x01(\x01\x12\x15\n\rtimestamp_sec\x18\x07 \x01(\x01\x12\x19\n\x11joint_coordinates\x18\x08 \x01(\t\"*\n\x17RejectedAttemptResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\"i\n\x10PoseDataResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x12\n\nsession_id\x18\x02 \x01(\x03\x12\x15\n\rtimestamp_sec\x18\x03 \x01(\x01\x12\x19\n\x11joint_coordinates\x18\x04 \x01(\t\"!\n\x0bStopRequest\x12\x12\n\nsession_id\x18\x01 \x01(\x03\"D\n\x0cStopResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t\x12\x12\n\nsession_id\x18\x03 \x01(\x03\"\x89\x01\n\rFeedbackEvent\x12\x15\n\rfeedback_type\x18\x01 \x01(\t\x12\x1c\n\x14sync_rate_at_trigger\x18\x02 \x01(\x01\x12/\n\x0boccurred_at\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x12\n\nrep_number\x18\x04 \x01(\x05\"l\n\x14\x46\x65\x65\x64\x62\x61\x63kBatchRequest\x12\x12\n\nsession_id\x18\x01 \x01(\x03\x12\x0e\n\x06set_no\x18\x02 \x01(\x05\x12\x10\n\x08is_final\x18\x03 \x01(\x08\x12\x1e\n\x06\x65vents\x18\x04 \x03(\x0b\x32\x0e.FeedbackEvent\"@\n\x15\x46\x65\x65\x64\x62\x61\x63kBatchResponse\x12\x12\n\nsession_id\x18\x01 \x01(\x03\x12\x13\n\x0bsaved_count\x18\x02 \x01(\x05*;\n\rSessionStatus\x12\x0f\n\x0bIN_PROGRESS\x10\x00\x12\r\n\tCOMPLETED\x10\x01\x12\n\n\x06\x46\x41ILED\x10\x02\x32\xfc\x03\n\x0f\x45xerciseService\x12\x39\n\x14\x45xtractReferenceData\x12\x0f.ExtractRequest\x1a\x10.ExtractResponse\x12\x32\n\rStartAnalysis\x12\x0f.AnalyzeRequest\x1a\x10.AnalyzeResponse\x12\x37\n\x10ReattachAnalysis\x12\x10.ReattachRequest\x1a\x11.ReattachResponse\x12=\n\x11SavePoseDataBatch\x12\x15.PoseDataBatchRequest\x1a\x11.PoseDataResponse\x12\x45\n\x10\x43ompleteAnalysis\x12\x17.SessionCompleteRequest\x1a\x18.SessionCompleteResponse\x12+\n\x0cStopAnalysis\x12\x0c.StopRequest\x1a\r.StopResponse\x12\x44\n\x13ReportFeedbackBatch\x12\x15.FeedbackBatchRequest\x1a\x16.FeedbackBatchResponse\x12H\n\x13SaveRejectedAttempt\x12\x17.RejectedAttemptRequest\x1a\x18.RejectedAttemptResponseB%\n\x12\x63om.shadowfit.grpcB\rExerciseProtoP\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -23,8 +23,8 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'exercise_pb2', _globals)
 if _descriptor._USE_C_DESCRIPTORS == False:
   _globals['DESCRIPTOR']._options = None
   _globals['DESCRIPTOR']._serialized_options = b'\n\022com.shadowfit.grpcB\rExerciseProtoP\001'
-  _globals['_SESSIONSTATUS']._serialized_start=2389
-  _globals['_SESSIONSTATUS']._serialized_end=2448
+  _globals['_SESSIONSTATUS']._serialized_start=2669
+  _globals['_SESSIONSTATUS']._serialized_end=2728
   _globals['_EXTRACTREQUEST']._serialized_start=52
   _globals['_EXTRACTREQUEST']._serialized_end=199
   _globals['_EXTRACTRESPONSE']._serialized_start=201
@@ -34,29 +34,33 @@ if _descriptor._USE_C_DESCRIPTORS == False:
   _globals['_ANALYZERESPONSE']._serialized_start=622
   _globals['_ANALYZERESPONSE']._serialized_end=777
   _globals['_REATTACHREQUEST']._serialized_start=780
-  _globals['_REATTACHREQUEST']._serialized_end=1120
-  _globals['_REATTACHRESPONSE']._serialized_start=1122
-  _globals['_REATTACHRESPONSE']._serialized_end=1237
-  _globals['_SESSIONCOMPLETEREQUEST']._serialized_start=1240
-  _globals['_SESSIONCOMPLETEREQUEST']._serialized_end=1424
-  _globals['_SESSIONCOMPLETERESPONSE']._serialized_start=1426
-  _globals['_SESSIONCOMPLETERESPONSE']._serialized_end=1549
-  _globals['_POSEDATAREQUEST']._serialized_start=1552
-  _globals['_POSEDATAREQUEST']._serialized_end=1778
-  _globals['_POSEDATABATCHREQUEST']._serialized_start=1780
-  _globals['_POSEDATABATCHREQUEST']._serialized_end=1859
-  _globals['_POSEDATARESPONSE']._serialized_start=1861
-  _globals['_POSEDATARESPONSE']._serialized_end=1966
-  _globals['_STOPREQUEST']._serialized_start=1968
-  _globals['_STOPREQUEST']._serialized_end=2001
-  _globals['_STOPRESPONSE']._serialized_start=2003
-  _globals['_STOPRESPONSE']._serialized_end=2071
-  _globals['_FEEDBACKEVENT']._serialized_start=2074
-  _globals['_FEEDBACKEVENT']._serialized_end=2211
-  _globals['_FEEDBACKBATCHREQUEST']._serialized_start=2213
-  _globals['_FEEDBACKBATCHREQUEST']._serialized_end=2321
-  _globals['_FEEDBACKBATCHRESPONSE']._serialized_start=2323
-  _globals['_FEEDBACKBATCHRESPONSE']._serialized_end=2387
-  _globals['_EXERCISESERVICE']._serialized_start=2451
-  _globals['_EXERCISESERVICE']._serialized_end=2885
+  _globals['_REATTACHREQUEST']._serialized_end=1152
+  _globals['_REATTACHRESPONSE']._serialized_start=1154
+  _globals['_REATTACHRESPONSE']._serialized_end=1269
+  _globals['_SESSIONCOMPLETEREQUEST']._serialized_start=1272
+  _globals['_SESSIONCOMPLETEREQUEST']._serialized_end=1456
+  _globals['_SESSIONCOMPLETERESPONSE']._serialized_start=1458
+  _globals['_SESSIONCOMPLETERESPONSE']._serialized_end=1581
+  _globals['_POSEDATAREQUEST']._serialized_start=1584
+  _globals['_POSEDATAREQUEST']._serialized_end=1810
+  _globals['_POSEDATABATCHREQUEST']._serialized_start=1812
+  _globals['_POSEDATABATCHREQUEST']._serialized_end=1891
+  _globals['_REJECTEDATTEMPTREQUEST']._serialized_start=1894
+  _globals['_REJECTEDATTEMPTREQUEST']._serialized_end=2095
+  _globals['_REJECTEDATTEMPTRESPONSE']._serialized_start=2097
+  _globals['_REJECTEDATTEMPTRESPONSE']._serialized_end=2139
+  _globals['_POSEDATARESPONSE']._serialized_start=2141
+  _globals['_POSEDATARESPONSE']._serialized_end=2246
+  _globals['_STOPREQUEST']._serialized_start=2248
+  _globals['_STOPREQUEST']._serialized_end=2281
+  _globals['_STOPRESPONSE']._serialized_start=2283
+  _globals['_STOPRESPONSE']._serialized_end=2351
+  _globals['_FEEDBACKEVENT']._serialized_start=2354
+  _globals['_FEEDBACKEVENT']._serialized_end=2491
+  _globals['_FEEDBACKBATCHREQUEST']._serialized_start=2493
+  _globals['_FEEDBACKBATCHREQUEST']._serialized_end=2601
+  _globals['_FEEDBACKBATCHRESPONSE']._serialized_start=2603
+  _globals['_FEEDBACKBATCHRESPONSE']._serialized_end=2667
+  _globals['_EXERCISESERVICE']._serialized_start=2731
+  _globals['_EXERCISESERVICE']._serialized_end=3239
 # @@protoc_insertion_point(module_scope)

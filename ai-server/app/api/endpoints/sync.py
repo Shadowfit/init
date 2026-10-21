@@ -45,6 +45,8 @@ async def calculate_sync_rate(req: SyncRequest) -> SyncResponse:
     ⚠️ 호출자 없음 (#293). 상태가 없다 — 세션도 rep 도 모르고 넣은 두 배열만 비교한다.
     실시간 경로는 `squat_analyzer` → gRPC 를 쓴다.
     """
+    # 요청에 프레임 시각이 없다 — user_times=None 이면 궤적 항이 사용자 열을 ~3fps 등간격으로 보고 편다
+    # (dtw_calculator.densify). dtw_distance 는 sync_rate 에 실제로 들어간 궤적 항과 같은 값이다(2026-10-21).
     sync_rate = compute_sync_rate(req.reference_angles, req.user_angles)
     dtw_distance = compute_dtw_distance(req.reference_angles, req.user_angles)
 

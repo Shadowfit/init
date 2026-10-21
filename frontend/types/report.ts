@@ -1,5 +1,6 @@
 // 백엔드 dto/report/* 와 1:1 매칭되는 프론트 타입.
 // 필드명/형태는 Spring DTO 기준 (camelCase JSON 직렬화 그대로).
+import type { RejectReason } from './pose';
 
 /* ── 달력 (record/CalendarMainResponseDto, CalendarDayDto) ── */
 export interface CalendarDay {
@@ -62,12 +63,23 @@ export interface WorstSection {
   reason: string;
 }
 
-/** 회차(rep) 하나의 싱크로율 — 추이 그래프의 한 점 */
+/**
+ * 회차(rep) 하나의 싱크로율 — 추이 그래프의 한 점.
+ * 2026-10-21 부터 «미인정 시도» 도 같은 목록에 시간순으로 섞여 온다(counted=false, repNumber=null, attemptNumber=k).
+ * 구버전 서버·옛 리포트는 counted 가 없다 → 인정 회차로 본다.
+ */
 export interface RepSyncRate {
-  repNumber: number;               // 1부터, 세션 전체 기준 연번
+  repNumber: number | null;        // 1부터, 세션 전체 기준 연번. 미인정 시도는 null
   syncRate: number;                // 소수 1자리
   timeStamp: string;               // "01:15" — 그 회차의 중앙 프레임
+  counted?: boolean;
+  attemptNumber?: number | null;   // 미인정 시도 번호(1부터)
+  rejectReason?: RejectReason | null;
+  timestampSec?: number | null;
 }
+
+/** 인정 회차인가 — counted 가 없으면(구버전) 인정으로 본다 */
+export const isCounted = (r: { counted?: boolean }) => r.counted !== false;
 
 export interface ExerciseSyncRate {
   exerciseId: number;
@@ -79,7 +91,8 @@ export interface ExerciseSyncRate {
 export interface ComparisonWithPrevious {
   syncRateDiff: number;
   workoutMinutesDiff: number;
-  caloriesDiff: number;
+  // 둘 중 한쪽이라도 칼로리를 못 잰 세션(체중 미입력)이면 null
+  caloriesDiff: number | null;
 }
 
 /* ── 스쿼트 깊이 모드 (2026-09-21) ── */
@@ -94,9 +107,11 @@ export const DEPTH_GRADE_LABEL: Record<SquatDepthGrade, string> = {
   POOR: '깊이를 다시 확인해보세요',
 };
 
-/** 회차(rep) 하나의 깊이 정확도 — RepSyncRate의 깊이 버전 */
+/** 회차(rep) 하나의 깊이 정확도 — RepSyncRate의 깊이 버전. 미인정 시도도 counted=false 로 섞여 온다 */
 export interface RepDepth {
-  repNumber: number;
+  repNumber: number | null;
+  counted?: boolean;
+  attemptNumber?: number | null;
   minKneeAngle: number;
   depthScore: number;              // 0-100
   timeStamp: string;                // "01:15" — 가장 깊었던 프레임
@@ -111,6 +126,11 @@ export interface RepDepth {
  */
 export interface SquatDepthAnalysis {
   depthMode: SquatDepthMode;
+  /**
+   * FULL 모드 만점 기준 — 이 무릎 각도 이하로 앉으면 그 회차 100점, 1° 얕을 때마다 4점 감점(2026-10-21).
+   * 기준 동작(3D 시범)의 최저 무릎 + 허용 5° 라 싱크로율과 같은 잣대다. HALF·구버전 서버는 null/없음.
+   */
+  targetKneeDeg?: number | null;
   depthScore: number;              // 세션 평균, 0-100
   depthGrade: SquatDepthGrade;
   repDepths: RepDepth[];
@@ -152,9 +172,11 @@ export interface LungeDepthAnalysis {
 // 깊이 타입과 달리 이 축은 두 운동이 같은 계산(rep 평균 체간 기울기)을 쓴다.
 export type TrunkLeanGrade = SquatDepthGrade; // 등급 5단계 이름을 그대로 공유
 
-/** 회차(rep) 하나의 체간 자세 정확도. */
+/** 회차(rep) 하나의 체간 자세 정확도. 미인정 시도도 counted=false 로 섞여 온다 */
 export interface RepTrunkLean {
-  repNumber: number;
+  repNumber: number | null;
+  counted?: boolean;
+  attemptNumber?: number | null;
   avgTiltDeg: number;
   tiltScore: number;                // 0-100
   timeStamp: string;                 // "01:15" — 그 rep의 첫 프레임 기준
@@ -213,11 +235,16 @@ export interface SessionReportResponse {
   syncGoodThreshold?: number | null;
   syncWarnThreshold?: number | null;
   sets: SessionSet[];
+  // 평균 싱크로율 — 2026-10-21 부터 인정 회차 + 미인정 시도 «모든 시도» 평균
   avgSyncRate: number;
   scoreAvailable?: boolean;
-  totalReps: number;
+  totalReps: number;               // 인정 횟수(세트·목표의 기준)
+  // 미인정 시도 수와 사유별 개수(2026-10-21). 구버전 서버·옛 리포트는 없음 → 0
+  rejectedReps?: number | null;
+  rejectedRepsByReason?: Partial<Record<RejectReason, number>> | null;
   workoutMinutes: number;
-  caloriesBurned: number;
+  // 추정 소모 칼로리(kcal) — 백엔드가 체중 × 운동 시간 × MET 3.0 으로 계산(2026-10-21). 체중을 모르면 null
+  caloriesBurned: number | null;
   aiSafetyReport: string | null;
   worstSection: WorstSection | null;
   /**

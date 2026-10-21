@@ -163,6 +163,24 @@ class WeeklySummaryBLayerRaceTest extends MySqlContainerSupport {
     }
 
     @Test
+    @DisplayName("미인정 시도 점(repNumber null, 2026-10-21)은 회차 곡선에서 빠진다 — NULL 회차 줄·NPE 없이")
+    void 미인정_시도는_회차_곡선에서_빠진다() {
+        // 세션 A: 1회차 90, 미인정 20, 2회차 70 / 세션 B: 1회차 80
+        seedWithReport(member, FROM.withHour(9), worst(2), List.of(
+                RepSyncRateDto.counted(1, 90.0, "00:01", 1.0),
+                RepSyncRateDto.rejected(1, 20.0, "00:03", 3.0, "DEPTH_NOT_CONFIRMED"),
+                RepSyncRateDto.counted(2, 70.0, "00:05", 5.0)));
+        seedWithReport(member, FROM.plusDays(1).withHour(9), worst(1), List.of(rep(1, 80.0)));
+
+        List<RepCurvePointDto> curve = repository.repCurveBetween(member.getId(), FROM, TO);
+
+        assertThat(curve).extracting(RepCurvePointDto::repNumber).containsExactly(1, 2);
+        assertThat(curve.get(0).avgSyncRate()).isEqualByComparingTo("85.00");
+        assertThat(curve.get(0).sampleCount()).isEqualTo(2);
+        assertThat(curve.get(1).avgSyncRate()).isEqualByComparingTo("70.00");
+    }
+
+    @Test
     @DisplayName("기간 밖 세션의 회차는 곡선에 안 섞인다")
     void 회차_곡선_기간_필터() {
         seedWithReport(member, FROM.withHour(9), worst(1), List.of(rep(1, 90.0)));

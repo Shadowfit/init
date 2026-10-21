@@ -12,12 +12,16 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from app.grpc import spring_client
 from app.core.lunge_analyzer import LungeState
 from app.core.squat_counter import SquatCounter
 from app.models.pose import Landmark
 from app.utils.constants import DEFAULT_SYNC_GOOD, DEFAULT_SYNC_WARN
+
+if TYPE_CHECKING:  # 타입 표기 전용 — 상태 모듈이 런타임에 분석 모듈을 끌어오지 않게 한다
+    from app.core.squat_analyzer import RejectedAttemptEvent
 
 logger = logging.getLogger(__name__)
 
@@ -158,6 +162,13 @@ class SessionState:
 
     # 분석기 내부 상태 (StreamingSquatAnalyzer가 관리)
     rep_count: int = 0
+    # 스쿼트 «미인정 시도» 수 (2026-10-21, SquatCounter.rejected_count 의 사본) — 내려갔다 올라왔지만 1회로
+    # 인정되지 않은 시도. rep_count 와 같은 규약: 재부착 때 Spring 이 저장한 행 수(initial_rejected_count)에서
+    # 시작하고, 횟수·세트·CompleteAnalysis 합계에는 절대 안 들어간다. 응답의 rejected_count 와 미인정 번호가 이 값이다.
+    rejected_count: int = 0
+    # 이번 프레임에서 난 미인정 시도의 요약(squat_analyzer.RejectedAttemptEvent) — process_frame 이 채우고
+    # pose.py 가 같은 락 안에서 꺼내(None 으로 되돌려) 락 밖에서 Spring 에 보낸다.
+    pending_rejected_attempt: RejectedAttemptEvent | None = None
     lunge_state: LungeState | None = None
     squat_counter: SquatCounter | None = None
     rep_state: str = "waiting_for_standing"
@@ -356,6 +367,7 @@ class SessionStateRegistry:
         depth_mode: str = "FULL",
         sync_good_threshold: float = DEFAULT_SYNC_GOOD,
         sync_warn_threshold: float = DEFAULT_SYNC_WARN,
+        initial_rejected_count: int = 0,
     ) -> SessionState:
         with self._lock:
             state = SessionState(
@@ -365,6 +377,7 @@ class SessionStateRegistry:
                 persona=persona,
                 reference_angles=reference_angles,
                 rep_count=initial_rep_count,
+                rejected_count=initial_rejected_count,
                 session_nonce=session_nonce,
                 depth_mode=depth_mode,
                 sync_good_threshold=sync_good_threshold,
@@ -385,6 +398,7 @@ class SessionStateRegistry:
         depth_mode: str = "FULL",
         sync_good_threshold: float = DEFAULT_SYNC_GOOD,
         sync_warn_threshold: float = DEFAULT_SYNC_WARN,
+        initial_rejected_count: int = 0,
     ) -> tuple[SessionState, bool]:
         """재부착 전용. 상태가 이미 있으면 **보존하고** 그대로 돌려준다.
 
@@ -423,6 +437,8 @@ class SessionStateRegistry:
                 persona=persona,
                 reference_angles=reference_angles,
                 rep_count=initial_rep_count,
+                # rep_count 와 같은 길 — 미인정 번호·화면 카운트를 Spring 이 저장한 행 수에서 잇는다.
+                rejected_count=initial_rejected_count,
                 session_nonce=session_nonce,
                 depth_mode=depth_mode,
                 sync_good_threshold=sync_good_threshold,

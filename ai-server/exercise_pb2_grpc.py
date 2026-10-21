@@ -50,6 +50,11 @@ class ExerciseServiceStub(object):
                 request_serializer=exercise__pb2.FeedbackBatchRequest.SerializeToString,
                 response_deserializer=exercise__pb2.FeedbackBatchResponse.FromString,
                 )
+        self.SaveRejectedAttempt = channel.unary_unary(
+                '/ExerciseService/SaveRejectedAttempt',
+                request_serializer=exercise__pb2.RejectedAttemptRequest.SerializeToString,
+                response_deserializer=exercise__pb2.RejectedAttemptResponse.FromString,
+                )
 
 
 class ExerciseServiceServicer(object):
@@ -111,6 +116,16 @@ class ExerciseServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def SaveRejectedAttempt(self, request, context):
+        """AI → Spring: «미인정 시도» 1건 (2026-10-21). 내려갔다 올라왔지만 1회로 인정되지 않은 시도(바닥 자세 미확인·런지 자세)
+        를 리포트에 남기려고 보낸다 — 횟수·세트에는 안 들어가고 점수·리포트에만 들어간다.
+        SavePoseDataBatch 에 플래그를 붙이지 않고 RPC 를 따로 둔 이유: 구버전 Spring 은 모르는 필드를 무시하므로
+        플래그 방식이면 미인정 프레임이 정상 반복(pose_data)으로 저장된다. 별도 RPC 면 구버전은 UNIMPLEMENTED 로 거절할 뿐이다.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_ExerciseServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -148,6 +163,11 @@ def add_ExerciseServiceServicer_to_server(servicer, server):
                     servicer.ReportFeedbackBatch,
                     request_deserializer=exercise__pb2.FeedbackBatchRequest.FromString,
                     response_serializer=exercise__pb2.FeedbackBatchResponse.SerializeToString,
+            ),
+            'SaveRejectedAttempt': grpc.unary_unary_rpc_method_handler(
+                    servicer.SaveRejectedAttempt,
+                    request_deserializer=exercise__pb2.RejectedAttemptRequest.FromString,
+                    response_serializer=exercise__pb2.RejectedAttemptResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -276,5 +296,22 @@ class ExerciseService(object):
         return grpc.experimental.unary_unary(request, target, '/ExerciseService/ReportFeedbackBatch',
             exercise__pb2.FeedbackBatchRequest.SerializeToString,
             exercise__pb2.FeedbackBatchResponse.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def SaveRejectedAttempt(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/ExerciseService/SaveRejectedAttempt',
+            exercise__pb2.RejectedAttemptRequest.SerializeToString,
+            exercise__pb2.RejectedAttemptResponse.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)

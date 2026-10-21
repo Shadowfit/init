@@ -133,6 +133,13 @@ class PoseResponse(BaseModel):
     message: str | None = None
     rep_count: int | None = None
     rep_completed: bool = False
+    # 스쿼트 «미인정 시도» 수 (2026-10-21) — 내려갔다 올라왔지만 1회로 인정되지 않은 시도. 앱이 rep_count 와 함께
+    # «인정 N회 · 미인정 M회» 로 보여준다. 횟수·세트·목표에는 안 들어가고 리포트 점수에만 쓰인다. 스쿼트가 아니면 0.
+    rejected_count: int = 0
+    # 이번 프레임에서 시도가 미인정됐을 때만 사유 코드 — "DEPTH_NOT_CONFIRMED"(바닥 자세 미확인) | "SPLIT_STANCE"
+    # (런지 자세). 사람이 읽을 안내 문구는 message 에 온다. Literal 로 묶지 않은 것은 사유가 늘었을 때 응답 검증이
+    # 그 프레임을 500 으로 깨뜨리지 않게 하려는 것이다.
+    rejected_reason: str | None = None
     sync_rate: float | None = None
     lunge: LungeProgress | None = None
     squat: SquatProgress | None = None

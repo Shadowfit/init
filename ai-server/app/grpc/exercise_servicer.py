@@ -316,6 +316,7 @@ class ExerciseServicer(exercise_pb2_grpc.ExerciseServiceServicer):
 
         되살리는 것 / 못 되살리는 것:
           - 되살림: rep 카운트(Spring 이 pose_data 의 MAX(rep_number) 로 계산해 주입),
+                    스쿼트 미인정 시도 수(initial_rejected_count, Spring 이 저장한 행 수, 2026-10-21),
                     기준 각도·persona·exercise (원래 Spring 이 DB 에서 읽어 넣어주던 것)
           - 못 되살림: rep_state, frame_index, 스무딩 이력, 진행 중이던 rep 의 프레임
             → 재개 직후 몇 프레임 동안 자세 판정이 흔들릴 수 있다. 감수하기로 한 결정이며
@@ -324,10 +325,12 @@ class ExerciseServicer(exercise_pb2_grpc.ExerciseServiceServicer):
         """
         session_id = request.session_id
         logger.info(
-            "[Spring → AI] ReattachAnalysis 수신 (session=%s, exercise=%s, initial_rep_count=%d)",
+            "[Spring → AI] ReattachAnalysis 수신 (session=%s, exercise=%s, initial_rep_count=%d, "
+            "initial_rejected_count=%d)",
             session_id,
             request.exercise_id,
             request.initial_rep_count,
+            request.initial_rejected_count,
         )
 
         # StartAnalysis 와 같은 판정이지만 **거절 방식이 다르다**(이슈 #147).
@@ -393,6 +396,10 @@ class ExerciseServicer(exercise_pb2_grpc.ExerciseServiceServicer):
             depth_mode=depth_mode,
             sync_good_threshold=sync_good,
             sync_warn_threshold=sync_warn,
+            # 미인정 시도 수(2026-10-21) — rep 축과 같은 방식으로 Spring 이 저장한 행 수에서 잇는다. 구버전 Spring 은
+            # 이 필드를 몰라 0 을 보내는데, 그런 Spring 은 SaveRejectedAttempt 도 몰라(UNIMPLEMENTED) 저장된 행이
+            # 없으니 0 이 맞다.
+            initial_rejected_count=max(0, request.initial_rejected_count),
         )
 
         if already_active:
@@ -411,10 +418,11 @@ class ExerciseServicer(exercise_pb2_grpc.ExerciseServiceServicer):
             # 같은 이유다.
             state.elapsed_offset_sec = max(0.0, request.elapsed_sec)
             logger.info(
-                "세션 %s 재부착 완료 — rep %d · 경과 %.1f초 부터 이어서 셈 "
+                "세션 %s 재부착 완료 — rep %d · 미인정 %d · 경과 %.1f초 부터 이어서 셈 "
                 "(분석기 내부 상태는 초기화)",
                 session_id,
                 state.rep_count,
+                state.rejected_count,
                 state.elapsed_offset_sec,
             )
 

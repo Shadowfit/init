@@ -3,6 +3,7 @@ package com.shadowfit.service.exercise;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shadowfit.dto.report.PoseFrameProjection;
+import com.shadowfit.dto.report.RejectedAttemptProjection;
 import com.shadowfit.dto.report.detailreport.LungeDepthAnalysisDto;
 import com.shadowfit.dto.report.detailreport.LungeStepLengthAnalysisDto;
 import com.shadowfit.dto.report.detailreport.RepSyncRateDto;
@@ -21,6 +22,7 @@ import com.shadowfit.model.outbox.OutboxEvent;
 import com.shadowfit.model.report.Report;
 import com.shadowfit.repository.exercise.PoseDataRepository;
 import com.shadowfit.repository.exercise.PoseDataRepository.RepSummaryProjection;
+import com.shadowfit.repository.exercise.RejectedAttemptRepository;
 import com.shadowfit.repository.exercise.SessionSetRepository;
 import com.shadowfit.repository.exercise.SessionRepository;
 import com.shadowfit.repository.group.GroupMemberRepository;
@@ -66,6 +68,8 @@ public class SessionCompletionTx {
     private final GroupMemberRepository groupMemberRepository;
     private final OutboxEventRepository outboxEventRepository;
     private final SessionSetRepository sessionSetRepository;
+    private final CalorieEstimator calorieEstimator;
+    private final RejectedAttemptRepository rejectedAttemptRepository;
 
     @Transactional
     public void applyComplete(SessionCompleteRequest request) {
@@ -75,7 +79,16 @@ public class SessionCompletionTx {
         // 싱크 통계는 AI 가 보낸 값을 쓰지 않고 pose_data 에서 직접 집계한다 (이슈 #75).
         // 세트 요약(V26)도 같은 rep 목록에서 나온다 — 한 번 읽어 둘 다 만든다.
         List<RepSummaryProjection> reps = poseDataRepository.findRepSummaries(session.getId(), session.getStartTime());
-        SyncStats sync = resolveSyncStats(session, reps, request);
+        // «미인정 시도»(V35) — 싱크 통계와 리포트에 들어가고 세트·횟수에는 안 들어간다. 한 번 읽어 둘 다 쓴다.
+        List<RejectedAttemptProjection> rejectedAttempts = rejectedAttemptRepository.findSummariesBySessionId(session.getId());
+        SyncStats sync = resolveSyncStats(session, reps, rejectedAttempts, request);
+
+        // 칼로리도 AI 값(request.getCaloriesBurned())을 쓰지 않는다 — AI 는 체중을 몰라 늘 0.0 을 보낸다
+        // (exercise_servicer.py «칼로리 계산은 추후»). 체중을 가진 여기서 시작~완료 시각으로 추정하고,
+        // 체중이 없으면 null(«측정 안 됨»)이다(CalorieEstimator). 완료 시각을 먼저 정해 두 값이 같은 구간을 보게 한다.
+        LocalDateTime completedAt = LocalDateTime.now();
+        java.math.BigDecimal calories = calorieEstimator.estimate(
+                session.getMember().getWeight(), session.getStartTime(), completedAt);
 
         // 멱등성: FastAPI가 응답 유실로 같은 결과를 재전송한 경우(2-1, 2-2) 첫 완료 시각/기록을 보존하고
         // 즉시 종료한다. 판정은 Session.complete 안에만 있다 — 여기서 미리 한 번 더 보면 위 집계
@@ -84,8 +97,8 @@ public class SessionCompletionTx {
         boolean transitioned = session.complete(
                 request.getTotalReps(),
                 sync,
-                java.math.BigDecimal.valueOf(request.getCaloriesBurned()),
-                LocalDateTime.now());
+                calories,
+                completedAt);
         if (!transitioned) {
             return;
         }
@@ -94,16 +107,18 @@ public class SessionCompletionTx {
 
         // 세트 표는 첫 완료 전이에서만 채워진다 — 위 멱등 가드 뒤라 재전송에 중복 INSERT 가 없다.
         // targetRepsPerSet 이 없는(세트 도입 전) 세션은 빈 목록이라 행이 안 생기고, 화면은 «1세트 x N회» 로 폴백한다.
+        // 인정 반복(reps)만 넘긴다 — 세트 경계는 «인정 횟수가 목표에 닿는 순간» 이고 세트 평균도 인정 반복의 것이다(2026-10-21).
         List<SessionSet> sets = SessionSetAssembler.assemble(session, reps);
         if (!sets.isEmpty()) {
             sessionSetRepository.saveAll(sets);
         }
 
         int exerciseMinutes = (int) java.time.Duration.between(session.getStartTime(), session.getEndTime()).toMinutes();
+        // 칼로리가 null(체중 모름)이면 일지에는 0 을 더한다 — accumulateStats 가 접는다.
         dailyLogService.accumulateStats(session.getMember().getId(), session.getStartTime().toLocalDate(),
-                exerciseMinutes, java.math.BigDecimal.valueOf(request.getCaloriesBurned()));
+                exerciseMinutes, calories);
 
-        precomputeReport(session);
+        precomputeReport(session, rejectedAttempts);
 
         enqueueGroupFeed(session);
 
@@ -153,8 +168,16 @@ public class SessionCompletionTx {
      *
      * <p>rep 가중 평균을 유지하는 이유는 {@code findRepSummaries} 주석 참고 — 다운샘플 때문에
      * 프레임 단위로 평균 내면 값이 달라진다.
+     *
+     * <p>🔵 <b>2026-10-21 — «평균 싱크로율 = 모든 시도».</b> 인정 반복(rep 하나에 값 하나)에 더해 «미인정 시도»(V35, 시도
+     * 하나에 값 하나)를 같은 무게로 넣어 avg/max/min 을 낸다. 판정 기준을 엄격하게 둔 채 미달 시도를 빼고 평균을 내면
+     * «좋은 자세만 세니 점수는 무조건 좋다» 가 되기 때문이다(docs/decisions/counted-reps-vs-scored-attempts.md, 사용자 결정).
+     * {@code total_reps}·세트는 그대로 인정 반복만이다. 그래서 이 날짜 이후 세션의 {@code avg_sync_rate} 는 «센 반복의 평균» 이
+     * 아니라 «시도의 평균» 이고, 그 전 세션과 비교하면(지난번 대비·주간 평균) 미인정 시도가 있던 만큼 낮게 나온다.
+     * 미인정 시도가 없는 세션은 예전과 값이 같다.
      */
-    private SyncStats resolveSyncStats(Session session, List<RepSummaryProjection> reps, SessionCompleteRequest request) {
+    private SyncStats resolveSyncStats(Session session, List<RepSummaryProjection> reps,
+                                       List<RejectedAttemptProjection> rejectedAttempts, SessionCompleteRequest request) {
         // 횟수만 세는 종목은 sync_rate 자체가 없다 — AI 가 보낸 0.0 을 «싱크로율 0%» 로 저장하지 않도록 먼저 접는다.
         // (세트 표는 같은 rep 목록으로 따로 만들어지므로 여기서 통계를 비워도 세트 경계에는 영향이 없다.)
         if (ExerciseAnalysisCapabilities.isCountOnly(session)) {
@@ -166,22 +189,28 @@ public class SessionCompletionTx {
                 .filter(java.util.Objects::nonNull)
                 .toList();
 
-        if (repAverages.isEmpty()) {
-            // rep 단위로 셀 수 있는 프레임이 없다. 두 경우가 섞여 있고 처리가 다르다.
-            if (request.getTotalReps() > 0 && request.getAvgSyncRate() > 0) {
-                // (1) AI 는 rep 을 셌는데 rep_number 가 안 남았다 = rep_number 를 안 보내는 구버전 AI.
-                // proto3 기본값 0 으로 들어와 위 쿼리(repNumber > 0)에 안 걸린다. 배포 순서를 안 맞춰도
-                // 깨지지 않게 하려던 설계인데(PoseDataService 주석), 여기서 null 로 덮으면 그 구간에
-                // 통계가 통째로 사라진다. 우리가 더 잘 계산할 수 없으므로 AI 가 보낸 값을 쓴다.
-                return SyncStats.of(request.getAvgSyncRate(), request.getMaxSyncRate(), request.getMinSyncRate());
-            }
-            // (2) 측정된 rep 이 정말 없다(0회 세션 등). 이때 AI 는 0.0 을 보내는데 그걸 저장하면 안 된다.
-            return SyncStats.none();
+        if (repAverages.isEmpty() && request.getTotalReps() > 0 && request.getAvgSyncRate() > 0) {
+            // (1) AI 는 rep 을 셌는데 rep_number 가 안 남았다 = rep_number 를 안 보내는 구버전 AI.
+            // proto3 기본값 0 으로 들어와 위 쿼리(repNumber > 0)에 안 걸린다. 배포 순서를 안 맞춰도
+            // 깨지지 않게 하려던 설계인데(PoseDataService 주석), 여기서 null 로 덮으면 그 구간에
+            // 통계가 통째로 사라진다. 우리가 더 잘 계산할 수 없으므로 AI 가 보낸 값을 쓴다.
+            // (미인정 시도는 여기 섞지 않는다 — 그 RPC 는 rep_number 를 보내는 AI 보다 뒤에 생겨 둘이 같이 오지 않는다.)
+            return SyncStats.of(request.getAvgSyncRate(), request.getMaxSyncRate(), request.getMinSyncRate());
         }
 
-        return SyncStats.from(repAverages.stream()
+        java.util.DoubleSummaryStatistics stats = repAverages.stream()
                 .mapToDouble(Double::doubleValue)
-                .summaryStatistics());
+                .summaryStatistics();
+        for (RejectedAttemptProjection attempt : rejectedAttempts) {
+            if (attempt.syncRate() != null) {
+                stats.accept(attempt.syncRate());
+            }
+        }
+        if (stats.getCount() == 0) {
+            // (2) 측정된 rep·시도가 정말 없다(0회 세션 등). 이때 AI 는 0.0 을 보내는데 그걸 저장하면 안 된다.
+            return SyncStats.none();
+        }
+        return SyncStats.from(stats);
     }
 
     /**
@@ -196,27 +225,29 @@ public class SessionCompletionTx {
      * 프레임으로 바로 나온다. 조회 시점에 계산하면 precompute 가 없애려던 pose_data 스캔이
      * 추이 때문에 되살아난다.
      */
-    private void precomputeReport(Session session) {
+    private void precomputeReport(Session session, List<RejectedAttemptProjection> rejectedAttempts) {
         List<PoseFrameProjection> poseFrames = poseDataRepository.findFramesBySessionId(session.getId(), session.getStartTime());
         WorstSectionDto worstSection = sessionAnalysisCalculator.calculate(session, poseFrames);
-        List<RepSyncRateDto> repTrend = sessionAnalysisCalculator.calculateRepTrend(poseFrames);
-        SquatDepthAnalysisDto squatDepthAnalysis = squatDepthAnalysisCalculator.calculate(session, poseFrames);
+        // 미인정 시도(V35)는 회차 추이·스쿼트 깊이·스쿼트 체간에 counted=false 로 섞인다. worst 구간은 인정 반복만 본다 —
+        // 대표 프레임의 3D 자세가 pose_data 에만 있다. 런지 계산은 AI 가 런지에 미인정 시도를 보내지 않아 그대로다.
+        List<RepSyncRateDto> repTrend = sessionAnalysisCalculator.calculateRepTrend(poseFrames, rejectedAttempts);
+        SquatDepthAnalysisDto squatDepthAnalysis = squatDepthAnalysisCalculator.calculate(session, poseFrames, rejectedAttempts);
         LungeDepthAnalysisDto lungeDepthAnalysis = lungeDepthAnalysisCalculator.calculate(session, poseFrames);
-        TrunkLeanAnalysisDto squatTrunkLeanAnalysis = squatTrunkLeanAnalysisCalculator.calculate(session, poseFrames);
+        TrunkLeanAnalysisDto squatTrunkLeanAnalysis = squatTrunkLeanAnalysisCalculator.calculate(session, poseFrames, rejectedAttempts);
         TrunkLeanAnalysisDto lungeTrunkLeanAnalysis = lungeTrunkLeanAnalysisCalculator.calculate(session, poseFrames);
         LungeStepLengthAnalysisDto lungeStepLengthAnalysis = lungeStepLengthAnalysisCalculator.calculate(session, poseFrames);
+        SessionDetailedAnalysis analysis = new SessionDetailedAnalysis(worstSection, repTrend, squatDepthAnalysis,
+                lungeDepthAnalysis, squatTrunkLeanAnalysis, lungeTrunkLeanAnalysis, lungeStepLengthAnalysis,
+                rejectedAttempts.size(), RejectedAttemptProjection.countByReason(rejectedAttempts));
 
         Report report = new Report();
         report.setMember(session.getMember());
         report.setSession(session);
-        // 일곱 다 비면 컬럼을 비워 둔다 — 읽기 경로가 "저장된 게 없다"로 보고 재계산을 시도하는데,
+        // 다 비면 컬럼을 비워 둔다 — 읽기 경로가 "저장된 게 없다"로 보고 재계산을 시도하는데,
         // 프레임이 없어서 비었던 것이라면 재계산도 같은 결과라 손해가 없다.
-        if (worstSection != null || !repTrend.isEmpty() || squatDepthAnalysis != null || lungeDepthAnalysis != null
-                || squatTrunkLeanAnalysis != null || lungeTrunkLeanAnalysis != null || lungeStepLengthAnalysis != null) {
+        if (analysis.hasContent()) {
             try {
-                report.setDetailedAnalysis(objectMapper.writeValueAsString(
-                        new SessionDetailedAnalysis(worstSection, repTrend, squatDepthAnalysis, lungeDepthAnalysis,
-                                squatTrunkLeanAnalysis, lungeTrunkLeanAnalysis, lungeStepLengthAnalysis)));
+                report.setDetailedAnalysis(objectMapper.writeValueAsString(analysis));
             } catch (JsonProcessingException e) {
                 throw new IllegalStateException("리포트 분석 직렬화 실패 - 세션 " + session.getId(), e);
             }

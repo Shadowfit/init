@@ -58,6 +58,8 @@ export interface ReattachSessionResponse {
   // 세션 시작 응답과 같은 판정 기준 — 이어하기에서도 같은 색·진동 기준을 쓴다
   syncGoodThreshold?: number | null;
   syncWarnThreshold?: number | null;
+  // 이미 저장된 미인정 시도 수(2026-10-21) — «미인정 M회» 화면 카운트를 여기서부터 잇는다. 구버전 서버는 없음 → 0
+  restoredRejectedCount?: number | null;
 }
 
 export const exercisesService = {

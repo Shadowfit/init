@@ -179,6 +179,131 @@ def report_pose_data_batch(
             time.sleep(backoff)
 
 
+# 구버전 Spring 이 SaveRejectedAttempt 를 몰라 UNIMPLEMENTED 로 답한 것을 이미 경고했는가 (2026-10-21).
+# 미인정은 세션마다 여러 번 나므로 매번 WARNING 을 남기면 로그가 잠긴다 — 프로세스당 한 번만 남기고 나머지는 DEBUG.
+# 여러 스레드가 동시에 처음 만나면 두어 번 찍힐 수 있다(락을 걸 만큼의 일이 아니다).
+_rejected_attempt_unimplemented_warned = False
+
+
+def send_rejected_attempt(
+    session_id: int,
+    attempt_number: int,
+    reason: str,
+    sync_rate: float,
+    min_knee_angle: float,
+    torso_tilt_deg: float,
+    timestamp_sec: float,
+    joint_coordinates: str,
+) -> bool:
+    """스쿼트 «미인정 시도» 1건을 Spring 에 남긴다 (`SaveRejectedAttempt`, 2026-10-21).
+
+    내려갔다 올라왔지만 1회로 인정되지 않은 시도(바닥 자세 미확인·런지 자세)의 요약 — 가장 깊이 앉은 순간 하나와
+    인정 반복과 같은 식으로 매긴 싱크로율. Spring 은 이것을 리포트에만 쓰고 횟수·세트에는 넣지 않는다.
+
+    전송 정책은 report_pose_data_batch 를 그대로 따른다 — 3회 · 1s → 3s 백오프 · 호출마다 데드라인
+    (BACKEND_GRPC_TIMEOUT_SECONDS) · 영구 실패 코드는 재시도 없이 버린다. 실패하면 리포트에서 그 시도가 통째로
+    사라진다는 점이 pose 배치와 같아서다. 재전송 중복은 수신측이 (session_id, attempt_number) 로 흡수한다.
+
+    🔴 **던지지 않는다.** 실시간 프레임 요청 안(세션 락 밖)에서 불리므로 여기서 예외가 나면 그 프레임 응답이 깨진다.
+    구버전 Spring 은 이 RPC 를 몰라 UNIMPLEMENTED 로 답한다 — 프로세스당 한 번 경고하고 버린다(재시도하지 않는다).
+
+    Returns:
+        Spring 이 받았으면 True. 호출부는 결과로 아무것도 바꾸지 않는다 — 로그·테스트용이다.
+    """
+    global _rejected_attempt_unimplemented_warned
+    try:
+        request = exercise_pb2.RejectedAttemptRequest(
+            session_id=session_id,
+            attempt_number=attempt_number,
+            reason=reason,
+            sync_rate=sync_rate,
+            min_knee_angle=min_knee_angle,
+            torso_tilt_deg=torso_tilt_deg,
+            timestamp_sec=timestamp_sec,
+            joint_coordinates=joint_coordinates,
+        )
+    except (TypeError, ValueError) as e:
+        # 우리 쪽 값 오류(None·형 불일치) — 보낼 수 없으니 남기고 버린다. 프레임 응답은 지킨다.
+        logger.error(
+            "[AI → Spring] 미인정 시도 요청을 만들지 못했다 (session=%s, attempt=%s): %s",
+            session_id, attempt_number, e,
+        )
+        metrics.record_callback("SaveRejectedAttempt", "invalid")
+        return False
+
+    # 메타데이터를 루프 밖에서 한 번만 만든다 — 같은 시도의 재전송들이 한 correlation id 로 묶이게(pose 배치와 같은 이유).
+    metadata = call_metadata()
+
+    for attempt in range(1, _POSE_BATCH_MAX_ATTEMPTS + 1):
+        try:
+            response = get_stub().SaveRejectedAttempt(
+                request,
+                metadata=metadata,
+                timeout=settings.BACKEND_GRPC_TIMEOUT_SECONDS,
+            )
+            logger.info(
+                "[AI → Spring] 미인정 시도 전송 (session=%s, no=%d, reason=%s, sync_rate=%.2f, success=%s, attempt=%d)",
+                session_id,
+                attempt_number,
+                reason,
+                sync_rate,
+                response.success,
+                attempt,
+            )
+            metrics.record_callback("SaveRejectedAttempt", "ok")
+            return bool(response.success)
+        except grpc.RpcError as e:
+            code = e.code() if hasattr(e, "code") else None
+            if code == grpc.StatusCode.UNIMPLEMENTED:
+                # 구버전 Spring — 이 RPC 자체가 없다. 몇 번을 던져도 같고, 기능이 없을 뿐 장애가 아니다.
+                if not _rejected_attempt_unimplemented_warned:
+                    _rejected_attempt_unimplemented_warned = True
+                    logger.warning(
+                        "[AI → Spring] Spring 이 SaveRejectedAttempt 를 모른다(UNIMPLEMENTED, 구버전) — "
+                        "미인정 시도 기록을 버린다. 이후 같은 응답은 DEBUG 로만 남긴다 (session=%s)",
+                        session_id,
+                    )
+                else:
+                    logger.debug(
+                        "[AI → Spring] SaveRejectedAttempt UNIMPLEMENTED — 버림 (session=%s, no=%d)",
+                        session_id, attempt_number,
+                    )
+                metrics.record_callback("SaveRejectedAttempt", "unimplemented")
+                return False
+            if not _is_retryable(e):
+                logger.error(
+                    "[AI → Spring] 미인정 시도 거절 (session=%s, no=%d, code=%s) — 재시도하지 않는다: %s",
+                    session_id,
+                    attempt_number,
+                    code,
+                    e.details(),
+                )
+                metrics.record_callback("SaveRejectedAttempt", "rejected")
+                return False
+            if attempt == _POSE_BATCH_MAX_ATTEMPTS:
+                logger.error(
+                    "[AI → Spring] 미인정 시도 전송 실패 (session=%s, no=%d, %d회 시도): %s",
+                    session_id,
+                    attempt_number,
+                    attempt,
+                    e.details(),
+                )
+                metrics.record_callback("SaveRejectedAttempt", "exhausted")
+                return False
+            backoff = _POSE_BATCH_BACKOFF_SECONDS[attempt - 1]
+            logger.warning(
+                "[AI → Spring] 미인정 시도 전송 실패 (session=%s, no=%d, attempt=%d) — %.1fs 후 재시도: %s",
+                session_id,
+                attempt_number,
+                attempt,
+                backoff,
+                e.details(),
+            )
+            metrics.record_callback("SaveRejectedAttempt", "retried")
+            time.sleep(backoff)
+    return False
+
+
 def report_complete_analysis(
     session_id: int,
     total_reps: int,

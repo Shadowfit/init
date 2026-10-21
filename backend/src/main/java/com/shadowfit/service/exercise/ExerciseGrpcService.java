@@ -28,6 +28,7 @@ public class ExerciseGrpcService extends ExerciseServiceGrpc.ExerciseServiceImpl
     private final SessionService sessionService;
     private final FeedbackLogService feedbackLogService;
     private final SessionMetrics sessionMetrics;
+    private final RejectedAttemptService rejectedAttemptService;
 
     /**
      * 클라이언트가 <b>이미 포기한</b> 요청인가 (#206 결함 B).
@@ -396,6 +397,50 @@ public class ExerciseGrpcService extends ExerciseServiceGrpc.ExerciseServiceImpl
                 log.error("피드백 batch 처리 중 에러: {}", e.getMessage());
                 responseObserver.onError(io.grpc.Status.INTERNAL
                         .withDescription(e.getMessage())
+                        .asRuntimeException());
+            }
+        }
+    }
+
+    /**
+     * [AI -> Spring] «미인정 시도» 1건 (2026-10-21, V35) — 내려갔다 올라왔지만 1회로 인정되지 않은 시도.
+     * 횟수·세트에는 안 들어가고 점수·리포트에만 들어간다({@link RejectedAttemptService}).
+     *
+     * <p>응답 규약은 다른 AI 콜백과 같다: 저장·중복(재전송)·종료된 세션에 늦게 도착 — 셋 다 {@code success=true}
+     * (재전송할 일이 아니다). 형식·범위 위반은 INVALID_ARGUMENT, 세션 없음은 NOT_FOUND({@link #rejectWith}),
+     * 잠금 경합에 진 것은 ABORTED(상대가 다시 던지면 대개 성공한다), 그 밖은 INTERNAL.
+     *
+     * <p>pose 배치와 달리 핸들러 안 데드락 재시도는 없다 — 시도는 세션당 몇 건이고 행 하나짜리 INSERT 라, 경합에
+     * 지는 일 자체가 드물고 지면 AI 쪽 재전송으로 충분하다.
+     */
+    @Override
+    public void saveRejectedAttempt(RejectedAttemptRequest request,
+                                    StreamObserver<RejectedAttemptResponse> responseObserver) {
+        if (abortIfClientGaveUp("SaveRejectedAttempt", responseObserver)) {
+            return;
+        }
+        try (CorrelationIds.Scope ignored = CorrelationIds.withSession(request.getSessionId())) {
+            try {
+                rejectedAttemptService.save(request);
+
+                responseObserver.onNext(RejectedAttemptResponse.newBuilder().setSuccess(true).build());
+                responseObserver.onCompleted();
+            } catch (CallAbandonedException e) {
+                log.warn("세션 {} : 호출자가 포기해 {}", request.getSessionId(), e.getMessage());
+                responseObserver.onError(io.grpc.Status.CANCELLED
+                        .withDescription(e.getMessage())
+                        .asRuntimeException());
+            } catch (com.shadowfit.global.error.BusinessException e) {
+                rejectWith("미인정 시도", request.getSessionId(), e, responseObserver);
+            } catch (PessimisticLockingFailureException e) {
+                log.warn("세션 {} : 미인정 시도 저장이 잠금 경합에 졌다 — ABORTED 로 돌려준다", request.getSessionId());
+                responseObserver.onError(io.grpc.Status.ABORTED
+                        .withDescription("LOCK_CONFLICT: " + e.getMessage())
+                        .asRuntimeException());
+            } catch (Exception e) {
+                log.error("미인정 시도 저장 실패: {} — {}", e.getClass().getSimpleName(), e.getMessage());
+                responseObserver.onError(io.grpc.Status.INTERNAL
+                        .withDescription(e.getClass().getSimpleName() + ": " + e.getMessage())
                         .asRuntimeException());
             }
         }

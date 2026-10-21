@@ -228,6 +228,19 @@ test('관절 각도가 달라질수록(최저 무릎 90→110→130°) 오차가
   assert.ok(Math.abs(deltas[0]) < 3 && Math.abs(deltas[1] - 20) < 4 && Math.abs(deltas[2] - 40) < 5);
 });
 
+test('같은 동작을 2·3·4·6fps 로 찍어도 점수가 거의 같다(찍힌 장수에 흔들리지 않는다)', () => {
+  // 2026-10-21: 궤적 거리를 «찍힌 프레임» 으로 평균하던 때는 같은 깊이 반복이 3장 73점·5장 90점(AI 싱크로율)이었다
+  const sims = [2, 3, 4, 6].map((fps) => compareRecording(syntheticRecording({ reps: 2, fps }), { squat: REF }).similarity);
+  console.log(`      2fps ${sims[0]} · 3fps ${sims[1]} · 4fps ${sims[2]} · 6fps ${sims[3]}`);
+  assert.ok(Math.max(...sims) - Math.min(...sims) <= 4, `점수 폭 ${Math.max(...sims) - Math.min(...sims)}`);
+});
+
+test('기준보다 더 깊게 앉으면(최저 무릎 70° vs 기준 90°) 기준 깊이와 같거나 더 높다 — 기준은 바닥', () => {
+  const [same, deeper] = [90, 70].map((k) => compareRecording(syntheticRecording({ reps: 2, minKnee: k }), { squat: REF }).similarity);
+  console.log(`      기준 깊이 ${same} · 더 깊게 ${deeper}`);
+  assert.ok(deeper >= same - 1, `더 깊게 ${deeper} < 기준 깊이 ${same}`);
+});
+
 test('얕은 동작이면 «기준보다 덜 굽힌» 문장이 실제 각도 차이와 함께 나온다', () => {
   const cmp = compareRecording(syntheticRecording({ reps: 2, minKnee: 105 }), { squat: REF });
   const knee = fb(cmp).find((i) => i.id === 'knee-bottom');

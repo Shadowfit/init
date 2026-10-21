@@ -2,12 +2,14 @@ package com.shadowfit.service.report;
 
 import com.shadowfit.dto.report.PoseFrameGrouping;
 import com.shadowfit.dto.report.PoseFrameProjection;
+import com.shadowfit.dto.report.RejectedAttemptProjection;
 import com.shadowfit.dto.report.detailreport.RepTrunkLeanDto;
 import com.shadowfit.dto.report.detailreport.TrunkLeanAnalysisDto;
 import com.shadowfit.model.exercise.Session;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -50,23 +52,46 @@ public class SquatTrunkLeanAnalysisCalculator {
     private static final double EXCESSIVE_THRESHOLD = 45.0;
 
     public TrunkLeanAnalysisDto calculate(Session session, List<PoseFrameProjection> poseFrames) {
+        return calculate(session, poseFrames, List.of());
+    }
+
+    /**
+     * 인정 반복 + «미인정 시도» (2026-10-21, V35). 미인정 시도는 AI 가 보낸 «가장 깊이 앉은 순간» 의 체간 기울기 한 값을
+     * <b>같은 공식</b>으로 채점해 {@code counted=false} 행으로 넣고, 세션 점수는 모든 행의 평균이다. 기울기가 미상(null)인
+     * 시도는 행을 안 만든다. 미인정 시도가 있으면 행은 시간 오름차순, 없으면 예전과 같은 rep 오름차순이다.
+     */
+    public TrunkLeanAnalysisDto calculate(Session session, List<PoseFrameProjection> poseFrames,
+                                          List<RejectedAttemptProjection> rejectedAttempts) {
         if (session.getExercise().getId() != SQUAT_EXERCISE_ID) {
             return null;
         }
-        if (poseFrames == null || poseFrames.isEmpty()) {
+        List<RejectedAttemptProjection> rejected = rejectedAttempts == null ? List.of() : rejectedAttempts;
+        if ((poseFrames == null || poseFrames.isEmpty()) && rejected.isEmpty()) {
             return null;
         }
 
-        List<RepTrunkLeanDto> repTrunkLeans = new ArrayList<>();
-        for (Map.Entry<Integer, List<PoseFrameProjection>> entry : PoseFrameGrouping.byRep(poseFrames).entrySet()) {
-            RepTrunkLeanDto rep = scoreRep(entry.getKey(), entry.getValue());
-            if (rep != null) {
-                repTrunkLeans.add(rep);
+        List<TimedLean> counted = new ArrayList<>();
+        if (poseFrames != null) {
+            for (Map.Entry<Integer, List<PoseFrameProjection>> entry : PoseFrameGrouping.byRep(poseFrames).entrySet()) {
+                TimedLean rep = scoreRep(entry.getKey(), entry.getValue());
+                if (rep != null) {
+                    counted.add(rep);
+                }
             }
         }
-        if (repTrunkLeans.isEmpty()) {
-            return null; // 유효한 체간 기울기 데이터가 있는 rep이 하나도 없음(구버전 행뿐이거나 전부 미계산)
+        List<TimedLean> notCounted = new ArrayList<>();
+        for (RejectedAttemptProjection attempt : rejected) {
+            Double tilt = attempt.torsoTiltDeg();
+            if (tilt == null) {
+                continue; // 미상 — 채점할 근거가 없다(0 은 «완전 직립» 이라 유효값이다)
+            }
+            notCounted.add(new TimedLean(attempt.timestampSec(), RepTrunkLeanDto.rejected(
+                    attempt.attemptNo(), tilt, scoreTilt(tilt), formatTimestamp(attempt.timestampSec()))));
         }
+        if (counted.isEmpty() && notCounted.isEmpty()) {
+            return null; // 유효한 체간 기울기 데이터가 있는 rep·시도가 하나도 없음(구버전 행뿐이거나 전부 미계산)
+        }
+        List<RepTrunkLeanDto> repTrunkLeans = mergeByTime(counted, notCounted);
 
         int sessionScore = (int) Math.round(
                 repTrunkLeans.stream().mapToInt(RepTrunkLeanDto::getTiltScore).average().orElse(0.0));
@@ -75,12 +100,26 @@ public class SquatTrunkLeanAnalysisCalculator {
         dto.setTiltScore(sessionScore);
         dto.setTiltGrade(gradeOf(sessionScore));
         dto.setRepTrunkLeans(repTrunkLeans);
-        dto.setNarrative(buildNarrative(repTrunkLeans, sessionScore));
+        dto.setNarrative(buildNarrative(counted.stream().map(TimedLean::dto).toList(), notCounted.size(), sessionScore));
         return dto;
     }
 
+    /** 정렬 기준 시각을 붙인 체간 행 — {@link RepTrunkLeanDto} 는 «mm:ss» 문자열만 갖고 있어 숫자 시각을 따로 든다. */
+    private record TimedLean(Double timestampSec, RepTrunkLeanDto dto) {}
+
+    /** 미인정 시도가 없으면 인정 반복 그대로(예전과 같다), 있으면 시간 오름차순으로 섞는다(안정 정렬). */
+    private static List<RepTrunkLeanDto> mergeByTime(List<TimedLean> counted, List<TimedLean> notCounted) {
+        if (notCounted.isEmpty()) {
+            return new ArrayList<>(counted.stream().map(TimedLean::dto).toList());
+        }
+        List<TimedLean> all = new ArrayList<>(counted);
+        all.addAll(notCounted);
+        all.sort(Comparator.comparing(TimedLean::timestampSec, Comparator.nullsLast(Comparator.naturalOrder())));
+        return new ArrayList<>(all.stream().map(TimedLean::dto).toList());
+    }
+
     /** 이 rep에 속한 프레임들의 torsoTiltDeg 평균을 채점한다. 유효값이 없으면 null. */
-    private RepTrunkLeanDto scoreRep(int repNumber, List<PoseFrameProjection> frames) {
+    private TimedLean scoreRep(int repNumber, List<PoseFrameProjection> frames) {
         List<Double> tilts = frames.stream()
                 .map(PoseFrameProjection::torsoTiltDeg)
                 .filter(Objects::nonNull)
@@ -90,7 +129,8 @@ public class SquatTrunkLeanAnalysisCalculator {
         }
         double avgTilt = tilts.stream().mapToDouble(Double::doubleValue).average().orElse(0.0);
         int score = scoreTilt(avgTilt);
-        return new RepTrunkLeanDto(repNumber, avgTilt, score, formatTimestamp(frames.get(0).timestampSec()));
+        Double firstSec = frames.get(0).timestampSec();
+        return new TimedLean(firstSec, new RepTrunkLeanDto(repNumber, avgTilt, score, formatTimestamp(firstSec)));
     }
 
     /** 35도 이하는 만점, 35~45도는 100→60 선형, 그 너머는 방어적으로 계속 깎는다. */
@@ -117,8 +157,14 @@ public class SquatTrunkLeanAnalysisCalculator {
      *
      * <p>우선순위: ① 인접 회차 대비(앞 회차 ≥85점, 바로 다음 회차가 15점 이상 낮고 실제로 더
      * 기울어짐) &gt; ② 세션 전체 등급이 낮음(FAIR 미만) &gt; ③ 전부 양호(폴백).
+     *
+     * <p>①은 인정 반복만 본다(«N회차» 는 인정 반복의 번호다). ②의 세션 점수와 ③의 개수는 미인정 시도까지 센다 —
+     * 미인정 시도가 있으면 ③은 «N번의 시도 모두» 로 말한다(2026-10-21).
+     *
+     * @param repTrunkLeans  인정 반복만(rep 오름차순)
+     * @param rejectedScored 채점된 미인정 시도 수
      */
-    private List<String> buildNarrative(List<RepTrunkLeanDto> repTrunkLeans, int sessionScore) {
+    private List<String> buildNarrative(List<RepTrunkLeanDto> repTrunkLeans, int rejectedScored, int sessionScore) {
         List<String> sentences = new ArrayList<>();
 
         RepTrunkLeanDto dropFrom = null, dropTo = null;
@@ -146,7 +192,9 @@ public class SquatTrunkLeanAnalysisCalculator {
         }
 
         if (sentences.isEmpty()) {
-            sentences.add(String.format("%d회 모두 상체 자세를 잘 유지했어요.", repTrunkLeans.size()));
+            sentences.add(rejectedScored == 0
+                    ? String.format("%d회 모두 상체 자세를 잘 유지했어요.", repTrunkLeans.size())
+                    : String.format("%d번의 시도 모두 상체 자세를 잘 유지했어요.", repTrunkLeans.size() + rejectedScored));
         }
 
         return sentences.size() > 4 ? sentences.subList(0, 4) : sentences;

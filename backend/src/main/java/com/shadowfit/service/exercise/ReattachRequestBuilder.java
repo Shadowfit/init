@@ -6,6 +6,7 @@ import com.shadowfit.model.exercise.ExerciseReference;
 import com.shadowfit.model.exercise.Session;
 import com.shadowfit.repository.exercise.ExerciseReferenceRepository;
 import com.shadowfit.repository.exercise.PoseDataRepository;
+import com.shadowfit.repository.exercise.RejectedAttemptRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +28,8 @@ public class ReattachRequestBuilder {
     // 재부착 시 MAX(rep_number)/MAX(timestamp_sec) 복원 전용 (이슈 #59 2단계)
     private final PoseDataRepository poseDataRepository;
     private final ExerciseReferenceRepository referenceRepository;
+    // 재부착 시 미인정 시도 수 복원 전용 (V35, 2026-10-21)
+    private final RejectedAttemptRepository rejectedAttemptRepository;
 
     /**
      * <b>lazy 접근을 여기서 끝내야 한다</b> — {@code session.getExercise()}, {@code getMember()} 는
@@ -59,6 +62,13 @@ public class ReattachRequestBuilder {
         // 여기서 되찾을 수 있다는 것이 재부착이 성립하는 근거다.
         int restoredRepCount = poseDataRepository.findMaxRepNumberBySessionId(sessionId, session.getStartTime());
 
+        // 미인정 시도(V35)도 rep 축과 같은 이유로 되살린다 — AI 는 미인정 번호(attempt_number, 멱등키)와 화면의 «미인정 N회»
+        // 카운터를 메모리에만 두므로, 재부착하면 1 부터 다시 센다. 그러면 새 시도가 이미 저장된 번호와 겹쳐 중복으로 버려진다.
+        // 값은 proto 계약대로 «저장된 행 수» 다(화면 카운터가 원하는 것이 «몇 회» 라서). ⚠️ 한 시도가 AI 재전송까지 다 실패해
+        // 번호에 구멍이 나 있으면(예: 1·3 저장) 행 수(2)로 이은 다음 번호(3)가 기존 행과 겹쳐 그 시도가 중복으로 버려진다 —
+        // 유실이 이미 난 세션에서 한 건 더 잃는 경우라 감수한다.
+        int restoredRejectedCount = Math.toIntExact(rejectedAttemptRepository.countBySessionId(sessionId));
+
         // 시간 축도 rep 축과 똑같이 이어붙여야 한다 (이슈 #156). AI 는 프레임 시각을 «첫 프레임
         // 도착부터의 경과» 로 만드는데, 재부착으로 상태를 새로 만들면 그 기준이 재부착 시점이 되어
         // 이후 프레임의 timestamp_sec 이 0 부터 다시 시작한다. 그러면 리포트의 «최악 구간 시각» 이
@@ -86,6 +96,7 @@ public class ReattachRequestBuilder {
                 .setExerciseId(exerciseId)
                 .setPersona(session.getMember().getSelectedPersona().name())
                 .setInitialRepCount(restoredRepCount)
+                .setInitialRejectedCount(restoredRejectedCount)
                 .setElapsedSec(elapsedSec)
                 .setSessionNonce(sessionNonce == null ? "" : sessionNonce)
                 .setExerciseCode(targets.exerciseCode())

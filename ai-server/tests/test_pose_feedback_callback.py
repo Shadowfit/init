@@ -96,7 +96,8 @@ class BackBentFeedbackCallbackTest(unittest.TestCase):
             mock.patch.object(pose_endpoint, "lease_detector", _fake_lease(lambda _img: next(frames))), \
             mock.patch.object(pose_endpoint, "accept_frame", lambda _s, _n: True), \
             mock.patch.object(pose_endpoint.time, "monotonic", lambda: clock["now"]), \
-            mock.patch.object(pose_endpoint.spring_client, "report_pose_data_batch") as mock_pose:
+            mock.patch.object(pose_endpoint.spring_client, "report_pose_data_batch") as mock_pose, \
+            mock.patch.object(pose_endpoint.spring_client, "send_rejected_attempt") as mock_rejected:
             responses = []
             for i in range(len(sequence)):
                 clock["now"] = i / 3
@@ -105,6 +106,8 @@ class BackBentFeedbackCallbackTest(unittest.TestCase):
         self.assertEqual([r.message for r in responses if r.message],
                          ["이번 동작에서 충분히 내려간 장면을 확인하지 못했어요."])
         mock_pose.assert_not_called()
+        # 세지 않은 시도는 «미인정» 1건으로 남는다(2026-10-21) — 자세한 계약은 test_rejected_attempts.py
+        mock_rejected.assert_called_once()
 
 
 class SquatProgressInResponseTest(unittest.TestCase):

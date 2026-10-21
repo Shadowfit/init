@@ -384,8 +384,9 @@ class SessionAnalysisCalculatorTest {
         WorstSectionDto worst = calculator.calculate(session, frames);
         List<RepSyncRateDto> trend = calculator.calculateRepTrend(frames);
 
+        // equals 다 — repNumber 가 Integer 가 됐고(미인정 시도는 null, 2026-10-21) Integer 끼리 == 는 참조 비교다.
         RepSyncRateDto matched = trend.stream()
-                .filter(point -> point.getRepNumber() == worst.getRepNumber())
+                .filter(point -> worst.getRepNumber().equals(point.getRepNumber()))
                 .findFirst()
                 .orElseThrow();
 
@@ -393,6 +394,64 @@ class SessionAnalysisCalculatorTest {
         assertThat(matched.getSyncRate())
                 .isEqualTo(trend.stream().mapToDouble(RepSyncRateDto::getSyncRate).min().orElseThrow());
         assertThat(matched.getTimeStamp()).isEqualTo(worst.getTimeStamp());
+    }
+
+    // ── 미인정 시도 (V35, 2026-10-21) ──────────────────────────────────────
+
+    private static com.shadowfit.dto.report.RejectedAttemptProjection rejected(
+            int attemptNo, String reason, double syncRate, double timestampSec) {
+        return new com.shadowfit.dto.report.RejectedAttemptProjection(attemptNo,
+                com.shadowfit.model.exercise.RejectedAttemptReason.valueOf(reason), syncRate, 100.0, 20.0, timestampSec);
+    }
+
+    @Test
+    @DisplayName("미인정 시도가 없으면 예전과 같다 — rep 오름차순, 전부 counted=true, 숫자 시각이 실린다")
+    void repTrend_withoutRejected_unchangedPlusTimestampSec() {
+        List<PoseFrameProjection> frames = List.of(frame(1, 3.0, 80.0), frame(2, 7.5, 75.0));
+
+        List<RepSyncRateDto> trend = calculator.calculateRepTrend(frames, List.of());
+
+        assertThat(trend).extracting(RepSyncRateDto::getRepNumber).containsExactly(1, 2);
+        assertThat(trend).extracting(RepSyncRateDto::getTimestampSec).containsExactly(3.0, 7.5);
+        assertThat(trend).allSatisfy(p -> {
+            assertThat(p.isCounted()).isTrue();
+            assertThat(p.getAttemptNumber()).isNull();
+            assertThat(p.getRejectReason()).isNull();
+        });
+    }
+
+    @Test
+    @DisplayName("미인정 시도는 counted=false·repNumber null 점으로 시간순으로 섞인다")
+    void repTrend_mergesRejectedByTime() {
+        List<PoseFrameProjection> frames = List.of(frame(1, 3.0, 80.0), frame(2, 12.0, 90.0));
+        List<com.shadowfit.dto.report.RejectedAttemptProjection> attempts = List.of(
+                rejected(1, "DEPTH_NOT_CONFIRMED", 41.25, 7.0),
+                rejected(2, "SPLIT_STANCE", 30.0, 15.0));
+
+        List<RepSyncRateDto> trend = calculator.calculateRepTrend(frames, attempts);
+
+        assertThat(trend).extracting(RepSyncRateDto::getRepNumber).containsExactly(1, null, 2, null);
+        assertThat(trend).extracting(RepSyncRateDto::getAttemptNumber).containsExactly(null, 1, null, 2);
+        assertThat(trend).extracting(RepSyncRateDto::isCounted).containsExactly(true, false, true, false);
+        assertThat(trend).extracting(RepSyncRateDto::getRejectReason)
+                .containsExactly(null, "DEPTH_NOT_CONFIRMED", null, "SPLIT_STANCE");
+        RepSyncRateDto first = trend.get(1);
+        assertThat(first.getSyncRate()).isEqualTo(41.3); // 인정 반복과 같은 소수 1자리 반올림
+        assertThat(first.getTimeStamp()).isEqualTo("00:07");
+        assertThat(first.getTimestampSec()).isEqualTo(7.0);
+    }
+
+    @Test
+    @DisplayName("인정 반복이 없어도 미인정 시도만으로 추이가 나온다 — worst 는 없다")
+    void repTrend_onlyRejected() {
+        List<com.shadowfit.dto.report.RejectedAttemptProjection> attempts = List.of(
+                rejected(2, "DEPTH_NOT_CONFIRMED", 50.0, 9.0),
+                rejected(1, "DEPTH_NOT_CONFIRMED", 40.0, 4.0));
+
+        assertThat(calculator.calculateRepTrend(List.of(), attempts))
+                .extracting(RepSyncRateDto::getAttemptNumber).containsExactly(1, 2);
+        assertThat(calculator.calculateRepTrend(null, attempts)).hasSize(2);
+        assertThat(calculator.calculate(session, List.of())).isNull();
     }
 
     @Test

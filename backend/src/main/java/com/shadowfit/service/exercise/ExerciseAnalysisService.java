@@ -638,8 +638,10 @@ public class ExerciseAnalysisService {
             // 클라가 그걸 동봉해 «틀린 nonce» 가 된다.
             String reattachNonce = request.getSessionNonce().isEmpty() ? null : request.getSessionNonce();
             // 판정 기준도 같은 이유로 요청에서 꺼낸다 — 이어하기 화면이 칠하는 기준 = AI 가 다시 세운 상태의 기준.
+            // 미인정 시도 수는 AI 응답에 없어 요청에 실은 DB 값을 그대로 돌려준다(V35) — 앱의 «미인정 N회» = AI 가 이어 셀 시작값.
             return ReattachSessionResponseDto.of(
-                    sessionId, response.getRepCount(), response.getAlreadyActive(), reattachNonce,
+                    sessionId, response.getRepCount(), request.getInitialRejectedCount(),
+                    response.getAlreadyActive(), reattachNonce,
                     Math.floorMod(sessionId, aiChannelPoolSize),
                     request.getSyncGoodThreshold(), request.getSyncWarnThreshold());
         }

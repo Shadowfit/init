@@ -36,6 +36,11 @@ service ExerciseService {
 
   // 4. TTS 피드백 발화 이벤트 batch 저장 (FastAPI -> Spring, BT-SET)
   rpc ReportFeedbackBatch (FeedbackBatchRequest) returns (FeedbackBatchResponse);
+  // AI → Spring: «미인정 시도» 1건 (2026-10-21). 내려갔다 올라왔지만 1회로 인정되지 않은 시도(바닥 자세 미확인·런지 자세)
+  // 를 리포트에 남기려고 보낸다 — 횟수·세트에는 안 들어가고 점수·리포트에만 들어간다.
+  // SavePoseDataBatch 에 플래그를 붙이지 않고 RPC 를 따로 둔 이유: 구버전 Spring 은 모르는 필드를 무시하므로
+  // 플래그 방식이면 미인정 프레임이 정상 반복(pose_data)으로 저장된다. 별도 RPC 면 구버전은 UNIMPLEMENTED 로 거절할 뿐이다.
+  rpc SaveRejectedAttempt (RejectedAttemptRequest) returns (RejectedAttemptResponse);
 }
 
 // ------------------------------------------------------------
@@ -145,6 +150,8 @@ message ReattachRequest {
   // AnalyzeRequest 의 11·12 와 같다 — 재부착으로 세운 상태도 같은 판정 기준을 쓴다.
   double sync_good_threshold = 12;
   double sync_warn_threshold = 13;
+  // 이 세션의 미인정 시도 수(Spring 이 저장한 행 수, 2026-10-21). AI 는 미인정 번호·화면 카운트를 여기서부터 잇는다.
+  int32 initial_rejected_count = 14;
 }
 
 message ReattachResponse {
@@ -234,6 +241,28 @@ message PoseDataRequest {
 message PoseDataBatchRequest {
   int64 session_id = 1;
   repeated PoseDataRequest pose_data = 2;
+}
+
+// 미인정 시도 1건의 요약 (2026-10-21) — 프레임 묶음이 아니라 «가장 깊이 앉은 순간» 하나로 요약해 보낸다.
+// 리포트가 필요한 것은 그 시도의 점수·깊이·체간·시각뿐이라서다.
+message RejectedAttemptRequest {
+  int64 session_id = 1;
+  // 이 세션의 미인정 시도 번호(1부터). 재전송 멱등키 — Spring 은 (session_id, attempt_number) 중복을 무시한다.
+  int32 attempt_number = 2;
+  // 미인정 사유 코드: "DEPTH_NOT_CONFIRMED"(바닥 자세가 확인되지 않음 — 덜 앉았거나 너무 빨리 일어남) | "SPLIT_STANCE"(런지 자세)
+  string reason = 3;
+  // 정상 반복과 같은 식(dtw_calculator.compute_sync_rate)으로 매긴 싱크로율 0~100
+  double sync_rate = 4;
+  // 그 시도에서 가장 깊이 앉은 순간의 무릎각(PoseDataRequest.smoothed_knee_angle 과 같은 정의)·체간 기울기
+  double min_knee_angle = 5;
+  double torso_tilt_deg = 6;
+  // 그 순간의 세션 경과 초(PoseDataRequest.timestamp_sec 과 같은 원점)와 관절 좌표 JSON
+  double timestamp_sec = 7;
+  string joint_coordinates = 8;
+}
+
+message RejectedAttemptResponse {
+  bool success = 1;
 }
 
 message PoseDataResponse {

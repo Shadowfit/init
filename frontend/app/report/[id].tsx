@@ -28,7 +28,8 @@ import { motionRecorder } from '@/lib/motion/recorder';
 import type { SessionFeedbackSummary } from '@/types/feedback';
 import { FEEDBACK_TYPE_LABEL } from '@/types/feedback';
 import type { SessionReportResponse } from '@/types/report';
-import { DEPTH_GRADE_LABEL } from '@/types/report';
+import { DEPTH_GRADE_LABEL, isCounted } from '@/types/report';
+import { REJECT_REASON_LABEL, type RejectReason } from '@/types/pose';
 import { syncColor, syncThresholdsFrom } from '@/constants/sync';
 
 const WEEKDAY = ['일', '월', '화', '수', '목', '금', '토'];
@@ -55,7 +56,9 @@ function reportHtml(r: SessionReportResponse, fb: SessionFeedbackSummary | null)
     : '';
   const reps = r.repTrend.length
     ? `<h2>회차별 싱크로율</h2><table><tr><th>회차</th><th>시점</th><th>싱크로율</th></tr>${r.repTrend
-        .map((p) => `<tr${p.repNumber === r.worstSection?.repNumber ? ' class="worst"' : ''}><td>${p.repNumber}회</td><td>${esc(p.timeStamp)}</td><td class="n">${p.syncRate.toFixed(1)}%</td></tr>`)
+        .map((p) => isCounted(p)
+          ? `<tr${p.repNumber === r.worstSection?.repNumber ? ' class="worst"' : ''}><td>${p.repNumber}회</td><td>${esc(p.timeStamp)}</td><td class="n">${p.syncRate.toFixed(1)}%</td></tr>`
+          : `<tr class="rejected"><td>미인정 ${p.attemptNumber ?? ''} (${esc(p.rejectReason ? REJECT_REASON_LABEL[p.rejectReason] ?? p.rejectReason : '사유 없음')})</td><td>${esc(p.timeStamp)}</td><td class="n">${p.syncRate.toFixed(1)}%</td></tr>`)
         .join('')}</table>`
     : '';
   // 자세 채점 축(깊이·체간·보폭) — 있는 것만
@@ -66,7 +69,10 @@ function reportHtml(r: SessionReportResponse, fb: SessionFeedbackSummary | null)
   if (trunk) axes.push(['체간(상체) 자세 정확도', trunk.tiltScore, DEPTH_GRADE_LABEL[trunk.tiltGrade], trunk.narrative]);
   if (r.lungeStepLengthAnalysis) axes.push(['보폭 정확도', r.lungeStepLengthAnalysis.stepScore, DEPTH_GRADE_LABEL[r.lungeStepLengthAnalysis.stepGrade], r.lungeStepLengthAnalysis.narrative]);
   const analysis = axes.length
-    ? axes.map(([title, score, grade, lines]) => `<h2>${esc(title)}</h2><p><b>${score}점 · ${esc(grade)}</b></p>${lines.map((l) => `<p>${esc(l)}</p>`).join('')}`).join('')
+    ? axes.map(([title, score, grade, lines]) => `<h2>${esc(title)}</h2><p><b>${score}점 · ${esc(grade)}</b></p>${
+        title === '스쿼트 깊이 정확도' && r.squatDepthAnalysis?.targetKneeDeg != null
+          ? `<p>목표: 무릎 ${Math.round(r.squatDepthAnalysis.targetKneeDeg)}° 이하까지 앉기 (시범 동작 깊이 기준, 1° 얕을 때마다 4점 감점)</p>` : ''
+      }${lines.map((l) => `<p>${esc(l)}</p>`).join('')}`).join('')
     : '';
   const feedback = fb && fb.totalCount > 0
     ? `<h2>자세 교정 알림 · 총 ${fb.totalCount}회</h2><table><tr><th>종류</th><th>횟수</th><th>평균 · 최저 싱크로율</th></tr>${fb.byType
@@ -85,16 +91,17 @@ h1{font-size:22px;margin:0}.date{color:#5a6152;margin:4px 0 20px}
 .card{border:1px solid #dadfd1;border-radius:8px;padding:12px;text-align:center}.card b{display:block;font-size:20px}.card span{color:#5a6152;font-size:11px}
 h2{font-size:15px;margin:22px 0 8px;border-bottom:2px solid #1b1f17;padding-bottom:4px}
 table{width:100%;border-collapse:collapse}td,th{padding:6px 4px;border-bottom:1px solid #e3e6dc;text-align:left}th{color:#5a6152;font-size:11px}
-.n{text-align:right;font-variant-numeric:tabular-nums}tr.worst td{background:#fbe9e9}
+.n{text-align:right;font-variant-numeric:tabular-nums}tr.worst td{background:#fbe9e9}tr.rejected td{color:#8a9081}
 .foot{margin-top:28px;color:#8a9081;font-size:10px}
 </style></head><body>
 <h1>ShadowFit 운동 보고서</h1><div class="date">${esc(formatDate(r.startTime))}</div>
 <div class="grid">
 <div class="card"><b>${sync}</b><span>평균 싱크로율</span></div>
-<div class="card"><b>${r.totalReps}</b><span>총 운동 횟수</span></div>
+<div class="card"><b>${r.totalReps}</b><span>${(r.rejectedReps ?? 0) > 0 ? `인정 횟수 · 미인정 ${r.rejectedReps}` : '총 운동 횟수'}</span></div>
 <div class="card"><b>${r.workoutMinutes}분</b><span>운동 시간</span></div>
-<div class="card"><b>${r.caloriesBurned}</b><span>소모 칼로리</span></div>
+<div class="card"><b>${r.caloriesBurned != null ? Math.round(r.caloriesBurned) : '—'}</b><span>${r.caloriesBurned != null ? '소모 칼로리(kcal, 추정)' : '칼로리 · 체중 필요'}</span></div>
 </div>
+${rejectedSummary(r) ? `<p>${esc(rejectedSummary(r)!)}</p>` : ''}
 <h2>종목별 싱크로율</h2><table><tr><th>종목</th><th>세트</th><th>싱크로율</th></tr>${rows}</table>
 ${sets}${analysis}${reps}${feedback}${worst}${ai}
 <div class="foot">세션 #${r.sessionId} · AI 서버가 분석한 rep 기록(pose_data)에서 백엔드가 집계한 값</div>
@@ -232,6 +239,9 @@ export default function ReportScreen() {
   // 싱크로율 색 — 이 종목의 판정 기준(정석·위험, 관리자 설정)으로. 서버가 안 보내면 80/60
   const thresholds = syncThresholdsFrom(report);
   const getSyncColor = (rate: number) => syncColor(rate, thresholds);
+  // 미인정 시도(2026-10-21) — 횟수엔 안 들어가고 점수엔 들어간다. 구버전 리포트는 없음 → 0
+  const rejected = report.rejectedReps ?? 0;
+  const rejectedText = rejectedSummary(report);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -257,15 +267,19 @@ export default function ReportScreen() {
         {/* 요약 카드 */}
         <View style={styles.summaryGrid}>
           <SummaryCard Icon={Target} value={hasScore ? `${report.avgSyncRate}%` : '—'} label={hasScore ? '평균 싱크로율' : '싱크로율 미측정'} highlight />
-          <SummaryCard Icon={TrendingUp} value={String(report.totalReps)} label="총 운동 횟수" />
+          <SummaryCard Icon={TrendingUp} value={String(report.totalReps)} label={rejected > 0 ? `인정 횟수 · 미인정 ${rejected}` : '총 운동 횟수'} />
           <SummaryCard Icon={Timer} value={`${report.workoutMinutes}분`} label="운동 시간" />
-          <SummaryCard Icon={Flame} value={String(report.caloriesBurned)} label="소모 칼로리" />
+          <SummaryCard Icon={Flame} value={report.caloriesBurned != null ? `${Math.round(report.caloriesBurned)}` : '—'}
+            label={report.caloriesBurned != null ? '소모 칼로리(kcal)' : '칼로리 · 체중 필요'} />
         </View>
 
-        {report.totalReps === 0 && (
+        {report.totalReps === 0 && rejected === 0 && (
           <Text style={styles.zeroNote}>
             이번 운동에서는 측정된 반복이 없어요. 전신이 화면에 들어오게 서서 다시 시도해보세요.
           </Text>
+        )}
+        {rejectedText && (
+          <Text style={[styles.zeroNote, styles.rejectedNote]}>{rejectedText}</Text>
         )}
         {!hasScore && report.totalReps > 0 && (
           <Text style={styles.zeroNote}>이 종목은 횟수만 측정해요. 동작 유사도(싱크로율)는 재지 않았어요.</Text>
@@ -305,7 +319,10 @@ export default function ReportScreen() {
         {/* 자세 채점 축 — 백엔드 계산기가 채점한 종목에만 있다 */}
         {report.squatDepthAnalysis && (
           <AxisCard title="스쿼트 깊이 정확도" score={report.squatDepthAnalysis.depthScore}
-            grade={DEPTH_GRADE_LABEL[report.squatDepthAnalysis.depthGrade]} lines={report.squatDepthAnalysis.narrative} />
+            grade={DEPTH_GRADE_LABEL[report.squatDepthAnalysis.depthGrade]} lines={report.squatDepthAnalysis.narrative}
+            sub={report.squatDepthAnalysis.targetKneeDeg != null
+              ? `목표: 무릎 ${Math.round(report.squatDepthAnalysis.targetKneeDeg)}° 이하까지 앉기 · 시범 동작 깊이 기준, 1° 얕을 때마다 4점 감점`
+              : undefined} />
         )}
         {report.lungeDepthAnalysis && (
           <AxisCard title="런지 깊이 정확도" score={report.lungeDepthAnalysis.depthScore}
@@ -355,22 +372,37 @@ export default function ReportScreen() {
             <Text style={styles.sectionTitle}>회차별 싱크로율</Text>
             <View style={styles.trend}>
               {report.repTrend.map((p) => {
-                const worst = p.repNumber === worstRep?.repNumber;
+                const counted = isCounted(p);
+                const worst = counted && p.repNumber === worstRep?.repNumber;
                 return (
-                  <View key={p.repNumber} style={styles.trendCol}>
+                  <View key={counted ? `r${p.repNumber}` : `x${p.attemptNumber}`} style={styles.trendCol}>
                     <View style={styles.trendTrack}>
                       <View
                         style={[
                           styles.trendBar,
-                          { height: `${Math.max(4, Math.min(100, p.syncRate))}%`, backgroundColor: worst ? COLORS.error : getSyncColor(p.syncRate) },
+                          // 색은 언제나 판정 기준(정석·교정·위험)대로. 최저 회차는 색을 바꾸지 않고 흰 테두리로만 표시한다 —
+                          // 예전엔 최저 회차를 빨강으로 칠해 63점(교정 필요)도 «위험»처럼 보였다.
+                          // 미인정 시도는 회색 — 점수(높이)는 보여주되 인정 회차와 섞여 보이지 않게
+                          { height: `${Math.max(4, Math.min(100, p.syncRate))}%`, backgroundColor: counted ? getSyncColor(p.syncRate) : COLORS.textMuted },
+                          worst && styles.trendBarWorst,
                         ]}
                       />
                     </View>
-                    <Text style={[styles.trendLabel, worst && { color: COLORS.error }]}>{p.repNumber}</Text>
+                    <Text style={[styles.trendLabel, worst && styles.trendLabelWorst, !counted && styles.trendLabelRejected]}>
+                      {counted ? p.repNumber : '✕'}
+                    </Text>
                   </View>
                 );
               })}
             </View>
+            {worstRep && (
+              <Text style={styles.trendNote}>
+                흰 테두리 = 가장 낮았던 {worstRep.repNumber}회차({Math.round(worstRep.syncRate)}%) · 색은 정석 {thresholds.good}% / 위험 {thresholds.warn}% 기준
+              </Text>
+            )}
+            {rejected > 0 && (
+              <Text style={styles.trendNote}>회색 ✕ = 미인정 시도 — 횟수엔 안 들어가고 점수엔 들어가요</Text>
+            )}
           </View>
         )}
 
@@ -466,26 +498,60 @@ function SummaryCard({ Icon, value, label, highlight }: {
   );
 }
 
-function Delta({ label, value, unit }: { label: string; value: number; unit: string }) {
+function Delta({ label, value, unit }: { label: string; value: number | null; unit: string }) {
+  if (value == null) {
+    return (
+      <View style={styles.delta}>
+        <Text style={styles.deltaLabel}>지난번 대비 {label}</Text>
+        <Text style={[styles.deltaValue, { color: COLORS.textSecondary }]}>—</Text>
+      </View>
+    );
+  }
   const color = value > 0 ? COLORS.primary : value < 0 ? COLORS.error : COLORS.textSecondary;
+  const shown = Number.isInteger(value) ? value : Math.round(value * 10) / 10;
   return (
     <View style={styles.delta}>
       <Text style={styles.deltaLabel}>지난번 대비 {label}</Text>
-      <Text style={[styles.deltaValue, { color }]}>{value > 0 ? '+' : ''}{value}{unit}</Text>
+      <Text style={[styles.deltaValue, { color }]}>{shown > 0 ? '+' : ''}{shown}{unit}</Text>
     </View>
   );
 }
 
+/**
+ * «미인정 2회 — 바닥 자세 미확인 2회. …» 한 줄. 미인정이 없으면 null.
+ * 인정 기준(무릎 115° 이하 + 바닥 자세가 두 번 연속 찍힘)을 같이 알려줘서 «왜 안 셌지?» 에 답한다.
+ */
+function rejectedSummary(r: SessionReportResponse): string | null {
+  const n = r.rejectedReps ?? 0;
+  if (n <= 0) return null;
+  const parts = Object.entries(r.rejectedRepsByReason ?? {})
+    .filter(([, c]) => (c ?? 0) > 0)
+    .map(([k, c]) => `${REJECT_REASON_LABEL[k as RejectReason] ?? k} ${c}회`);
+  const why = r.rejectedRepsByReason?.SPLIT_STANCE
+    ? '두 발을 나란히 두고, 충분히 앉아 바닥에서 잠깐 멈췄다 일어나야 1회로 세요.'
+    : '충분히 앉아 바닥에서 잠깐 멈췄다 일어나야 1회로 세요.';
+  return `미인정 ${n}회${parts.length ? ` — ${parts.join(' · ')}` : ''}. 횟수에는 넣지 않았지만 점수에는 반영했어요. ${why}`;
+}
+
+// 축 점수 색 — 백엔드 gradeOf 컷오프와 맞춘다: 75 이상(좋아요·매우 정확) 라임 · 60~74(양호) 주황 · 60 미만 빨강.
+// 예전엔 점수와 상관없이 라임이라 64점 «양호해요» 도 만점처럼 보였다.
+function axisColor(score: number): string {
+  if (score >= 75) return COLORS.primary;
+  if (score >= 60) return COLORS.warning;
+  return COLORS.error;
+}
+
 /** 자세 채점 축 카드 — 점수 + 등급 배지 + 회차별 코멘트 */
 function AxisCard({ title, score, grade, lines, sub }: { title: string; score: number; grade: string; lines: string[]; sub?: string }) {
+  const color = axisColor(score);
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{title}</Text>
       <View style={styles.axisCard}>
         <View style={styles.axisScoreRow}>
-          <Text style={styles.axisScore}>{score}점</Text>
-          <View style={styles.axisGradeBadge}>
-            <Text style={styles.axisGradeText}>{grade}</Text>
+          <Text style={[styles.axisScore, { color }]}>{score}점</Text>
+          <View style={[styles.axisGradeBadge, { backgroundColor: `${color}26` }]}>
+            <Text style={[styles.axisGradeText, { color }]}>{grade}</Text>
           </View>
         </View>
         {sub ? <Text style={styles.axisSub}>{sub}</Text> : null}
@@ -510,6 +576,11 @@ const styles = StyleSheet.create({
   trendTrack: { flex: 1, width: '100%', justifyContent: 'flex-end' },
   trendBar: { width: '100%', borderRadius: 3 },
   trendLabel: { fontSize: 10, color: COLORS.textMuted, marginTop: 4 },
+  trendBarWorst: { borderWidth: 2, borderColor: COLORS.text },
+  trendLabelWorst: { color: COLORS.text, fontWeight: '800' },
+  trendLabelRejected: { color: COLORS.warning, fontWeight: '800' },
+  rejectedNote: { color: COLORS.warning },
+  trendNote: { fontSize: FONT_SIZE.xs, color: COLORS.textSecondary, marginTop: SPACING.sm },
   container: { flex: 1, backgroundColor: COLORS.background },
   header: {
     flexDirection: 'row',

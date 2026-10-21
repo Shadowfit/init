@@ -156,6 +156,26 @@ POST /exercises/1/reference?youtubeUrl=<AI 컨테이너 안 파일 경로>
 ```
 유튜브 URL → AI 가 MediaPipe로 프레임마다 관절 좌표 추출 → Spring 콜백으로 `exercise_references` 테이블 영속화.
 
+### POST /sessions/{sessionId}/reattach - 진행 중 세션 이어하기 (AI 상태 재부착)
+AI 프로세스 메모리에서 사라진 분석 상태를 DB 값(pose_data·미인정 시도)으로 되살린다(이슈 #59 2단계, [`decisions/session-resume-and-ai-state.md`](./decisions/session-resume-and-ai-state.md)).
+```json
+// Response 200
+{
+  "sessionId": 42,
+  "restoredRepCount": 7,          // 인정 반복 수(MAX(pose_data.rep_number)). alreadyActive 면 살아있던 AI 의 현재 값
+  "restoredRejectedCount": 2,     // 2026-10-21, V35 — 저장된 미인정 시도 수. 이어하기 화면의 «미인정 N회» 카운터 시작값
+  "alreadyActive": false,
+  "analyzerStateReset": true,
+  "message": "7회까지 이어서 진행합니다. 자세 판정이 잠시 흔들릴 수 있습니다.",
+  "sessionNonce": "…",
+  "aiWorkerIndex": 0,
+  "syncGoodThreshold": 80.0,
+  "syncWarnThreshold": 60.0
+}
+// 503 SESSION_REATTACH_UNAVAILABLE — AI 연결 실패·서킷 OPEN·AI 거절(세션은 그대로 둔다)
+```
+`restoredRejectedCount` 는 재부착 요청 `ReattachRequest.initial_rejected_count`(14)로 AI 에 실어 보낸 값과 같다 — AI 는 미인정 번호(멱등키)와 화면 카운트를 여기서부터 잇는다. `restoredRepCount` 와 달리 `alreadyActive` 여도 **DB 값**이다(AI 재부착 응답에 그 필드가 없다).
+
 ### PATCH /sessions/{sessionId}/end - 운동 세션 종료
 권장 종료 경로. 프론트가 종료 버튼을 누르면 호출. **멱등** — 이미 종료된 세션에 다시 호출해도 `200`.
 ```
@@ -251,13 +271,36 @@ AI = 운동 통계의 단일 진실 원천 원칙. (커밋 143a2e4)
   "avgSyncRate": 78.5,
   "summary": "전체적으로 좋은 자세를 유지했습니다. 다만 후반부에 무릎이 발끝을...",
   "improvementTips": "1. 무릎 위치를 더 신경써주세요\n2. 허리를 곧게 유지해주세요",
-  "comparisonWithPrevious": {
-    "syncRateChange": +5.2,
-    "repChange": +3
+  "workoutMinutes": 3,                   // 시작~종료, 분 절삭
+  "caloriesBurned": 10,                  // 2026-10-21 — kcal 정수 반올림, Spring 이 체중으로 추정(아래). 못 쟀으면 null
+  "comparisonWithPrevious": {            // 같은 종목의 직전 COMPLETED 세션이 없으면 null
+    "syncRateDiff": 5,
+    "workoutMinutesDiff": -2,
+    "caloriesDiff": 3                    // 2026-10-21 — 두 세션 중 하나라도 칼로리가 null 이면 null
   },
+  "squatDepthAnalysis": {                // 스쿼트 세션만(런지·깊이 데이터 없음 → null)
+    "depthMode": "FULL",
+    "depthScore": 32,                    // 모든 행의 평균 (64 + 0) / 2 — 미인정 시도도 들어간다
+    "depthGrade": "POOR",
+    "repDepths": [                       // 2026-10-21 — 미인정 시도가 counted=false 행으로 시간순으로 섞인다
+      { "repNumber": 1, "minKneeAngle": 85.3, "depthScore": 64, "timeStamp": "00:05", "counted": true, "attemptNumber": null },
+      { "repNumber": null, "minKneeAngle": 101.2, "depthScore": 0, "timeStamp": "00:09", "counted": false, "attemptNumber": 1 }
+    ],
+    "narrative": ["1회 중 1회는 시범 깊이에 조금 못 미쳤어요.",
+                  "1회는 바닥 자세가 확인되지 않아 인정되지 않았어요 — 무릎 76° 이하까지 앉아 잠깐 멈췄다 일어나세요."],
+    "targetKneeDeg": 76.2                // 2026-10-21 — FULL 목표 무릎각(이하면 만점). HALF·이전 저장 리포트는 null
+  },
+  "totalReps": 1,                        // 인정 반복만 — 미인정 시도는 안 센다
+  "rejectedReps": 1,                     // 2026-10-21, V35 — 미인정 시도 수. 기록 이전 리포트는 0
+  "rejectedRepsByReason": { "DEPTH_NOT_CONFIRMED": 1 },   // 0 이 아닌 사유만. 없으면 {}
   "syncGoodThreshold": 80.0,             // 2026-10-21, V34 — 세션 종목의 «현재» 판정 기준(정석 ≥ good, 교정 필요 ≥ warn, 위험 < warn)
   "syncWarnThreshold": 60.0,
-  "repTrend": [{ "repNumber": 1, "syncRate": 82.5, "timeStamp": "00:05" }, ...],   // 회차 추이 — 예전 문서의 syncRateTimeline 은 오기
+  "repTrend": [                          // 회차 추이 — 예전 문서의 syncRateTimeline 은 오기. 2026-10-21 부터 시간순, 미인정 시도 포함
+    { "repNumber": 1, "syncRate": 82.5, "timeStamp": "00:05", "timestampSec": 5.2,
+      "counted": true, "attemptNumber": null, "rejectReason": null },
+    { "repNumber": null, "syncRate": 41.5, "timeStamp": "00:09", "timestampSec": 9.4,
+      "counted": false, "attemptNumber": 1, "rejectReason": "DEPTH_NOT_CONFIRMED" }
+  ],
   "syncRateDetails": [{ "exerciseId": 1, "name": "스쿼트", "setInfo": "3세트 x 12회 (마지막 7회)", "syncRate": 78.5 }],
   "sets": [                              // 2026-09-22, V26. 세트 도입 전 세션은 []
     { "setNo": 1, "reps": 12, "avgSyncRate": 80.1, "startedSec": 3.2, "endedSec": 41.0 },
@@ -267,6 +310,21 @@ AI = 운동 통계의 단일 진실 원천 원칙. (커밋 143a2e4)
 }
 ```
 `sets`·`setInfo` 는 AI 가 보낸 값이 아니라 완료 시점에 `pose_data` 의 rep 별 집계를 `ceil(rep_number / targetRepsPerSet)` 로 묶은 것이다(싱크 통계 #75 와 같은 원칙). 마지막 세트만 목표 미달일 수 있어 `setInfo` 는 «N세트 x T회」 또는 «N세트 x T회 (마지막 r회)」 두 꼴뿐이다.
+
+**칼로리 (2026-10-21)** — AI 는 체중을 몰라 완료 콜백의 `calories_burned` 를 늘 0.0 으로 보낸다. 그래서 그 값은 버리고(proto 는 그대로) Spring 이 완료 시점에 `kcal = MET 3.0 × 3.5 × 체중(kg) ÷ 200 × 분` 으로 추정해 `exercise_sessions.calories_burned` 에 소수 둘째 자리로 저장한다(`CalorieEstimator`). MET 3.0 은 2024 Adult Compendium 코드 02056 «Body weight resistance exercises (squat, lunge, …), general» — 스쿼트·런지 공통. 분은 시작~완료 구간(`workoutMinutes` 와 같은 구간)을 **절삭하지 않은 소수**로 쓴다.
+- 체중(`members.weight`)이 없거나 0 이하면 세션 칼로리는 **null**(«못 잼»)이다 — 0 이 아니다. 이 응답의 `caloriesBurned` 도 `Integer` 로 바꿔 **null** 을 그대로 싣는다(예전엔 `int` 라 0 으로 접혔다 — 이 필드만 `avgSyncRate`·`totalReps` 의 «0 으로 접기» 규약에서 빠진다). 값이 있으면 소수 둘째 자리 저장값을 정수로 **반올림**한다(예전엔 절삭 — `caloriesDiff` 의 반올림과 맞춤). 일지(`daily_logs.total_calories`)에는 0 을 더하고, 주간 합계(`totalCalories`)도 0 으로 친다.
+- `comparisonWithPrevious.caloriesDiff` 는 `Integer` 다 — 두 세션 중 하나라도 null 이면 **null**(없는 값을 0 으로 쳐서 «지난번 대비 −56» 같은 가짜 차이를 만들지 않는다). 이 변경 전에 완료된 세션은 백필하지 않았다: AI 경로로 완료된 옛 세션은 `0.00` 이 그대로 남아 있어 그 세션과 비교하면 차이가 «+N» 으로 나온다.
+
+**`squatDepthAnalysis.targetKneeDeg` (2026-10-21)** — FULL 모드 깊이 채점의 목표 무릎각 = 이 종목 기준(`exercise_references`, 시범)의 최저 무릎각 + 5.0°(AI 싱크로율의 무릎 허용 오차와 같은 값). 회차 점수 = `max(0, round(100 − 4 × max(0, 최저 무릎각 − 목표)))`. 앱은 «목표: 무릎 76° 이하» 처럼 보여 준다. 리포트는 완료 시점에 계산돼 `reports.detailed_analysis` 에 저장되므로(precompute-on-write) 목표·점수는 **그 시점 값으로 박제**된다 — 이 필드가 생기기 전에 저장된 리포트는 옛 규칙(100° 이하 만점) 점수 그대로이고 `targetKneeDeg` 가 null 이다. 근거: `docs/decisions/squat-repetition-counting.md` 2026-10-21 절.
+
+**«미인정 시도» (2026-10-21, V35 `exercise_rejected_attempts`)** — 내려갔다 올라왔지만 AI 가 1회로 인정하지 않은 시도(바닥 자세 미확인 `DEPTH_NOT_CONFIRMED`·런지 자세 `SPLIT_STANCE`). 횟수 판정은 엄격하게 두고(사람 판정과 맞춤), 대신 미달 시도가 리포트에 보이게 한다 — 예전엔 그런 시도가 어디에도 안 남아 «좋은 자세만 세니 리포트는 무조건 좋다» 였다. 근거: [`decisions/counted-reps-vs-scored-attempts.md`](./decisions/counted-reps-vs-scored-attempts.md).
+- **횟수·세트·목표 달성은 인정 반복만**이다: `totalReps`·`sets`·`syncRateDetails[0].setInfo` 는 그대로.
+- **점수는 모든 시도**다: `avgSyncRate`(= 세션 `avg_sync_rate`, `max/min_sync_rate` 도 같다)는 인정 반복과 미인정 시도를 **한 표씩** 센 평균이다. 인정 0회·미인정만 있는 세션도 점수가 있다(`scoreAvailable: true`, `totalReps: 0`). 그래서 이 날짜 이후 세션의 평균은 «센 반복의 평균» 이 아니라 «시도의 평균» 이고, 미인정 시도가 있던 세션은 그 전 세션과 비교하면(`comparisonWithPrevious.syncRateDiff`·주간 평균) 그만큼 낮게 나온다. 미인정 시도가 없는 세션은 값이 예전과 같다.
+- `repTrend` 의 점에 `timestampSec`(숫자 시각)·`counted`·`attemptNumber`·`rejectReason` 이 붙었다. 미인정 점은 `repNumber: null`·`counted: false`·`attemptNumber: k`(세션 안 미인정 번호, 1부터). 미인정 시도가 있으면 목록 전체가 `timestampSec` 오름차순이다(없으면 예전과 같은 rep 오름차순). **`repNumber` 는 null 일 수 있다** — 회차 번호로 무언가를 잇는 쪽은 null 을 건너뛸 것(`worstSection.repNumber` 매칭 등). `worstSection` 은 인정 반복에서만 고른다(대표 프레임의 3D 자세가 `pose_data` 에만 있다).
+- `squatDepthAnalysis.repDepths`·`squatTrunkLeanAnalysis.repTrunkLeans` 에도 미인정 시도가 `counted: false`·`repNumber: null`·`attemptNumber` 행으로 시간순으로 섞이고, **인정 반복과 같은 공식**(같은 목표·같은 감점)으로 채점된다. 세션 `depthScore`·`tiltScore` 는 모든 행의 평균이다. 미인정 체간 행의 `avgTiltDeg` 는 평균이 아니라 «가장 깊이 앉은 순간» 한 장의 값이다. 무릎각·기울기가 미상인 시도는 행을 안 만든다.
+- 깊이 `narrative` 는 미인정 시도가 있으면 사유별 한 문장을 끝에 붙인다(합계 4문장 이하 — 회차 코멘트 몫이 줄어든다): `DEPTH_NOT_CONFIRMED` «N회는 바닥 자세가 확인되지 않아 인정되지 않았어요 — 무릎 {목표}° 이하까지 앉아 잠깐 멈췄다 일어나세요.»(HALF 모드는 «목표 깊이까지»), `SPLIT_STANCE` «N회는 두 발이 앞뒤로 벌어진 자세로 보여 인정되지 않았어요 — 두 발을 어깨너비로 나란히 두고 앉으세요.» 회차 지목(«N회차»)은 인정 반복의 번호만 쓴다.
+- 런지는 AI 가 미인정 시도를 보내지 않아 바뀐 것이 없다.
+- **옛 리포트**: 이 필드들이 생기기 전에 저장된 `detailed_analysis` 는 그대로 읽힌다 — `rejectedReps: 0`·`rejectedRepsByReason: {}`, 옛 점·행은 `counted: true`·`attemptNumber: null`·`timestampSec: null`(백필 없음).
 
 ### ~~GET /reports/weekly~~ → **GET /reports/weekly-summary 로 합쳤다** (2026-08-23, #352)
 
@@ -569,6 +627,28 @@ message FeedbackBatchResponse {
   int32 saved_count = 2;                       // INSERT 된 row 수 (중복 흡수 제외)
 }
 ```
+
+### gRPC ExerciseService.SaveRejectedAttempt — «미인정 시도» 1건 저장 (2026-10-21, V35)
+**호출자**: AI 서버 (FastAPI → Spring). 내려갔다 올라왔지만 1회로 인정하지 않은 시도마다 1건 — «가장 깊이 앉은 순간» 한 장으로 요약.
+**인증**: 다른 AI 콜백과 같다(`InternalAuthInterceptor`).
+**멱등성**: `(session_id, attempt_number)` UNIQUE + `ON DUPLICATE KEY UPDATE` — 재전송(동시 재전송 포함)에 행이 안 는다. 첫 저장값을 보존한다.
+**세션 규칙**: `SavePoseDataBatch` 와 같다 — 세션 없음 `NOT_FOUND`, `IN_PROGRESS` 가 아니면(완료 뒤 도착) 저장 없이 `success=true`. 횟수만 세는 종목도 저장하지 않는다(점수가 없다). 저장되면 `last_active_at` 도 갱신한다(얕은 시도만 반복하는 동안 유휴 타임아웃이 세션을 걷어가지 않게).
+**거절**: `attempt_number ≤ 0`·모르는 `reason` → `INVALID_ARGUMENT`(INVALID_INPUT_VALUE), `sync_rate ∉ [0,100]`·`timestamp_sec ∉ [0,3600]`·`min_knee_angle`/`torso_tilt_deg ∉ [0,180]`·NaN·JSON 이 아닌 `joint_coordinates` → `INVALID_ARGUMENT`(DATA_INTEGRITY_VIOLATION). 잠금 경합 → `ABORTED`. `min_knee_angle` 0 은 «미상» 이라 NULL 로, 빈 `joint_coordinates` 는 NULL 로 저장한다.
+
+```proto
+message RejectedAttemptRequest {
+  int64 session_id = 1;
+  int32 attempt_number = 2;      // 세션 안 미인정 번호(1부터) — 멱등키
+  string reason = 3;             // "DEPTH_NOT_CONFIRMED" | "SPLIT_STANCE"
+  double sync_rate = 4;          // 인정 반복과 같은 식, 0~100
+  double min_knee_angle = 5;     // 가장 깊이 앉은 순간의 무릎각
+  double torso_tilt_deg = 6;
+  double timestamp_sec = 7;      // pose_data.timestamp_sec 과 같은 원점
+  string joint_coordinates = 8;
+}
+message RejectedAttemptResponse { bool success = 1; }
+```
+저장된 시도는 세션 완료 때 싱크 통계(avg/max/min)와 리포트(`rejectedReps`·회차 추이·깊이·체간)에 들어가고 횟수·세트에는 안 들어간다 — 위 「세션 보고서」 절.
 
 ### 기존 gRPC RPC (참고)
 

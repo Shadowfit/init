@@ -917,4 +917,22 @@
 
 **FastAPI 측** — `SYNC_THRESHOLDS` 삭제 → `DEFAULT_SYNC_GOOD/WARN`, `resolve_sync_thresholds`, `SessionState` 기준 보관, `analyze_video(reference=True)`(ROI·너비·벌린 다리 필터 끔), `ReferenceExtractionError`·`spring_client.send_reference_failure`.
 
-**결합 결과**: «Spring 쪽에 완료 신호가 없다» 던 #772 의 빈칸이 채워졌다 — 추출 결과가 성공·실패 모두 같은 역호출로 돌아온다. 원격 URL·파일 없음 같은 **접수 단계 거부는 여전히 사유 없이** `success=false` 라, Spring 은 일반 문구로 FAILED 처리한다. 상세: [changelog 2026-10-21](./ai-backend-changelog.md).
+**결합 결과(판정 기준·추출 상태)**: «Spring 쪽에 완료 신호가 없다» 던 #772 의 빈칸이 채워졌다 — 추출 결과가 성공·실패 모두 같은 역호출로 돌아온다. 원격 URL·파일 없음 같은 **접수 단계 거부는 여전히 사유 없이** `success=false` 라, Spring 은 일반 문구로 FAILED 처리한다. 상세: [changelog 2026-10-21](./ai-backend-changelog.md).
+
+### 10-21 (2) — 싱크로율·깊이 점수 같은 잣대 + 칼로리 (양쪽, proto 변경 없음)
+
+**FastAPI 측** — `dtw_calculator`(사용자 각도 시간축 보간 `densify`, 궤적 비교 전 기준 최솟값에서 자르기, 허용 무릎 5°·고관절 8°), `config.SYNC_RATE_TAU_DEG` 24, `squat_analyzer._rep_times`(실시간 프레임 시각 전달).
+
+**Spring 측** — `SquatDepthAnalysisCalculator`(만점 기준 = 기준 동작 최저 무릎 + 5°, 1° 당 4점), `ReferenceDepth` 공개, `CalorieEstimator`(MET 3.0), `SessionCompletionTx`(AI 의 `calories_burned` 무시), 리포트 `targetKneeDeg`·`caloriesBurned` null 허용.
+
+**결합 결과(2)**: 무릎 허용 5° 가 AI 싱크로율·Spring 깊이 점수·앱 3D 비교 세 곳에 같이 박혔다 — 하나만 바꾸면 «싱크로율 낮은데 깊이 100점» 이 다시 생긴다. `SessionCompleteRequest.calories_burned` 는 계약에 남지만 읽는 쪽이 없어졌다. 상세: [changelog 2026-10-21 (2)](./ai-backend-changelog.md).
+
+### 10-21 (3) — 미인정 시도 (양쪽, proto: 새 RPC 1개·필드 1개)
+
+**proto** — `rpc SaveRejectedAttempt(RejectedAttemptRequest)`, `ReattachRequest.initial_rejected_count`(14).
+
+**FastAPI 측** — `squat_counter`(`rejected_event`·`rejected_count`, 반복 인정 규칙은 원래대로), `squat_analyzer`(미인정 시도 채점·요약), `spring_client.send_rejected_attempt`(구버전 Spring 의 UNIMPLEMENTED 는 경고 후 버림), `pose.py`(`rejected_count`·`rejected_reason` 응답).
+
+**Spring 측** — V35 `exercise_rejected_attempts`, 미인정 시도 수신(멱등), 세션 싱크로율 집계에 포함, 재부착 개수 전달, 리포트 `rejectedReps`·`counted:false` 회차.
+
+**결합 결과(3)**: AI → Spring 콜백이 하나 늘었다. 플래그 대신 별도 RPC 라 배포 순서와 무관하게 안전하다(구버전 Spring 은 거절, 미인정 프레임이 pose_data 로 새지 않는다). 상세: [changelog 2026-10-21 (3)](./ai-backend-changelog.md).

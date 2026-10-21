@@ -35,6 +35,7 @@ public class LungeDepthAnalysisCalculator {
     // 같은 결합 취약성을 그대로 안는다 — 시드가 바뀌면 이 값도 같이 고쳐야 한다.
     private static final long LUNGE_EXERCISE_ID = 2L;
 
+    // 2026-10-21 스쿼트 FULL 은 이 100도 선을 버리고 «기준 최저 무릎각 + 5도» 로 바꿨다(싱크로율과 모순돼서) — 런지는 싱크로율이 없어 그 모순이 없으므로 그대로 둔다.
     private static final double TARGET = 100.0;
     private static final double ENTRY = 115.0;   // ai-server bottom_angle(100) + margin(15, 스쿼트와 동일 여유)
 

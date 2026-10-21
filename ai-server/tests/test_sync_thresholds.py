@@ -144,7 +144,7 @@ def test_레지스트리는_임계값_기본값이_80_60이고_지정하면_저�
 
 
 def _message_for(monkeypatch, score: float, **state_kwargs) -> str:
-    monkeypatch.setattr(squat_analyzer, "compute_sync_rate", lambda *_: score)
+    monkeypatch.setattr(squat_analyzer, "compute_sync_rate", lambda *_, **__: score)
     state = SessionState(session_id=1, exercise_id=1, reference_angles=[[1.0, 2.0, 3.0, 4.0]], **state_kwargs)
     event = StreamingSquatAnalyzer("squat")._summarize_rep(state, [1.0, 2.0, 3.0, 4.0])
     assert event.sync_rate == score

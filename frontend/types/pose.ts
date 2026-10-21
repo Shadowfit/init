@@ -4,6 +4,13 @@ import type { FeedbackType } from './feedback';
 // AI 가 돌려주는 자세 결함 유형 (백엔드 FeedbackType 8종과 동일)
 export type AiFeedbackType = FeedbackType;
 
+/** 미인정 사유(2026-10-21) — AI squat_counter 와 백엔드 리포트가 같은 코드를 쓴다 */
+export type RejectReason = 'DEPTH_NOT_CONFIRMED' | 'SPLIT_STANCE';
+export const REJECT_REASON_LABEL: Record<RejectReason, string> = {
+  DEPTH_NOT_CONFIRMED: '바닥 자세 미확인',
+  SPLIT_STANCE: '런지 자세',
+};
+
 export interface LungeProgress {
   phase: 'calibrating' | 'ready' | 'descending' | 'returning';
   lead_leg: 'left' | 'right' | null;
@@ -72,6 +79,11 @@ export interface PoseDetectResponse {
   sync_rate?: number | null;
   rep_count?: number | null;
   rep_completed?: boolean;
+  // 이 세션의 «미인정» 시도 수(2026-10-21, 스쿼트) — 내려갔다 올라왔지만 1회로 인정되지 않은 시도.
+  // 횟수엔 안 들어가고 리포트 점수에만 들어간다. 구버전 서버는 없음.
+  rejected_count?: number | null;
+  // 이번 프레임에서 시도가 미인정됐을 때만 채워진다 — 사유 코드. 안내 문구는 message 에 온다.
+  rejected_reason?: RejectReason | null;
   lunge?: LungeProgress | null;
   squat?: SquatProgress | null;
   feedback_type?: AiFeedbackType | null;

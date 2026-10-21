@@ -35,17 +35,52 @@ export const SCORE_TAU = 1.5;
  *   상체  : 서 있을 때 대비 최대 숙임의 차이
  */
 export const POSTURE_AXES: Record<MotionExercise, Array<{ key: 'knee' | 'hip' | 'trunk'; tol: number; max: number; weight: number }>> = {
+  // 2026-10-21: 무릎 허용 8→5°, 고관절 10→8° — AI 싱크로율(ai-server dtw_calculator `_KNEE/_HIP_TOLERANCE_DEG`)과
+  // 리포트 깊이 점수(백엔드 SquatDepthAnalysisCalculator, 시범 최저 무릎 + 5°)와 같은 허용 오차. 셋이 같이 움직여야 한다.
   squat: [
-    { key: 'knee', tol: 8, max: 35, weight: 0.5 },
-    { key: 'hip', tol: 10, max: 40, weight: 0.25 },
+    { key: 'knee', tol: 5, max: 35, weight: 0.5 },
+    { key: 'hip', tol: 8, max: 40, weight: 0.25 },
     { key: 'trunk', tol: 8, max: 30, weight: 0.25 },
   ],
   lunge: [
-    { key: 'knee', tol: 8, max: 35, weight: 0.5 },
-    { key: 'hip', tol: 10, max: 40, weight: 0.2 },
+    { key: 'knee', tol: 5, max: 35, weight: 0.5 },
+    { key: 'hip', tol: 8, max: 40, weight: 0.2 },
     { key: 'trunk', tol: 8, max: 30, weight: 0.3 },
   ],
 };
+
+/** 궤적 점수용 사용자 곡선 보간 간격(초) — 기준(0.1초)보다 촘촘하게. */
+const TRAJ_STEP_SEC = 1 / 12;
+
+/**
+ * 궤적 점수용 사용자 곡선 — (1) 기준의 «바닥»에서 자르고 (2) 시간축으로 선형 보간한다(2026-10-21).
+ *
+ * (1) 기준보다 더 깊게 앉은 것은 «다르다» 가 아니다(자세 점수와 같은 원칙). 무릎·고관절 각도(0·1번)는 기준의
+ *     최솟값 밑으로, 엉덩이 내려간 정도(3번)는 기준의 최댓값 위로 가면 그 값으로 본다. 상체 숙임(2번)은 깊이가
+ *     아니라 자세라 자르지 않는다.
+ * (2) 3fps 라 반복당 3~6장인데, DTW 거리를 «찍힌 프레임» 으로 평균하면 전이 구간이 한 장 끼고 안 끼고에 따라
+ *     같은 동작이 수 점씩 달라졌다(AI 싱크로율에서 같은 깊이 반복이 3장 73점·5장 90점). 프레임 사이를 이어
+ *     연속 동작으로 평균하면 찍힌 장수에 둔감해진다. 와핑 경로(관절별 오차·3D 강조)는 실제 프레임 그대로 쓴다.
+ */
+export function trajectoryCurve(user: number[][], t: number[], ref: number[][]): number[][] {
+  if (!user.length) return user;
+  const dims = user[0].length;
+  const lo = Array.from({ length: dims }, (_, k) => Math.min(...ref.map((r) => r[k])));
+  const hi = Array.from({ length: dims }, (_, k) => Math.max(...ref.map((r) => r[k])));
+  const floored = user.map((v) => v.map((x, k) => (k === 0 || k === 1 ? Math.max(x, lo[k]) : k === 3 ? Math.min(x, hi[k]) : x)));
+  const ok = t.length === floored.length && t.every((x, i) => Number.isFinite(x) && (i === 0 || x > t[i - 1]));
+  const times = ok ? t : floored.map((_, i) => i / 3);
+  if (floored.length < 2) return floored;
+  const out: number[][] = [];
+  let seg = 0;
+  for (let tau = times[0]; ; tau = Math.min(tau + TRAJ_STEP_SEC, times[times.length - 1])) {
+    while (seg < times.length - 2 && times[seg + 1] < tau) seg++;
+    const a = times[seg], b = times[seg + 1], w = b > a ? (tau - a) / (b - a) : 0;
+    out.push(floored[seg].map((x, k) => x + (floored[seg + 1][k] - x) * Math.max(0, Math.min(1, w))));
+    if (tau >= times[times.length - 1]) break;
+  }
+  return out;
+}
 /** 최종 점수 = POSTURE_WEIGHT × 자세 + (1 − POSTURE_WEIGHT) × 궤적 */
 export const POSTURE_WEIGHT = 0.7;
 
@@ -462,7 +497,9 @@ export function compareRecording(rec: MotionRecording, refs: ReferenceSet): Sess
     const s = summarize(exercise, lead, ref, ref, feats, res.path);
     // 점수: 최저점 자세가 주(70%), DTW 궤적 거리가 보조(30%). 프레임 평균 거리만 쓰면 3fps 잡음이 자세 차이를 덮어서
     // «기준과 같은 자세가 49점, 20° 얕은 자세가 44점» 처럼 구분이 안 됐다(2026-10-20 실촬영).
-    const trajectory = Math.max(0, Math.min(1, Math.exp(-res.meanDistance / SCORE_TAU)));
+    // 궤적 거리는 바닥에서 자르고 보간한 곡선으로 따로 잰다(trajectoryCurve) — 찍힌 장수·더 깊은 자세에 흔들리지 않게.
+    const trajRes = dtwAsymmetric(trajectoryCurve(user, feats.map((f) => f.t), ref.scaled), ref.scaled, { weights: weightsOf(exercise) });
+    const trajectory = Math.max(0, Math.min(1, Math.exp(-trajRes.meanDistance / SCORE_TAU)));
     const posture = postureScore(exercise, s);
     const similarity = Math.round(100 * (POSTURE_WEIGHT * posture + (1 - POSTURE_WEIGHT) * trajectory));
     results.push({

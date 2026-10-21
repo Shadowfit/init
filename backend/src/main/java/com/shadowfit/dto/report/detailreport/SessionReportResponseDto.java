@@ -23,8 +23,19 @@ public class SessionReportResponseDto {
     // 횟수만 측정한 운동의 0 기본값을 점수로 표시하지 않도록 구분한다.
     private boolean scoreAvailable;
     private int totalReps;
+    /**
+     * «미인정 시도» 수 (2026-10-21, V35) — 내려갔다 올라왔지만 {@code totalReps} 에 안 들어간 시도. 횟수·세트에는 안 들어가지만
+     * 점수에는 들어간다: {@code avgSyncRate} 는 인정 반복과 미인정 시도를 한 표씩 센 평균이고, {@code repTrend}·
+     * {@code squatDepthAnalysis.repDepths}·{@code squatTrunkLeanAnalysis.repTrunkLeans} 에 {@code counted=false} 행으로 섞인다.
+     * 기록 이전에 저장된 리포트는 0.
+     */
+    private int rejectedReps;
+    /** 사유별 미인정 시도 수 — 0 이 아닌 사유만(예: {@code {"DEPTH_NOT_CONFIRMED": 2}}). 없으면 빈 객체. */
+    private java.util.Map<String, Integer> rejectedRepsByReason = java.util.Map.of();
     private int workoutMinutes;
-    private int caloriesBurned;
+    // kcal, 정수 반올림. 2026-10-21 부터 Spring 이 체중으로 추정한다(CalorieEstimator) — 체중을 몰라 못 잰 세션은
+    // 0 이 아니라 null 이다(아래 of 주석). 앱은 null 이면 «체중 필요» 로 보여 준다.
+    private Integer caloriesBurned;
     private String aiSafetyReport;
 
     /**
@@ -38,7 +49,9 @@ public class SessionReportResponseDto {
     private WorstSectionDto worstSection;
 
     /**
-     * 회차별 싱크로율 추이(rep 오름차순). 측정된 rep 이 없으면 빈 리스트.
+     * 회차별 싱크로율 추이(시간 오름차순). 측정된 rep 이 없으면 빈 리스트. 2026-10-21 부터 미인정 시도가
+     * {@code counted=false}·{@code repNumber=null} 점으로 섞인다({@link RepSyncRateDto}) — 옛 리포트는 인정 반복뿐이라
+     * rep 오름차순 그대로다.
      *
      * <p>{@code syncRateDetails} 는 이름과 달리 <b>세션당 한 줄</b>이라(운동 종목 단위 요약) 회차
      * 흐름을 볼 수 없었다. {@code worstSection} 도 가장 나빴던 한 회차만 알려준다. 데이터는
@@ -101,6 +114,10 @@ public class SessionReportResponseDto {
      * 500</b> 이 됐다. 지금까지 안 터진 건 AI 가 늘 0.0 을 보내 실제 null 이 없었기 때문이고,
      * #75 수정으로 null 이 실재하게 되면서 드러났다. {@code totalReps}·{@code caloriesBurned} 도
      * 같은 형태의 잠복 NPE 라 함께 막는다.
+     *
+     * <p><b>2026-10-21 — {@code caloriesBurned} 는 예외가 됐다.</b> 칼로리를 Spring 이 체중으로 추정하면서
+     * «체중을 몰라 못 잼(null)» 이 정상 케이스가 됐고, 그 세션은 rep 이 있어 «0회 / 0 kcal» 처럼 자기모순 없이
+     * 읽히지 않는다. 그래서 이 필드만 {@code Integer} 로 바꿔 null 을 그대로 내보낸다.
      */
     public static SessionReportResponseDto of(Session session, Report report) {
         SessionReportResponseDto dto = new SessionReportResponseDto();
@@ -110,7 +127,10 @@ public class SessionReportResponseDto {
         dto.setScoreAvailable(session.getAvgSyncRate() != null);
         dto.setTotalReps(session.getTotalReps() == null ? 0 : session.getTotalReps());
         dto.setWorkoutMinutes((int) java.time.Duration.between(session.getStartTime(), session.getEndTime()).toMinutes());
-        dto.setCaloriesBurned(intOrZero(session.getCaloriesBurned()));
+        // 칼로리만은 null 을 접지 않는다(2026-10-21) — 체중이 없어 못 잰 세션이 실재하게 됐고, 0 으로 접으면 «소모 칼로리 0»
+        // 이라는 거짓 값이 된다. 절삭(intValue)이 아니라 반올림인 이유: caloriesDiff 가 반올림이라 화면의 두 값이 어긋나지 않게.
+        dto.setCaloriesBurned(session.getCaloriesBurned() == null ? null
+                : session.getCaloriesBurned().setScale(0, java.math.RoundingMode.HALF_UP).intValue());
         dto.setAiSafetyReport(report.getImprovementTips());
         // 호출부(ReportService)가 exercise 를 JOIN FETCH 로 읽어 온다 — open-in-view: false 라 여기서 lazy 를 타면 안 된다.
         if (session.getExercise() != null) {

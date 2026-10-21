@@ -1,5 +1,46 @@
 # Spring ↔ FastAPI 결합 변경 이력
 
+## 2026-10-21 (3) — «미인정 시도» 를 세어 보여주고 리포트에 반영 — 새 RPC `SaveRejectedAttempt`
+
+«자세가 나쁘면 안 세져서 리포트가 좋게만 나온다» 는 지적으로, 세지 않은 시도가 리포트·DB 어디에도 남지 않는다는 것을 확인했다.
+횟수 규칙은 그대로(바닥 연속 두 표본·선 자세 고관절 150° — 같은 날 완화했다가 2026-09-21 사람 판정과 어긋나 되돌림)이고,
+내려갔다 올라왔지만 인정되지 않은 시도를 **미인정 시도**로 센다.
+
+- **AI**: `SquatCounter.rejected_event/rejected_count`(사유 `DEPTH_NOT_CONFIRMED`·`SPLIT_STANCE`), 인정 반복과 같은 식으로 채점해
+  가장 깊은 순간 하나로 요약 → `spring_client.send_rejected_attempt` → **새 RPC** `SaveRejectedAttempt(RejectedAttemptRequest)`.
+  앱 응답 `PoseResponse.rejected_count·rejected_reason`. 재부착은 `ReattachRequest.initial_rejected_count`(14)에서 잇는다.
+- **Spring**: V35 `exercise_rejected_attempts`(세션·번호 유일 — 재전송 멱등), 세션 평균·최대·최소 싱크로율은 «모든 시도» 로 집계
+  (`total_reps`·세트는 인정 반복만), 리포트에 `rejectedReps`·사유별 개수, `repTrend`·깊이·체간 회차에 `counted:false` 항목.
+- **왜 플래그가 아니라 별도 RPC**: 구버전 Spring 은 `SavePoseDataBatch` 의 모르는 필드를 무시하므로 플래그 방식이면 미인정 프레임이
+  정상 반복으로 저장된다. 별도 RPC 면 구버전은 `UNIMPLEMENTED` 로 거절할 뿐이고 AI 는 한 번 경고하고 버린다 — **어느 쪽을 먼저 배포해도 안전**.
+- 실촬영: normal 5·5·side 5회·미인정 0, shallow_01 0회·미인정 2. 결정: [`../decisions/counted-reps-vs-scored-attempts.md`](../decisions/counted-reps-vs-scored-attempts.md) §6.
+
+## 2026-10-21 (2) — 싱크로율·깊이 점수를 같은 잣대로, 찍힌 프레임 수에 흔들리지 않게
+
+사용자 리포트에서 같은 깊이(무릎 76°·74°)의 두 반복이 싱크로율 73·90 으로 갈렸고, 싱크로율 63.5 «자세 보정 필요» 인
+반복(무릎 85°)이 깊이 점수는 100 «매우 정확해요» 였다. 원인 셋과 고친 것:
+
+1. **궤적 항이 찍힌 프레임 수에 흔들렸다** — 비대칭 DTW 거리를 사용자 프레임으로 평균해서 3fps·반복당 3~5장일 때
+   전이 프레임 한 장의 비중이 컸다(4장 반복 78~84 vs 5장 86~92). 사용자 각도 열을 **시간축으로 선형 보간**한 뒤 비교한다
+   (`dtw_calculator.densify`, 실시간은 프레임 시각을 넘김). 같은 동작을 3~12장으로 찍었을 때 점수 폭 10~12 → 약 1.
+2. **기준보다 깊게 앉으면 궤적 항에서 감점됐다** — 최저점 항은 한쪽만 감점하는데 궤적은 양방향이었다. 궤적 비교 전에
+   사용자 각도를 채널마다 **기준의 최솟값에서 자른다**.
+3. **깊이 점수의 잣대가 따로 놀았다** — 리포트 깊이 점수는 무릎 100° 이하면 만점이었는데(2D 각도 전환 전 값),
+   AI 는 115° 이하만 반복으로 세므로 세어진 반복은 사실상 늘 100점이었다. 이제 **기준 동작 최저 무릎 + 5°** 이하가 만점이고
+   1° 얕을 때마다 4점 감점(`SquatDepthAnalysisCalculator`, 기준은 `exercise_references` 에서 AI 와 같은 방식으로 잰다).
+
+더불어 사용자 요청(«조금 더 엄격하게»)으로 허용 오차 무릎 8→**5°**·고관절 10→**8°**, `SYNC_RATE_TAU_DEG` 30→**24**.
+실촬영 재현(`scripts/sync_rate_harness.py`, 기준 = 3D 마네킹 최저 무릎 71.2°): 깊고 바른 반복 88.7~94.8, 무릎 76~78° 81~86,
+81° 76, 84° 68.5, 93° 47(예전 58). **무릎 허용 5° 는 세 곳이 같이 움직인다** — AI `_KNEE_TOLERANCE_DEG`, 백엔드 깊이 점수의
+목표(기준 + 5°), 앱 3D 비교 `POSTURE_AXES`. 앱 3D 비교의 궤적 점수도 같은 보간·바닥 자르기를 쓴다(`trajectoryCurve`).
+proto 변경 없음. 리포트 JSON 에 `squatDepthAnalysis.targetKneeDeg` 가 붙는다.
+
+**칼로리.** AI 는 `SessionCompleteRequest.calories_burned` 를 늘 0 으로 보냈다(체중을 모른다 — «칼로리 계산은 추후»).
+이제 Spring 이 그 값을 무시하고 완료 시점에 `CalorieEstimator` 로 계산한다 — kcal = MET 3.0 × 3.5 × 체중 ÷ 200 × 분
+(2024 Adult Compendium 02056 «맨몸 저항 운동(스쿼트·런지 등), 일반»). 체중이 없으면 세션 값은 null(앱 «칼로리 · 체중 필요»),
+일일 합계엔 0. proto 필드는 그대로 두고 읽지만 않는다. 이미 저장된 리포트(`session_reports.detailed_analysis`)는 그때의
+규칙으로 남는다 — 새 규칙은 이후 완료되는 세션부터.
+
 ## 2026-10-21 — 판정 기준 종목당 하나로 + 기준 영상 추출 실패를 Spring 이 안다
 
 **판정 기준.** 페르소나별 싱크로율 기준(AI 상수 `SYNC_THRESHOLDS` 60/85/70/50)을 없애고 **종목당 정석·위험 두 값**

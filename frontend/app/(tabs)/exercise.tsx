@@ -99,6 +99,8 @@ export default function ExerciseScreen() {
   const [coachingNotice, setCoachingNotice] = useState<{ message: string; success: boolean } | null>(null);
   // AI 응답 — 누적 횟수
   const [repCount, setRepCount] = useState(0);
+  // 미인정 시도 수(2026-10-21) — 내려갔다 올라왔지만 1회로 인정되지 않은 시도. 사용자가 «왜 안 세지?» 를 알 수 있게 보여준다
+  const [rejectedCount, setRejectedCount] = useState(0);
   // 카메라 ref (takePictureAsync 호출용)
   const cameraRef = useRef<CameraView | null>(null);
 
@@ -159,6 +161,7 @@ export default function ExerciseScreen() {
         setAiWorkerIndex(r.aiWorkerIndex ?? null);
         setThresholds(syncThresholdsFrom(r));
         setRepCount(r.restoredRepCount);
+        setRejectedCount(r.restoredRejectedCount ?? 0);
         setIsRecording(true);
         if (r.analyzerStateReset) {
           // 감수하기로 확정된 손실(session-resume-and-ai-state.md §4-0) — 그대로 노출해도
@@ -276,6 +279,7 @@ export default function ExerciseScreen() {
       setLastFeedback(null);
       setCoachingNotice(null);
       setRepCount(0);
+      setRejectedCount(0);
       setLunge(null);
       setCaptureMessage(null);
       setSquat(null);
@@ -457,6 +461,11 @@ export default function ExerciseScreen() {
             setCoachingNotice(null);
           }
           if (r.rep_count != null) setRepCount(r.rep_count);
+          if (r.rejected_count != null) setRejectedCount(r.rejected_count);
+          if (r.rejected_reason && Platform.OS !== 'web') {
+            // 미인정은 화면을 안 보고 있어도 알 수 있게 짧게 진동한다(안내 문구는 위 coachingNotice 토스트)
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+          }
         } catch (e: any) {
           if (!cancelled) {
             setCaptureMessage('AI 연결을 확인하고 있습니다. 잠시 원위치에서 기다려주세요.');
@@ -608,7 +617,10 @@ export default function ExerciseScreen() {
         {/* AI가 완료 동작으로 판정한 횟수 */}
         <View style={styles.repCounter}>
           <Text style={styles.repValue}>{repCount}</Text>
-          <Text style={styles.repLabel}>완료한 횟수</Text>
+          <Text style={styles.repLabel}>인정 횟수</Text>
+          {rejectedCount > 0 && (
+            <Text style={styles.rejectedLabel}>미인정 {rejectedCount}</Text>
+          )}
         </View>
 
         {/* 촬영 가이드 (접기/펴기) */}
@@ -831,6 +843,12 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZE.xs,
     color: COLORS.textSecondary,
     fontWeight: '600',
+  },
+  rejectedLabel: {
+    marginTop: 4,
+    fontSize: FONT_SIZE.xs,
+    color: COLORS.warning,
+    fontWeight: '800',
   },
 
   // Bottom overlay

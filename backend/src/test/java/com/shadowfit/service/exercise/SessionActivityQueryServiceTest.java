@@ -95,6 +95,19 @@ class SessionActivityQueryServiceTest {
     }
 
     @Test
+    @DisplayName("getWeeklyActivity — 칼로리 null(체중 몰라 못 잰 세션, 2026-10-21) 은 합계에서 0 으로 친다")
+    void getWeeklyActivity_nullCaloriesCountAsZero() {
+        LocalDate today = LocalDate.now();
+        completedSessionOn(today, 80.0, 100.0, 20);
+        sessionOn(today, Status.COMPLETED); // caloriesBurned == null
+
+        WeeklyActivityResponseDto result = sessionActivityQueryService.getWeeklyActivity(member.getId());
+
+        assertThat(result.getTotalWorkouts()).isEqualTo(2);
+        assertThat(result.getTotalCalories()).isEqualTo(100);
+    }
+
+    @Test
     @DisplayName("getCalendarMain — 이번 달 운동일수·평균 싱크로율 계산")
     void getCalendarMain_aggregatesThisMonth() {
         LocalDate today = LocalDate.now();

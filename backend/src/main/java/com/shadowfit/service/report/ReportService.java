@@ -7,6 +7,7 @@ import com.shadowfit.dto.report.detailreport.SessionDetailedAnalysis;
 import com.shadowfit.dto.report.detailreport.SessionReportResponseDto;
 import com.shadowfit.dto.report.detailreport.WorstSectionDto;
 import com.shadowfit.dto.report.PoseFrameProjection;
+import com.shadowfit.dto.report.RejectedAttemptProjection;
 import com.shadowfit.global.error.BusinessException;
 import com.shadowfit.global.error.ErrorCode;
 import com.shadowfit.global.util.SetSummaryFormatter;
@@ -17,6 +18,7 @@ import com.shadowfit.model.exercise.Session;
 import com.shadowfit.model.exercise.Status;
 import com.shadowfit.model.report.Report;
 import com.shadowfit.repository.exercise.PoseDataRepository;
+import com.shadowfit.repository.exercise.RejectedAttemptRepository;
 import com.shadowfit.repository.report.ReportRepository;
 import com.shadowfit.repository.exercise.SessionRepository;
 import lombok.RequiredArgsConstructor;
@@ -42,6 +44,7 @@ public class ReportService {
     private final LungeStepLengthAnalysisCalculator lungeStepLengthAnalysisCalculator;
     private final ObjectMapper objectMapper;
     private final SessionSetRepository sessionSetRepository;
+    private final RejectedAttemptRepository rejectedAttemptRepository;
 
     @Transactional(readOnly = true)
     public SessionReportResponseDto getSessionReport(Long sessionId, Long currentMemberId) {
@@ -77,6 +80,10 @@ public class ReportService {
         attachJointCoordinates(worstSection, session);
         responseDto.setWorstSection(worstSection);
         responseDto.setRepTrend(analysis.getRepTrend() == null ? List.of() : analysis.getRepTrend());
+        // 미인정 시도(V35) — 기록 이전에 저장된 리포트는 필드가 없어 0·빈 맵으로 읽힌다(그때는 기록하지 않았다).
+        responseDto.setRejectedReps(analysis.getRejectedReps());
+        responseDto.setRejectedRepsByReason(
+                analysis.getRejectedRepsByReason() == null ? java.util.Map.of() : analysis.getRejectedRepsByReason());
         responseDto.setSquatDepthAnalysis(analysis.getSquatDepthAnalysis());
         responseDto.setLungeDepthAnalysis(analysis.getLungeDepthAnalysis());
         responseDto.setSquatTrunkLeanAnalysis(analysis.getSquatTrunkLeanAnalysis());
@@ -111,13 +118,7 @@ public class ReportService {
             try {
                 SessionDetailedAnalysis parsed =
                         objectMapper.readValue(detailedAnalysis, SessionDetailedAnalysis.class);
-                if (parsed.getWorstSection() != null
-                        || (parsed.getRepTrend() != null && !parsed.getRepTrend().isEmpty())
-                        || parsed.getSquatDepthAnalysis() != null
-                        || parsed.getLungeDepthAnalysis() != null
-                        || parsed.getSquatTrunkLeanAnalysis() != null
-                        || parsed.getLungeTrunkLeanAnalysis() != null
-                        || parsed.getLungeStepLengthAnalysis() != null) {
+                if (parsed.hasContent()) {
                     return parsed;
                 }
                 log.warn("세션 {} detailed_analysis 가 구버전 형식으로 판단됨 — pose_data 즉석 재계산으로 대체",
@@ -127,14 +128,18 @@ public class ReportService {
             }
         }
         List<PoseFrameProjection> poseFrames = poseDataRepository.findFramesBySessionId(session.getId(), session.getStartTime());
+        // 미인정 시도(V35)도 완료 시점 precompute(SessionCompletionTx.precomputeReport)와 같은 자리에 섞는다.
+        List<RejectedAttemptProjection> rejectedAttempts = rejectedAttemptRepository.findSummariesBySessionId(session.getId());
         return new SessionDetailedAnalysis(
                 sessionAnalysisCalculator.calculate(session, poseFrames),
-                sessionAnalysisCalculator.calculateRepTrend(poseFrames),
-                squatDepthAnalysisCalculator.calculate(session, poseFrames),
+                sessionAnalysisCalculator.calculateRepTrend(poseFrames, rejectedAttempts),
+                squatDepthAnalysisCalculator.calculate(session, poseFrames, rejectedAttempts),
                 lungeDepthAnalysisCalculator.calculate(session, poseFrames),
-                squatTrunkLeanAnalysisCalculator.calculate(session, poseFrames),
+                squatTrunkLeanAnalysisCalculator.calculate(session, poseFrames, rejectedAttempts),
                 lungeTrunkLeanAnalysisCalculator.calculate(session, poseFrames),
-                lungeStepLengthAnalysisCalculator.calculate(session, poseFrames));
+                lungeStepLengthAnalysisCalculator.calculate(session, poseFrames),
+                rejectedAttempts.size(),
+                RejectedAttemptProjection.countByReason(rejectedAttempts));
     }
 
     /**
@@ -171,7 +176,9 @@ public class ReportService {
         ComparisonWithPreviousDto dto = new ComparisonWithPreviousDto();
         dto.setSyncRateDiff(diffInt(current.getAvgSyncRate(), last.getAvgSyncRate()));
         dto.setWorkoutMinutesDiff(durationMinutes(current) - durationMinutes(last));
-        dto.setCaloriesDiff(diffInt(current.getCaloriesBurned(), last.getCaloriesBurned()));
+        // 칼로리는 null 을 0 으로 접지 않는다 — 체중을 몰라 못 잰 세션(null)과 비교하면 차이 자체가 없다.
+        dto.setCaloriesDiff(current.getCaloriesBurned() == null || last.getCaloriesBurned() == null
+                ? null : diffInt(current.getCaloriesBurned(), last.getCaloriesBurned()));
         return dto;
     }
 

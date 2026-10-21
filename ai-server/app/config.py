@@ -56,11 +56,12 @@ class Settings(BaseSettings):
     AI_WORKER_COUNT: int = 1
 
     # DTW 설정
-    DTW_WINDOW_SIZE: int = 10  # 비대칭 DTW 에서 사용자 한 프레임 사이에 기준이 건너뛸 수 있는 최대 프레임 수
+    DTW_WINDOW_SIZE: int = 10  # 비대칭 DTW 에서 사용자 한 점(시간축으로 편 ~12점/초) 사이에 기준이 건너뛸 수 있는 최대 프레임 수
     # 싱크로율 = 100 × exp(−합성 거리(도) / τ), 합성 거리 = 0.6·최저점 무릎 차 + 0.2·최저점 고관절 차 + 0.2·궤적 평균 차
-    # (dtw_calculator.compute_sync_distance). 실촬영(2026-10-20, 스쿼트 3개 영상)으로 맞춘 값 — 최저점이 기준과 8° 안쪽이면
-    # 90 안팎, 20° 얕으면 70 안팎, 35° 얕으면 50 안팎.
-    SYNC_RATE_TAU_DEG: float = 30.0
+    # (dtw_calculator.compute_sync_distance). 2026-10-21 제품 결정으로 조금 엄하게 30→24 (허용 오차 무릎 8→5°·
+    # 고관절 10→8° 와 한 묶음). 실촬영 반복(3D 마네킹 기준, 최저 무릎 71°)으로 잰 값 — 깊고 바른 반복(무릎 48~66°)
+    # 89~95, 무릎 76~78° 81~87, 81° 76, 84° 69, 93° 47.
+    SYNC_RATE_TAU_DEG: float = 24.0
 
     # 영상 전처리 설정
     VIDEO_MAX_FPS: int = 30

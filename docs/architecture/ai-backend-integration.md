@@ -103,7 +103,7 @@ Docker 네트워크는 `shadowfit-net` 브리지 한 개. 외부 노출은 backe
 - ai-server: 이미지 빌드가 같은 파일로 생성. 로컬·pytest 는 커밋된 `ai-server/exercise_pb2*.py` — 변경 시 `ai-server/scripts/gen_proto.sh` 로 재생성해 같이 커밋 (CI 가 대조)
 - 두 Dockerfile 의 빌드 컨텍스트가 저장소 루트인 이유가 이것이다
 
-`ExerciseService` 정의된 RPC — **7개** (2026-05-23 판에는 5개만 적혀 있었다):
+`ExerciseService` 정의된 RPC — **8개** (2026-05-23 판에는 5개만 적혀 있었다, 2026-10-21 `SaveRejectedAttempt` 추가):
 
 | RPC | 방향 | 호출자 | 수신자 | 용도 |
 |-----|------|--------|--------|------|
@@ -112,6 +112,7 @@ Docker 네트워크는 `shadowfit-net` 브리지 한 개. 외부 노출은 backe
 | **`ReattachAnalysis`** 🆕 | Spring → AI | `ExerciseAnalysisService.reattachSession` | `ExerciseServicer.ReattachAnalysis` | **이미 `IN_PROGRESS` 인 세션의 AI 상태를 DB 값으로 되살린다.** 2026-07-31 신설(#59 2단계) |
 | `StopAnalysis` | Spring → AI | **아웃박스 발행기**(`OutboxPublisher`) ← `ExerciseAnalysisService.stopAnalysis` 가 이벤트만 적재 | `ExerciseServicer.StopAnalysis` | 사용자 중단 신호. **호출자가 바뀌었다** — §4 중단 |
 | `SavePoseDataBatch` | AI → Spring | `spring_client.report_pose_data_batch` (트리거: rep 완성 시) | `ExerciseGrpcService.savePoseDataBatch` | rep 단위 실시간 포즈 데이터 저장. **프론트가 `POST /pose` 를 프레임마다 호출해야 동작** |
+| **`SaveRejectedAttempt`** 🆕 | AI → Spring | `spring_client.send_rejected_attempt` (트리거: 미인정 시도 — 내려갔다 올라왔지만 1회로 인정되지 않음) | `ExerciseGrpcService`(미인정 시도 저장) | **미인정 시도 1건 요약**(사유·싱크로율·가장 깊은 순간의 무릎·체간·시각·좌표)을 `exercise_rejected_attempts`(V35)에 멱등 저장(세션·번호 유일). 횟수엔 안 들어가고 리포트 점수·회차 막대에만 들어간다. 2026-10-21 — `SavePoseDataBatch` 플래그가 아니라 별도 RPC 인 이유는 [changelog 2026-10-21 (3)](./ai-backend-changelog.md) |
 | `CompleteAnalysis` | AI → Spring | `spring_client.report_complete_analysis` | `ExerciseGrpcService.completeAnalysis` | 세션 종료 + 최종 통계 전달 (핵심 콜백) |
 | **`ReportFeedbackBatch`** ⚠️ | AI → Spring | **없음 — 아무도 안 부른다** | `ExerciseGrpcService.reportFeedbackBatch` → `FeedbackLogService` | TTS 피드백 발화 이벤트 batch 저장. **수신부만 있는 반쪽 경로**(§3-1) |
 
@@ -161,7 +162,7 @@ Spring 쪽 트랜잭션 경계(`ReferenceVideoService`): 서킷 확인 → 파�
 핵심 메시지:
 - `AnalyzeRequest`: `exercise_id(int64)`, `session_id(int64)`, `reference_poses(PoseDataRequest[])`, `persona`(피드백 말투만 — 판정엔 안 쓴다), `session_nonce`, **`exercise_code`·`target_reps_per_set`·`target_sets`** (2026-09-22, §3-4), `depth_mode`(10), **`sync_good_threshold`(11)·`sync_warn_threshold`(12)** (2026-10-21, §3-4)
 - `ExtractRequest`(AI → Spring 역호출): `exercise_id`, `extracted_poses`, `exercise_code`(4), **`error_message`(5)** — 비어 있지 않으면 추출 실패(§3-3 ③)
-- `SessionCompleteRequest`: `session_id(int64)`, `total_reps(int32)`, `avg_sync_rate(double)`, `max/min_sync_rate(double)`, `calories_burned(double)`
+- `SessionCompleteRequest`: `session_id(int64)`, `total_reps(int32)`, `avg_sync_rate(double)`, `max/min_sync_rate(double)`, `calories_burned(double)` — **Spring 은 `calories_burned` 를 읽지 않는다**(2026-10-21). AI 는 체중을 몰라 늘 0 을 보냈고, 이제 Spring 이 회원 체중 × 운동 시간 × MET 3.0(`CalorieEstimator`)으로 계산한다. 싱크 통계도 이미 AI 값이 아니라 `pose_data` 에서 집계한다(#75)
 - `PoseDataRequest`: `timestamp_sec(double)`, `joint_coordinates(string=JSON)`, `sync_rate(double)`, `feedback_message(string)`
 
 `SessionStatus` enum: `IN_PROGRESS=0`, `COMPLETED=1`, `FAILED=2`.
