@@ -61,12 +61,10 @@ function reportHtml(r: SessionReportResponse, fb: SessionFeedbackSummary | null)
           : `<tr class="rejected"><td>미인정 ${p.attemptNumber ?? ''} (${esc(p.rejectReason ? REJECT_REASON_LABEL[p.rejectReason] ?? p.rejectReason : '사유 없음')})</td><td>${esc(p.timeStamp)}</td><td class="n">${p.syncRate.toFixed(1)}%</td></tr>`)
         .join('')}</table>`
     : '';
-  // 자세 채점 축(깊이·체간·보폭) — 있는 것만
+  // 자세 채점 축(깊이·보폭) — 있는 것만. 체간(상체)은 2026-10-21 사용자 요청으로 리포트에서 뺐다
   const axes: Array<[string, number, string, string[]]> = [];
   if (r.squatDepthAnalysis) axes.push(['스쿼트 깊이 정확도', r.squatDepthAnalysis.depthScore, DEPTH_GRADE_LABEL[r.squatDepthAnalysis.depthGrade], r.squatDepthAnalysis.narrative]);
   if (r.lungeDepthAnalysis) axes.push(['런지 깊이 정확도', r.lungeDepthAnalysis.depthScore, DEPTH_GRADE_LABEL[r.lungeDepthAnalysis.depthGrade], r.lungeDepthAnalysis.narrative]);
-  const trunk = r.squatTrunkLeanAnalysis ?? r.lungeTrunkLeanAnalysis;
-  if (trunk) axes.push(['체간(상체) 자세 정확도', trunk.tiltScore, DEPTH_GRADE_LABEL[trunk.tiltGrade], trunk.narrative]);
   if (r.lungeStepLengthAnalysis) axes.push(['보폭 정확도', r.lungeStepLengthAnalysis.stepScore, DEPTH_GRADE_LABEL[r.lungeStepLengthAnalysis.stepGrade], r.lungeStepLengthAnalysis.narrative]);
   const analysis = axes.length
     ? axes.map(([title, score, grade, lines]) => `<h2>${esc(title)}</h2><p><b>${score}점 · ${esc(grade)}</b></p>${
@@ -235,7 +233,6 @@ export default function ReportScreen() {
   const worstRep = report.worstSection
     ? report.repTrend.find((r) => r.repNumber === report.worstSection?.repNumber)
     : undefined;
-  const trunkLean = report.squatTrunkLeanAnalysis ?? report.lungeTrunkLeanAnalysis;
   // 싱크로율 색 — 이 종목의 판정 기준(정석·위험, 관리자 설정)으로. 서버가 안 보내면 80/60
   const thresholds = syncThresholdsFrom(report);
   const getSyncColor = (rate: number) => syncColor(rate, thresholds);
@@ -311,7 +308,7 @@ export default function ReportScreen() {
           />
         </View>
 
-        {/* 오늘의 코칭 — 깊이·체간·보폭 축 중 가장 먼저 고칠 한 가지 (축 점수가 없으면 아무것도 안 그린다) */}
+        {/* 오늘의 코칭 — 싱크로율·깊이·보폭 중 가장 먼저 고칠 한 가지 (축 점수가 없으면 아무것도 안 그린다) */}
         <View style={styles.section}>
           <CoachingSummary report={report} />
         </View>
@@ -330,9 +327,6 @@ export default function ReportScreen() {
             sub={(report.lungeDepthAnalysis.leftAvgKneeAngle != null || report.lungeDepthAnalysis.rightAvgKneeAngle != null)
               ? `${report.lungeDepthAnalysis.leftAvgKneeAngle != null ? `왼쪽 평균 ${Math.round(report.lungeDepthAnalysis.leftAvgKneeAngle)}도` : '왼쪽 기록 없음'} · ${report.lungeDepthAnalysis.rightAvgKneeAngle != null ? `오른쪽 평균 ${Math.round(report.lungeDepthAnalysis.rightAvgKneeAngle)}도` : '오른쪽 기록 없음'}`
               : undefined} />
-        )}
-        {trunkLean && (
-          <AxisCard title="체간(상체) 자세 정확도" score={trunkLean.tiltScore} grade={DEPTH_GRADE_LABEL[trunkLean.tiltGrade]} lines={trunkLean.narrative} />
         )}
         {report.lungeStepLengthAnalysis && (
           <AxisCard title="보폭 정확도" score={report.lungeStepLengthAnalysis.stepScore}

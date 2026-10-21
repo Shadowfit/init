@@ -4,7 +4,7 @@ import { syncThresholdsFrom } from '@/constants/sync';
 import type { SessionReportResponse } from '@/types/report';
 import { isCounted } from '@/types/report';
 
-type AxisKey = 'sync' | 'depth' | 'trunk' | 'step';
+type AxisKey = 'sync' | 'depth' | 'step';
 
 interface Axis {
   key: AxisKey;
@@ -50,7 +50,6 @@ function avg(xs: number[]): number {
 
 function collectAxes(report: SessionReportResponse): Axis[] {
   const axes: Axis[] = [];
-  const isLunge = !!report.lungeDepthAnalysis || !!report.lungeTrunkLeanAnalysis || !!report.lungeStepLengthAnalysis;
   const axis = (a: Omit<Axis, 'unit' | 'strong' | 'ok'>): Axis => ({ ...a, unit: '점', strong: STRONG, ok: OK });
 
   // 싱크로율도 축으로 넣는다(2026-10-21) — 빠져 있어서 깊이·체간이 100점이면 싱크로율이 «교정 필요» 여도
@@ -91,15 +90,7 @@ function collectAxes(report: SessionReportResponse): Axis[] {
       cue: '앞무릎이 90도 가까이 될 때까지 몸을 수직으로 내려보세요. 뒤무릎도 바닥 쪽으로 같이 내려가요.',
     }));
   }
-  const trunk = report.squatTrunkLeanAnalysis ?? report.lungeTrunkLeanAnalysis;
-  if (trunk) {
-    axes.push(axis({
-      key: 'trunk', label: '상체 자세', provisional: isLunge,
-      score: trunk.tiltScore,
-      repScores: trunk.repTrunkLeans.map((r) => r.tiltScore),
-      cue: '시선을 정면보다 살짝 위에 두고 가슴을 펴보세요. 상체가 숙여지면 허리 부담이 커져요.',
-    }));
-  }
+  // 체간(상체) 자세는 리포트에서 뺐다(2026-10-21 사용자 요청) — 백엔드는 계속 계산하지만 화면·코칭엔 쓰지 않는다
   if (report.lungeStepLengthAnalysis) {
     axes.push(axis({
       key: 'step', label: '보폭', provisional: true,
