@@ -19,7 +19,6 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDateTime;
 import java.util.Set;
 
 /**
@@ -125,11 +124,6 @@ public class AuthRateLimitFilter extends OncePerRequestFilter {
 
         // 본문 형식을 GlobalExceptionHandler 와 맞춘다 — 이 필터는 MVC 밖이라 그 핸들러가
         // 안 도는데, 클라 입장에서 «어떤 실패는 모양이 다르다» 가 되면 안 된다.
-        response.getWriter().write(objectMapper.writeValueAsString(
-                ErrorResponseDto.builder()
-                        .status(code.getStatus())
-                        .message(code.getMessage())
-                        .timestamp(LocalDateTime.now())
-                        .build()));
+        response.getWriter().write(objectMapper.writeValueAsString(ErrorResponseDto.of(code)));
     }
 }

@@ -6,14 +6,16 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
-import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.stream.Collectors;
 
@@ -41,11 +43,7 @@ public class GlobalExceptionHandler {
         return ResponseEntity
                 .status(code.getStatus())
                 .header(HttpHeaders.RETRY_AFTER, String.valueOf(e.getRetryAfterSeconds()))
-                .body(ErrorResponseDto.builder()
-                        .status(code.getStatus())
-                        .message(code.getMessage())
-                        .timestamp(LocalDateTime.now())
-                        .build());
+                .body(ErrorResponseDto.of(code));
     }
 
     @ExceptionHandler(BusinessException.class)
@@ -180,6 +178,38 @@ public class GlobalExceptionHandler {
         return buildResponse(ErrorCode.FILE_TOO_LARGE);
     }
 
+    /**
+     * ⚠️ 2026-09-23 추가: 아래 세 핸들러는 MVC 가 «요청이 잘못됐다» 로 던지는 예외들인데, 핸들러가
+     * 없어 {@code handleUnexpectedException} 으로 떨어져 <b>4xx 대신 500</b> + ERROR 스택트레이스가
+     * 나갔다 — #129(404)·#180(400) 과 같은 형태다. {@code MvcFrameworkErrorStatusTest} 가 핸들러를
+     * 쓰기 전에 셋 다 500 인 것을 재현했고, 지금은 그 테스트가 이 계약을 고정한다.
+     *
+     * <p>405·415 는 예외가 들고 있는 헤더({@code Allow}·{@code Accept})를 그대로 싣는다 — «무엇이면
+     * 되는가» 를 못 주면 클라가 고칠 방법을 모른다. WARN 인 이유는 #129 와 같다(서버 결함이 아니다).
+     */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ErrorResponseDto> handleMethodNotSupported(HttpRequestMethodNotSupportedException e,
+                                                                     HttpServletRequest request) {
+        log.warn("Method {} not supported on {}", e.getMethod(), request.getRequestURI());
+        return buildResponse(ErrorCode.METHOD_NOT_ALLOWED, e.getHeaders());
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ErrorResponseDto> handleMediaTypeNotSupported(HttpMediaTypeNotSupportedException e,
+                                                                        HttpServletRequest request) {
+        log.warn("Content-Type {} not supported on {} {}", e.getContentType(), request.getMethod(),
+                request.getRequestURI());
+        return buildResponse(ErrorCode.UNSUPPORTED_MEDIA_TYPE, e.getHeaders());
+    }
+
+    /** 파라미터 <b>이름</b>은 우리가 매핑한 것이라 응답에 실어도 안전하다(값이 아니다 — #180 의 파서 메시지와 다른 점). */
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ErrorResponseDto> handleMissingParameter(MissingServletRequestParameterException e) {
+        log.warn("Missing request parameter '{}'", e.getParameterName());
+        return buildResponse(ErrorCode.INVALID_INPUT_VALUE,
+                "%s: 필수 파라미터가 없습니다.".formatted(e.getParameterName()));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponseDto> handleUnexpectedException(Exception e) {
         log.error("Unhandled exception", e);
@@ -195,10 +225,13 @@ public class GlobalExceptionHandler {
     private ResponseEntity<ErrorResponseDto> buildResponse(ErrorCode code, String message) {
         return ResponseEntity
                 .status(code.getStatus())
-                .body(ErrorResponseDto.builder()
-                        .status(code.getStatus())
-                        .message(message)
-                        .timestamp(LocalDateTime.now())
-                        .build());
+                .body(ErrorResponseDto.of(code, message));
+    }
+
+    private ResponseEntity<ErrorResponseDto> buildResponse(ErrorCode code, HttpHeaders headers) {
+        return ResponseEntity
+                .status(code.getStatus())
+                .headers(headers)
+                .body(ErrorResponseDto.of(code));
     }
 }
