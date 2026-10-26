@@ -135,15 +135,14 @@ class GroupInvitationServiceTest {
     }
 
     @Test
-    @DisplayName("accept — 초대받은 사람이 아니면 ACCESS_DENIED")
+    @DisplayName("accept — 초대받은 사람이 아니면 INVITATION_NOT_FOUND (남의 초대는 없는 것과 같다)")
     void accept_wrongInvitee_throws() {
-        GroupInvitation invitation = GroupInvitation.builder().group(group).inviter(inviter).invitee(invitee).build();
-        when(groupInvitationRepository.findById(INVITATION_ID)).thenReturn(Optional.of(invitation));
+        when(groupInvitationRepository.findByIdAndInviteeId(INVITATION_ID, 999L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.accept(INVITATION_ID, 999L))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
-                .isEqualTo(ErrorCode.ACCESS_DENIED);
+                .isEqualTo(ErrorCode.INVITATION_NOT_FOUND);
     }
 
     @Test
@@ -151,7 +150,7 @@ class GroupInvitationServiceTest {
     void accept_alreadyResponded_throws() {
         GroupInvitation invitation = GroupInvitation.builder().group(group).inviter(inviter).invitee(invitee).build();
         invitation.accept();
-        when(groupInvitationRepository.findById(INVITATION_ID)).thenReturn(Optional.of(invitation));
+        when(groupInvitationRepository.findByIdAndInviteeId(INVITATION_ID, INVITEE_ID)).thenReturn(Optional.of(invitation));
 
         assertThatThrownBy(() -> service.accept(INVITATION_ID, INVITEE_ID))
                 .isInstanceOf(BusinessException.class)
@@ -162,7 +161,7 @@ class GroupInvitationServiceTest {
     @Test
     @DisplayName("accept — 존재하지 않는 초대면 INVITATION_NOT_FOUND")
     void accept_unknownInvitation_throws() {
-        when(groupInvitationRepository.findById(INVITATION_ID)).thenReturn(Optional.empty());
+        when(groupInvitationRepository.findByIdAndInviteeId(INVITATION_ID, INVITEE_ID)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.accept(INVITATION_ID, INVITEE_ID))
                 .isInstanceOf(BusinessException.class)
@@ -174,7 +173,7 @@ class GroupInvitationServiceTest {
     @DisplayName("accept — 성공 시 초대가 ACCEPTED 가 되고, 그룹 행을 잠근 채 GroupService.admit 에 가입을 맡긴다")
     void accept_success_marksAcceptedAndAdmitsUnderLock() {
         GroupInvitation invitation = GroupInvitation.builder().group(group).inviter(inviter).invitee(invitee).build();
-        when(groupInvitationRepository.findById(INVITATION_ID)).thenReturn(Optional.of(invitation));
+        when(groupInvitationRepository.findByIdAndInviteeId(INVITATION_ID, INVITEE_ID)).thenReturn(Optional.of(invitation));
         when(groupRepository.findByIdForUpdate(GROUP_ID)).thenReturn(Optional.of(group));
 
         service.accept(INVITATION_ID, INVITEE_ID);
@@ -190,7 +189,7 @@ class GroupInvitationServiceTest {
     @DisplayName("decline — 성공 시 상태만 바뀌고 이벤트는 발행하지 않는다")
     void decline_success_doesNotPublishEvent() {
         GroupInvitation invitation = GroupInvitation.builder().group(group).inviter(inviter).invitee(invitee).build();
-        when(groupInvitationRepository.findById(INVITATION_ID)).thenReturn(Optional.of(invitation));
+        when(groupInvitationRepository.findByIdAndInviteeId(INVITATION_ID, INVITEE_ID)).thenReturn(Optional.of(invitation));
 
         service.decline(INVITATION_ID, INVITEE_ID);
 
@@ -199,15 +198,14 @@ class GroupInvitationServiceTest {
     }
 
     @Test
-    @DisplayName("decline — 초대받은 사람이 아니면 ACCESS_DENIED")
+    @DisplayName("decline — 초대받은 사람이 아니면 INVITATION_NOT_FOUND (남의 초대는 없는 것과 같다)")
     void decline_wrongInvitee_throws() {
-        GroupInvitation invitation = GroupInvitation.builder().group(group).inviter(inviter).invitee(invitee).build();
-        when(groupInvitationRepository.findById(INVITATION_ID)).thenReturn(Optional.of(invitation));
+        when(groupInvitationRepository.findByIdAndInviteeId(INVITATION_ID, 999L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.decline(INVITATION_ID, 999L))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
-                .isEqualTo(ErrorCode.ACCESS_DENIED);
+                .isEqualTo(ErrorCode.INVITATION_NOT_FOUND);
     }
 
     private void stubActiveInviter() {

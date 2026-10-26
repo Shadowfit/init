@@ -164,12 +164,17 @@ if (!memberRepository.existsByEmail(email)) {
     throw new BusinessException(ErrorCode.USER_NOT_FOUND);
 }
 
-// 운동 세션 조회 실패
-Session session = sessionRepository.findById(sessionId)
+// 내 세션 조회 — 소유권을 WHERE 에 넣는다. 없는 것·남의 것 둘 다 같은 404
+Session session = sessionRepository.findByIdAndMemberId(sessionId, currentMemberId)
     .orElseThrow(() -> new BusinessException(ErrorCode.SESSION_NOT_FOUND));
 ```
 
 > 외부 API 응답 매핑 시에도 같은 패턴: catch 한 후 적절한 `ErrorCode` 로 다시 throw.
+
+> **남의 리소스는 403 인가 404 인가 (2026-09-23 결정, [decisions/resource-ownership-403-vs-404.md](./decisions/resource-ownership-403-vs-404.md))** — 판정 문장: «요청자가 그 리소스의 존재를 정당하게 알 수 있는가».
+> - **개인 소유**(세션·목표·알림·초대 등 한 사람만의 것) → **404** `*_NOT_FOUND`. `findById` 후 소유자 비교(fetch-then-check)를 쓰지 않는다 — 비교 줄을 빼먹으면 곧 IDOR 이고, 403 은 id 존재를 흘린다.
+> - **공유·멤버십**(그룹) → 없으면 404, 멤버 아니면 **403** 유지.
+> - 404 로 합칠 때 «없음/남의 것» 을 서버 로그에도 **구분해 남기지 않는다**(결정).
 
 ---
 
