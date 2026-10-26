@@ -1,0 +1,448 @@
+skew_t1_f7_uni.exercise_sessions	histogram	status	Histogram statistics removed for column 'member_id'.
+skew_t1_f7_uni.exercise_sessions	histogram	status	Histogram statistics removed for column 'start_time'.
+skew_t1_f7_uni.exercise_sessions	histogram	status	Histogram statistics removed for column 'status'.
+skew_t1_f7_uni.session_reports	histogram	status	Histogram statistics removed for column 'member_id'.
+skew_t1_f7_uni.exercise_sessions	analyze	status	OK
+skew_t1_f7_uni.session_reports	analyze	status	OK
+##STATS
+exercise_sessions	PRIMARY	n_diff_pfx01	99995	396	2026-09-23 23:47:13
+exercise_sessions	PRIMARY	n_leaf_pages	396	NULL	2026-09-23 23:47:13
+exercise_sessions	exercise_id	n_diff_pfx01	1	133	2026-09-23 23:47:13
+exercise_sessions	exercise_id	n_diff_pfx02	99995	133	2026-09-23 23:47:13
+exercise_sessions	exercise_id	n_leaf_pages	133	NULL	2026-09-23 23:47:13
+exercise_sessions	idx_session_member_exercise_status_start	n_diff_pfx01	14285	377	2026-09-23 23:47:13
+exercise_sessions	idx_session_member_exercise_status_start	n_diff_pfx02	14285	377	2026-09-23 23:47:13
+exercise_sessions	idx_session_member_exercise_status_start	n_leaf_pages	377	NULL	2026-09-23 23:47:13
+exercise_sessions	idx_session_member_status_start	n_diff_pfx01	14285	279	2026-09-23 23:47:13
+exercise_sessions	idx_session_member_status_start	n_diff_pfx02	49501	279	2026-09-23 23:47:13
+exercise_sessions	idx_session_member_status_start	n_leaf_pages	279	NULL	2026-09-23 23:47:13
+exercise_sessions	idx_session_starttime_member	n_diff_pfx01	7	256	2026-09-23 23:47:13
+exercise_sessions	idx_session_starttime_member	n_diff_pfx02	99995	256	2026-09-23 23:47:13
+exercise_sessions	idx_session_starttime_member	n_leaf_pages	256	NULL	2026-09-23 23:47:13
+exercise_sessions	idx_session_status_starttime	n_diff_pfx01	4	159	2026-09-23 23:47:13
+exercise_sessions	idx_session_status_starttime	n_diff_pfx02	28	159	2026-09-23 23:47:13
+exercise_sessions	idx_session_status_starttime	n_leaf_pages	159	NULL	2026-09-23 23:47:13
+session_reports	PRIMARY	n_diff_pfx01	25144	5359	2026-09-23 23:47:14
+session_reports	PRIMARY	n_leaf_pages	5359	NULL	2026-09-23 23:47:14
+session_reports	member_id	n_diff_pfx01	12441	56	2026-09-23 23:47:14
+session_reports	member_id	n_diff_pfx02	25144	56	2026-09-23 23:47:14
+session_reports	member_id	n_leaf_pages	56	NULL	2026-09-23 23:47:14
+session_reports	uk_report_session	n_diff_pfx01	25144	45	2026-09-23 23:47:14
+session_reports	uk_report_session	n_leaf_pages	45	NULL	2026-09-23 23:47:14
+##HIST
+##ENDSTATS
+##Q|T1.Q2cur.heavy
+-> Sort: jt.rep_number  (actual time=0.276..0.28 rows=30 loops=1)
+    -> Table scan on <temporary>  (actual time=0.241..0.247 rows=30 loops=1)
+        -> Aggregate using temporary table  (actual time=0.24..0.24 rows=30 loops=1)
+            -> Nested loop inner join  (actual time=0.107..0.178 rows=60 loops=1)
+                -> Nested loop inner join  (cost=1.4 rows=1) (actual time=0.0646..0.0874 rows=2 loops=1)
+                    -> Index lookup on r using member_id (member_id=5166)  (cost=0.7 rows=2) (actual time=0.046..0.0623 rows=2 loops=1)
+                    -> Filter: ((s.start_time >= TIMESTAMP'2025-10-01 00:00:00') and (s.start_time < TIMESTAMP'2025-10-08 00:00:00'))  (cost=0.275 rows=0.5) (actual time=0.0112..0.0115 rows=1 loops=2)
+                        -> Single-row index lookup on s using PRIMARY (id=r.session_id)  (cost=0.275 rows=1) (actual time=0.0094..0.0095 rows=1 loops=2)
+                -> Materialize table function  (actual time=0.0347..0.0406 rows=30 loops=2)
+
+1	75	2
+2	76	2
+3	77	2
+4	78	2
+5	79	2
+6	80	2
+7	81	2
+8	82	2
+9	83	2
+10	84	2
+11	85	2
+12	86	2
+13	87	2
+14	88	2
+15	89	2
+16	90	2
+17	91	2
+18	92	2
+19	93	2
+20	94	2
+21	75	2
+22	76	2
+23	77	2
+24	78	2
+25	79	2
+26	80	2
+27	81	2
+28	82	2
+29	83	2
+30	84	2
+Handler_read_first	0
+Handler_read_key	63
+Handler_read_last	0
+Handler_read_next	2
+Handler_read_prev	0
+Handler_read_rnd	0
+Handler_read_rnd_next	93
+##Q|T1.Q2n3.heavy
+-> Sort: jt.rep_number  (actual time=0.243..0.247 rows=30 loops=1)
+    -> Table scan on <temporary>  (actual time=0.215..0.22 rows=30 loops=1)
+        -> Aggregate using temporary table  (actual time=0.214..0.214 rows=30 loops=1)
+            -> Nested loop inner join  (actual time=0.117..0.169 rows=60 loops=1)
+                -> Nested loop inner join  (cost=1.36 rows=2) (actual time=0.0792..0.0936 rows=2 loops=1)
+                    -> Filter: ((s.`status` = 'COMPLETED') and (s.member_id = 5166) and (s.start_time >= TIMESTAMP'2025-10-01 00:00:00') and (s.start_time < TIMESTAMP'2025-10-08 00:00:00'))  (cost=0.661 rows=2) (actual time=0.0536..0.0581 rows=2 loops=1)
+                        -> Covering index range scan on s using idx_session_member_status_start over (member_id = 5166 AND status = 'COMPLETED' AND '2025-10-01 00:00:00' <= start_time < '2025-10-08 00:00:00')  (cost=0.661 rows=2) (actual time=0.0256..0.0286 rows=2 loops=1)
+                    -> Single-row index lookup on r using uk_report_session (session_id=s.id)  (cost=0.3 rows=1) (actual time=0.0167..0.0168 rows=1 loops=2)
+                -> Materialize table function  (actual time=0.0285..0.0338 rows=30 loops=2)
+
+1	75	2
+2	76	2
+3	77	2
+4	78	2
+5	79	2
+6	80	2
+7	81	2
+8	82	2
+9	83	2
+10	84	2
+11	85	2
+12	86	2
+13	87	2
+14	88	2
+15	89	2
+16	90	2
+17	91	2
+18	92	2
+19	93	2
+20	94	2
+21	75	2
+22	76	2
+23	77	2
+24	78	2
+25	79	2
+26	80	2
+27	81	2
+28	82	2
+29	83	2
+30	84	2
+Handler_read_first	0
+Handler_read_key	63
+Handler_read_last	0
+Handler_read_next	2
+Handler_read_prev	0
+Handler_read_rnd	0
+Handler_read_rnd_next	93
+##Q|T1.Q3cur.heavy
+-> Sort: `COUNT(*)` DESC, jt.worst_rep  (actual time=0.104..0.104 rows=2 loops=1)
+    -> Table scan on <temporary>  (actual time=0.0908..0.0913 rows=2 loops=1)
+        -> Aggregate using temporary table  (actual time=0.0902..0.0902 rows=2 loops=1)
+            -> Nested loop inner join  (actual time=0.0593..0.0762 rows=2 loops=1)
+                -> Nested loop inner join  (cost=1.4 rows=1) (actual time=0.0438..0.0567 rows=2 loops=1)
+                    -> Index lookup on r using member_id (member_id=5166)  (cost=0.7 rows=2) (actual time=0.0304..0.0391 rows=2 loops=1)
+                    -> Filter: ((s.start_time >= TIMESTAMP'2025-10-01 00:00:00') and (s.start_time < TIMESTAMP'2025-10-08 00:00:00'))  (cost=0.275 rows=0.5) (actual time=0.0077..0.0079 rows=1 loops=2)
+                        -> Single-row index lookup on s using PRIMARY (id=r.session_id)  (cost=0.275 rows=1) (actual time=0.00605..0.0061 rows=1 loops=2)
+                -> Filter: (jt.worst_rep is not null)  (actual time=0.00785..0.0082 rows=1 loops=2)
+                    -> Materialize table function  (actual time=0.0075..0.0077 rows=1 loops=2)
+
+4	1
+27	1
+Handler_read_first	0
+Handler_read_key	5
+Handler_read_last	0
+Handler_read_next	2
+Handler_read_prev	0
+Handler_read_rnd	0
+Handler_read_rnd_next	7
+##Q|T1.Q3n3.heavy
+-> Sort: `COUNT(*)` DESC, jt.worst_rep  (actual time=0.128..0.128 rows=2 loops=1)
+    -> Table scan on <temporary>  (actual time=0.114..0.114 rows=2 loops=1)
+        -> Aggregate using temporary table  (actual time=0.113..0.113 rows=2 loops=1)
+            -> Nested loop inner join  (actual time=0.0762..0.0958 rows=2 loops=1)
+                -> Nested loop inner join  (cost=1.36 rows=2) (actual time=0.0584..0.0726 rows=2 loops=1)
+                    -> Filter: ((s.`status` = 'COMPLETED') and (s.member_id = 5166) and (s.start_time >= TIMESTAMP'2025-10-01 00:00:00') and (s.start_time < TIMESTAMP'2025-10-08 00:00:00'))  (cost=0.661 rows=2) (actual time=0.0325..0.037 rows=2 loops=1)
+                        -> Covering index range scan on s using idx_session_member_status_start over (member_id = 5166 AND status = 'COMPLETED' AND '2025-10-01 00:00:00' <= start_time < '2025-10-08 00:00:00')  (cost=0.661 rows=2) (actual time=0.0273..0.0301 rows=2 loops=1)
+                    -> Single-row index lookup on r using uk_report_session (session_id=s.id)  (cost=0.3 rows=1) (actual time=0.0165..0.0166 rows=1 loops=2)
+                -> Filter: (jt.worst_rep is not null)  (actual time=0.00935..0.0097 rows=1 loops=2)
+                    -> Materialize table function  (actual time=0.00885..0.0091 rows=1 loops=2)
+
+4	1
+27	1
+Handler_read_first	0
+Handler_read_key	5
+Handler_read_last	0
+Handler_read_next	2
+Handler_read_prev	0
+Handler_read_rnd	0
+Handler_read_rnd_next	7
+##Q|T1.Q2cur.mid
+-> Sort: jt.rep_number  (actual time=0.246..0.251 rows=30 loops=1)
+    -> Table scan on <temporary>  (actual time=0.144..0.218 rows=30 loops=1)
+        -> Aggregate using temporary table  (actual time=0.143..0.143 rows=30 loops=1)
+            -> Nested loop inner join  (actual time=0.0984..0.113 rows=30 loops=1)
+                -> Nested loop inner join  (cost=0.7 rows=0.5) (actual time=0.0546..0.0609 rows=1 loops=1)
+                    -> Index lookup on r using member_id (member_id=5821)  (cost=0.35 rows=1) (actual time=0.0401..0.0458 rows=1 loops=1)
+                    -> Filter: ((s.start_time >= TIMESTAMP'2025-10-01 00:00:00') and (s.start_time < TIMESTAMP'2025-10-08 00:00:00'))  (cost=0.3 rows=0.5) (actual time=0.013..0.0133 rows=1 loops=1)
+                        -> Single-row index lookup on s using PRIMARY (id=r.session_id)  (cost=0.3 rows=1) (actual time=0.0105..0.0106 rows=1 loops=1)
+                -> Materialize table function  (actual time=0.0418..0.047 rows=30 loops=1)
+
+1	75	1
+2	76	1
+3	77	1
+4	78	1
+5	79	1
+6	80	1
+7	81	1
+8	82	1
+9	83	1
+10	84	1
+11	85	1
+12	86	1
+13	87	1
+14	88	1
+15	89	1
+16	90	1
+17	91	1
+18	92	1
+19	93	1
+20	94	1
+21	75	1
+22	76	1
+23	77	1
+24	78	1
+25	79	1
+26	80	1
+27	81	1
+28	82	1
+29	83	1
+30	84	1
+Handler_read_first	0
+Handler_read_key	32
+Handler_read_last	0
+Handler_read_next	1
+Handler_read_prev	0
+Handler_read_rnd	0
+Handler_read_rnd_next	62
+##Q|T1.Q2n3.mid
+-> Sort: jt.rep_number  (actual time=0.207..0.211 rows=30 loops=1)
+    -> Table scan on <temporary>  (actual time=0.179..0.183 rows=30 loops=1)
+        -> Aggregate using temporary table  (actual time=0.178..0.178 rows=30 loops=1)
+            -> Nested loop inner join  (actual time=0.129..0.145 rows=30 loops=1)
+                -> Nested loop inner join  (cost=0.81 rows=1) (actual time=0.0882..0.0963 rows=1 loops=1)
+                    -> Filter: ((s.`status` = 'COMPLETED') and (s.member_id = 5821) and (s.start_time >= TIMESTAMP'2025-10-01 00:00:00') and (s.start_time < TIMESTAMP'2025-10-08 00:00:00'))  (cost=0.46 rows=1) (actual time=0.0504..0.0581 rows=1 loops=1)
+                        -> Covering index range scan on s using idx_session_member_status_start over (member_id = 5821 AND status = 'COMPLETED' AND '2025-10-01 00:00:00' <= start_time < '2025-10-08 00:00:00')  (cost=0.46 rows=1) (actual time=0.0432..0.0506 rows=1 loops=1)
+                    -> Single-row index lookup on r using uk_report_session (session_id=s.id)  (cost=0.35 rows=1) (actual time=0.0366..0.0367 rows=1 loops=1)
+                -> Materialize table function  (actual time=0.0395..0.0437 rows=30 loops=1)
+
+1	75	1
+2	76	1
+3	77	1
+4	78	1
+5	79	1
+6	80	1
+7	81	1
+8	82	1
+9	83	1
+10	84	1
+11	85	1
+12	86	1
+13	87	1
+14	88	1
+15	89	1
+16	90	1
+17	91	1
+18	92	1
+19	93	1
+20	94	1
+21	75	1
+22	76	1
+23	77	1
+24	78	1
+25	79	1
+26	80	1
+27	81	1
+28	82	1
+29	83	1
+30	84	1
+Handler_read_first	0
+Handler_read_key	32
+Handler_read_last	0
+Handler_read_next	1
+Handler_read_prev	0
+Handler_read_rnd	0
+Handler_read_rnd_next	62
+##Q|T1.Q3cur.mid
+-> Sort: `COUNT(*)` DESC, jt.worst_rep  (actual time=0.105..0.105 rows=1 loops=1)
+    -> Table scan on <temporary>  (actual time=0.092..0.0922 rows=1 loops=1)
+        -> Aggregate using temporary table  (actual time=0.0913..0.0913 rows=1 loops=1)
+            -> Nested loop inner join  (actual time=0.0722..0.0776 rows=1 loops=1)
+                -> Nested loop inner join  (cost=0.7 rows=0.5) (actual time=0.0551..0.0598 rows=1 loops=1)
+                    -> Index lookup on r using member_id (member_id=5821)  (cost=0.35 rows=1) (actual time=0.0406..0.045 rows=1 loops=1)
+                    -> Filter: ((s.start_time >= TIMESTAMP'2025-10-01 00:00:00') and (s.start_time < TIMESTAMP'2025-10-08 00:00:00'))  (cost=0.3 rows=0.5) (actual time=0.0134..0.0136 rows=1 loops=1)
+                        -> Single-row index lookup on s using PRIMARY (id=r.session_id)  (cost=0.3 rows=1) (actual time=0.0105..0.0106 rows=1 loops=1)
+                -> Filter: (jt.worst_rep is not null)  (actual time=0.0154..0.0158 rows=1 loops=1)
+                    -> Materialize table function  (actual time=0.0149..0.0151 rows=1 loops=1)
+
+16	1
+Handler_read_first	0
+Handler_read_key	3
+Handler_read_last	0
+Handler_read_next	1
+Handler_read_prev	0
+Handler_read_rnd	0
+Handler_read_rnd_next	4
+##Q|T1.Q3n3.mid
+-> Sort: `COUNT(*)` DESC, jt.worst_rep  (actual time=0.111..0.111 rows=1 loops=1)
+    -> Table scan on <temporary>  (actual time=0.1..0.1 rows=1 loops=1)
+        -> Aggregate using temporary table  (actual time=0.0991..0.0991 rows=1 loops=1)
+            -> Nested loop inner join  (actual time=0.0787..0.0856 rows=1 loops=1)
+                -> Nested loop inner join  (cost=0.81 rows=1) (actual time=0.0621..0.0682 rows=1 loops=1)
+                    -> Filter: ((s.`status` = 'COMPLETED') and (s.member_id = 5821) and (s.start_time >= TIMESTAMP'2025-10-01 00:00:00') and (s.start_time < TIMESTAMP'2025-10-08 00:00:00'))  (cost=0.46 rows=1) (actual time=0.0304..0.0363 rows=1 loops=1)
+                        -> Covering index range scan on s using idx_session_member_status_start over (member_id = 5821 AND status = 'COMPLETED' AND '2025-10-01 00:00:00' <= start_time < '2025-10-08 00:00:00')  (cost=0.46 rows=1) (actual time=0.0253..0.031 rows=1 loops=1)
+                    -> Single-row index lookup on r using uk_report_session (session_id=s.id)  (cost=0.35 rows=1) (actual time=0.0303..0.0304 rows=1 loops=1)
+                -> Filter: (jt.worst_rep is not null)  (actual time=0.0145..0.0149 rows=1 loops=1)
+                    -> Materialize table function  (actual time=0.0136..0.0138 rows=1 loops=1)
+
+16	1
+Handler_read_first	0
+Handler_read_key	3
+Handler_read_last	0
+Handler_read_next	1
+Handler_read_prev	0
+Handler_read_rnd	0
+Handler_read_rnd_next	4
+##Q|T1.Q2cur.light
+-> Sort: jt.rep_number  (actual time=0.373..0.378 rows=30 loops=1)
+    -> Table scan on <temporary>  (actual time=0.339..0.345 rows=30 loops=1)
+        -> Aggregate using temporary table  (actual time=0.338..0.338 rows=30 loops=1)
+            -> Nested loop inner join  (actual time=0.094..0.208 rows=90 loops=1)
+                -> Nested loop inner join  (cost=2.1 rows=1.5) (actual time=0.0493..0.0807 rows=3 loops=1)
+                    -> Index lookup on r using member_id (member_id=2202)  (cost=1.05 rows=3) (actual time=0.0344..0.0542 rows=3 loops=1)
+                    -> Filter: ((s.start_time >= TIMESTAMP'2025-10-01 00:00:00') and (s.start_time < TIMESTAMP'2025-10-08 00:00:00'))  (cost=0.267 rows=0.5) (actual time=0.00777..0.00803 rows=1 loops=3)
+                        -> Single-row index lookup on s using PRIMARY (id=r.session_id)  (cost=0.267 rows=1) (actual time=0.00643..0.00647 rows=1 loops=3)
+                -> Materialize table function  (actual time=0.0316..0.0376 rows=30 loops=3)
+
+1	75	3
+2	76	3
+3	77	3
+4	78	3
+5	79	3
+6	80	3
+7	81	3
+8	82	3
+9	83	3
+10	84	3
+11	85	3
+12	86	3
+13	87	3
+14	88	3
+15	89	3
+16	90	3
+17	91	3
+18	92	3
+19	93	3
+20	94	3
+21	75	3
+22	76	3
+23	77	3
+24	78	3
+25	79	3
+26	80	3
+27	81	3
+28	82	3
+29	83	3
+30	84	3
+Handler_read_first	0
+Handler_read_key	94
+Handler_read_last	0
+Handler_read_next	3
+Handler_read_prev	0
+Handler_read_rnd	0
+Handler_read_rnd_next	124
+##Q|T1.Q2n3.light
+-> Sort: jt.rep_number  (actual time=0.332..0.337 rows=30 loops=1)
+    -> Table scan on <temporary>  (actual time=0.298..0.305 rows=30 loops=1)
+        -> Aggregate using temporary table  (actual time=0.297..0.297 rows=30 loops=1)
+            -> Nested loop inner join  (actual time=0.112..0.222 rows=90 loops=1)
+                -> Nested loop inner join  (cost=1.91 rows=3) (actual time=0.0652..0.0952 rows=3 loops=1)
+                    -> Filter: ((s.`status` = 'COMPLETED') and (s.member_id = 2202) and (s.start_time >= TIMESTAMP'2025-10-01 00:00:00') and (s.start_time < TIMESTAMP'2025-10-08 00:00:00'))  (cost=0.861 rows=3) (actual time=0.0369..0.0442 rows=3 loops=1)
+                        -> Covering index range scan on s using idx_session_member_status_start over (member_id = 2202 AND status = 'COMPLETED' AND '2025-10-01 00:00:00' <= start_time < '2025-10-08 00:00:00')  (cost=0.861 rows=3) (actual time=0.0309..0.0345 rows=3 loops=1)
+                    -> Single-row index lookup on r using uk_report_session (session_id=s.id)  (cost=0.283 rows=1) (actual time=0.0161..0.0162 rows=1 loops=3)
+                -> Materialize table function  (actual time=0.032..0.038 rows=30 loops=3)
+
+1	75	3
+2	76	3
+3	77	3
+4	78	3
+5	79	3
+6	80	3
+7	81	3
+8	82	3
+9	83	3
+10	84	3
+11	85	3
+12	86	3
+13	87	3
+14	88	3
+15	89	3
+16	90	3
+17	91	3
+18	92	3
+19	93	3
+20	94	3
+21	75	3
+22	76	3
+23	77	3
+24	78	3
+25	79	3
+26	80	3
+27	81	3
+28	82	3
+29	83	3
+30	84	3
+Handler_read_first	0
+Handler_read_key	94
+Handler_read_last	0
+Handler_read_next	3
+Handler_read_prev	0
+Handler_read_rnd	0
+Handler_read_rnd_next	124
+##Q|T1.Q3cur.light
+-> Sort: `COUNT(*)` DESC, jt.worst_rep  (actual time=0.129..0.129 rows=3 loops=1)
+    -> Table scan on <temporary>  (actual time=0.115..0.116 rows=3 loops=1)
+        -> Aggregate using temporary table  (actual time=0.115..0.115 rows=3 loops=1)
+            -> Nested loop inner join  (actual time=0.0646..0.0999 rows=3 loops=1)
+                -> Nested loop inner join  (cost=2.1 rows=1.5) (actual time=0.0474..0.0734 rows=3 loops=1)
+                    -> Index lookup on r using member_id (member_id=2202)  (cost=1.05 rows=3) (actual time=0.0326..0.0487 rows=3 loops=1)
+                    -> Filter: ((s.start_time >= TIMESTAMP'2025-10-01 00:00:00') and (s.start_time < TIMESTAMP'2025-10-08 00:00:00'))  (cost=0.267 rows=0.5) (actual time=0.0072..0.00743 rows=1 loops=3)
+                        -> Single-row index lookup on s using PRIMARY (id=r.session_id)  (cost=0.267 rows=1) (actual time=0.00587..0.00597 rows=1 loops=3)
+                -> Filter: (jt.worst_rep is not null)  (actual time=0.00743..0.00777 rows=1 loops=3)
+                    -> Materialize table function  (actual time=0.00703..0.00733 rows=1 loops=3)
+
+4	1
+8	1
+21	1
+Handler_read_first	0
+Handler_read_key	7
+Handler_read_last	0
+Handler_read_next	3
+Handler_read_prev	0
+Handler_read_rnd	0
+Handler_read_rnd_next	10
+##Q|T1.Q3n3.light
+-> Sort: `COUNT(*)` DESC, jt.worst_rep  (actual time=0.122..0.122 rows=3 loops=1)
+    -> Table scan on <temporary>  (actual time=0.11..0.111 rows=3 loops=1)
+        -> Aggregate using temporary table  (actual time=0.109..0.109 rows=3 loops=1)
+            -> Nested loop inner join  (actual time=0.0689..0.0965 rows=3 loops=1)
+                -> Nested loop inner join  (cost=1.91 rows=3) (actual time=0.0554..0.0758 rows=3 loops=1)
+                    -> Filter: ((s.`status` = 'COMPLETED') and (s.member_id = 2202) and (s.start_time >= TIMESTAMP'2025-10-01 00:00:00') and (s.start_time < TIMESTAMP'2025-10-08 00:00:00'))  (cost=0.861 rows=3) (actual time=0.03..0.0355 rows=3 loops=1)
+                        -> Covering index range scan on s using idx_session_member_status_start over (member_id = 2202 AND status = 'COMPLETED' AND '2025-10-01 00:00:00' <= start_time < '2025-10-08 00:00:00')  (cost=0.861 rows=3) (actual time=0.026..0.029 rows=3 loops=1)
+                    -> Single-row index lookup on r using uk_report_session (session_id=s.id)  (cost=0.283 rows=1) (actual time=0.0126..0.0127 rows=1 loops=3)
+                -> Filter: (jt.worst_rep is not null)  (actual time=0.00553..0.00587 rows=1 loops=3)
+                    -> Materialize table function  (actual time=0.00527..0.0055 rows=1 loops=3)
+
+4	1
+8	1
+21	1
+Handler_read_first	0
+Handler_read_key	7
+Handler_read_last	0
+Handler_read_next	3
+Handler_read_prev	0
+Handler_read_rnd	0
+Handler_read_rnd_next	10
+##END

@@ -1,0 +1,63 @@
+skew_t1_f50_uni.exercise_sessions	analyze	status	OK
+skew_t1_f50_uni.session_reports	analyze	status	OK
+##STATS
+exercise_sessions	PRIMARY	n_diff_pfx01	95673	20	2026-09-23 23:58:40
+exercise_sessions	PRIMARY	n_leaf_pages	396	NULL	2026-09-23 23:58:40
+exercise_sessions	exercise_id	n_diff_pfx01	0	2	2026-09-23 23:58:40
+exercise_sessions	exercise_id	n_diff_pfx02	97768	20	2026-09-23 23:58:40
+exercise_sessions	exercise_id	n_leaf_pages	133	NULL	2026-09-23 23:58:40
+exercise_sessions	idx_session_member_exercise_status_start	n_diff_pfx01	14952	20	2026-09-23 23:58:40
+exercise_sessions	idx_session_member_exercise_status_start	n_diff_pfx02	15706	20	2026-09-23 23:58:40
+exercise_sessions	idx_session_member_exercise_status_start	n_leaf_pages	361	NULL	2026-09-23 23:58:40
+exercise_sessions	idx_session_member_status_start	n_diff_pfx01	15689	20	2026-09-23 23:58:40
+exercise_sessions	idx_session_member_status_start	n_diff_pfx02	48218	20	2026-09-23 23:58:40
+exercise_sessions	idx_session_member_status_start	n_leaf_pages	291	NULL	2026-09-23 23:58:40
+exercise_sessions	idx_session_starttime_member	n_diff_pfx01	9938	20	2026-09-23 23:58:40
+exercise_sessions	idx_session_starttime_member	n_diff_pfx02	97310	20	2026-09-23 23:58:40
+exercise_sessions	idx_session_starttime_member	n_leaf_pages	264	NULL	2026-09-23 23:58:40
+exercise_sessions	idx_session_status_starttime	n_diff_pfx01	3	5	2026-09-23 23:58:40
+exercise_sessions	idx_session_status_starttime	n_diff_pfx02	10385	20	2026-09-23 23:58:40
+exercise_sessions	idx_session_status_starttime	n_leaf_pages	163	NULL	2026-09-23 23:58:40
+session_reports	PRIMARY	n_diff_pfx01	18960	20	2026-09-23 23:58:40
+session_reports	PRIMARY	n_leaf_pages	5341	NULL	2026-09-23 23:58:40
+session_reports	member_id	n_diff_pfx01	11372	20	2026-09-23 23:58:40
+session_reports	member_id	n_diff_pfx02	23920	20	2026-09-23 23:58:40
+session_reports	member_id	n_leaf_pages	52	NULL	2026-09-23 23:58:40
+session_reports	uk_report_session	n_diff_pfx01	26337	20	2026-09-23 23:58:40
+session_reports	uk_report_session	n_leaf_pages	49	NULL	2026-09-23 23:58:40
+##HIST
+##ENDSTATS
+##P|T1.Q2cur.heavy
+-> Sort: jt.rep_number
+    -> Table scan on <temporary>
+        -> Aggregate using temporary table
+            -> Nested loop inner join
+                -> Nested loop inner join  (cost=8.4 rows=6)
+                    -> Index lookup on r using member_id (member_id=5166)  (cost=4.2 rows=12)
+                    -> Filter: ((s.start_time >= TIMESTAMP'2025-10-01 00:00:00') and (s.start_time < TIMESTAMP'2025-10-08 00:00:00'))  (cost=0.254 rows=0.5)
+                        -> Single-row index lookup on s using PRIMARY (id=r.session_id)  (cost=0.254 rows=1)
+                -> Materialize table function
+
+##P|T1.Q2cur.mid
+-> Sort: jt.rep_number
+    -> Table scan on <temporary>
+        -> Aggregate using temporary table
+            -> Nested loop inner join
+                -> Nested loop inner join  (cost=1.4 rows=1)
+                    -> Index lookup on r using member_id (member_id=5821)  (cost=0.7 rows=2)
+                    -> Filter: ((s.start_time >= TIMESTAMP'2025-10-01 00:00:00') and (s.start_time < TIMESTAMP'2025-10-08 00:00:00'))  (cost=0.275 rows=0.5)
+                        -> Single-row index lookup on s using PRIMARY (id=r.session_id)  (cost=0.275 rows=1)
+                -> Materialize table function
+
+##P|T1.Q2cur.light
+-> Sort: jt.rep_number
+    -> Table scan on <temporary>
+        -> Aggregate using temporary table
+            -> Nested loop inner join
+                -> Nested loop inner join  (cost=1.4 rows=1)
+                    -> Index lookup on r using member_id (member_id=2202)  (cost=0.7 rows=2)
+                    -> Filter: ((s.start_time >= TIMESTAMP'2025-10-01 00:00:00') and (s.start_time < TIMESTAMP'2025-10-08 00:00:00'))  (cost=0.275 rows=0.5)
+                        -> Single-row index lookup on s using PRIMARY (id=r.session_id)  (cost=0.275 rows=1)
+                -> Materialize table function
+
+##END
