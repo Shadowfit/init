@@ -1,0 +1,43 @@
+[mpath] compose up
+ Network mpath_net  Creating
+ Network mpath_net  Created
+ Container mpath_replica  Creating
+ Container mpath_client  Creating
+ Container mpath_source  Creating
+ Container mpath_source  Created
+ Container mpath_client  Created
+ Container mpath_replica  Created
+ Container mpath_replica  Starting
+ Container mpath_client  Starting
+ Container mpath_source  Starting
+ Container mpath_replica  Started
+ Container mpath_source  Started
+ Container mpath_client  Started
+mysql: [Warning] Using a password on the command line interface can be insecure.
+mysql: [Warning] Using a password on the command line interface can be insecure.
+[mpath] 무대 준비 — SOURCE_DELAY=5 · IO=Yes · SQL=Yes
+[mpath] 판 1 (버림) — 팔 X
+[mpath] 판 2 (본판) — 팔 X
+[mpath] 판 3 (본판) — 팔 Y
+[mpath] 판 4 (본판) — 팔 Z
+[mpath] 판 5 (본판) — 팔 Y
+[mpath] 판 6 (본판) — 팔 Z
+[mpath] 판 7 (본판) — 팔 X
+[mpath] 판 8 (본판) — 팔 Z
+[mpath] 판 9 (본판) — 팔 X
+[mpath] 판 10 (본판) — 팔 Y
+[mpath] 완료 → /e/init-wt-mpath/loadtest/results/replication-measure-path-2026-11-07/_out
+ Container mpath_client  Stopping
+ Container mpath_replica  Stopping
+ Container mpath_source  Stopping
+ Container mpath_client  Stopped
+ Container mpath_client  Removing
+ Container mpath_replica  Stopped
+ Container mpath_replica  Removing
+ Container mpath_source  Stopped
+ Container mpath_source  Removing
+ Container mpath_client  Removed
+ Container mpath_replica  Removed
+ Container mpath_source  Removed
+ Network mpath_net  Removing
+ Network mpath_net  Removed
