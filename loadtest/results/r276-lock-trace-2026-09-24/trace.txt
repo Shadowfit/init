@@ -1,0 +1,621 @@
+# MySQL 8.0.46 · 기본 격리 REPEATABLE-READ · SLEEP=1
+
+################ 팔: base ################
+>>> T1:  BEGIN;
+>>> T2:  BEGIN;
+=== [0 시작 — 둘 다 BEGIN]
+    (잠금 없음이면 표가 비어 있다)
+>>> T1: INSERT INTO pose_lab (session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at) VALUES (901, 1, 1.000, JSON_OBJECT('k',1), 50.00, 0.00, NULL, '2026-05-15 10:00:00') ON DUPLICATE KEY UPDATE session_id = session_id;
+=== [1 T1 이 중복(901,1,1) 을 넣은 직후]
++------+---------------+----------+--------+---------------+---------+---------------------------------------+
+| who  | idx           | part     | type   | mode          | status  | data                                  |
++------+---------------+----------+--------+---------------+---------+---------------------------------------+
+| t1   | PRIMARY       | p2026_05 | RECORD | X             | GRANTED | supremum pseudo-record                |
+| t1   | PRIMARY       | p2026_05 | RECORD | X,REC_NOT_GAP | GRANTED | 1, 0x6A067010                         |
+| t1   | uk_pose_event | p2026_05 | RECORD | X             | GRANTED | 901, 1, 0x800000010000, 0x6A067010, 1 |
+| t1   | NULL          | p2026_05 | TABLE  | IX            | GRANTED | NULL                                  |
++------+---------------+----------+--------+---------------+---------+---------------------------------------+
+    (잠금 없음이면 표가 비어 있다)
+>>> T2: INSERT INTO pose_lab (session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at) VALUES (902, 1, 1.000, JSON_OBJECT('k',1), 50.00, 0.00, NULL, '2026-05-15 10:00:00') ON DUPLICATE KEY UPDATE session_id = session_id;
+=== [2 T2 가 중복(902,1,1) 을 넣은 직후]
++------+---------------+----------+--------+--------------------+---------+---------------------------------------+
+| who  | idx           | part     | type   | mode               | status  | data                                  |
++------+---------------+----------+--------+--------------------+---------+---------------------------------------+
+| t1   | PRIMARY       | p2026_05 | RECORD | X                  | GRANTED | supremum pseudo-record                |
+| t1   | PRIMARY       | p2026_05 | RECORD | X,REC_NOT_GAP      | GRANTED | 1, 0x6A067010                         |
+| t1   | uk_pose_event | p2026_05 | RECORD | X                  | GRANTED | 901, 1, 0x800000010000, 0x6A067010, 1 |
+| t1   | NULL          | p2026_05 | TABLE  | IX                 | GRANTED | NULL                                  |
+| t2   | PRIMARY       | p2026_05 | RECORD | X,INSERT_INTENTION | WAITING | supremum pseudo-record                |
+| t2   | NULL          | p2026_05 | TABLE  | IX                 | GRANTED | NULL                                  |
++------+---------------+----------+--------+--------------------+---------+---------------------------------------+
+    (잠금 없음이면 표가 비어 있다)
+>>> T1: INSERT INTO pose_lab (session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at) VALUES (901, 2, 2.000, JSON_OBJECT('k',1), 50.00, 0.00, NULL, '2026-05-15 10:00:00') ON DUPLICATE KEY UPDATE session_id = session_id;
+=== [3 T1 이 신규(901,2,2) 를 넣은 직후]
++------+---------------+----------+--------+--------------------+---------+---------------------------------------+
+| who  | idx           | part     | type   | mode               | status  | data                                  |
++------+---------------+----------+--------+--------------------+---------+---------------------------------------+
+| t1   | PRIMARY       | p2026_05 | RECORD | X                  | GRANTED | supremum pseudo-record                |
+| t1   | PRIMARY       | p2026_05 | RECORD | X,REC_NOT_GAP      | GRANTED | 1, 0x6A067010                         |
+| t1   | PRIMARY       | p2026_05 | RECORD | X,GAP              | GRANTED | 4, 0x6A067010                         |
+| t1   | uk_pose_event | p2026_05 | RECORD | X                  | GRANTED | 901, 1, 0x800000010000, 0x6A067010, 1 |
+| t1   | NULL          | p2026_05 | TABLE  | IX                 | GRANTED | NULL                                  |
+| t2   | PRIMARY       | p2026_05 | RECORD | X,INSERT_INTENTION | WAITING | supremum pseudo-record                |
+| t2   | NULL          | p2026_05 | TABLE  | IX                 | GRANTED | NULL                                  |
++------+---------------+----------+--------+--------------------+---------+---------------------------------------+
+    (잠금 없음이면 표가 비어 있다)
+>>> T2: INSERT INTO pose_lab (session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at) VALUES (902, 2, 2.000, JSON_OBJECT('k',1), 50.00, 0.00, NULL, '2026-05-15 10:00:00') ON DUPLICATE KEY UPDATE session_id = session_id;
+=== [4 T2 가 신규(902,2,2) 를 넣은 직후]
++------+---------------+----------+--------+--------------------+---------+---------------------------------------+
+| who  | idx           | part     | type   | mode               | status  | data                                  |
++------+---------------+----------+--------+--------------------+---------+---------------------------------------+
+| t1   | PRIMARY       | p2026_05 | RECORD | X                  | GRANTED | supremum pseudo-record                |
+| t1   | PRIMARY       | p2026_05 | RECORD | X,REC_NOT_GAP      | GRANTED | 1, 0x6A067010                         |
+| t1   | PRIMARY       | p2026_05 | RECORD | X,GAP              | GRANTED | 4, 0x6A067010                         |
+| t1   | uk_pose_event | p2026_05 | RECORD | X                  | GRANTED | 901, 1, 0x800000010000, 0x6A067010, 1 |
+| t1   | NULL          | p2026_05 | TABLE  | IX                 | GRANTED | NULL                                  |
+| t2   | PRIMARY       | p2026_05 | RECORD | X,INSERT_INTENTION | WAITING | supremum pseudo-record                |
+| t2   | NULL          | p2026_05 | TABLE  | IX                 | GRANTED | NULL                                  |
++------+---------------+----------+--------+--------------------+---------+---------------------------------------+
+    (잠금 없음이면 표가 비어 있다)
+>>> T1: COMMIT;
+>>> T2: COMMIT;
+=== [5 둘 다 COMMIT 뒤]
+    (잠금 없음이면 표가 비어 있다)
+session_id	rep_number	timestamp_sec	id
+901	1	1.000	1
+901	2	2.000	4
+902	1	1.000	2
+902	2	2.000	5
+--- t1 세션 로그 (오류만)
+    Query OK, 0 rows affected (0.00 sec)
+    Query OK, 0 rows affected (0.00 sec)
+    Query OK, 1 row affected (0.00 sec)
+    Query OK, 0 rows affected (0.14 sec)
+--- t2 세션 로그 (오류만)
+    Query OK, 0 rows affected (0.00 sec)
+    Query OK, 0 rows affected (3.24 sec)
+    Query OK, 1 row affected (0.00 sec)
+    Query OK, 0 rows affected (0.08 sec)
+--- 이 팔의 데드락 수: 0
+
+################ 팔: dup_blocks_new ################
+>>> T1: BEGIN;
+>>> T2: BEGIN;
+>>> T1: INSERT INTO pose_lab (session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at) VALUES (901, 1, 1.000, JSON_OBJECT('k',1), 50.00, 0.00, NULL, '2026-05-15 10:00:00') ON DUPLICATE KEY UPDATE session_id = session_id;
+=== [1 T1 중복]
++------+---------------+----------+--------+---------------+---------+---------------------------------------+
+| who  | idx           | part     | type   | mode          | status  | data                                  |
++------+---------------+----------+--------+---------------+---------+---------------------------------------+
+| t1   | PRIMARY       | p2026_05 | RECORD | X             | GRANTED | supremum pseudo-record                |
+| t1   | PRIMARY       | p2026_05 | RECORD | X,REC_NOT_GAP | GRANTED | 1, 0x6A067010                         |
+| t1   | uk_pose_event | p2026_05 | RECORD | X             | GRANTED | 901, 1, 0x800000010000, 0x6A067010, 1 |
+| t1   | NULL          | p2026_05 | TABLE  | IX            | GRANTED | NULL                                  |
++------+---------------+----------+--------+---------------+---------+---------------------------------------+
+    (잠금 없음이면 표가 비어 있다)
+>>> T2: INSERT INTO pose_lab (session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at) VALUES (903, 1, 1.000, JSON_OBJECT('k',1), 50.00, 0.00, NULL, '2026-05-15 10:00:00') ON DUPLICATE KEY UPDATE session_id = session_id;
+=== [2 T2 가 무관한 신규(903,1,1) 를 넣은 직후]
++------+---------------+----------+--------+--------------------+---------+---------------------------------------+
+| who  | idx           | part     | type   | mode               | status  | data                                  |
++------+---------------+----------+--------+--------------------+---------+---------------------------------------+
+| t1   | PRIMARY       | p2026_05 | RECORD | X                  | GRANTED | supremum pseudo-record                |
+| t1   | PRIMARY       | p2026_05 | RECORD | X,REC_NOT_GAP      | GRANTED | 1, 0x6A067010                         |
+| t1   | uk_pose_event | p2026_05 | RECORD | X                  | GRANTED | 901, 1, 0x800000010000, 0x6A067010, 1 |
+| t1   | NULL          | p2026_05 | TABLE  | IX                 | GRANTED | NULL                                  |
+| t2   | PRIMARY       | p2026_05 | RECORD | X,INSERT_INTENTION | WAITING | supremum pseudo-record                |
+| t2   | NULL          | p2026_05 | TABLE  | IX                 | GRANTED | NULL                                  |
++------+---------------+----------+--------+--------------------+---------+---------------------------------------+
+    (잠금 없음이면 표가 비어 있다)
+>>> T1: COMMIT;
+=== [3 T1 COMMIT 뒤]
++------+---------+----------+--------+--------------------+---------+------------------------+
+| who  | idx     | part     | type   | mode               | status  | data                   |
++------+---------+----------+--------+--------------------+---------+------------------------+
+| t2   | PRIMARY | p2026_05 | RECORD | X,INSERT_INTENTION | GRANTED | supremum pseudo-record |
+| t2   | NULL    | p2026_05 | TABLE  | IX                 | GRANTED | NULL                   |
++------+---------+----------+--------+--------------------+---------+------------------------+
+    (잠금 없음이면 표가 비어 있다)
+>>> T2: COMMIT;
+--- t1 세션 로그 (오류만)
+    Query OK, 0 rows affected (0.00 sec)
+    Query OK, 0 rows affected (0.01 sec)
+    Query OK, 0 rows affected (0.04 sec)
+--- t2 세션 로그 (오류만)
+    Query OK, 0 rows affected (0.00 sec)
+    Query OK, 1 row affected (1.02 sec)
+    Query OK, 0 rows affected (0.03 sec)
+--- 이 팔의 데드락 수: 0
+
+################ 팔: plain_insert ################
+>>> T1: BEGIN;
+>>> T1: INSERT INTO pose_lab (session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at) VALUES (901, 1, 1.000, JSON_OBJECT('k',1), 50.00, 0.00, NULL, '2026-05-15 10:00:00');
+=== [1 T1 의 평범한 INSERT 가 1062 로 실패한 직후]
++------+---------------+----------+--------+------+---------+---------------------------------------+
+| who  | idx           | part     | type   | mode | status  | data                                  |
++------+---------------+----------+--------+------+---------+---------------------------------------+
+| t1   | PRIMARY       | p2026_05 | RECORD | X    | GRANTED | supremum pseudo-record                |
+| t1   | uk_pose_event | p2026_05 | RECORD | S    | GRANTED | 901, 1, 0x800000010000, 0x6A067010, 1 |
+| t1   | NULL          | p2026_05 | TABLE  | IX   | GRANTED | NULL                                  |
++------+---------------+----------+--------+------+---------+---------------------------------------+
+    (잠금 없음이면 표가 비어 있다)
+>>> T1: ROLLBACK;
+--- t1 세션 로그 (오류만)
+    Query OK, 0 rows affected (0.00 sec)
+    ERROR 1062 (23000) at line 2: Duplicate entry '901-1-1.000-2026-05-15 10:00:00' for key 'pose_lab.uk_pose_event'
+    Query OK, 0 rows affected (0.01 sec)
+--- t2 세션 로그 (오류만)
+--- 이 팔의 데드락 수: 0
+
+################ 팔: dup_only ################
+>>> T1: BEGIN;
+>>> T2: BEGIN;
+>>> T1: INSERT INTO pose_lab (session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at) VALUES (901, 1, 1.000, JSON_OBJECT('k',1), 50.00, 0.00, NULL, '2026-05-15 10:00:00') ON DUPLICATE KEY UPDATE session_id = session_id;
+=== [1 T1 중복]
++------+---------------+----------+--------+---------------+---------+---------------------------------------+
+| who  | idx           | part     | type   | mode          | status  | data                                  |
++------+---------------+----------+--------+---------------+---------+---------------------------------------+
+| t1   | PRIMARY       | p2026_05 | RECORD | X             | GRANTED | supremum pseudo-record                |
+| t1   | PRIMARY       | p2026_05 | RECORD | X,REC_NOT_GAP | GRANTED | 1, 0x6A067010                         |
+| t1   | uk_pose_event | p2026_05 | RECORD | X             | GRANTED | 901, 1, 0x800000010000, 0x6A067010, 1 |
+| t1   | NULL          | p2026_05 | TABLE  | IX            | GRANTED | NULL                                  |
++------+---------------+----------+--------+---------------+---------+---------------------------------------+
+    (잠금 없음이면 표가 비어 있다)
+>>> T2: INSERT INTO pose_lab (session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at) VALUES (902, 1, 1.000, JSON_OBJECT('k',1), 50.00, 0.00, NULL, '2026-05-15 10:00:00') ON DUPLICATE KEY UPDATE session_id = session_id;
+=== [2 T2 중복]
++------+---------------+----------+--------+--------------------+---------+---------------------------------------+
+| who  | idx           | part     | type   | mode               | status  | data                                  |
++------+---------------+----------+--------+--------------------+---------+---------------------------------------+
+| t1   | PRIMARY       | p2026_05 | RECORD | X                  | GRANTED | supremum pseudo-record                |
+| t1   | PRIMARY       | p2026_05 | RECORD | X,REC_NOT_GAP      | GRANTED | 1, 0x6A067010                         |
+| t1   | uk_pose_event | p2026_05 | RECORD | X                  | GRANTED | 901, 1, 0x800000010000, 0x6A067010, 1 |
+| t1   | NULL          | p2026_05 | TABLE  | IX                 | GRANTED | NULL                                  |
+| t2   | PRIMARY       | p2026_05 | RECORD | X,INSERT_INTENTION | WAITING | supremum pseudo-record                |
+| t2   | NULL          | p2026_05 | TABLE  | IX                 | GRANTED | NULL                                  |
++------+---------------+----------+--------+--------------------+---------+---------------------------------------+
+    (잠금 없음이면 표가 비어 있다)
+>>> T1: INSERT INTO pose_lab (session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at) VALUES (901, 2, 2.000, JSON_OBJECT('k',1), 50.00, 0.00, NULL, '2026-05-15 10:00:00') ON DUPLICATE KEY UPDATE session_id = session_id;
+=== [3 T1 중복(두 번째)]
++------+---------------+----------+--------+--------------------+---------+---------------------------------------+
+| who  | idx           | part     | type   | mode               | status  | data                                  |
++------+---------------+----------+--------+--------------------+---------+---------------------------------------+
+| t1   | PRIMARY       | p2026_05 | RECORD | X                  | GRANTED | supremum pseudo-record                |
+| t1   | PRIMARY       | p2026_05 | RECORD | X,REC_NOT_GAP      | GRANTED | 1, 0x6A067010                         |
+| t1   | PRIMARY       | p2026_05 | RECORD | X,REC_NOT_GAP      | GRANTED | 3, 0x6A067010                         |
+| t1   | uk_pose_event | p2026_05 | RECORD | X                  | GRANTED | 901, 1, 0x800000010000, 0x6A067010, 1 |
+| t1   | uk_pose_event | p2026_05 | RECORD | X                  | GRANTED | 901, 2, 0x800000020000, 0x6A067010, 3 |
+| t1   | NULL          | p2026_05 | TABLE  | IX                 | GRANTED | NULL                                  |
+| t2   | PRIMARY       | p2026_05 | RECORD | X,INSERT_INTENTION | WAITING | supremum pseudo-record                |
+| t2   | NULL          | p2026_05 | TABLE  | IX                 | GRANTED | NULL                                  |
++------+---------------+----------+--------+--------------------+---------+---------------------------------------+
+    (잠금 없음이면 표가 비어 있다)
+>>> T2: INSERT INTO pose_lab (session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at) VALUES (902, 2, 2.000, JSON_OBJECT('k',1), 50.00, 0.00, NULL, '2026-05-15 10:00:00') ON DUPLICATE KEY UPDATE session_id = session_id;
+=== [4 T2 중복(두 번째)]
++------+---------------+----------+--------+--------------------+---------+---------------------------------------+
+| who  | idx           | part     | type   | mode               | status  | data                                  |
++------+---------------+----------+--------+--------------------+---------+---------------------------------------+
+| t1   | PRIMARY       | p2026_05 | RECORD | X                  | GRANTED | supremum pseudo-record                |
+| t1   | PRIMARY       | p2026_05 | RECORD | X,REC_NOT_GAP      | GRANTED | 1, 0x6A067010                         |
+| t1   | PRIMARY       | p2026_05 | RECORD | X,REC_NOT_GAP      | GRANTED | 3, 0x6A067010                         |
+| t1   | uk_pose_event | p2026_05 | RECORD | X                  | GRANTED | 901, 1, 0x800000010000, 0x6A067010, 1 |
+| t1   | uk_pose_event | p2026_05 | RECORD | X                  | GRANTED | 901, 2, 0x800000020000, 0x6A067010, 3 |
+| t1   | NULL          | p2026_05 | TABLE  | IX                 | GRANTED | NULL                                  |
+| t2   | PRIMARY       | p2026_05 | RECORD | X,INSERT_INTENTION | WAITING | supremum pseudo-record                |
+| t2   | NULL          | p2026_05 | TABLE  | IX                 | GRANTED | NULL                                  |
++------+---------------+----------+--------+--------------------+---------+---------------------------------------+
+    (잠금 없음이면 표가 비어 있다)
+>>> T1: COMMIT;
+>>> T2: COMMIT;
+--- t1 세션 로그 (오류만)
+    Query OK, 0 rows affected (0.01 sec)
+    Query OK, 0 rows affected (0.00 sec)
+    Query OK, 0 rows affected (0.00 sec)
+    Query OK, 0 rows affected (0.03 sec)
+--- t2 세션 로그 (오류만)
+    Query OK, 0 rows affected (0.01 sec)
+    Query OK, 0 rows affected (3.09 sec)
+    Query OK, 0 rows affected (0.01 sec)
+    Query OK, 0 rows affected (0.04 sec)
+--- 이 팔의 데드락 수: 0
+
+################ 팔: new_only ################
+>>> T1: BEGIN;
+>>> T2: BEGIN;
+>>> T1: INSERT INTO pose_lab (session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at) VALUES (901, 3, 3.000, JSON_OBJECT('k',1), 50.00, 0.00, NULL, '2026-05-15 10:00:00') ON DUPLICATE KEY UPDATE session_id = session_id;
+=== [1 T1 신규]
++------+------+----------+-------+------+---------+------+
+| who  | idx  | part     | type  | mode | status  | data |
++------+------+----------+-------+------+---------+------+
+| t1   | NULL | p2026_05 | TABLE | IX   | GRANTED | NULL |
++------+------+----------+-------+------+---------+------+
+    (잠금 없음이면 표가 비어 있다)
+>>> T2: INSERT INTO pose_lab (session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at) VALUES (902, 3, 3.000, JSON_OBJECT('k',1), 50.00, 0.00, NULL, '2026-05-15 10:00:00') ON DUPLICATE KEY UPDATE session_id = session_id;
+=== [2 T2 신규]
++------+------+----------+-------+------+---------+------+
+| who  | idx  | part     | type  | mode | status  | data |
++------+------+----------+-------+------+---------+------+
+| t1   | NULL | p2026_05 | TABLE | IX   | GRANTED | NULL |
+| t2   | NULL | p2026_05 | TABLE | IX   | GRANTED | NULL |
++------+------+----------+-------+------+---------+------+
+    (잠금 없음이면 표가 비어 있다)
+>>> T1: INSERT INTO pose_lab (session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at) VALUES (901, 4, 4.000, JSON_OBJECT('k',1), 50.00, 0.00, NULL, '2026-05-15 10:00:00') ON DUPLICATE KEY UPDATE session_id = session_id;
+=== [3 T1 신규(두 번째)]
++------+------+----------+-------+------+---------+------+
+| who  | idx  | part     | type  | mode | status  | data |
++------+------+----------+-------+------+---------+------+
+| t1   | NULL | p2026_05 | TABLE | IX   | GRANTED | NULL |
+| t2   | NULL | p2026_05 | TABLE | IX   | GRANTED | NULL |
++------+------+----------+-------+------+---------+------+
+    (잠금 없음이면 표가 비어 있다)
+>>> T2: INSERT INTO pose_lab (session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at) VALUES (902, 4, 4.000, JSON_OBJECT('k',1), 50.00, 0.00, NULL, '2026-05-15 10:00:00') ON DUPLICATE KEY UPDATE session_id = session_id;
+=== [4 T2 신규(두 번째)]
++------+------+----------+-------+------+---------+------+
+| who  | idx  | part     | type  | mode | status  | data |
++------+------+----------+-------+------+---------+------+
+| t1   | NULL | p2026_05 | TABLE | IX   | GRANTED | NULL |
+| t2   | NULL | p2026_05 | TABLE | IX   | GRANTED | NULL |
++------+------+----------+-------+------+---------+------+
+    (잠금 없음이면 표가 비어 있다)
+>>> T1: COMMIT;
+>>> T2: COMMIT;
+--- t1 세션 로그 (오류만)
+    Query OK, 0 rows affected (0.00 sec)
+    Query OK, 1 row affected (0.00 sec)
+    Query OK, 1 row affected (0.00 sec)
+    Query OK, 0 rows affected (0.09 sec)
+--- t2 세션 로그 (오류만)
+    Query OK, 0 rows affected (0.00 sec)
+    Query OK, 1 row affected (0.01 sec)
+    Query OK, 1 row affected (0.00 sec)
+    Query OK, 0 rows affected (0.07 sec)
+--- 이 팔의 데드락 수: 0
+
+################ 팔: no_uk ################
+>>> T1:  BEGIN;
+>>> T2:  BEGIN;
+=== [0 시작 — 둘 다 BEGIN]
+    (잠금 없음이면 표가 비어 있다)
+>>> T1: INSERT INTO pose_lab (session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at) VALUES (901, 1, 1.000, JSON_OBJECT('k',1), 50.00, 0.00, NULL, '2026-05-15 10:00:00') ON DUPLICATE KEY UPDATE session_id = session_id;
+=== [1 T1 이 중복(901,1,1) 을 넣은 직후]
++------+------+----------+-------+------+---------+------+
+| who  | idx  | part     | type  | mode | status  | data |
++------+------+----------+-------+------+---------+------+
+| t1   | NULL | p2026_05 | TABLE | IX   | GRANTED | NULL |
++------+------+----------+-------+------+---------+------+
+    (잠금 없음이면 표가 비어 있다)
+>>> T2: INSERT INTO pose_lab (session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at) VALUES (902, 1, 1.000, JSON_OBJECT('k',1), 50.00, 0.00, NULL, '2026-05-15 10:00:00') ON DUPLICATE KEY UPDATE session_id = session_id;
+=== [2 T2 가 중복(902,1,1) 을 넣은 직후]
++------+------+----------+-------+------+---------+------+
+| who  | idx  | part     | type  | mode | status  | data |
++------+------+----------+-------+------+---------+------+
+| t1   | NULL | p2026_05 | TABLE | IX   | GRANTED | NULL |
+| t2   | NULL | p2026_05 | TABLE | IX   | GRANTED | NULL |
++------+------+----------+-------+------+---------+------+
+    (잠금 없음이면 표가 비어 있다)
+>>> T1: INSERT INTO pose_lab (session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at) VALUES (901, 2, 2.000, JSON_OBJECT('k',1), 50.00, 0.00, NULL, '2026-05-15 10:00:00') ON DUPLICATE KEY UPDATE session_id = session_id;
+=== [3 T1 이 신규(901,2,2) 를 넣은 직후]
++------+------+----------+-------+------+---------+------+
+| who  | idx  | part     | type  | mode | status  | data |
++------+------+----------+-------+------+---------+------+
+| t1   | NULL | p2026_05 | TABLE | IX   | GRANTED | NULL |
+| t2   | NULL | p2026_05 | TABLE | IX   | GRANTED | NULL |
++------+------+----------+-------+------+---------+------+
+    (잠금 없음이면 표가 비어 있다)
+>>> T2: INSERT INTO pose_lab (session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at) VALUES (902, 2, 2.000, JSON_OBJECT('k',1), 50.00, 0.00, NULL, '2026-05-15 10:00:00') ON DUPLICATE KEY UPDATE session_id = session_id;
+=== [4 T2 가 신규(902,2,2) 를 넣은 직후]
++------+------+----------+-------+------+---------+------+
+| who  | idx  | part     | type  | mode | status  | data |
++------+------+----------+-------+------+---------+------+
+| t1   | NULL | p2026_05 | TABLE | IX   | GRANTED | NULL |
+| t2   | NULL | p2026_05 | TABLE | IX   | GRANTED | NULL |
++------+------+----------+-------+------+---------+------+
+    (잠금 없음이면 표가 비어 있다)
+>>> T1: COMMIT;
+>>> T2: COMMIT;
+=== [5 둘 다 COMMIT 뒤]
+    (잠금 없음이면 표가 비어 있다)
+session_id	rep_number	timestamp_sec	id
+901	1	1.000	1
+901	1	1.000	3
+901	2	2.000	5
+902	1	1.000	2
+902	1	1.000	4
+902	2	2.000	6
+--- t1 세션 로그 (오류만)
+    Query OK, 0 rows affected (0.00 sec)
+    Query OK, 1 row affected (0.00 sec)
+    Query OK, 1 row affected (0.00 sec)
+    Query OK, 0 rows affected (0.07 sec)
+--- t2 세션 로그 (오류만)
+    Query OK, 0 rows affected (0.00 sec)
+    Query OK, 1 row affected (0.01 sec)
+    Query OK, 1 row affected (0.00 sec)
+    Query OK, 0 rows affected (0.02 sec)
+--- 이 팔의 데드락 수: 0
+
+################ 팔: insert_ignore ################
+>>> T1:  BEGIN;
+>>> T2:  BEGIN;
+=== [0 시작 — 둘 다 BEGIN]
+    (잠금 없음이면 표가 비어 있다)
+>>> T1: INSERT IGNORE INTO pose_lab (session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at) VALUES (901, 1, 1.000, JSON_OBJECT('k',1), 50.00, 0.00, NULL, '2026-05-15 10:00:00');
+=== [1 T1 이 중복(901,1,1) 을 넣은 직후]
++------+---------------+----------+--------+------+---------+---------------------------------------+
+| who  | idx           | part     | type   | mode | status  | data                                  |
++------+---------------+----------+--------+------+---------+---------------------------------------+
+| t1   | PRIMARY       | p2026_05 | RECORD | X    | GRANTED | supremum pseudo-record                |
+| t1   | uk_pose_event | p2026_05 | RECORD | S    | GRANTED | 901, 1, 0x800000010000, 0x6A067010, 1 |
+| t1   | NULL          | p2026_05 | TABLE  | IX   | GRANTED | NULL                                  |
++------+---------------+----------+--------+------+---------+---------------------------------------+
+    (잠금 없음이면 표가 비어 있다)
+>>> T2: INSERT IGNORE INTO pose_lab (session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at) VALUES (902, 1, 1.000, JSON_OBJECT('k',1), 50.00, 0.00, NULL, '2026-05-15 10:00:00');
+=== [2 T2 가 중복(902,1,1) 을 넣은 직후]
++------+---------------+----------+--------+--------------------+---------+---------------------------------------+
+| who  | idx           | part     | type   | mode               | status  | data                                  |
++------+---------------+----------+--------+--------------------+---------+---------------------------------------+
+| t1   | PRIMARY       | p2026_05 | RECORD | X                  | GRANTED | supremum pseudo-record                |
+| t1   | uk_pose_event | p2026_05 | RECORD | S                  | GRANTED | 901, 1, 0x800000010000, 0x6A067010, 1 |
+| t1   | NULL          | p2026_05 | TABLE  | IX                 | GRANTED | NULL                                  |
+| t2   | PRIMARY       | p2026_05 | RECORD | X,INSERT_INTENTION | WAITING | supremum pseudo-record                |
+| t2   | NULL          | p2026_05 | TABLE  | IX                 | GRANTED | NULL                                  |
++------+---------------+----------+--------+--------------------+---------+---------------------------------------+
+    (잠금 없음이면 표가 비어 있다)
+>>> T1: INSERT IGNORE INTO pose_lab (session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at) VALUES (901, 2, 2.000, JSON_OBJECT('k',1), 50.00, 0.00, NULL, '2026-05-15 10:00:00');
+=== [3 T1 이 신규(901,2,2) 를 넣은 직후]
++------+---------------+----------+--------+--------------------+---------+---------------------------------------+
+| who  | idx           | part     | type   | mode               | status  | data                                  |
++------+---------------+----------+--------+--------------------+---------+---------------------------------------+
+| t1   | PRIMARY       | p2026_05 | RECORD | X                  | GRANTED | supremum pseudo-record                |
+| t1   | PRIMARY       | p2026_05 | RECORD | X,GAP              | GRANTED | 4, 0x6A067010                         |
+| t1   | uk_pose_event | p2026_05 | RECORD | S                  | GRANTED | 901, 1, 0x800000010000, 0x6A067010, 1 |
+| t1   | NULL          | p2026_05 | TABLE  | IX                 | GRANTED | NULL                                  |
+| t2   | PRIMARY       | p2026_05 | RECORD | X,INSERT_INTENTION | WAITING | supremum pseudo-record                |
+| t2   | NULL          | p2026_05 | TABLE  | IX                 | GRANTED | NULL                                  |
++------+---------------+----------+--------+--------------------+---------+---------------------------------------+
+    (잠금 없음이면 표가 비어 있다)
+>>> T2: INSERT IGNORE INTO pose_lab (session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at) VALUES (902, 2, 2.000, JSON_OBJECT('k',1), 50.00, 0.00, NULL, '2026-05-15 10:00:00');
+=== [4 T2 가 신규(902,2,2) 를 넣은 직후]
++------+---------------+----------+--------+--------------------+---------+---------------------------------------+
+| who  | idx           | part     | type   | mode               | status  | data                                  |
++------+---------------+----------+--------+--------------------+---------+---------------------------------------+
+| t1   | PRIMARY       | p2026_05 | RECORD | X                  | GRANTED | supremum pseudo-record                |
+| t1   | PRIMARY       | p2026_05 | RECORD | X,GAP              | GRANTED | 4, 0x6A067010                         |
+| t1   | uk_pose_event | p2026_05 | RECORD | S                  | GRANTED | 901, 1, 0x800000010000, 0x6A067010, 1 |
+| t1   | NULL          | p2026_05 | TABLE  | IX                 | GRANTED | NULL                                  |
+| t2   | PRIMARY       | p2026_05 | RECORD | X,INSERT_INTENTION | WAITING | supremum pseudo-record                |
+| t2   | NULL          | p2026_05 | TABLE  | IX                 | GRANTED | NULL                                  |
++------+---------------+----------+--------+--------------------+---------+---------------------------------------+
+    (잠금 없음이면 표가 비어 있다)
+>>> T1: COMMIT;
+>>> T2: COMMIT;
+=== [5 둘 다 COMMIT 뒤]
+    (잠금 없음이면 표가 비어 있다)
+session_id	rep_number	timestamp_sec	id
+901	1	1.000	1
+901	2	2.000	4
+902	1	1.000	2
+902	2	2.000	5
+--- t1 세션 로그 (오류만)
+    Query OK, 0 rows affected (0.00 sec)
+    Query OK, 0 rows affected, 1 warning (0.00 sec)
+    Query OK, 1 row affected (0.00 sec)
+    Query OK, 0 rows affected (0.09 sec)
+--- t2 세션 로그 (오류만)
+    Query OK, 0 rows affected (0.00 sec)
+    Query OK, 0 rows affected, 1 warning (3.15 sec)
+    Query OK, 1 row affected (0.01 sec)
+    Query OK, 0 rows affected (0.05 sec)
+--- 이 팔의 데드락 수: 0
+
+################ 팔: read_committed ################
+>>> T1: SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED; BEGIN;
+>>> T2: SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED; BEGIN;
+=== [0 시작 — 둘 다 BEGIN]
+    (잠금 없음이면 표가 비어 있다)
+>>> T1: INSERT INTO pose_lab (session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at) VALUES (901, 1, 1.000, JSON_OBJECT('k',1), 50.00, 0.00, NULL, '2026-05-15 10:00:00') ON DUPLICATE KEY UPDATE session_id = session_id;
+=== [1 T1 이 중복(901,1,1) 을 넣은 직후]
++------+---------------+----------+--------+---------------+---------+---------------------------------------+
+| who  | idx           | part     | type   | mode          | status  | data                                  |
++------+---------------+----------+--------+---------------+---------+---------------------------------------+
+| t1   | PRIMARY       | p2026_05 | RECORD | X,REC_NOT_GAP | GRANTED | 1, 0x6A067010                         |
+| t1   | uk_pose_event | p2026_05 | RECORD | X             | GRANTED | 901, 1, 0x800000010000, 0x6A067010, 1 |
+| t1   | NULL          | p2026_05 | TABLE  | IX            | GRANTED | NULL                                  |
++------+---------------+----------+--------+---------------+---------+---------------------------------------+
+    (잠금 없음이면 표가 비어 있다)
+>>> T2: INSERT INTO pose_lab (session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at) VALUES (902, 1, 1.000, JSON_OBJECT('k',1), 50.00, 0.00, NULL, '2026-05-15 10:00:00') ON DUPLICATE KEY UPDATE session_id = session_id;
+=== [2 T2 가 중복(902,1,1) 을 넣은 직후]
++------+---------------+----------+--------+---------------+---------+---------------------------------------+
+| who  | idx           | part     | type   | mode          | status  | data                                  |
++------+---------------+----------+--------+---------------+---------+---------------------------------------+
+| t1   | PRIMARY       | p2026_05 | RECORD | X,REC_NOT_GAP | GRANTED | 1, 0x6A067010                         |
+| t1   | uk_pose_event | p2026_05 | RECORD | X             | GRANTED | 901, 1, 0x800000010000, 0x6A067010, 1 |
+| t1   | NULL          | p2026_05 | TABLE  | IX            | GRANTED | NULL                                  |
+| t2   | PRIMARY       | p2026_05 | RECORD | X,REC_NOT_GAP | GRANTED | 2, 0x6A067010                         |
+| t2   | uk_pose_event | p2026_05 | RECORD | X             | GRANTED | 902, 1, 0x800000010000, 0x6A067010, 2 |
+| t2   | NULL          | p2026_05 | TABLE  | IX            | GRANTED | NULL                                  |
++------+---------------+----------+--------+---------------+---------+---------------------------------------+
+    (잠금 없음이면 표가 비어 있다)
+>>> T1: INSERT INTO pose_lab (session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at) VALUES (901, 2, 2.000, JSON_OBJECT('k',1), 50.00, 0.00, NULL, '2026-05-15 10:00:00') ON DUPLICATE KEY UPDATE session_id = session_id;
+=== [3 T1 이 신규(901,2,2) 를 넣은 직후]
++------+---------------+----------+--------+------------------------+---------+---------------------------------------+
+| who  | idx           | part     | type   | mode                   | status  | data                                  |
++------+---------------+----------+--------+------------------------+---------+---------------------------------------+
+| t1   | PRIMARY       | p2026_05 | RECORD | X,REC_NOT_GAP          | GRANTED | 1, 0x6A067010                         |
+| t1   | uk_pose_event | p2026_05 | RECORD | X                      | GRANTED | 901, 1, 0x800000010000, 0x6A067010, 1 |
+| t1   | uk_pose_event | p2026_05 | RECORD | X,GAP,INSERT_INTENTION | WAITING | 902, 1, 0x800000010000, 0x6A067010, 2 |
+| t1   | NULL          | p2026_05 | TABLE  | IX                     | GRANTED | NULL                                  |
+| t2   | PRIMARY       | p2026_05 | RECORD | X,REC_NOT_GAP          | GRANTED | 2, 0x6A067010                         |
+| t2   | uk_pose_event | p2026_05 | RECORD | X                      | GRANTED | 902, 1, 0x800000010000, 0x6A067010, 2 |
+| t2   | NULL          | p2026_05 | TABLE  | IX                     | GRANTED | NULL                                  |
++------+---------------+----------+--------+------------------------+---------+---------------------------------------+
+    (잠금 없음이면 표가 비어 있다)
+>>> T2: INSERT INTO pose_lab (session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at) VALUES (902, 2, 2.000, JSON_OBJECT('k',1), 50.00, 0.00, NULL, '2026-05-15 10:00:00') ON DUPLICATE KEY UPDATE session_id = session_id;
+=== [4 T2 가 신규(902,2,2) 를 넣은 직후]
++------+---------------+----------+--------+------------------------+---------+---------------------------------------+
+| who  | idx           | part     | type   | mode                   | status  | data                                  |
++------+---------------+----------+--------+------------------------+---------+---------------------------------------+
+| t1   | PRIMARY       | p2026_05 | RECORD | X,REC_NOT_GAP          | GRANTED | 1, 0x6A067010                         |
+| t1   | uk_pose_event | p2026_05 | RECORD | X                      | GRANTED | 901, 1, 0x800000010000, 0x6A067010, 1 |
+| t1   | uk_pose_event | p2026_05 | RECORD | X,GAP,INSERT_INTENTION | WAITING | 902, 1, 0x800000010000, 0x6A067010, 2 |
+| t1   | NULL          | p2026_05 | TABLE  | IX                     | GRANTED | NULL                                  |
+| t2   | PRIMARY       | p2026_05 | RECORD | X,REC_NOT_GAP          | GRANTED | 2, 0x6A067010                         |
+| t2   | uk_pose_event | p2026_05 | RECORD | X                      | GRANTED | 902, 1, 0x800000010000, 0x6A067010, 2 |
+| t2   | NULL          | p2026_05 | TABLE  | IX                     | GRANTED | NULL                                  |
++------+---------------+----------+--------+------------------------+---------+---------------------------------------+
+    (잠금 없음이면 표가 비어 있다)
+>>> T1: COMMIT;
+>>> T2: COMMIT;
+=== [5 둘 다 COMMIT 뒤]
+    (잠금 없음이면 표가 비어 있다)
+session_id	rep_number	timestamp_sec	id
+901	1	1.000	1
+901	2	2.000	3
+902	1	1.000	2
+902	2	2.000	4
+--- t1 세션 로그 (오류만)
+    Query OK, 0 rows affected (0.00 sec)
+    Query OK, 0 rows affected (0.00 sec)
+    Query OK, 0 rows affected (0.00 sec)
+    Query OK, 1 row affected (3.04 sec)
+    Query OK, 0 rows affected (0.05 sec)
+--- t2 세션 로그 (오류만)
+    Query OK, 0 rows affected (0.00 sec)
+    Query OK, 0 rows affected (0.00 sec)
+    Query OK, 0 rows affected (0.00 sec)
+    Query OK, 1 row affected (0.00 sec)
+    Query OK, 0 rows affected (0.03 sec)
+--- 이 팔의 데드락 수: 0
+
+################ 팔: natural_pk ################
+>>> T1:  BEGIN;
+>>> T2:  BEGIN;
+=== [0 시작 — 둘 다 BEGIN]
+    (잠금 없음이면 표가 비어 있다)
+>>> T1: INSERT INTO pose_lab (session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at) VALUES (901, 1, 1.000, JSON_OBJECT('k',1), 50.00, 0.00, NULL, '2026-05-15 10:00:00') ON DUPLICATE KEY UPDATE session_id = session_id;
+=== [1 T1 이 중복(901,1,1) 을 넣은 직후]
++------+---------+----------+--------+---------------+---------+------------------------------------+
+| who  | idx     | part     | type   | mode          | status  | data                               |
++------+---------+----------+--------+---------------+---------+------------------------------------+
+| t1   | PRIMARY | p2026_05 | RECORD | X,REC_NOT_GAP | GRANTED | 901, 1, 0x800000010000, 0x6A067010 |
+| t1   | NULL    | p2026_05 | TABLE  | IX            | GRANTED | NULL                               |
++------+---------+----------+--------+---------------+---------+------------------------------------+
+    (잠금 없음이면 표가 비어 있다)
+>>> T2: INSERT INTO pose_lab (session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at) VALUES (902, 1, 1.000, JSON_OBJECT('k',1), 50.00, 0.00, NULL, '2026-05-15 10:00:00') ON DUPLICATE KEY UPDATE session_id = session_id;
+=== [2 T2 가 중복(902,1,1) 을 넣은 직후]
++------+---------+----------+--------+---------------+---------+------------------------------------+
+| who  | idx     | part     | type   | mode          | status  | data                               |
++------+---------+----------+--------+---------------+---------+------------------------------------+
+| t1   | PRIMARY | p2026_05 | RECORD | X,REC_NOT_GAP | GRANTED | 901, 1, 0x800000010000, 0x6A067010 |
+| t1   | NULL    | p2026_05 | TABLE  | IX            | GRANTED | NULL                               |
+| t2   | PRIMARY | p2026_05 | RECORD | X,REC_NOT_GAP | GRANTED | 902, 1, 0x800000010000, 0x6A067010 |
+| t2   | NULL    | p2026_05 | TABLE  | IX            | GRANTED | NULL                               |
++------+---------+----------+--------+---------------+---------+------------------------------------+
+    (잠금 없음이면 표가 비어 있다)
+>>> T1: INSERT INTO pose_lab (session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at) VALUES (901, 2, 2.000, JSON_OBJECT('k',1), 50.00, 0.00, NULL, '2026-05-15 10:00:00') ON DUPLICATE KEY UPDATE session_id = session_id;
+=== [3 T1 이 신규(901,2,2) 를 넣은 직후]
++------+---------+----------+--------+---------------+---------+------------------------------------+
+| who  | idx     | part     | type   | mode          | status  | data                               |
++------+---------+----------+--------+---------------+---------+------------------------------------+
+| t1   | PRIMARY | p2026_05 | RECORD | X,REC_NOT_GAP | GRANTED | 901, 1, 0x800000010000, 0x6A067010 |
+| t1   | NULL    | p2026_05 | TABLE  | IX            | GRANTED | NULL                               |
+| t2   | PRIMARY | p2026_05 | RECORD | X,REC_NOT_GAP | GRANTED | 902, 1, 0x800000010000, 0x6A067010 |
+| t2   | NULL    | p2026_05 | TABLE  | IX            | GRANTED | NULL                               |
++------+---------+----------+--------+---------------+---------+------------------------------------+
+    (잠금 없음이면 표가 비어 있다)
+>>> T2: INSERT INTO pose_lab (session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at) VALUES (902, 2, 2.000, JSON_OBJECT('k',1), 50.00, 0.00, NULL, '2026-05-15 10:00:00') ON DUPLICATE KEY UPDATE session_id = session_id;
+=== [4 T2 가 신규(902,2,2) 를 넣은 직후]
++------+---------+----------+--------+---------------+---------+------------------------------------+
+| who  | idx     | part     | type   | mode          | status  | data                               |
++------+---------+----------+--------+---------------+---------+------------------------------------+
+| t1   | PRIMARY | p2026_05 | RECORD | X,REC_NOT_GAP | GRANTED | 901, 1, 0x800000010000, 0x6A067010 |
+| t1   | NULL    | p2026_05 | TABLE  | IX            | GRANTED | NULL                               |
+| t2   | PRIMARY | p2026_05 | RECORD | X,REC_NOT_GAP | GRANTED | 902, 1, 0x800000010000, 0x6A067010 |
+| t2   | NULL    | p2026_05 | TABLE  | IX            | GRANTED | NULL                               |
++------+---------+----------+--------+---------------+---------+------------------------------------+
+    (잠금 없음이면 표가 비어 있다)
+>>> T1: COMMIT;
+>>> T2: COMMIT;
+=== [5 둘 다 COMMIT 뒤]
+    (잠금 없음이면 표가 비어 있다)
+session_id	rep_number	timestamp_sec
+901	1	1.000
+901	2	2.000
+902	1	1.000
+902	2	2.000
+--- t1 세션 로그 (오류만)
+    Query OK, 0 rows affected (0.00 sec)
+    Query OK, 0 rows affected (0.01 sec)
+    Query OK, 1 row affected (0.00 sec)
+    Query OK, 0 rows affected (0.06 sec)
+--- t2 세션 로그 (오류만)
+    Query OK, 0 rows affected (0.00 sec)
+    Query OK, 0 rows affected (0.00 sec)
+    Query OK, 1 row affected (0.00 sec)
+    Query OK, 0 rows affected (0.07 sec)
+--- 이 팔의 데드락 수: 0
+
+################ 팔: natural_pk_keep_id ################
+>>> T1:  BEGIN;
+>>> T2:  BEGIN;
+=== [0 시작 — 둘 다 BEGIN]
+    (잠금 없음이면 표가 비어 있다)
+>>> T1: INSERT INTO pose_lab (session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at) VALUES (901, 1, 1.000, JSON_OBJECT('k',1), 50.00, 0.00, NULL, '2026-05-15 10:00:00') ON DUPLICATE KEY UPDATE session_id = session_id;
+=== [1 T1 이 중복(901,1,1) 을 넣은 직후]
++------+---------+----------+--------+---------------+---------+------------------------------------+
+| who  | idx     | part     | type   | mode          | status  | data                               |
++------+---------+----------+--------+---------------+---------+------------------------------------+
+| t1   | PRIMARY | p2026_05 | RECORD | X,REC_NOT_GAP | GRANTED | 901, 1, 0x800000010000, 0x6A067010 |
+| t1   | NULL    | p2026_05 | TABLE  | IX            | GRANTED | NULL                               |
++------+---------+----------+--------+---------------+---------+------------------------------------+
+    (잠금 없음이면 표가 비어 있다)
+>>> T2: INSERT INTO pose_lab (session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at) VALUES (902, 1, 1.000, JSON_OBJECT('k',1), 50.00, 0.00, NULL, '2026-05-15 10:00:00') ON DUPLICATE KEY UPDATE session_id = session_id;
+=== [2 T2 가 중복(902,1,1) 을 넣은 직후]
++------+---------+----------+--------+---------------+---------+------------------------------------+
+| who  | idx     | part     | type   | mode          | status  | data                               |
++------+---------+----------+--------+---------------+---------+------------------------------------+
+| t1   | PRIMARY | p2026_05 | RECORD | X,REC_NOT_GAP | GRANTED | 901, 1, 0x800000010000, 0x6A067010 |
+| t1   | NULL    | p2026_05 | TABLE  | IX            | GRANTED | NULL                               |
+| t2   | PRIMARY | p2026_05 | RECORD | X,REC_NOT_GAP | GRANTED | 902, 1, 0x800000010000, 0x6A067010 |
+| t2   | NULL    | p2026_05 | TABLE  | IX            | GRANTED | NULL                               |
++------+---------+----------+--------+---------------+---------+------------------------------------+
+    (잠금 없음이면 표가 비어 있다)
+>>> T1: INSERT INTO pose_lab (session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at) VALUES (901, 2, 2.000, JSON_OBJECT('k',1), 50.00, 0.00, NULL, '2026-05-15 10:00:00') ON DUPLICATE KEY UPDATE session_id = session_id;
+=== [3 T1 이 신규(901,2,2) 를 넣은 직후]
++------+---------+----------+--------+---------------+---------+------------------------------------+
+| who  | idx     | part     | type   | mode          | status  | data                               |
++------+---------+----------+--------+---------------+---------+------------------------------------+
+| t1   | PRIMARY | p2026_05 | RECORD | X,REC_NOT_GAP | GRANTED | 901, 1, 0x800000010000, 0x6A067010 |
+| t1   | NULL    | p2026_05 | TABLE  | IX            | GRANTED | NULL                               |
+| t2   | PRIMARY | p2026_05 | RECORD | X,REC_NOT_GAP | GRANTED | 902, 1, 0x800000010000, 0x6A067010 |
+| t2   | NULL    | p2026_05 | TABLE  | IX            | GRANTED | NULL                               |
++------+---------+----------+--------+---------------+---------+------------------------------------+
+    (잠금 없음이면 표가 비어 있다)
+>>> T2: INSERT INTO pose_lab (session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at) VALUES (902, 2, 2.000, JSON_OBJECT('k',1), 50.00, 0.00, NULL, '2026-05-15 10:00:00') ON DUPLICATE KEY UPDATE session_id = session_id;
+=== [4 T2 가 신규(902,2,2) 를 넣은 직후]
++------+---------+----------+--------+---------------+---------+------------------------------------+
+| who  | idx     | part     | type   | mode          | status  | data                               |
++------+---------+----------+--------+---------------+---------+------------------------------------+
+| t1   | PRIMARY | p2026_05 | RECORD | X,REC_NOT_GAP | GRANTED | 901, 1, 0x800000010000, 0x6A067010 |
+| t1   | NULL    | p2026_05 | TABLE  | IX            | GRANTED | NULL                               |
+| t2   | PRIMARY | p2026_05 | RECORD | X,REC_NOT_GAP | GRANTED | 902, 1, 0x800000010000, 0x6A067010 |
+| t2   | NULL    | p2026_05 | TABLE  | IX            | GRANTED | NULL                               |
++------+---------+----------+--------+---------------+---------+------------------------------------+
+    (잠금 없음이면 표가 비어 있다)
+>>> T1: COMMIT;
+>>> T2: COMMIT;
+=== [5 둘 다 COMMIT 뒤]
+    (잠금 없음이면 표가 비어 있다)
+session_id	rep_number	timestamp_sec	id
+901	1	1.000	1
+901	2	2.000	3
+902	1	1.000	2
+902	2	2.000	4
+--- t1 세션 로그 (오류만)
+    Query OK, 0 rows affected (0.00 sec)
+    Query OK, 0 rows affected (0.00 sec)
+    Query OK, 1 row affected (0.00 sec)
+    Query OK, 0 rows affected (0.02 sec)
+--- t2 세션 로그 (오류만)
+    Query OK, 0 rows affected (0.00 sec)
+    Query OK, 0 rows affected (0.00 sec)
+    Query OK, 1 row affected (0.00 sec)
+    Query OK, 0 rows affected (0.07 sec)
+--- 이 팔의 데드락 수: 0
