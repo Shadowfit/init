@@ -1,0 +1,55 @@
+# 계측 경로 분리 rig — 소스 1 + 리플리카 1 + 클라이언트 1 (로컬 전용)
+#
+# 08-17 rig(../replication-2026-08-17/docker-compose.yml)과 같은 MySQL 설정이다. 바꾼 것은
+# 컨테이너·네트워크 이름(동시 세션 충돌 회피)과 팔 Y 용 클라이언트 컨테이너 하나.
+#
+# 이 무대가 답하는 것은 «08-17 팔 C 의 5초 → 7~11.5초 오차가 계측 경로 탓인가, 같은 머신의
+# 다른 프로그램(간섭) 탓인가» 뿐이다. 처리량·실제 복제 지연은 재지 않는다.
+
+services:
+  source:
+    image: mysql:8.0
+    container_name: mpath_source
+    command:
+      - --server-id=1
+      - --log-bin=binlog
+      - --binlog-format=ROW
+      - --gtid-mode=OFF
+      - --log-replica-updates=ON
+      - --enforce-gtid-consistency=OFF
+      - --innodb-flush-log-at-trx-commit=1
+      - --sync-binlog=1
+    environment:
+      MYSQL_ROOT_PASSWORD: repl
+      MYSQL_DATABASE: replprobe
+    networks: [mpath]
+
+  replica:
+    image: mysql:8.0
+    container_name: mpath_replica
+    command:
+      - --server-id=2
+      - --log-bin=binlog
+      - --binlog-format=ROW
+      - --gtid-mode=OFF
+      - --log-replica-updates=ON
+      - --enforce-gtid-consistency=OFF
+      - --innodb-flush-log-at-trx-commit=1
+      - --sync-binlog=1
+      - --read-only=ON
+    environment:
+      MYSQL_ROOT_PASSWORD: repl
+    networks: [mpath]
+
+  # 팔 Y — 커넥션을 열어 둔 채 0.1초마다 쓰고 읽는 클라이언트
+  client:
+    image: python:3.12-slim
+    container_name: mpath_client
+    command: ["sh", "-c", "pip install -q --disable-pip-version-check pymysql==1.1.1 && touch /tmp/ready && sleep infinity"]
+    volumes:
+      - ./arm_y.py:/work/arm_y.py:ro
+    networks: [mpath]
+
+networks:
+  mpath:
+    name: mpath_net
