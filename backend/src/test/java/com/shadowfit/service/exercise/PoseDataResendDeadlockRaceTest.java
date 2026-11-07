@@ -134,8 +134,6 @@ class PoseDataResendDeadlockRaceTest extends MySqlContainerSupport {
                 .orElseGet(() -> categoryRepository.save(Category.builder().name("LOWER").build()));
         Exercise exercise = exercisesRepository.saveAndFlush(Exercise.builder()
                 .name("스쿼트").category(category).expectedDurationMinutes(15)
-                .syncThresholdBeginner(new BigDecimal("60.00"))
-                .syncThresholdAdvanced(new BigDecimal("85.00"))
                 .build());
 
         // 시작 시각을 같게 둔다 — created_at 이 세션 시작 시각이라 전부 같은 파티션(같은 달)에 들어간다.
