@@ -131,6 +131,7 @@
 - [backup-restore-rto-rpo.md](./backup-restore-rto-rpo.md) — 백업·복구 — "되돌릴 수 있다"를 시간으로 (진행중 — #202 실측 완료, 병렬 덤프 등은 범위 밖으로 남음)
 - [major-version-upgrade-policy.md](./major-version-upgrade-policy.md) — 메이저 버전업 2건(springdoc 3.x·Gradle 9) (보류 — §8에 "재지 않은 것" 다수, 테스트·실측 안 됨)
 - [replication-lag-and-semisync.md](./replication-lag-and-semisync.md) — 복제 — "한 대가 죽어도 된다"를 지연과 대가로 (진행중 — 조건부 결론, 다른 AZ는 안 잼)
+- [rpo-rto-targets.md](./rpo-rto-targets.md) — RPO·RTO 목표 — "얼마 걸리나"에서 "얼마여야 하나"로 (보류 — 분기점, 결정 6건 미결. 구멍은 호스트 상실 하나)
 - [reverse-proxy-and-tls.md](./reverse-proxy-and-tls.md) — 리버스 프록시·TLS 종료 — nginx를 넣어야 하나 (진행중 — 이슈 일부 등록, CORS PATCH 누락은 여전히 미등록)
 
 ## 포트폴리오·전략·서사
