@@ -1,0 +1,4 @@
+trial	kind	arm	count	killed	pre_status/clients	w1_ms	w2_ms	w3_ms	down_status/clients	yes_tx_delta	no_tx_delta	verdict	back_s	post_status/clients
+1	버림	P	1	replica2	ON/2	1198	1301	1391	ON/2	3	0	버팀	1	ON/2
+2	본판	Q	1	replica1+replica2	ON/2	11738	1607	1397	OFF/2	0	3	강등	1	ON/2
+3	본판	R	2	replica2	ON/2	11278	1327	787	OFF/2	0	3	강등	1	ON/2
