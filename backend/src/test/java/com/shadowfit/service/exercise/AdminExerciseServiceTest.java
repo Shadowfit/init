@@ -67,8 +67,6 @@ class AdminExerciseServiceTest {
         // code 가 있는 «분석 가능한 종목» 이 기본 픽스처다 — 켜기(W020) 검사가 걸리지 않게.
         return Exercise.builder().id(EXERCISE_ID).name("스쿼트").code("SQUAT").category(category)
                 .expectedDurationMinutes(15)
-                .syncThresholdBeginner(new BigDecimal("60.00")).syncThresholdAdvanced(new BigDecimal("85.00"))
-                .syncThresholdDiet(new BigDecimal("70.00")).syncThresholdRehab(new BigDecimal("50.00"))
                 .build();
     }
 
@@ -77,41 +75,62 @@ class AdminExerciseServiceTest {
     class UpdateThresholds {
 
         @Test
-        @DisplayName("정상 변경 — 4개 임계값 전부 갱신")
+        @DisplayName("정상 변경 — 정석·위험 기준 한 쌍 갱신")
         void updateThresholds_success() {
             Exercise exercise = exercise();
             when(exercisesRepository.findById(EXERCISE_ID)).thenReturn(Optional.of(exercise));
-            ThresholdUpdateDto dto = new ThresholdUpdateDto(
-                    new BigDecimal("55"), new BigDecimal("90"), new BigDecimal("65"), new BigDecimal("45"));
+            ThresholdUpdateDto dto = new ThresholdUpdateDto(new BigDecimal("85"), new BigDecimal("55"));
 
             ExerciseThresholdResponseDto result = service.updateThresholds(EXERCISE_ID, dto);
 
-            assertThat(result.syncThresholdBeginner()).isEqualByComparingTo(new BigDecimal("55"));
-            assertThat(result.syncThresholdAdvanced()).isEqualByComparingTo(new BigDecimal("90"));
-            assertThat(exercise.getSyncThresholdDiet()).isEqualByComparingTo(new BigDecimal("65"));
+            assertThat(result.exerciseId()).isEqualTo(EXERCISE_ID);
+            assertThat(result.syncGoodThreshold()).isEqualTo(85.0);
+            assertThat(result.syncWarnThreshold()).isEqualTo(55.0);
+            assertThat(exercise.getSyncGoodThreshold()).isEqualByComparingTo(new BigDecimal("85"));
+            assertThat(exercise.getSyncWarnThreshold()).isEqualByComparingTo(new BigDecimal("55"));
         }
 
         @Test
-        @DisplayName("beginner >= advanced 이면 INVALID_INPUT_VALUE, 저장 시도 자체를 안 함")
-        void updateThresholds_beginnerNotLessThanAdvanced_throws() {
-            ThresholdUpdateDto dto = new ThresholdUpdateDto(
-                    new BigDecimal("90"), new BigDecimal("90"), new BigDecimal("65"), new BigDecimal("45"));
+        @DisplayName("0 < warn < good ≤ 100 이 아니면 INVALID_SYNC_THRESHOLDS, 저장 시도 자체를 안 함")
+        void updateThresholds_invalidOrder_throws() {
+            for (String[] pair : new String[][]{
+                    {"80", "80"},   // warn == good
+                    {"60", "80"},   // warn > good
+                    {"80", "0"},    // warn == 0
+                    {"80", "-5"},   // 음수
+                    {"100.5", "60"} // good > 100
+            }) {
+                ThresholdUpdateDto dto = new ThresholdUpdateDto(new BigDecimal(pair[0]), new BigDecimal(pair[1]));
 
-            assertThatThrownBy(() -> service.updateThresholds(EXERCISE_ID, dto))
-                    .isInstanceOf(BusinessException.class)
-                    .extracting(e -> ((BusinessException) e).getErrorCode())
-                    .isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+                assertThatThrownBy(() -> service.updateThresholds(EXERCISE_ID, dto))
+                        .as("good=%s, warn=%s", pair[0], pair[1])
+                        .isInstanceOf(BusinessException.class)
+                        .extracting(e -> ((BusinessException) e).getErrorCode())
+                        .isEqualTo(ErrorCode.INVALID_SYNC_THRESHOLDS);
+            }
 
-            // beginner==advanced 케이스라 findById까지 안 가고 검증에서 바로 걸려야 함
+            // 검증에서 바로 걸려야 함 — findById 까지 가지 않는다
             org.mockito.Mockito.verifyNoInteractions(exercisesRepository);
+        }
+
+        @Test
+        @DisplayName("good = 100 은 허용된다(상한 포함)")
+        void updateThresholds_goodAtUpperBound_ok() {
+            Exercise exercise = exercise();
+            when(exercisesRepository.findById(EXERCISE_ID)).thenReturn(Optional.of(exercise));
+
+            ExerciseThresholdResponseDto result = service.updateThresholds(EXERCISE_ID,
+                    new ThresholdUpdateDto(new BigDecimal("100"), new BigDecimal("0.5")));
+
+            assertThat(result.syncGoodThreshold()).isEqualTo(100.0);
+            assertThat(result.syncWarnThreshold()).isEqualTo(0.5);
         }
 
         @Test
         @DisplayName("존재하지 않는 운동이면 EXERCISE_NOT_FOUND")
         void updateThresholds_exerciseNotFound_throws() {
             when(exercisesRepository.findById(EXERCISE_ID)).thenReturn(Optional.empty());
-            ThresholdUpdateDto dto = new ThresholdUpdateDto(
-                    new BigDecimal("55"), new BigDecimal("90"), new BigDecimal("65"), new BigDecimal("45"));
+            ThresholdUpdateDto dto = new ThresholdUpdateDto(new BigDecimal("80"), new BigDecimal("60"));
 
             assertThatThrownBy(() -> service.updateThresholds(EXERCISE_ID, dto))
                     .isInstanceOf(BusinessException.class)
@@ -156,7 +175,7 @@ class AdminExerciseServiceTest {
         }
 
         @Test
-        @DisplayName("임계값 4종은 엔티티 기본값에서 시작한다")
+        @DisplayName("판정 기준 한 쌍은 엔티티 기본값(80/60)에서 시작한다")
         void create_thresholdsStartFromDefaults() {
             when(exercisesRepository.saveAndFlush(any(Exercise.class))).thenAnswer(inv -> inv.getArgument(0));
             ExerciseCreateDto dto = new ExerciseCreateDto(
@@ -164,8 +183,8 @@ class AdminExerciseServiceTest {
 
             AdminExerciseDetailDto result = service.createExercise(dto);
 
-            assertThat(result.syncThresholdBeginner()).isEqualByComparingTo("60.00");
-            assertThat(result.syncThresholdAdvanced()).isEqualByComparingTo("85.00");
+            assertThat(result.syncGoodThreshold()).isEqualTo(80.0);
+            assertThat(result.syncWarnThreshold()).isEqualTo(60.0);
             assertThat(result.expectedDurationMinutes()).isEqualTo(20);
         }
 

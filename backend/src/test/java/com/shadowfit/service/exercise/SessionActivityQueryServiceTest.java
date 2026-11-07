@@ -56,7 +56,6 @@ class SessionActivityQueryServiceTest {
         Category category = categoryRepository.save(Category.builder().name("LOWER").build());
         exercise = exercisesRepository.saveAndFlush(Exercise.builder()
                 .name("스쿼트").category(category).expectedDurationMinutes(15)
-                .syncThresholdBeginner(new BigDecimal("60.00")).syncThresholdAdvanced(new BigDecimal("85.00"))
                 .analysisSupported(true)
                 .build());
     }
@@ -93,6 +92,19 @@ class SessionActivityQueryServiceTest {
         assertThat(result.getTotalMinutes()).isEqualTo(20);
         assertThat(result.getTotalCalories()).isEqualTo(100);
         assertThat(result.getTodayDetails()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("getWeeklyActivity — 칼로리 null(체중 몰라 못 잰 세션, 2026-10-21) 은 합계에서 0 으로 친다")
+    void getWeeklyActivity_nullCaloriesCountAsZero() {
+        LocalDate today = LocalDate.now();
+        completedSessionOn(today, 80.0, 100.0, 20);
+        sessionOn(today, Status.COMPLETED); // caloriesBurned == null
+
+        WeeklyActivityResponseDto result = sessionActivityQueryService.getWeeklyActivity(member.getId());
+
+        assertThat(result.getTotalWorkouts()).isEqualTo(2);
+        assertThat(result.getTotalCalories()).isEqualTo(100);
     }
 
     @Test

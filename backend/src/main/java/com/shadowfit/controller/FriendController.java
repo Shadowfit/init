@@ -48,6 +48,16 @@ public class FriendController {
                 userDetails.getMember().getId(), LocalDate.now()));
     }
 
+    @Operation(summary = "오늘 내가 재촉한 친구",
+            description = "회원 id 목록. 재촉 버튼을 «재촉함» 으로 잠그는 근거 — 화면을 다시 열어도 유지된다. "
+                    + "날짜는 서버 기준 오늘(하루 1회 판정과 같은 기준).")
+    @GetMapping("/nudged-today")
+    public ResponseEntity<List<Long>> nudgedToday(
+            @AuthenticationPrincipal CustomUserDetails userDetails
+    ) {
+        return ResponseEntity.ok(notificationService.nudgedToday(userDetails.getMember().getId(), LocalDate.now()));
+    }
+
     // 경로가 /friends 밑인 이유: 재촉할 수 있는 조건이 «같은 모임에 둘 다 ACTIVE» = 친구(§3-A b) 그 자체라
     // URL 이 하는 말과 권한 규칙이 같다. 결정 문서 §4-1 표기(/members/{id}/nudge)는 견적표의 표기였고
     // /member(단수)와 나란히 서는 걸 피했다(2026-09-12 사용자 confirm).

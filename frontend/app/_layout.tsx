@@ -97,6 +97,7 @@ function RootLayoutNav() {
         <Stack.Screen name="report/[id]" />
         <Stack.Screen name="group/[id]" />
         <Stack.Screen name="notifications" />
+        <Stack.Screen name="compare/[id]" />
         <Stack.Screen name="board/notice" />
         <Stack.Screen name="board/qna" />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />

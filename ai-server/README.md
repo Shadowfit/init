@@ -50,6 +50,8 @@ sequenceDiagram
         alt rep 1회 완성
             AI->>BE: gRPC SavePoseDataBatch
             BE->>DB: pose_data 저장
+        else 스쿼트 미인정 시도 (내려갔다 올라왔지만 인정 안 됨)
+            AI->>BE: gRPC SaveRejectedAttempt (가장 깊은 순간 1건 + 싱크로율)
         end
     end
 
@@ -61,7 +63,7 @@ sequenceDiagram
     end
 ```
 
-프레임마다 rep 완성 여부를 판단해 완성된 rep만 Spring에 배치로 콜백합니다. TTS 발화 이벤트 배치(`ReportFeedbackBatch`)는 Spring 쪽 계약은 완료됐지만 AI 서버의 세트 경계 감지·전송 로직은 아직 구현 전입니다.
+프레임마다 rep 완성 여부를 판단해 완성된 rep만 Spring에 배치로 콜백합니다. 스쿼트에서 인정되지 않은 시도(바닥 자세 미확인·런지 자세)는 횟수에 넣지 않고 1건씩 `SaveRejectedAttempt`로 리포트용 기록만 남깁니다(2026-10-21). TTS 발화 이벤트 배치(`ReportFeedbackBatch`)는 Spring 쪽 계약은 완료됐지만 AI 서버의 세트 경계 감지·전송 로직은 아직 구현 전입니다.
 
 ## 실행 방법
 

@@ -20,7 +20,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -70,8 +69,6 @@ class SessionLastActiveTest {
         exercise = exercisesRepository.saveAndFlush(Exercise.builder()
                 .name("스쿼트").category(category)
                 .expectedDurationMinutes(EXPECTED_DURATION_MINUTES)
-                .syncThresholdBeginner(new BigDecimal("60.00"))
-                .syncThresholdAdvanced(new BigDecimal("85.00"))
                 .analysisSupported(true)
                 .build());
     }

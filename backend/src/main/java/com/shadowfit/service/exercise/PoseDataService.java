@@ -17,6 +17,7 @@ import com.shadowfit.service.coaching.TrainerConnectionRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -56,8 +57,8 @@ public class PoseDataService {
     // ODKU 는 중복 키만 흡수하고 NOT NULL 위반은 그대로 터뜨린다.
     private static final String INSERT_POSE_SQL =
             "INSERT INTO pose_data " +
-            "(session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at) " +
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?) " +
+            "(session_id, rep_number, timestamp_sec, joint_coordinates, sync_rate, smoothed_knee_angle, feedback_message, created_at, lead_leg, torso_tilt_deg, stagger_ratio) " +
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
             "ON DUPLICATE KEY UPDATE session_id = session_id";
 
     // 다운샘플 윈도우 크기 — R-sweep 실측(docs/decisions/pose-ingest-downsampling.md §5-1(4))에서
@@ -184,13 +185,35 @@ public class PoseDataService {
                 ps.setInt(2, grpc.getRepNumber());
                 ps.setDouble(3, grpc.getTimestampSec());
                 ps.setString(4, grpc.getJointCoordinates());
-                ps.setDouble(5, grpc.getSyncRate());
+                if (ExerciseAnalysisCapabilities.isCountOnly(session)) {
+                    ps.setNull(5, java.sql.Types.DECIMAL);
+                } else {
+                    ps.setDouble(5, grpc.getSyncRate());
+                }
                 // 구버전 AI 는 이 필드를 안 보내 0(미상)이 들어온다 — rep_number 와 같은 방식이라
                 // 배포 순서를 맞추지 않아도 깨지지 않는다. 스쿼트 무릎각은 0 이 될 수 없으므로
                 // 유효값과 구분되고, 대표 프레임 선택에서 후보에서 빠진다.
                 ps.setDouble(6, grpc.getSmoothedKneeAngle());
                 ps.setString(7, grpc.getFeedbackMessage());
                 ps.setObject(8, sessionAnchor);
+                // proto3 는 "안 보냄"을 빈 문자열로 표현한다 — 스쿼트 프레임과 구버전 AI가 전부
+                // 여기 해당한다. 빈 문자열을 그대로 저장하면 "런지인데 판정 전"과 "이 개념 자체가
+                // 없음"이 안 갈리므로 NULL로 접는다(PoseData.leadLeg 주석과 같은 이유).
+                String leadLeg = grpc.getLeadLeg();
+                if (leadLeg == null || leadLeg.isBlank()) {
+                    ps.setNull(9, java.sql.Types.VARCHAR);
+                } else {
+                    ps.setString(9, leadLeg);
+                }
+                // torso_tilt_deg는 leadLeg와 달리 0.0 자체가 유효값(완전 직립)이라 접을 필요가
+                // 없다 — proto3 미전송 구버전 AI도 그냥 0.0이 들어오고, 이는 TrunkLeanAnalysis
+                // Calculator가 "체간 자세 완벽"과 구분 없이 그대로 채점에 반영한다(감수한 왜곡,
+                // proto 필드 주석 참고).
+                ps.setDouble(10, grpc.getTorsoTiltDeg());
+                // stagger_ratio는 런지 전용 — torso_tilt_deg와 같은 이유로 0.0을 그대로 저장한다
+                // (LungeStepLengthAnalysisCalculator가 런지 세션만 채점하므로 스쿼트 행의 0은
+                // 소비되지 않는다).
+                ps.setDouble(11, grpc.getStaggerRatio());
             }
 
             @Override
@@ -266,7 +289,9 @@ public class PoseDataService {
                 .findFirst()
                 .orElse(null);
         TrainerRepEventDto event = new TrainerRepEventDto(
-                representative.getRepNumber(), representative.getSyncRate(), message != null, message);
+                representative.getRepNumber(),
+                ExerciseAnalysisCapabilities.isCountOnly(session) ? null : representative.getSyncRate(),
+                message != null, message);
         Long userId = session.getMember().getId();
 
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
@@ -344,16 +369,45 @@ public class PoseDataService {
         return deepest != null ? deepest : frames.get(start);
     }
 
+    /** 추출은 «성공» 했는데 좌표가 0개 — AI 가 사람을 못 찾은 영상 등. 관리자에게 그대로 보인다. */
+    static final String REFERENCE_EMPTY_MESSAGE = "추출된 기준 좌표가 없어요.";
+
     /**
-     * [관리자용] AI가 유튜브에서 추출한 '정석 기준 좌표'를 DB에 저장합니다.
+     * [관리자용] AI 가 기준 영상에서 추출한 '정석 기준 좌표' 역호출을 처리한다 — 성공이면 교체, 실패면 사유만 남긴다.
+     *
+     * <p>등록 상태(V34, {@code exercises.reference_extraction_*})를 <b>같은 트랜잭션에서</b> 닫는다:
+     * <ul>
+     *   <li>{@code errorMessage} 가 있으면 AI 가 백그라운드 추출에 실패한 것 — FAILED + 사유. <b>기존 기준 좌표는
+     *       건드리지 않는다</b>(실패한 재등록이 멀쩡한 정답지를 지우면 안 된다)</li>
+     *   <li>좌표가 0개면 FAILED({@value #REFERENCE_EMPTY_MESSAGE}) — 역시 기존 행은 그대로</li>
+     *   <li>그 외엔 교체(아래 #220) + READY</li>
+     * </ul>
+     * 예전엔 빈 목록을 조용히 무시해서 관리자 화면은 «등록했어요» 인데 기준은 안 바뀌는 일이 있었다.
+     *
+     * <p>{@code findById}(캐시 미적용)로 읽는다 — 캐시된 {@code findByIdCached} 는 detached 라 상태 변경이
+     * dirty-checking 에 안 잡힌다. 같은 이유로 {@code exercises} 캐시도 비운다.
+     *
+     * @param errorMessage AI 가 실은 실패 사유(proto {@code ExtractRequest.error_message}). 비었으면 성공
      */
     @Transactional
-    @CacheEvict(cacheNames = "exerciseReferences", key = "#exerciseId")
-    public void saveReferencePoses(Long exerciseId, List<com.shadowfit.grpc.PoseDataRequest> grpcList) {
-        if (grpcList == null || grpcList.isEmpty()) return;
-
-        Exercise exercise = exercisesRepository.findByIdCached(exerciseId)
+    @Caching(evict = {
+            @CacheEvict(cacheNames = "exerciseReferences", key = "#exerciseId"),
+            @CacheEvict(cacheNames = "exercises", key = "#exerciseId")
+    })
+    public void saveReferencePoses(Long exerciseId, List<com.shadowfit.grpc.PoseDataRequest> grpcList, String errorMessage) {
+        Exercise exercise = exercisesRepository.findById(exerciseId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.EXERCISE_NOT_FOUND));
+
+        if (errorMessage != null && !errorMessage.isBlank()) {
+            exercise.markReferenceFailed(errorMessage);
+            log.warn("운동 ID {} : AI 기준 좌표 추출 실패 — 기존 기준 좌표 유지 (사유: {})", exerciseId, errorMessage);
+            return;
+        }
+        if (grpcList == null || grpcList.isEmpty()) {
+            exercise.markReferenceFailed(REFERENCE_EMPTY_MESSAGE);
+            log.warn("운동 ID {} : AI 가 기준 좌표 0개를 보냄 — 기존 기준 좌표 유지", exerciseId);
+            return;
+        }
 
         List<ExerciseReference> referenceEntities = grpcList.stream()
                 .map(grpc -> ExerciseReference.builder()
@@ -370,6 +424,7 @@ public class PoseDataService {
         //    같은 트랜잭션이라 삭제·삽입이 원자적이다 — 중간에 실패해도 정답지가 비지 않는다.
         long removed = referenceRepository.deleteByExerciseId(exerciseId);
         referenceRepository.saveAll(referenceEntities);
+        exercise.markReferenceReady();
         log.info("운동 ID {} : 기준 좌표 {}개 등록 완료 (기존 {}개 교체)",
                 exerciseId, referenceEntities.size(), removed);
     }

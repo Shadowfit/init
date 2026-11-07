@@ -1,6 +1,21 @@
 # Spring ↔ FastAPI 결합 — 월별 작업 로그
 
-마지막 업데이트: **2026-08-08** (이전 2026-05-24 — 그 사이 2026-06·07·08 을 뒤늦게 채웠다)
+## 2026-09-17 — 스쿼트 반복 판정 통일
+
+- **Spring 측**: 변경 없음. 기존 rep 이벤트와 세션 집계 계약 사용.
+- **FastAPI 측**: 실시간·업로드 영상 공통 스쿼트 상태 판정, 기준 영상 분할 연동,
+  촬영 시각·화면 비율 반영, 검증되지 않은 영상 품질 점수 제거.
+- **공통**: proto 변경 없음. [논문 적용 범위와 실제 영상 평가 한계](../decisions/squat-repetition-counting.md).
+
+## 2026-09-17 — 전방 런지 구현
+
+- **Spring 측**: 횟수 전용 종목 지원, 기준 URL 의존 제거, 미측정 점수 NULL 저장·집계 제외.
+- **FastAPI 측**: 전방 런지 상태 판정, 좌우 횟수, 가림·끊김 시 미완성 동작 초기화,
+  기준 좌표 없이 시작·복구, 기존 인증과 워커 라우팅 유지.
+- **공통**: V22가 런지 종목을 활성화한다. AI를 먼저 배포해야 한다. protobuf 변경 없음.
+  [논문 근거·평가 방법·좌우 복구 한계](../decisions/lunge-repetition-counting.md).
+
+마지막 업데이트: **2026-09-17** (스쿼트 판정 통일·전방 런지 작업분 추가)
 
 > ⚠️ **06~08 절의 수록 기준은 앞 절들과 다르다.** 03~05 는 거의 전 커밋을 담았지만, 이 3개월은 커밋이 332건이라 **결합 계약(RPC·메시지·인증·메타데이터)이나 전달 의미론에 영향을 준 것만** 담았다. 나머지(DB·부하테스트·관리자 API·CI 등 Spring 단독 작업)는 [`../tasks/28-remaining-work-plan.md`](../tasks/28-remaining-work-plan.md)·[`../handoff/`](../handoff/) 와 git log 를 볼 것.
 >
@@ -883,3 +898,41 @@
 **Spring 측** — `AbstractOutboxPublisher`(`dispatchOne` 이 `dispatch()` 예외를 RETRY 로 접음), 테스트 `OutboxPublisherFailureInjectionTest`·`WeeklyReportLlmOutboxIntegrationTest`
 
 **결합 결과**: `StopAnalysis`·`ReattachAnalysis` 행의 «상한 10회 후 `FAILED`» 가 던진 예외에도 적용된다. 전엔 예외가 lease 회수(`retry_count` 불변)로 빠져 상한 밖에서 무한 반복할 수 있었다. 결과 기록 단계(DB) 예외는 그대로 회수 대기.
+
+## 2026-10 — 병합 복구·채점 재보정·판정 기준 통일 (결합 계약에 영향 준 것만)
+
+### 10-20 — 두 갈래 병합 복구 (양쪽)
+
+**proto** — `depth_mode` 를 `AnalyzeRequest` 10·`ReattachRequest` 11 로 이동(7번 충돌). **Spring 측** — Flyway V22~V26 중복분을 V28~V32 로, V33 추가. **FastAPI 측** — pb2 재생성. 상세: [changelog 2026-10-20](./ai-backend-changelog.md).
+
+### 10-20 — 싱크로율 채점 기준 변경 (FastAPI 주도)
+
+**FastAPI 측** — `angle_calculator`(2D + 너비/높이 보정), `dtw_calculator`(비대칭 DTW·최저점 주축·한쪽 감점), `video_processor`·`exercise_servicer`(기준 좌표 끝 `index=-1` 비율 표식). **Spring 측** — 변경 없음(표식은 좌표 JSON 안). **결합 결과**: proto 밖 계약 하나 추가 — 기준 좌표 JSON 의 표식 항목.
+
+### 10-21 — 판정 기준 종목당 하나 + 기준 영상 추출 상태 (양쪽)
+
+**proto** — `AnalyzeRequest` 11·12 / `ReattachRequest` 12·13 `sync_good_threshold`·`sync_warn_threshold`, `ExtractRequest` 5 `error_message`.
+
+**Spring 측** — V34(`exercises` 기준 두 컬럼 + 추출 상태 세 컬럼, 페르소나 컬럼 4개 삭제), `ExerciseAnalysisService`·`ReattachRequestBuilder`(기준 실어 보냄), `PoseDataService`·`ExerciseGrpcService`(실패 역호출 처리), `ReferenceExtractionStatusService`(접수 거부·오류·서킷 열림 → FAILED), `ReferenceDepth`(AI 와 같은 각도 계산·깊이 판정), 시작·재부착·활성·리포트 응답에 기준 두 값.
+
+**FastAPI 측** — `SYNC_THRESHOLDS` 삭제 → `DEFAULT_SYNC_GOOD/WARN`, `resolve_sync_thresholds`, `SessionState` 기준 보관, `analyze_video(reference=True)`(ROI·너비·벌린 다리 필터 끔), `ReferenceExtractionError`·`spring_client.send_reference_failure`.
+
+**결합 결과(판정 기준·추출 상태)**: «Spring 쪽에 완료 신호가 없다» 던 #772 의 빈칸이 채워졌다 — 추출 결과가 성공·실패 모두 같은 역호출로 돌아온다. 원격 URL·파일 없음 같은 **접수 단계 거부는 여전히 사유 없이** `success=false` 라, Spring 은 일반 문구로 FAILED 처리한다. 상세: [changelog 2026-10-21](./ai-backend-changelog.md).
+
+### 10-21 (2) — 싱크로율·깊이 점수 같은 잣대 + 칼로리 (양쪽, proto 변경 없음)
+
+**FastAPI 측** — `dtw_calculator`(사용자 각도 시간축 보간 `densify`, 궤적 비교 전 기준 최솟값에서 자르기, 허용 무릎 5°·고관절 8°), `config.SYNC_RATE_TAU_DEG` 24, `squat_analyzer._rep_times`(실시간 프레임 시각 전달).
+
+**Spring 측** — `SquatDepthAnalysisCalculator`(만점 기준 = 기준 동작 최저 무릎 + 5°, 1° 당 4점), `ReferenceDepth` 공개, `CalorieEstimator`(MET 3.0), `SessionCompletionTx`(AI 의 `calories_burned` 무시), 리포트 `targetKneeDeg`·`caloriesBurned` null 허용.
+
+**결합 결과(2)**: 무릎 허용 5° 가 AI 싱크로율·Spring 깊이 점수·앱 3D 비교 세 곳에 같이 박혔다 — 하나만 바꾸면 «싱크로율 낮은데 깊이 100점» 이 다시 생긴다. `SessionCompleteRequest.calories_burned` 는 계약에 남지만 읽는 쪽이 없어졌다. 상세: [changelog 2026-10-21 (2)](./ai-backend-changelog.md).
+
+### 10-21 (3) — 미인정 시도 (양쪽, proto: 새 RPC 1개·필드 1개)
+
+**proto** — `rpc SaveRejectedAttempt(RejectedAttemptRequest)`, `ReattachRequest.initial_rejected_count`(14).
+
+**FastAPI 측** — `squat_counter`(`rejected_event`·`rejected_count`, 반복 인정 규칙은 원래대로), `squat_analyzer`(미인정 시도 채점·요약), `spring_client.send_rejected_attempt`(구버전 Spring 의 UNIMPLEMENTED 는 경고 후 버림), `pose.py`(`rejected_count`·`rejected_reason` 응답).
+
+**Spring 측** — V35 `exercise_rejected_attempts`, 미인정 시도 수신(멱등), 세션 싱크로율 집계에 포함, 재부착 개수 전달, 리포트 `rejectedReps`·`counted:false` 회차.
+
+**결합 결과(3)**: AI → Spring 콜백이 하나 늘었다. 플래그 대신 별도 RPC 라 배포 순서와 무관하게 안전하다(구버전 Spring 은 거절, 미인정 프레임이 pose_data 로 새지 않는다). 상세: [changelog 2026-10-21 (3)](./ai-backend-changelog.md).

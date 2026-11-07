@@ -39,6 +39,8 @@
 | 구성원 현황 | `GET /groups/{groupId}/members/status` | `/friends` 와 같은 항목·정렬, 모임 하나로 한정 |
 | 출석 캘린더 | `GET /groups/{groupId}/attendance?year&month` | 날짜별 `attendedCount` / `activeMemberCount`. 칸 농도는 프론트 |
 | 피드 | `GET /groups/{groupId}/feed?beforeSeq&size` | 최신순 keyset. `beforeSeq` 생략 = 최신부터. 응답 `nextBeforeSeq` 를 다음 요청에(null 이면 끝). `size` 기본 20·최대 100 |
+| 운동 공유 (사진 · 한마디) | `POST /groups/{groupId}/shares` (multipart) · `GET /groups/shares?sessionId` | 2026-10-06 추가. 같은 운동 · 같은 모임 재공유 409 `G012`. 사진은 `GET /feed-photos/{name}`(인증 없음) |
+| 피드 글 응원 한마디 | `PUT` / `DELETE /groups/{groupId}/events/{seq}/cheers` `{message}` | 2026-10-06 추가. 회원당 한 줄 — 다시 보내면 바뀜. 피드 항목에 `cheers[]` 로 실려 온다 |
 | 리액션 달기 / 취소 | `PUT` / `DELETE /groups/{groupId}/events/{seq}/reactions/{kind}` | `kind` = `HEART` \| `FIRE`. **둘 다 멱등 200**. 응답 `{reactions:{HEART,FIRE}, myReactions:[]}`. 글 없음 404 `G009` |
 | 소켓 재연결 백필 | `GET /groups/{groupId}/events?afterSeq` | 오름차순·무페이징. 피드 화면용 아님 |
 

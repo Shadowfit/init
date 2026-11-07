@@ -46,7 +46,7 @@ public interface PoseDataRepository extends JpaRepository<PoseData, Long> {
      * "프레임이 아예 없다"와 "rep 을 알 수 없는 프레임뿐이다"를 계산기가 구분해 다룰 수 있다.
      */
     @Query("SELECT new com.shadowfit.dto.report.PoseFrameProjection(" +
-           "p.id, p.timestampSec, p.syncRate, p.repNumber, p.smoothedKneeAngle) " +
+           "p.id, p.timestampSec, p.syncRate, p.repNumber, p.smoothedKneeAngle, p.leadLeg, p.torsoTiltDeg, p.staggerRatio) " +
            "FROM PoseData p WHERE p.session.id = :sessionId AND p.createdAt = :sessionAnchor " +
            "ORDER BY p.repNumber ASC, p.timestampSec ASC")
     List<PoseFrameProjection> findFramesBySessionId(@Param("sessionId") Long sessionId,
@@ -124,6 +124,20 @@ public interface PoseDataRepository extends JpaRepository<PoseData, Long> {
         Double getStartedSec();
         Double getEndedSec();
     }
+
+    /**
+     * {@link #findRepSummaries} 의 sync_rate 전용 축약 — rep 별 평균만 필요한 호출부용(2026-09-21 계통).
+     *
+     * <p>{@code syncRate IS NOT NULL} 을 거는 이유: 횟수만 세는 종목({@code ExerciseAnalysisCapabilities.isCountOnly})
+     * 은 프레임에 sync_rate 가 없다. 그 행이 섞이면 {@code AVG} 가 null 인 rep 이 생겨 "미측정" 이 통계에 끼어든다.
+     * {@link #findRepSummaries} 는 세트 경계(시작·끝 시각)도 같이 쓰므로 거기서는 거르지 않고, 호출부
+     * ({@code SessionCompletionTx.resolveSyncStats})가 null 을 건너뛴다 — 두 쿼리의 통계 의미는 같다.
+     */
+    @Query("SELECT AVG(p.syncRate) FROM PoseData p " +
+           "WHERE p.session.id = :sessionId AND p.createdAt = :sessionAnchor AND p.repNumber > 0 AND p.syncRate IS NOT NULL " +
+           "GROUP BY p.repNumber ORDER BY p.repNumber")
+    List<Double> findRepAverageSyncRates(@Param("sessionId") Long sessionId,
+                                         @Param("sessionAnchor") LocalDateTime sessionAnchor);
 
     // 회원 탈퇴 시 pose_data 참조무결성 대체(FK CASCADE 제거로 인한 애플리케이션 정리).
     // PoseDataCleanupService에서 afterCommit 이후 비동기로 호출됨.

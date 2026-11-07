@@ -19,41 +19,43 @@ import {
 } from 'lucide-react-native';
 import { COLORS, FONT_SIZE, SPACING, RADIUS } from '@/constants/Colors';
 import Button from '@/components/ui/Button';
+import { Alert } from '@/utils/alert';
 import { reportService } from '@/services/reportService';
+import { goalService } from '@/services/goalService';
+import { useAuthStore } from '@/stores/authStore';
 import type { CalendarMainResponse, CalendarDay, DailyActivityResponse } from '@/types/report';
+import type { WorkoutGoal } from '@/types/goal';
 import FriendStatusList from '@/components/social/FriendStatusList';
 import { friendService } from '@/services/friendService';
+import { notificationService } from '@/services/notificationService';
 import type { MemberAttendanceStatus } from '@/types/social';
+import { syncColor } from '@/constants/sync';
 
-function getSyncColor(rate: number) {
-  if (rate >= 80) return COLORS.primary;
-  if (rate >= 60) return COLORS.warning;
-  return COLORS.error;
-}
+// 목록·달력은 여러 종목이 섞여 종목별 기준을 알 수 없어 기본 판정 기준(80 / 60)으로 색을 낸다 — constants/sync.ts
+const getSyncColor = (rate: number) => syncColor(rate);
 
 // 백엔드 records 를 react-native-calendars 의 markedDates 형식으로 변환
 function buildMarkedDates(records: CalendarDay[]): Record<string, any> {
   const marked: Record<string, any> = {};
   for (const r of records) {
     if (!r.hasRecord) continue;
-    // 80% 이상 = 정석(primary) / 60~80% = 교정(warning) / <60% = 부상(error)
+    // 정석(≥ 80) 라임 / 교정 필요(≥ 60) 주황 / 위험 빨강 — 기록만 있고 점수가 없는 날은 라임
     const sync = r.dailyAvgSyncRate;
-    const dotColor =
-      sync == null
-        ? COLORS.primary
-        : sync >= 80
-        ? COLORS.primary
-        : sync >= 60
-        ? COLORS.warning
-        : COLORS.error;
+    const dotColor = sync == null ? COLORS.primary : syncColor(sync);
     marked[r.date] = { marked: true, dotColor };
   }
   return marked;
 }
 
+// «오늘» 은 로컬 날짜로 만든다 — toISOString() 은 UTC 라 한국 밤 9시 이후엔 내일로 잡힌다
+function localDateString(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export default function HomeScreen() {
   const router = useRouter();
-  const today = new Date().toISOString().split('T')[0];
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const today = localDateString(new Date());
   const [selectedDate, setSelectedDate] = useState('');
 
   // 캘린더가 가리키는 연/월 (사용자가 ◀▶ 눌러 바꿈)
@@ -66,6 +68,13 @@ export default function HomeScreen() {
   const [daily, setDaily] = useState<DailyActivityResponse | null>(null);
   const [dailyLoading, setDailyLoading] = useState(false);
   const [friends, setFriends] = useState<MemberAttendanceStatus[]>([]);
+
+  // 나의 운동 약속 — 최근 7일 완료 세션 수 목표 (GET/POST/PATCH /goals)
+  const [goal, setGoal] = useState<WorkoutGoal | null>(null);
+  const [goalLoading, setGoalLoading] = useState(false);
+  const [goalSaving, setGoalSaving] = useState(false);
+  const [goalError, setGoalError] = useState(false);
+  const [goalEditing, setGoalEditing] = useState(false);
 
   // 화면 포커스 / 연·월 변경마다 캘린더 데이터 재조회
   useFocusEffect(
@@ -89,22 +98,88 @@ export default function HomeScreen() {
     }, []),
   );
 
+  // 운동 약속 — 로그인 상태에서만 조회
+  useFocusEffect(
+    useCallback(() => {
+      if (!isAuthenticated) {
+        setGoal(null);
+        setGoalError(false);
+        setGoalLoading(false);
+        return;
+      }
+      let active = true;
+      setGoalLoading(true);
+      goalService.getGoals()
+        .then((res) => {
+          if (!active) return;
+          setGoal(res.data.find((item) => item.goalType === 'WEEKLY_SESSIONS') ?? null);
+          setGoalError(false);
+        })
+        .catch(() => { if (active) setGoalError(true); })
+        .finally(() => { if (active) setGoalLoading(false); });
+      return () => { active = false; };
+    }, [isAuthenticated]),
+  );
+
+  const saveGoal = async (targetValue: number) => {
+    if (!isAuthenticated) {
+      router.push('/(auth)/login');
+      return;
+    }
+    if (goalSaving) return;
+    setGoalSaving(true);
+    try {
+      const response = goal
+        ? await goalService.updateGoal(goal.id, targetValue)
+        : await goalService.createWeeklySessionsGoal(targetValue);
+      setGoal(response.data);
+      setGoalError(false);
+      setGoalEditing(false);
+    } catch (error: any) {
+      Alert.alert('목표를 저장하지 못했습니다', error?.response?.data?.message ?? '연결을 확인하고 다시 시도해주세요.');
+    } finally {
+      setGoalSaving(false);
+    }
+  };
+
+  const retryGoal = async () => {
+    setGoalLoading(true);
+    try {
+      const response = await goalService.getGoals();
+      setGoal(response.data.find((item) => item.goalType === 'WEEKLY_SESSIONS') ?? null);
+      setGoalError(false);
+    } catch {
+      setGoalError(true);
+    } finally {
+      setGoalLoading(false);
+    }
+  };
+
+  // 종 아이콘 배지 — 안 읽은 알림 수. 홈에 있는 동안 30초마다, 알림함에서 돌아올 때 바로 다시 센다
+  // (푸시·소켓이 아직 없어서 새 재촉·응원을 알아챌 길이 이것뿐이다).
+  const [unread, setUnread] = useState(0);
+  useFocusEffect(
+    useCallback(() => {
+      const refresh = () =>
+        notificationService
+          .unreadCount()
+          .then((res) => setUnread(res.data.count))
+          .catch(() => {});
+      refresh();
+      const timer = setInterval(refresh, 30000);
+      return () => clearInterval(timer);
+    }, []),
+  );
+
   // 선택 날짜 변경 시 그 날의 운동 목록 조회 (없으면 오늘 자동 조회)
   useEffect(() => {
     const targetDate = selectedDate || today;
     setDailyLoading(true);
-    console.log('[daily] 요청 date=', targetDate);
     reportService
       .getDaily(targetDate)
-      .then((res) => {
-        console.log('[daily] 응답', JSON.stringify(res.data));
-        setDaily(res.data);
-      })
+      .then((res) => setDaily(res.data))
       .catch((e) => {
-        console.warn(
-          '[daily] 에러 status=', e?.response?.status,
-          'data=', JSON.stringify(e?.response?.data),
-        );
+        console.warn('[daily] 에러 status=', e?.response?.status, 'data=', JSON.stringify(e?.response?.data));
         setDaily(null);
       })
       .finally(() => setDailyLoading(false));
@@ -131,7 +206,6 @@ export default function HomeScreen() {
     [],
   );
 
-
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
@@ -143,7 +217,12 @@ export default function HomeScreen() {
           </View>
           <View style={styles.headerIcons}>
             <TouchableOpacity onPress={() => router.push('/notifications' as any)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Bell size={24} color={COLORS.textSecondary} strokeWidth={1.75} />
+              <Bell size={24} color={unread > 0 ? COLORS.text : COLORS.textSecondary} strokeWidth={1.75} />
+              {unread > 0 && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>{unread > 9 ? '9+' : unread}</Text>
+                </View>
+              )}
             </TouchableOpacity>
             <TouchableOpacity onPress={() => router.push('/(tabs)/mypage')}>
               <CircleUser size={28} color={COLORS.textSecondary} strokeWidth={1.75} />
@@ -169,6 +248,60 @@ export default function HomeScreen() {
             value={`${data?.consecutiveDays ?? 0}일`}
             label="연속 기록"
           />
+        </View>
+
+        {/* 나의 운동 약속 — 최근 7일 완료 세션 수 목표 */}
+        <View style={styles.goalCard}>
+          <View style={styles.goalHeading}>
+            <Target size={20} color={COLORS.primary} strokeWidth={2} />
+            <Text style={styles.goalEyebrow}>나의 운동 약속</Text>
+          </View>
+          {goalLoading ? (
+            <Text style={styles.goalDescription}>목표를 불러오는 중...</Text>
+          ) : goal ? (
+            <>
+              <Text style={styles.goalTitle}>최근 7일 {goal.currentValue} / {goal.targetValue}회 완료</Text>
+              <View style={styles.goalTrack}>
+                <View style={[styles.goalFill, { width: `${Math.min(100, (goal.currentValue / goal.targetValue) * 100)}%` }]} />
+              </View>
+              <Text style={styles.goalDescription}>
+                {goal.status === 'ACHIEVED' ? '이번 목표를 채웠어요! 다음 운동도 내 페이스로 이어가요.' : '짧게 운동해도 한 번의 완료로 기록돼요.'}
+              </Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.goalTitle}>{isAuthenticated ? '최근 7일 목표를 정해볼까요?' : '운동 약속을 만들어보세요'}</Text>
+              <Text style={styles.goalDescription}>{goalError ? '목표를 불러오지 못했습니다. 연결을 확인해주세요.' : '매일 운동할 필요는 없어요. 내 일정에 맞춰 시작하세요.'}</Text>
+            </>
+          )}
+          {goalError ? (
+            <TouchableOpacity accessibilityRole="button" onPress={() => void retryGoal()} style={styles.goalEditButton}>
+              <Text style={styles.goalEditText}>다시 불러오기</Text>
+            </TouchableOpacity>
+          ) : isAuthenticated && (goalEditing || !goal) ? (
+            <View style={styles.goalOptions}>
+              {[2, 3, 4].map((target) => (
+                <TouchableOpacity
+                  key={target}
+                  accessibilityRole="button"
+                  disabled={goalSaving || goalLoading}
+                  onPress={() => saveGoal(target)}
+                  style={[styles.goalOption, goal?.targetValue === target && styles.goalOptionSelected]}
+                >
+                  <Text style={styles.goalOptionText}>{target}회</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : goal ? (
+            <TouchableOpacity accessibilityRole="button" onPress={() => setGoalEditing(true)} style={styles.goalEditButton}>
+              <Text style={styles.goalEditText}>목표 변경</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity accessibilityRole="button" onPress={() => router.push('/(auth)/login')} style={styles.goalEditButton}>
+              <Text style={styles.goalEditText}>로그인하고 시작하기</Text>
+            </TouchableOpacity>
+          )}
+          <Text style={styles.goalFootnote}>완료한 운동 세션만 셉니다. 쉬는 날에도 목표 설정은 유지돼요.</Text>
         </View>
 
         {/* 내 모임 친구 운동 현황 — GET /friends (오늘 완료 → 진행 중 → 기록 없음 순) */}
@@ -252,9 +385,14 @@ export default function HomeScreen() {
               <Text style={styles.dailyCardSets}>{s.setSummary}</Text>
             </View>
             <View style={styles.dailyCardRight}>
-              <Text style={[styles.dailyCardSync, { color: getSyncColor(s.syncRate) }]}>
-                {Math.round(s.syncRate)}%
-              </Text>
+              {/* 횟수만 재는 종목(scoreAvailable=false)은 싱크로율 대신 «횟수 기록» */}
+              {s.scoreAvailable === false ? (
+                <Text style={styles.dailyCardCountOnly}>횟수 기록</Text>
+              ) : (
+                <Text style={[styles.dailyCardSync, { color: getSyncColor(s.syncRate) }]}>
+                  {Math.round(s.syncRate)}%
+                </Text>
+              )}
               <ChevronRight size={14} color={COLORS.textMuted} strokeWidth={2} />
             </View>
           </TouchableOpacity>
@@ -266,10 +404,10 @@ export default function HomeScreen() {
             <Camera size={16} color={COLORS.text} strokeWidth={2} />
             <Text style={styles.guideHeader}>운동 촬영 가이드</Text>
           </View>
-          <GuideItem Icon={Ruler} text="정면 또는 측면(45°)에서 촬영" />
-          <GuideItem Icon={PersonStanding} text="전신이 보이도록 1.5m 이상 거리 확보" />
-          <GuideItem Icon={Lightbulb} text="밝은 조명, 단색 배경 권장" />
-          <GuideItem Icon={Ban} text="거울 반사, 여러 사람이 보이는 환경은 피해주세요" />
+          <GuideItem Icon={Ruler} text="스쿼트는 정면 기준 45° · 런지는 측면에 카메라 고정" />
+          <GuideItem Icon={PersonStanding} text="머리부터 발목까지 담고 시작·종료 자세를 2초 유지" />
+          <GuideItem Icon={Lightbulb} text="밝은 조명에서 관절이 선명하게 보이도록 촬영" />
+          <GuideItem Icon={Ban} text="거울 반사, 무릎을 가리는 기구, 여러 사람이 보이는 환경은 피해주세요" />
         </View>
 
         {/* 운동 시작 버튼 */}
@@ -345,6 +483,30 @@ const styles = StyleSheet.create({
   statValueHighlight: { color: COLORS.primary },
   statLabel: { fontSize: FONT_SIZE.xs, color: COLORS.textSecondary, marginTop: 2 },
 
+  // 나의 운동 약속
+  goalCard: {
+    marginHorizontal: SPACING.xxl,
+    marginBottom: SPACING.lg,
+    padding: SPACING.xl,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.card,
+  },
+  goalHeading: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+  goalEyebrow: { color: COLORS.primary, fontSize: FONT_SIZE.sm, fontWeight: '700' },
+  goalTitle: { color: COLORS.text, fontSize: FONT_SIZE.xl, fontWeight: '800', marginTop: SPACING.md },
+  goalDescription: { color: COLORS.textSecondary, fontSize: FONT_SIZE.sm, lineHeight: 20, marginTop: SPACING.sm },
+  goalTrack: { height: 9, borderRadius: RADIUS.full, backgroundColor: COLORS.surfaceLight, overflow: 'hidden', marginTop: SPACING.lg },
+  goalFill: { height: '100%', backgroundColor: COLORS.primary, borderRadius: RADIUS.full },
+  goalOptions: { flexDirection: 'row', gap: SPACING.sm, marginTop: SPACING.lg },
+  goalOption: { flex: 1, borderWidth: 1, borderColor: COLORS.cardBorder, borderRadius: RADIUS.sm, paddingVertical: SPACING.md, alignItems: 'center' },
+  goalOptionSelected: { borderColor: COLORS.primary, backgroundColor: COLORS.primaryDim },
+  goalOptionText: { color: COLORS.text, fontSize: FONT_SIZE.md, fontWeight: '700' },
+  goalEditButton: { alignSelf: 'flex-start', marginTop: SPACING.md, paddingVertical: SPACING.sm },
+  goalEditText: { color: COLORS.primary, fontSize: FONT_SIZE.sm, fontWeight: '700' },
+  goalFootnote: { color: COLORS.textMuted, fontSize: FONT_SIZE.xs, marginTop: SPACING.md, lineHeight: 17 },
+
   // 친구 운동 현황
   friendsSection: { paddingHorizontal: SPACING.xxl, marginBottom: SPACING.lg },
   friendsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: SPACING.sm },
@@ -354,6 +516,21 @@ const styles = StyleSheet.create({
   friendsAll: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: SPACING.sm },
   friendsAllText: { fontSize: FONT_SIZE.xs, fontWeight: '700', color: COLORS.primary },
   headerIcons: { flexDirection: 'row', alignItems: 'center', gap: SPACING.lg },
+  badge: {
+    position: 'absolute',
+    top: -5,
+    right: -7,
+    minWidth: 17,
+    height: 17,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    backgroundColor: COLORS.error,
+    borderWidth: 1.5,
+    borderColor: COLORS.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeText: { fontSize: 10, fontWeight: '800', color: COLORS.white },
 
   calendarContainer: {
     marginHorizontal: SPACING.xxl,
@@ -388,6 +565,7 @@ const styles = StyleSheet.create({
   dailyCardSets: { fontSize: FONT_SIZE.xs, color: COLORS.textSecondary, marginTop: 2 },
   dailyCardRight: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
   dailyCardSync: { fontSize: FONT_SIZE.lg, fontWeight: '800' },
+  dailyCardCountOnly: { fontSize: FONT_SIZE.sm, fontWeight: '700', color: COLORS.textSecondary },
 
   scrollContent: {
     paddingBottom: SPACING.xxxl,

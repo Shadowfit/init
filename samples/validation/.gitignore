@@ -1,0 +1,13 @@
+/labels.csv
+/results.csv
+/.pose-cache/
+/*.mp4
+/*.mov
+/*.avi
+/*.mkv
+# 날짜별 검증 폴더(예: 2026-09-21/)에도 원본 영상은 절대 커밋하지 않는다.
+# ground-truth.json 등 텍스트 메타데이터는 계속 추적한다.
+**/*.mp4
+**/*.mov
+**/*.avi
+**/*.mkv

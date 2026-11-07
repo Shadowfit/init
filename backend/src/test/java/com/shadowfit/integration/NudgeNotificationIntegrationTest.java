@@ -125,12 +125,26 @@ class NudgeNotificationIntegrationTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").value(ErrorCode.NOTIFICATION_NOT_FOUND.getMessage()));
 
+        // 배지 — 받은 사람은 안 읽은 1건, 보낸 사람은 0
+        mockMvc.perform(get("/notifications/unread-count").header("Authorization", "Bearer " + tokenFor(friend)))
+                .andExpect(jsonPath("$.count").value(1));
+        mockMvc.perform(get("/notifications/unread-count").header("Authorization", "Bearer " + tokenFor(me)))
+                .andExpect(jsonPath("$.count").value(0));
+        // 오늘 재촉한 사람 — 화면을 다시 열어도 «재촉함» 을 유지하는 근거
+        mockMvc.perform(get("/friends/nudged-today").header("Authorization", "Bearer " + tokenFor(me)))
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0]").value(friend.getId()));
+        mockMvc.perform(get("/friends/nudged-today").header("Authorization", "Bearer " + tokenFor(friend)))
+                .andExpect(jsonPath("$", hasSize(0)));
+
         mockMvc.perform(patch("/notifications/" + notificationId + "/read")
                         .header("Authorization", "Bearer " + tokenFor(friend)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.read").value(true));
         mockMvc.perform(get("/notifications").header("Authorization", "Bearer " + tokenFor(friend)))
                 .andExpect(jsonPath("$.content[0].read").value(true));
+        mockMvc.perform(get("/notifications/unread-count").header("Authorization", "Bearer " + tokenFor(friend)))
+                .andExpect(jsonPath("$.count").value(0));
     }
 
     @Test

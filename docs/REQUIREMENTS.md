@@ -102,7 +102,7 @@
 
 | 기능 | 메서드 / 경로 | 권한 |
 |---|---|---|
-| 싱크로율 임계값 변경 | `PATCH /admin/exercises/{exerciseId}/thresholds` | `ROLE_ADMIN`, `beginner < advanced` 필수 |
+| 싱크로율 판정 기준 변경 | `PATCH /admin/exercises/{exerciseId}/thresholds` | `ROLE_ADMIN`. 본문 `{"good": 80, "warn": 60}`(종목당 한 쌍, 2026-10-21 V34 — 페르소나별 4개는 폐기), `0 < warn < good ≤ 100` 필수(위반 400 W022). AI 판정·앱 표시에 같이 쓰인다 |
 | **회원 목록 조회** | `GET /admin/members` | `ROLE_ADMIN`. 필터 5(가입일 범위·검색어·페르소나·운동레벨·온보딩) · 정렬 3 · offset 페이징 |
 | **세션 목록 조회** | `GET /admin/sessions` | `ROLE_ADMIN`. 필터 4(상태·운동종목·기간·회원검색어) · 정렬 3 · offset 페이징 |
 | **대시보드 통계** | `GET /admin/stats/overview` | `ROLE_ADMIN`. 위젯 5종(오늘 세션 수·상태별 분포·평균 싱크로율·신규 가입자·활성 회원) |

@@ -11,7 +11,7 @@
 
 ⚠️ **판정 기준을 `EXERCISE_ANGLES` 로 잡으면 안 된다.** 그건 각도 «정의» 표라 `deadlift`·
 `pullup` 이 들어 있지만, rep 카운팅은 그 표를 타지 않는다 —
-`squat_analyzer._extract_raw_metrics` 가 무릎 랜드마크를 하드코딩해 세기 때문이다. 각도 표를
+스쿼트 반복 분석기에는 해당 종목의 무릎·고관절 상태 규칙이 따로 있기 때문이다. 각도 표를
 기준으로 통과시키면 데드리프트가 무릎 각도로 rep 을 세는, 정확히 이 이슈가 없애려던 실패가
 다시 생긴다. 그래서 기준은 **분석기 보유 여부**(`_ANALYZERS`)다.
 """
@@ -19,11 +19,13 @@
 from __future__ import annotations
 
 from app.core.squat_analyzer import StreamingSquatAnalyzer
+from app.core.lunge_analyzer import StreamingLungeAnalyzer
 
 # 운동 유형별 분석기 — stateless 클래스라 공유 가능.
 # 여기 없는 유형은 «분석할 수 없다» 는 뜻이고, 그것이 이 dict 의 유일한 의미다.
-_ANALYZERS: dict[str, StreamingSquatAnalyzer] = {
+_ANALYZERS: dict[str, StreamingSquatAnalyzer | StreamingLungeAnalyzer] = {
     "squat": StreamingSquatAnalyzer("squat"),
+    "lunge": StreamingLungeAnalyzer(),
 }
 
 # exercises.id → 분석기 키.
@@ -37,9 +39,10 @@ _ANALYZERS: dict[str, StreamingSquatAnalyzer] = {
 #    «되던 것이 안 되는» 쪽으로 틀리지, «안 될 것이 되는» 쪽으로 틀리지 않는다.
 #
 # 현재 시드(V2__seed_master_data.sql): 1=스쿼트 · 2=런지 · 3=플랭크.
-# 런지·플랭크는 분석기가 없어 일부러 뺐다(squat-first).
+# 플랭크는 아직 분석기가 없다. 런지는 전방 런지 횟수만 분석한다.
 _EXERCISE_ID_TO_TYPE: dict[int, str] = {
     1: "squat",
+    2: "lunge",
 }
 
 
@@ -55,7 +58,7 @@ def resolve_exercise_type(exercise_id: int) -> str | None:
     return exercise_type
 
 
-def get_analyzer(exercise_type: str) -> StreamingSquatAnalyzer | None:
+def get_analyzer(exercise_type: str) -> StreamingSquatAnalyzer | StreamingLungeAnalyzer | None:
     """분석기를 꺼낸다. 없으면 `None`."""
     return _ANALYZERS.get(exercise_type)
 

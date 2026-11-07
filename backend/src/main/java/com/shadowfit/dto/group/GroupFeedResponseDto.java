@@ -56,7 +56,10 @@ public class GroupFeedResponseDto {
         @Schema(description = "리액션 개수·내 리액션", requiredMode = Schema.RequiredMode.REQUIRED)
         private ReactionSummaryDto reactionSummary;
 
-        public static Item of(GroupEvent event, ReactionSummaryDto summary) {
+        @Schema(description = "응원 한마디 — 오래된 순, 회원당 하나", requiredMode = Schema.RequiredMode.REQUIRED)
+        private List<EventCheerDto> cheers;
+
+        public static Item of(GroupEvent event, ReactionSummaryDto summary, List<EventCheerDto> cheers) {
             return Item.builder()
                     .seq(event.getSeq())
                     .groupId(event.getGroup().getId())
@@ -65,6 +68,7 @@ public class GroupFeedResponseDto {
                     .payload(event.getPayload())
                     .occurredAt(event.getCreatedAt())
                     .reactionSummary(summary)
+                    .cheers(cheers == null ? List.of() : cheers)
                     .build();
         }
     }

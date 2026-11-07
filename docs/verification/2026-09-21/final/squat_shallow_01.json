@@ -1,0 +1,45 @@
+{
+  "video": "samples\\validation\\2026-09-21\\squat_shallow_01.mp4",
+  "source_fps": 30.104989463253688,
+  "sample_fps": 3.0,
+  "sampled_frames": 21,
+  "usable_frames": 21,
+  "calibrated_frames": 10,
+  "valid_frame_ratio": 1.0,
+  "evaluation_valid": true,
+  "reps": 0,
+  "coaching_events": [
+    {
+      "time_sec": 5.115,
+      "message": "이번 동작에서 충분히 내려간 장면을 확인하지 못했어요.",
+      "rep_count": 0
+    },
+    {
+      "time_sec": 6.577,
+      "message": "이번 동작에서 충분히 내려간 장면을 확인하지 못했어요.",
+      "rep_count": 0
+    }
+  ],
+  "thresholds": {
+    "standing_knee": 160.0,
+    "standing_hip": 160.0,
+    "bottom_knee": 100.0,
+    "bottom_hip": 150.0,
+    "standing_knee_margin": 8.0,
+    "initial_hip_margin": 10.0,
+    "bottom_knee_margin": 15.0,
+    "bottom_dwell_margin": 5.0,
+    "min_hip_drop": 0.25,
+    "hip_return_tolerance": 0.3,
+    "ankle_outlier_grace_sec": 0.7,
+    "min_active_sec": 0.4,
+    "standing_confirm_sec": 0.2,
+    "bottom_confirm_sec": 0.12,
+    "max_bottom_sec": 8.0,
+    "max_gap_sec": 1.2,
+    "smoothing_sec": 0.12,
+    "visibility": 0.55,
+    "ankle_tolerance": 0.35,
+    "phase_velocity": 12.0
+  }
+}

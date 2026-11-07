@@ -62,8 +62,8 @@ class AttendanceStreakBatchRaceTest extends MySqlContainerSupport {
         Category category = categoryRepository.findByName("LOWER")
                 .orElseGet(() -> categoryRepository.save(Category.builder().name("LOWER").build()));
         exercise = exercisesRepository.saveAndFlush(Exercise.builder().name("스쿼트").category(category)
-                .expectedDurationMinutes(15).syncThresholdBeginner(new BigDecimal("60.00"))
-                .syncThresholdAdvanced(new BigDecimal("85.00")).analysisSupported(true).build());
+                .expectedDurationMinutes(15)
+                .analysisSupported(true).build());
 
         Member none = member("none");                       // 세션 없음 → 0
         Member three = member("three");                     // 오늘·어제·그제 → 3

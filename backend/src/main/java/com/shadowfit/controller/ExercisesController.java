@@ -98,6 +98,9 @@ public class ExercisesController {
                 .aiWorkerIndex(started.aiWorkerIndex())
                 .targetRepsPerSet(started.targetRepsPerSet())
                 .targetSets(started.targetSets())
+                // AnalyzeRequest 로 AI 에 간 것과 같은 판정 기준(V34)
+                .syncGoodThreshold(started.syncGoodThreshold())
+                .syncWarnThreshold(started.syncWarnThreshold())
                 .build();
 
         return ResponseEntity.accepted().body(response);

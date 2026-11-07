@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import grpc
+from unittest.mock import patch
 
 import exercise_pb2
 from app.core.analyzer_registry import (
@@ -22,7 +23,7 @@ from app.core.analyzer_registry import (
 from app.grpc.exercise_servicer import ExerciseServicer
 
 SQUAT_ID = 1
-LUNGE_ID = 2  # 시드에는 있지만 분석기가 없다
+PLANK_ID = 3  # 시드에는 있지만 분석기가 없다
 
 
 class _FakeContext:
@@ -67,16 +68,16 @@ def test_스쿼트는_분석기가_있다():
     assert get_analyzer("squat") is not None
 
 
-def test_런지는_분석기가_없어_None():
-    assert resolve_exercise_type(LUNGE_ID) is None
+def test_플랭크는_분석기가_없어_None():
+    assert resolve_exercise_type(PLANK_ID) is None
 
 
 def test_매핑에_없는_id_는_None():
     assert resolve_exercise_type(9999) is None
 
 
-def test_지원_목록에_스쿼트만_들어_있다():
-    assert supported_exercise_ids() == [SQUAT_ID]
+def test_지원_목록에_스쿼트와_런지가_들어_있다():
+    assert supported_exercise_ids() == [SQUAT_ID, 2]
 
 
 def test_각도_정의만_있는_종목은_통과하지_않는다():
@@ -103,13 +104,13 @@ def test_StartAnalysis_는_미지원_종목을_abort_로_거절한다():
     servicer = ExerciseServicer()
     context = _FakeContext()
     request = exercise_pb2.AnalyzeRequest(
-        exercise_id=LUNGE_ID, session_id=1234, persona="BEGINNER"
+        exercise_id=PLANK_ID, session_id=1234, persona="BEGINNER"
     )
 
     _assert_aborted(lambda: servicer.StartAnalysis(request, context))
 
     assert context.abort_code == grpc.StatusCode.INVALID_ARGUMENT
-    assert str(LUNGE_ID) in context.abort_details
+    assert str(PLANK_ID) in context.abort_details
 
 
 def test_StartAnalysis_는_거절_시_세션_상태를_만들지_않는다():
@@ -120,12 +121,35 @@ def test_StartAnalysis_는_거절_시_세션_상태를_만들지_않는다():
     context = _FakeContext()
     session_id = 4321
     request = exercise_pb2.AnalyzeRequest(
-        exercise_id=LUNGE_ID, session_id=session_id, persona="BEGINNER"
+        exercise_id=PLANK_ID, session_id=session_id, persona="BEGINNER"
     )
 
     _assert_aborted(lambda: servicer.StartAnalysis(request, context))
 
     assert get_registry().get(session_id) is None
+
+
+def test_StartAnalysis_는_검출기_풀_소진을_abort_로_거절한다():
+    """success=False 응답은 Spring 이 성공으로 삼키므로 RESOURCE_EXHAUSTED 여야 한다."""
+
+    class _ExhaustedPool:
+        def status(self):
+            return 1, 1
+
+        def acquire(self, _session_id):
+            return False
+
+    servicer = ExerciseServicer()
+    context = _FakeContext()
+    session_id = 9876
+    request = exercise_pb2.AnalyzeRequest(
+        exercise_id=SQUAT_ID, session_id=session_id, persona="BEGINNER"
+    )
+
+    with patch("app.grpc.exercise_servicer.get_pool", return_value=_ExhaustedPool()):
+        _assert_aborted(lambda: servicer.StartAnalysis(request, context))
+
+    assert context.abort_code == grpc.StatusCode.RESOURCE_EXHAUSTED
 
 
 # ─── ReattachAnalysis — success=False 로 거절 ──────────────────────────────────
@@ -140,10 +164,14 @@ def test_ReattachAnalysis_는_미지원_종목을_success_False_로_거절한다
     servicer = ExerciseServicer()
     context = _FakeContext()
     request = exercise_pb2.ReattachRequest(
-        exercise_id=LUNGE_ID, session_id=555, initial_rep_count=3
+        exercise_id=PLANK_ID, session_id=555, initial_rep_count=3
     )
 
     response = servicer.ReattachAnalysis(request, context)
 
     assert response.success is False
     assert context.abort_code is None  # abort 로 끊지 않았다
+
+def test_forward_lunge_is_registered():
+    assert resolve_exercise_type(2) == "lunge"
+    assert get_analyzer("lunge") is not None

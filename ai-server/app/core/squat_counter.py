@@ -10,6 +10,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field, replace
 
+from app.core.stance import StanceFeatures, stance_features
 from app.models.pose import Landmark
 
 
@@ -21,6 +22,8 @@ class SquatThresholds:
     bottom_knee: float = 100.0
     bottom_hip: float = 150.0
     standing_knee_margin: float = 8.0
+    # 2026-10-21 에 10 → 20 으로 넓혀 봤다가 같은 날 되돌렸다 — 사람 판정 «정상 0회» 인 squat_shallow_01 을
+    # 4회로 셌다(docs/verification/2026-09-21-verification-report.md §4).
     initial_hip_margin: float = 10.0
     bottom_knee_margin: float = 15.0
     bottom_dwell_margin: float = 5.0  # 경계 통과 구간을 바닥 체류 시간에서 제외
@@ -94,6 +97,9 @@ class SquatObservation:
     ankles: tuple[tuple[float, float] | None, tuple[float, float] | None]
     torso_length: float
     visible_sides: tuple[bool, bool]
+    # 양쪽 다리가 다 보일 때만 계산된다(한쪽만 보이면 None). 런지 동작을 걸러내는 데 쓴다 —
+    # app/core/stance.py 참고.
+    stance: StanceFeatures | None = None
 
     @property
     def knee_angle(self) -> float:
@@ -155,6 +161,7 @@ def observe_squat(landmarks: list[Landmark], aspect_ratio: float, visibility: fl
         torso_tilt=abs(math.degrees(math.atan2(shoulders[0] - hips[0], hips[1] - shoulders[1]))),
         hip_height=hips[1], ankles=(p.get(27), p.get(28)), torso_length=torso_length,
         visible_sides=(0 in visible_sides, 1 in visible_sides),
+        stance=stance_features(p) if len(valid) == 2 else None,
     )
 
 
@@ -178,9 +185,29 @@ class SquatCounter:
     coaching_event: str | None = None
     ankle_outlier_since: float | None = None
     tracked_sides: tuple[bool, bool] = (False, False)
+    # 이번 시도 중 바닥 근처에서 «앞뒤로 벌린 런지 자세» 가 한 번이라도 보였는가.
+    # True 면 일어서도 횟수에 넣지 않는다(2026-10-19, 스쿼트 선택 후 런지를 하면 세지던 문제).
+    attempt_split_stance: bool = False
+    # 위 «런지 자세» 시도를 실제로 버릴 것인가 (2026-10-21). 사용자 경로(실시간·영상)는 항상 True.
+    #
+    # False 는 **관리자 기준 영상 추출 전용**이다. 3D 마네킹이 무릎을 바깥으로 벌리고 앉는 스쿼트를
+    # 45° 카메라로 찍으면, 원근 때문에 바닥에서 허벅지 차이가 ~37°·발 간격 ~0.78 로 나와 split 판정
+    # 두 조건(0.74 · 25°)을 다 넘는다 — 그래서 2회 전부 버려지고 «반복 0회» 로 추출이 실패했다.
+    # 기준 영상은 관리자가 고른 «정답» 이라 «스쿼트를 골라놓고 런지를 했다» 를 걸러낼 이유가 없다.
+    # 판정 자체(attempt_split_stance)는 그대로 계산한다 — 버리지만 않는다.
+    reject_split_stance: bool = True
+    # «미인정 시도» (2026-10-21) — 내려갔다 올라왔지만 1회로 인정하지 않은 시도. 횟수(rep_count)에는 안 들어가고
+    # 화면(«미인정 M회»)과 리포트 점수에만 쓴다. 판정 규칙은 그대로이고, 이미 시도를 버리던 두 자리에서 기록만 한다:
+    #   "DEPTH_NOT_CONFIRMED" — «진짜 시도»(min_active_sec 이상·골반 하강 ≥ min_hip_drop)였지만 바닥 자세(무릎·고관절
+    #                           각도 + 두 표본 체류)가 확인되지 않은 채 일어섬 — 덜 앉았거나 바닥에서 너무 빨리 일어남
+    #   "SPLIT_STANCE"        — 바닥까지 갔지만 런지 자세(reject_split_stance 가 True 일 때)
+    # 추적 끊김·다리 바뀜·발 이동·오래 앉음·영상 공백(invalidate)은 «시도» 가 아니라 판정 불가라 세지 않는다.
+    # rejected_event 는 이번 update 에서 미인정이 났을 때만 사유 코드가 실린다(coaching_event 와 같은 수명).
+    rejected_count: int = 0
+    rejected_event: str | None = None
 
     def invalidate(self, message="영상이 끊겼습니다. 똑바로 서서 다시 준비해주세요."):
-        # 완성된 횟수와 시각 단조성은 보존한다.
+        # 완성된 횟수(rep_count·rejected_count)와 시각 단조성은 보존한다.
         self.stage, self.phase = "waiting_for_standing", "unknown"
         self.standing_since = self.started_at = self.bottom_since = self.bottom_band_since = None
         self.filtered = None
@@ -188,13 +215,16 @@ class SquatCounter:
         self.top_hip_height = self.ankle_outlier_since = None
         self.attempt_max_hip_drop = 0.0
         self.coaching_event = None
+        self.rejected_event = None
         self.tracked_sides = (False, False)
+        self.attempt_split_stance = False
         self.guidance = message
 
     def update(self, landmarks: list[Landmark] | None, timestamp_sec: float,
                aspect_ratio: float = 1.0) -> tuple[SquatObservation | None, bool]:
         now, t = timestamp_sec, self.thresholds
         self.coaching_event = None
+        self.rejected_event = None
         if not math.isfinite(now) or (self.last_time is not None and now <= self.last_time):
             return None, False
         dt = now - self.last_time if self.last_time is not None else 0.
@@ -276,12 +306,22 @@ class SquatCounter:
             self.stage, self.started_at = "descending", now
             self.standing_since = self.bottom_since = self.bottom_band_since = None
             self.attempt_max_hip_drop = 0.0
+            self.attempt_split_stance = False
             self.guidance = "편안한 범위에서 무릎과 고관절을 굽혀주세요."
+
+        if (self.stage in ("descending", "bottom") and raw.stance is not None
+                and min(raw.knees) <= t.bottom_knee + t.bottom_knee_margin
+                and raw.stance.is_split()):
+            self.attempt_split_stance = True
 
         if self.stage == "descending":
             self.attempt_max_hip_drop = max(
                 self.attempt_max_hip_drop, raw.hip_height - self.top_hip_height
             )
+            # 바닥은 연속 두 표본(bottom_confirm_sec 체류)이 있어야 확정한다 — 표본 하나로는 확정하지 않는
+            # 의도적인 보수 판정이다(docs/verification/2026-09-21-verification-report.md §4).
+            # 2026-10-21 에 «표본 간격 ≥ 확인창이면 한 장으로 확정» 을 넣었다가 같은 날 되돌렸다 — 사람 판정
+            # «정상 0회» 인 squat_shallow_01 을 4회로 셌다. 그런 시도는 아래 «미인정(DEPTH_NOT_CONFIRMED)» 으로 남는다.
             if bottom:
                 if self.bottom_since is None:
                     self.bottom_since = now
@@ -295,8 +335,11 @@ class SquatCounter:
                 if (self.started_at is not None and now - self.started_at >= t.min_active_sec
                         and self.attempt_max_hip_drop >= t.min_hip_drop * self.scale):
                     self.coaching_event = "이번 동작에서 충분히 내려간 장면을 확인하지 못했어요."
+                    self.rejected_count += 1
+                    self.rejected_event = "DEPTH_NOT_CONFIRMED"
                 self.stage = "ready"
                 self.top_hip_height = raw.hip_height
+                self.attempt_split_stance = False
                 self.guidance = "이번 동작은 세지 않았습니다. 준비 자세에서 다시 시작하세요."
             return raw, False
 
@@ -329,6 +372,20 @@ class SquatCounter:
                 if ((now - self.standing_since >= t.standing_confirm_sec
                      or dt >= t.standing_confirm_sec)
                         and now - self.started_at >= t.min_active_sec):
+                    if self.attempt_split_stance and self.reject_split_stance:
+                        # 런지 자세로 굽혔다 편 동작 — 스쿼트 1회로 세지 않는다.
+                        self.stage = "ready"
+                        self.top_hip_height = raw.hip_height
+                        self.anchors, self.scale = raw.ankles, raw.torso_length
+                        self.tracked_sides = raw.visible_sides
+                        self.standing_since = self.bottom_since = self.bottom_band_since = self.started_at = None
+                        self.attempt_max_hip_drop = 0.0
+                        self.attempt_split_stance = False
+                        self.coaching_event = "런지 자세로 인식돼 이번 동작은 세지 않았어요."
+                        self.rejected_count += 1
+                        self.rejected_event = "SPLIT_STANCE"
+                        self.guidance = "두 발을 나란히 두고 스쿼트해주세요."
+                        return raw, False
                     self.rep_count += 1
                     self.stage = "ready"
                     self.top_hip_height = raw.hip_height

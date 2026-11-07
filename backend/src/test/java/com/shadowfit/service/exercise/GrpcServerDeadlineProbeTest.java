@@ -33,7 +33,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -163,8 +162,7 @@ class GrpcServerDeadlineProbeTest {
         Category category = categoryRepository.save(Category.builder().name("LOWER").build());
         Exercise exercise = exercisesRepository.saveAndFlush(Exercise.builder()
                 .name("스쿼트").category(category).expectedDurationMinutes(15)
-                .syncThresholdBeginner(new BigDecimal("60.00"))
-                .syncThresholdAdvanced(new BigDecimal("85.00")).build());
+                .build());
         sessionId = sessionRepository.saveAndFlush(Session.builder()
                 .member(member).exercise(exercise)
                 .startTime(LocalDateTime.now()).status(Status.IN_PROGRESS)

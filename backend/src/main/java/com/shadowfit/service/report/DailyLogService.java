@@ -55,10 +55,13 @@ public class DailyLogService {
      * 종료돼도 lost-update가 안 생김. JPA save()로 먼저 시도하고 실패하면 catch해서 재시도하는
      * 방식은 Hibernate 세션이 flush 실패로 손상돼 같은 트랜잭션 내 후속 쿼리가 깨짐(실측으로 확인,
      * DailyLogServiceConcurrencyTest 최초 버전 실패 사유) — 그래서 이 방식은 쓰지 않음.
+     *
+     * <p>{@code addCalories} 가 null(체중을 몰라 세션 칼로리를 못 잰 경우, {@code CalorieEstimator})이면 0 을 더한다 —
+     * null 을 그대로 넘기면 {@code total_calories + NULL} 이 그날 합계를 통째로 NULL 로 만든다.
      */
     @Transactional
     public void accumulateStats(Long memberId, LocalDate logDate, int addTime, BigDecimal addCalories) {
-        dailyLogRepository.upsertStats(memberId, logDate, addTime, addCalories);
+        dailyLogRepository.upsertStats(memberId, logDate, addTime, addCalories == null ? BigDecimal.ZERO : addCalories);
     }
 
     /**

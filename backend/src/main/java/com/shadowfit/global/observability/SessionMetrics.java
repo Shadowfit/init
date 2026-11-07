@@ -66,6 +66,15 @@ public class SessionMetrics {
      */
     private static final String AI_STOP_RESULT = "shadowfit.ai.stop.result";
 
+    /**
+     * «미인정 시도»(V35) 수신 결과. tags: outcome(stored/duplicate/dropped/invalid)
+     *
+     * <p>{@code dropped} 는 세션이 이미 끝났거나(pose 배치의 {@link #POSE_BATCH_REJECTED} 와 같은 창) 점수가 없는
+     * 종목이라 저장하지 않은 것, {@code invalid} 는 형식·범위 검증에서 거절한 것이다. {@code duplicate} 가 늘면
+     * AI 재전송이 잦다는 뜻이다(응답 유실·타임아웃).
+     */
+    private static final String REJECTED_ATTEMPTS = "shadowfit.rejected.attempts";
+
     /** 서킷브레이커 OPEN 자동 재부착 결과. tags: outcome(ok/already-active/circuit-open/grpc-error/not-reattachable) */
     private static final String AI_REATTACH_RESULT = "shadowfit.ai.reattach.result";
 
@@ -240,6 +249,11 @@ public class SessionMetrics {
     /** @param reason batch_size / sync_rate_range / timestamp_range 중 어떤 검증에서 걸렸는지. */
     public void poseBatchInvalid(String reason) {
         registry.counter(POSE_BATCH_INVALID, "reason", reason).increment();
+    }
+
+    /** @param outcome stored / duplicate / dropped / invalid — {@link #REJECTED_ATTEMPTS} 참고. */
+    public void rejectedAttempt(String outcome) {
+        registry.counter(REJECTED_ATTEMPTS, "outcome", outcome).increment();
     }
 
     private DistributionSummary frames(String stage) {

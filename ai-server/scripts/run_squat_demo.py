@@ -26,7 +26,7 @@ def main() -> None:
     print(f"Video: {Path(args.video).resolve()}")
     print(f"Detected reps: {summary.get('reps_detected', 0)}")
     print(f"Current phase: {summary.get('current_phase', 'unknown')}")
-    print(f"Quality score: {summary.get('quality_score', 0)}")
+    print("Quality score: unavailable (no validated scalar score)")
     print(f"Feedback: {', '.join(summary.get('feedback', []))}")
 
     if args.output:

@@ -1,6 +1,23 @@
 # AI ↔ Backend 결합 현황
 
-마지막 업데이트: **2026-09-23** (§6 아웃박스 — 송신 예외도 재시도 상한 안으로, #759. 그 전: 09-06 §3-2 RPC별 stub 종류 정정 — 대규모 반영은 2026-08-08, §0 참조)
+## 2026-09-17 추가: 스쿼트 반복 판정 통일
+
+스쿼트(`exercise_id=1`)는 논문에서 제시한 무릎·고관절 단계와 초 단위 확인을 결합한
+`SquatCounter`로 실시간·업로드 영상 횟수를 함께 판단한다. 완료 시 기존 rep 배치와
+종료 콜백이 실행되며 nonce·proto·Spring 저장 구조는 유지된다. 업로드 영상
+`quality_score`는 `null`이고 기존 실시간 `sync_rate`는 참고용 DTW 유사도다.
+[근거·검증 한계](../decisions/squat-repetition-counting.md).
+
+## 2026-09-17 추가: 전방 런지 횟수 측정
+
+`exercise_id=2`는 전방 런지 분석기로 연결한다. 기준 좌표 없이 시작·재부착할 수 있으며,
+기존 rep 배치와 종료 콜백으로 총 횟수를 저장한다. nonce·워커·proto 필드는 유지한다.
+런지 HTTP 점수는 null이고, gRPC 기본 숫자 0은 Spring의 `repetition_only` 종목 판정으로
+DB NULL로 변환한다(V22). SSE 점수는 nullable, 상세 리포트는 `scoreAvailable`로 구분한다.
+좌우 횟수는 살아 있는 AI 세션에서 유지되며 프로세스 재시작 이전 기록은 좌우 미상으로 표시한다.
+근거·단계·배포 순서는 [전방 런지 구현 문서](../decisions/lunge-repetition-counting.md)를 참조한다.
+
+마지막 업데이트: **2026-10-20** (두 갈래 병합 — 09-17 스쿼트 판정 통일·전방 런지 추가 + 09-23 §6 아웃박스 — 송신 예외도 재시도 상한 안으로, #759. 그 전: 09-06 §3-2 RPC별 stub 종류 정정 — 대규모 반영은 2026-08-08, §0 참조)
 범위: `ai-server/` (Python, FastAPI + gRPC) ↔ `backend/` (Spring Boot, Java/Kotlin)
 목적: 현재 어떻게 결합돼 있는지 사실만 정리한 스냅샷. 트레이드오프·대안 비교는 [`docs/decisions/ai-backend-coupling.md`](../decisions/ai-backend-coupling.md) 참조.
 
@@ -86,7 +103,7 @@ Docker 네트워크는 `shadowfit-net` 브리지 한 개. 외부 노출은 backe
 - ai-server: 이미지 빌드가 같은 파일로 생성. 로컬·pytest 는 커밋된 `ai-server/exercise_pb2*.py` — 변경 시 `ai-server/scripts/gen_proto.sh` 로 재생성해 같이 커밋 (CI 가 대조)
 - 두 Dockerfile 의 빌드 컨텍스트가 저장소 루트인 이유가 이것이다
 
-`ExerciseService` 정의된 RPC — **7개** (2026-05-23 판에는 5개만 적혀 있었다):
+`ExerciseService` 정의된 RPC — **8개** (2026-05-23 판에는 5개만 적혀 있었다, 2026-10-21 `SaveRejectedAttempt` 추가):
 
 | RPC | 방향 | 호출자 | 수신자 | 용도 |
 |-----|------|--------|--------|------|
@@ -95,6 +112,7 @@ Docker 네트워크는 `shadowfit-net` 브리지 한 개. 외부 노출은 backe
 | **`ReattachAnalysis`** 🆕 | Spring → AI | `ExerciseAnalysisService.reattachSession` | `ExerciseServicer.ReattachAnalysis` | **이미 `IN_PROGRESS` 인 세션의 AI 상태를 DB 값으로 되살린다.** 2026-07-31 신설(#59 2단계) |
 | `StopAnalysis` | Spring → AI | **아웃박스 발행기**(`OutboxPublisher`) ← `ExerciseAnalysisService.stopAnalysis` 가 이벤트만 적재 | `ExerciseServicer.StopAnalysis` | 사용자 중단 신호. **호출자가 바뀌었다** — §4 중단 |
 | `SavePoseDataBatch` | AI → Spring | `spring_client.report_pose_data_batch` (트리거: rep 완성 시) | `ExerciseGrpcService.savePoseDataBatch` | rep 단위 실시간 포즈 데이터 저장. **프론트가 `POST /pose` 를 프레임마다 호출해야 동작** |
+| **`SaveRejectedAttempt`** 🆕 | AI → Spring | `spring_client.send_rejected_attempt` (트리거: 미인정 시도 — 내려갔다 올라왔지만 1회로 인정되지 않음) | `ExerciseGrpcService`(미인정 시도 저장) | **미인정 시도 1건 요약**(사유·싱크로율·가장 깊은 순간의 무릎·체간·시각·좌표)을 `exercise_rejected_attempts`(V35)에 멱등 저장(세션·번호 유일). 횟수엔 안 들어가고 리포트 점수·회차 막대에만 들어간다. 2026-10-21 — `SavePoseDataBatch` 플래그가 아니라 별도 RPC 인 이유는 [changelog 2026-10-21 (3)](./ai-backend-changelog.md) |
 | `CompleteAnalysis` | AI → Spring | `spring_client.report_complete_analysis` | `ExerciseGrpcService.completeAnalysis` | 세션 종료 + 최종 통계 전달 (핵심 콜백) |
 | **`ReportFeedbackBatch`** ⚠️ | AI → Spring | **없음 — 아무도 안 부른다** | `ExerciseGrpcService.reportFeedbackBatch` → `FeedbackLogService` | TTS 피드백 발화 이벤트 batch 저장. **수신부만 있는 반쪽 경로**(§3-1) |
 
@@ -130,7 +148,10 @@ Docker 네트워크는 `shadowfit-net` 브리지 한 개. 외부 노출은 backe
 | 계약 | 내용 | 어긋나면 |
 |---|---|---|
 | **① 경로 = 공유 bind mount** | Spring 이 `reference-video.dir`(compose: `/data/reference-videos`) 아래 `{exerciseId}/{uuid}.mp4` 로 쓰고, gRPC 에는 `reference-video.ai-dir + 상대경로` 를 `youtube_url` 에 실어 보낸다. AI 는 그 문자열을 **그대로 열고** 없으면 즉시 `success=false`. compose 는 같은 호스트 폴더 `./backend/data/reference-videos` 를 backend(rw)·ai(ro) 에 마운트한다. 호스트 `bootRun` + AI 컨테이너 조합은 `REFERENCE_VIDEO_AI_DIR=/data/reference-videos` 하나만 주면 된다 | AI 로그 «기준 영상 파일이 없다». Spring 은 «접수 실패» 로그만 남기고 DB 경로는 이미 커밋된 상태 |
-| **② 응답 = 접수, 저장 = 역호출** | AI 는 원격 URL·파일 존재만 검사하고 **즉시** 반환한다(`extracted_poses` 항상 빈 값). 추출은 프로세스당 1스레드 FIFO 풀(`reference-extraction`)에서 돌고, 끝나면 AI → Spring `ExtractReferenceData`(같은 이름, 역방향) 로 `saveReferencePoses` 가 정답지를 **교체**(#220)한다. 예전엔 추출을 끝내고 응답했는데 Spring 의 5초 데드라인(`GRPC_CALL_TIMEOUT_SECONDS`)에 걸려 **성공한 추출이 서킷브레이커 실패로 집계**됐다(윈도 10·최소 5·50% — 업로드 5번이면 그 채널의 라이브 세션까지 거부) | 202 를 받았는데 좌표가 안 바뀐다 → AI 로그의 `[#192]` 추출 실패 줄을 볼 것. Spring 쪽에 완료 신호는 없다 |
+| **② 응답 = 접수, 저장 = 역호출** | AI 는 원격 URL·파일 존재만 검사하고 **즉시** 반환한다(`extracted_poses` 항상 빈 값). 추출은 프로세스당 1스레드 FIFO 풀(`reference-extraction`)에서 돌고, 끝나면 AI → Spring `ExtractReferenceData`(같은 이름, 역방향) 로 `saveReferencePoses` 가 정답지를 **교체**(#220)한다. 예전엔 추출을 끝내고 응답했는데 Spring 의 5초 데드라인(`GRPC_CALL_TIMEOUT_SECONDS`)에 걸려 **성공한 추출이 서킷브레이커 실패로 집계**됐다(윈도 10·최소 5·50% — 업로드 5번이면 그 채널의 라이브 세션까지 거부) | 202 를 받았는데 좌표가 안 바뀐다 → 관리자 화면의 «마지막 등록 상태»(③)를 볼 것. 자세한 원인은 AI 로그의 `[#192]` 줄 |
+| **③ 실패도 같은 역호출로** 🆕 (2026-10-21) | 추출이 실패하면 AI 가 같은 역방향 `ExtractReferenceData` 에 **`error_message`(ExtractRequest 5번) 를 채우고 `extracted_poses` 를 비워** 보낸다 — 문구는 관리자에게 그대로 보이는 한국어(«영상에서 사람을 찾지 못했어요…» 등, `exercise_servicer.py` 상수). Spring 은 `exercises.reference_extraction_status`(V34) 를 업로드 때 `EXTRACTING`, 성공 역호출 `READY`, 실패 역호출·접수 거부(`success=false`)·gRPC 오류·서킷 열림 `FAILED` 로 남기고, **실패 때는 기존 기준 좌표를 건드리지 않는다**. 역호출이 아예 안 오면 읽을 때 10분 넘은 `EXTRACTING` 을 `FAILED` 로 보고한다(저장값은 그대로). 3D 마네킹 등록(`PUT …/reference-poses`, RPC 없음)은 바로 `READY` | 업로드 뒤 상태가 `EXTRACTING` 에 머문다 → 10분 뒤 «AI 응답이 10분 넘게 없어요». AI 가 구버전이면(필드 5 모름) 실패는 예전처럼 침묵하고 이 경로로 정리된다 |
+
+**업로드 영상은 «기준 모드» 로 읽는다** (2026-10-21, `analyze_video(…, reference=True)`) — 사용자 프레임용 필터(화면 중앙 ROI·몸 너비 0.1~0.34·벌린 다리 = 런지 오인 거부)를 끄고 한 사람·전신 가시성 검사만 남긴다. 관리자가 올리는 영상은 사람이 고른 시범이라 오검출 방어보다 «반복을 찾는 것» 이 중요해서다. 그 대신 Spring 이 저장된 좌표에서 AI 와 같은 방식(2D·비율 보정)으로 **최저 무릎각과 깊이 판정**(60° 미만 `STRICT` · 95° 초과 `LENIENT`)을 계산해 `GET /admin/exercises/{id}/reference` 로 보여준다 — 기준이 후하거나 깐깐하면 관리자가 등록 직후 안다. 실측: 3D 마네킹을 45° 에서 찍은 영상은 최저 무릎 107.6°(`LENIENT`), 마네킹 관절을 직접 넣은 기준은 71.3°(`OK`).
 
 **전제 — 같은 호스트.** ①은 Spring 과 AI 가 한 머신에 있을 때만 성립한다(현 compose·EC2 측정 구성 모두 동거). 호스트를 나누면 gRPC bytes 가 아니라 **오브젝트 스토리지**로 바꿔야 한다 — 영상은 «보관·교체» 대상이라(`exercises.reference_video_path`, V23) 전달만 해결하는 방식으로는 부족하다.
 
@@ -139,8 +160,9 @@ Docker 네트워크는 `shadowfit-net` 브리지 한 개. 외부 노출은 backe
 Spring 쪽 트랜잭션 경계(`ReferenceVideoService`): 서킷 확인 → 파일 저장(tx 밖) → `attachReferenceVideo`(tx: 경로 갱신 + `@CacheEvict`) → **afterCommit** 에서 gRPC 발사·이전 파일 삭제 → tx 실패 시 새 파일 삭제(보상). gRPC 를 tx 안에서 쏘지 않는 이유는 `startAnalysis` 와 같다(커넥션 점유·롤백 뒤 콜백).
 
 핵심 메시지:
-- `AnalyzeRequest`: `exercise_id(int64)`, `session_id(int64)`, `reference_poses(PoseDataRequest[])`, `persona`, `session_nonce`, **`exercise_code`·`target_reps_per_set`·`target_sets`** (2026-09-22, §3-4)
-- `SessionCompleteRequest`: `session_id(int64)`, `total_reps(int32)`, `avg_sync_rate(double)`, `max/min_sync_rate(double)`, `calories_burned(double)`
+- `AnalyzeRequest`: `exercise_id(int64)`, `session_id(int64)`, `reference_poses(PoseDataRequest[])`, `persona`(피드백 말투만 — 판정엔 안 쓴다), `session_nonce`, **`exercise_code`·`target_reps_per_set`·`target_sets`** (2026-09-22, §3-4), `depth_mode`(10), **`sync_good_threshold`(11)·`sync_warn_threshold`(12)** (2026-10-21, §3-4)
+- `ExtractRequest`(AI → Spring 역호출): `exercise_id`, `extracted_poses`, `exercise_code`(4), **`error_message`(5)** — 비어 있지 않으면 추출 실패(§3-3 ③)
+- `SessionCompleteRequest`: `session_id(int64)`, `total_reps(int32)`, `avg_sync_rate(double)`, `max/min_sync_rate(double)`, `calories_burned(double)` — **Spring 은 `calories_burned` 를 읽지 않는다**(2026-10-21). AI 는 체중을 몰라 늘 0 을 보냈고, 이제 Spring 이 회원 체중 × 운동 시간 × MET 3.0(`CalorieEstimator`)으로 계산한다. 싱크 통계도 이미 AI 값이 아니라 `pose_data` 에서 집계한다(#75)
 - `PoseDataRequest`: `timestamp_sec(double)`, `joint_coordinates(string=JSON)`, `sync_rate(double)`, `feedback_message(string)`
 
 `SessionStatus` enum: `IN_PROGRESS=0`, `COMPLETED=1`, `FAILED=2`.
@@ -154,6 +176,8 @@ Spring 쪽 트랜잭션 경계(`ReferenceVideoService`): 서킷 확인 → 파�
 | `exercise_code` | `exercises.code`(V25) 저장값 그대로 — `"SQUAT"`. NULL 이면 빈 문자열 | 분석기 레지스트리 키로 쓴다. 지금은 `_EXERCISE_ID_TO_TYPE={1:"squat"}` DB id 표 — 빈 문자열이면 그 표로 폴백. `ExtractReferenceData` 의 `analyze_video(path,"squat")` 하드코딩도 이 값으로 |
 | `target_reps_per_set` | `exercise_sessions.target_reps_per_set`(V26) — body 또는 추천 공식. 0 = 없음 | «n세트 완료» TTS cue, `ReportFeedbackBatch.set_no`. **세트 저장·집계는 Spring 이 `pose_data` 로 하므로 AI 는 세트를 기억할 필요가 없다** |
 | `target_sets` | 사용자 값만. 0 = 열린 세트 | «마지막 세트» cue |
+| `depth_mode` (AnalyzeRequest **10** · ReattachRequest **11**) | `exercise_sessions.squat_depth_mode`(V29) — `"FULL"`·`"HALF"`, 빈 문자열이면 FULL | 스쿼트 깊이 판정 기준 선택(SquatCounter). 번호가 10·11 인 이유는 [changelog 2026-10-20](./ai-backend-changelog.md) — 두 갈래가 7번을 다르게 써서 병합 때 뒤로 옮겼다 |
+| `sync_good_threshold` · `sync_warn_threshold` (AnalyzeRequest **11·12** · ReattachRequest **12·13**) 🆕 2026-10-21 | `exercises.sync_good_threshold`·`sync_warn_threshold`(V34, 기본 80·60, 관리자 PATCH `/thresholds` `{good, warn}`). 세션 시작·재부착 응답에도 같은 값이 실려 앱의 색·진동이 같은 기준을 쓴다 | **읽는다(완료)** — `resolve_sync_thresholds` 가 0·범위 밖·`warn ≥ good` 이면 80·60 으로 바꾸고 경고 로그. `SessionState` 에 저장해 `_summarize_rep` 이 «자세 양호(≥good) / 자세 보정 필요(≥warn) / 즉시 자세 수정 필요» 를 가른다. 재부착은 살아 있는 세션 값을 덮지 않는다(`depth_mode` 와 같음). **페르소나별 상수 `SYNC_THRESHOLDS` 는 삭제** — [`../12-persona-difficulty.md`](../12-persona-difficulty.md) 머리말 |
 
 - **한쪽만 배포돼도 안 깨진다** — proto3 기본값(`""`·`0`)이 «없음» 이고, AI 는 모르는 필드를 무시한다. 재생성된 `exercise_pb2.py` 는 커밋돼 있다(CI `ai-server-test.yml` 이 원본과 대조).
 - **판정 기준 갱신은 아직이다** — 계약에 코드가 실려도 AI 가 안 읽으면 런지 세션은 여전히 id 표 밖이라 `StartAnalysis` 거절(#147 ㄷ). 갱신 트리거 1번(메시지 추가)에는 해당하고 5번(판정 기준)은 AI 쪽 작업 뒤에 온다.

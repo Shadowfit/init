@@ -1,6 +1,9 @@
 package com.shadowfit.controller;
 
+import com.shadowfit.dto.admin.AdminMemberDetailDto;
 import com.shadowfit.dto.admin.AdminMemberListItemDto;
+import com.shadowfit.service.admin.AdminInsightService;
+import org.springframework.web.bind.annotation.PathVariable;
 import com.shadowfit.dto.admin.AdminMemberSearchCondition;
 import com.shadowfit.dto.admin.AdminMemberSortKey;
 import com.shadowfit.dto.common.PageResponse;
@@ -25,6 +28,15 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminMemberController {
 
     private final AdminMemberService adminMemberService;
+    private final AdminInsightService adminInsightService;
+
+    @Operation(summary = "회원 상세",
+               description = "프로필 · 권한 · 세션 집계(전체·완료·평균 싱크로율·마지막 운동) · 참여 모임 · 최근 세션 10개. "
+                       + "없는 회원 404(U001).")
+    @GetMapping("/{memberId}")
+    public ResponseEntity<AdminMemberDetailDto> getMember(@PathVariable Long memberId) {
+        return ResponseEntity.ok(adminInsightService.memberDetail(memberId));
+    }
 
     @Operation(summary = "회원 목록 조회",
                description = "필터 5종(검색어·페르소나·운동레벨·온보딩여부·가입일범위)의 임의 조합으로 조회한다. "

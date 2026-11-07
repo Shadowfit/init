@@ -170,7 +170,11 @@ services:
       # AI 가 같은 볼륨을 같은 경로로 보므로 REFERENCE_VIDEO_AI_DIR 은 안 넘긴다(비면 DIR 과 같음).
       # 호스트 bootRun + AI 컨테이너 조합에서만 REFERENCE_VIDEO_AI_DIR=/data/reference-videos 를 준다.
       REFERENCE_VIDEO_DIR: /data/reference-videos
+      # 모임 피드 공유 사진 — 아래 volumes 의 컨테이너 쪽 경로와 같아야 한다. AI 는 안 본다.
+      FEED_PHOTO_DIR: /data/feed-photos
     volumes:
+      # 피드 사진도 bind mount — 컨테이너를 재빌드해도 올린 사진이 남는다.
+      - ./backend/data/feed-photos:/data/feed-photos
       # 기준 영상 공유 (2026-09-17 confirm — 전달 방식 ①). Spring 이 쓰고 AI 가 읽는다.
       # 이름 있는 볼륨이 아니라 bind mount 인 이유: 호스트에서 파일이 보여야 «AI 가 못 읽는다» 를
       # 디버깅할 수 있고, 호스트 bootRun 이 같은 폴더를 쓸 수 있다. 전제는 **같은 호스트** — 분리하면

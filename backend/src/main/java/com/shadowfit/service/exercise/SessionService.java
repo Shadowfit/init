@@ -21,6 +21,7 @@ import com.shadowfit.model.outbox.OutboxEvent;
 import com.shadowfit.repository.outbox.OutboxEventRepository;
 import com.shadowfit.model.exercise.Exercise;
 import com.shadowfit.model.exercise.Session;
+import com.shadowfit.model.exercise.SquatDepthMode;
 import com.shadowfit.model.exercise.Status;
 import com.shadowfit.model.member.Member;
 import com.shadowfit.repository.exercise.ExercisesRepository;
@@ -147,6 +148,7 @@ public class SessionService {
                 .startTime(LocalDateTime.now().withNano(0))
                 .status(Status.IN_PROGRESS)
                 .sessionNonce(sessionNonceGenerator.generate())
+                .squatDepthMode(appDto.getDepthMode() != null ? appDto.getDepthMode() : SquatDepthMode.FULL)
                 .difficultyLevel(recommendation.difficultyLevel())
                 .targetRepsPerSet(targetRepsPerSet)
                 .targetSets(appDto.getTargetSets())

@@ -92,6 +92,7 @@ security:
     # 신원은 refresh token 의 서명에서 나온다 — decisions/token-lifecycle.md §4-2
     - "/member/reissue"
     - "/ws/**"
+    - "/feed-photos/**"
     - "/actuator/health"
     - "/actuator/health/**"
     # 관리 포트를 분리해도 필터체인은 두 포트에 공유된다(2026-08-08 실측) — 그래서 permitAll 이

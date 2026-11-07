@@ -78,6 +78,36 @@ def test_상태가_살아있으면_아무것도_덮어쓰지_않는다():
     assert len(state.current_rep_frames) == 1
 
 
+def test_create_는_depth_mode_기본값이_FULL이고_지정하면_저장한다():
+    registry = SessionStateRegistry()
+
+    default_state = registry.create(session_id=1, exercise_id=1, reference_angles=_REF)
+    assert default_state.depth_mode == "FULL"
+
+    half_state = registry.create(
+        session_id=2, exercise_id=1, reference_angles=_REF, depth_mode="HALF",
+    )
+    assert half_state.depth_mode == "HALF"
+
+
+def test_재부착은_기존_세션의_depth_mode를_덮어쓰지_않는다():
+    """persona와 동일한 규약 — Spring이 재부착에서 다른 값을 보내도 진행 중이던 세션의
+    깊이 모드를 바꾸면, 이미 그 모드로 판정 중이던 SquatCounter와 어긋난다."""
+    registry, _ = _registry_with_live_session()
+    registry._sessions[1].depth_mode = "HALF"
+
+    state, already_active = registry.create_if_absent(
+        session_id=1,
+        exercise_id=1,
+        reference_angles=_REF,
+        persona="BEGINNER",
+        depth_mode="FULL",  # DB 값이 뒤처져 있거나 다르게 와도
+    )
+
+    assert already_active is True
+    assert state.depth_mode == "HALF"  # 보관값 유지
+
+
 def test_create_는_여전히_덮어쓴다():
     """create 의 기존 동작은 그대로다 — 재부착만 다른 규칙을 쓴다는 것을 고정한다."""
     registry, _ = _registry_with_live_session()

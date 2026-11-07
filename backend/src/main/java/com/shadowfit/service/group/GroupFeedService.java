@@ -1,7 +1,10 @@
 package com.shadowfit.service.group;
 
+import com.shadowfit.dto.group.EventCheerDto;
 import com.shadowfit.dto.group.GroupFeedResponseDto;
 import com.shadowfit.dto.group.ReactionSummaryDto;
+import com.shadowfit.model.group.EventCheer;
+import com.shadowfit.repository.group.EventCheerRepository;
 import com.shadowfit.global.error.BusinessException;
 import com.shadowfit.global.error.ErrorCode;
 import com.shadowfit.model.group.GroupEvent;
@@ -44,6 +47,7 @@ public class GroupFeedService {
     private final EventReactionRepository eventReactionRepository;
     private final EventReactionStore eventReactionStore;
     private final MemberRepository memberRepository;
+    private final EventCheerRepository eventCheerRepository;
 
     @Transactional(readOnly = true)
     public GroupFeedResponseDto feed(Long groupId, Long memberId, Long beforeSeq, int size) {
@@ -55,9 +59,10 @@ public class GroupFeedService {
         List<GroupEvent> events = groupEventRepository
                 .findAllByGroupIdAndSeqLessThanOrderBySeqDesc(groupId, cursor, PageRequest.of(0, safeSize));
         Map<Long, ReactionSummaryDto> summaries = summarize(events, memberId);
+        Map<Long, List<EventCheerDto>> cheers = cheersOf(events);
 
         List<GroupFeedResponseDto.Item> items = events.stream()
-                .map(e -> GroupFeedResponseDto.Item.of(e, summaries.get(e.getId())))
+                .map(e -> GroupFeedResponseDto.Item.of(e, summaries.get(e.getId()), cheers.get(e.getId())))
                 .toList();
         Long next = items.size() == safeSize ? items.get(items.size() - 1).getSeq() : null;
         return GroupFeedResponseDto.builder().items(items).nextBeforeSeq(next).build();
@@ -89,6 +94,46 @@ public class GroupFeedService {
         GroupEvent event = target(groupId, seq, memberId);
         eventReactionStore.delete(event.getId(), memberId, kind);
         return summaryOf(event, memberId);
+    }
+
+    /**
+     * 응원 한마디 — 한 글에 회원당 한 줄(V27 UNIQUE). 있으면 문구를 바꾸고 없으면 만든다. 응답은 그 글의 응원 전부.
+     * 리액션처럼 알림 · WS 발행은 없다 — 화면을 다시 열면 보인다.
+     */
+    @Transactional
+    public List<EventCheerDto> cheer(Long groupId, Long seq, Long memberId, String message) {
+        GroupEvent event = target(groupId, seq, memberId);
+        String text = message.strip();
+        eventCheerRepository.findByEventIdAndMemberId(event.getId(), memberId).ifPresentOrElse(
+                c -> c.changeMessage(text),
+                () -> eventCheerRepository.save(EventCheer.builder()
+                        .event(event)
+                        .member(memberRepository.findById(memberId)
+                                .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND)))
+                        .message(text)
+                        .build()));
+        eventCheerRepository.flush();
+        return cheersOf(List.of(event)).get(event.getId());
+    }
+
+    /** 내 응원 지우기 — 없어도 200(멱등). */
+    @Transactional
+    public List<EventCheerDto> uncheer(Long groupId, Long seq, Long memberId) {
+        GroupEvent event = target(groupId, seq, memberId);
+        eventCheerRepository.deleteByEventIdAndMemberId(event.getId(), memberId);
+        return cheersOf(List.of(event)).get(event.getId());
+    }
+
+    /** 이벤트 목록의 응원을 쿼리 하나로 — 응원이 없는 글은 빈 리스트. */
+    private Map<Long, List<EventCheerDto>> cheersOf(List<GroupEvent> events) {
+        Map<Long, List<EventCheerDto>> out = new HashMap<>();
+        events.forEach(e -> out.put(e.getId(), new ArrayList<>()));
+        if (!events.isEmpty()) {
+            for (EventCheer c : eventCheerRepository.findAllByEventIds(events.stream().map(GroupEvent::getId).toList())) {
+                out.get(c.getEvent().getId()).add(EventCheerDto.from(c));
+            }
+        }
+        return out;
     }
 
     private GroupEvent target(Long groupId, Long seq, Long memberId) {

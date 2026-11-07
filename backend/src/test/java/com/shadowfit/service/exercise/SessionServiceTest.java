@@ -78,7 +78,6 @@ class SessionServiceTest {
         category = categoryRepository.save(Category.builder().name("LOWER").build());
         exercise = exercisesRepository.saveAndFlush(Exercise.builder()
                 .name("스쿼트").category(category).expectedDurationMinutes(15)
-                .syncThresholdBeginner(new BigDecimal("60.00")).syncThresholdAdvanced(new BigDecimal("85.00"))
                 .analysisSupported(true)  // 기본값이 false라 명시 필요 — 없으면 createSession이 W007로 막힘
                 .build());
     }
@@ -188,7 +187,6 @@ class SessionServiceTest {
         void createSession_analysisNotSupported_throws() {
             Exercise unsupported = exercisesRepository.saveAndFlush(Exercise.builder()
                     .name("런지").category(category).expectedDurationMinutes(15)
-                    .syncThresholdBeginner(new BigDecimal("60.00")).syncThresholdAdvanced(new BigDecimal("85.00"))
                     .build());  // analysisSupported 기본값 false
             VideoRequestDto dto = VideoRequestDto.builder().exerciseId(unsupported.getId()).build();
 

@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
@@ -46,7 +46,7 @@ export default function ActivityScreen() {
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* 헤더 */}
         <View style={styles.header}>
-          <Text style={styles.title}>Activity</Text>
+          <Text style={styles.title}>운동 기록</Text>
         </View>
 
         {/* 주간 네비게이션 (현재 주만 표시 - 추후 이전/다음 주 기능 확장) */}
@@ -68,9 +68,9 @@ export default function ActivityScreen() {
           <>
             {/* 주간 통계 */}
             <View style={styles.statsRow}>
-              <WeeklyStat Icon={Dumbbell} value={String(data?.totalWorkouts ?? 0)} label="Workouts" />
-              <WeeklyStat Icon={Timer} value={String(data?.totalMinutes ?? 0)} label="Min" />
-              <WeeklyStat Icon={Flame} value={String(data?.totalCalories ?? 0)} label="Kcal" />
+              <WeeklyStat Icon={Dumbbell} value={String(data?.totalWorkouts ?? 0)} label="완료 횟수" />
+              <WeeklyStat Icon={Timer} value={String(data?.totalMinutes ?? 0)} label="운동 시간(분)" />
+              <WeeklyStat Icon={Flame} value={String(data?.totalCalories ?? 0)} label="소모 열량(kcal)" />
             </View>
 
             {/* 운동일지 */}
@@ -79,7 +79,7 @@ export default function ActivityScreen() {
 
               <View style={styles.summaryCard}>
                 <Text style={styles.summaryText}>
-                  {data?.totalWorkouts ?? 0} Workouts   {data?.totalMinutes ?? 0} Min   {data?.totalCalories ?? 0} Kcal
+                  {data?.totalWorkouts ?? 0}회 완료 · {data?.totalMinutes ?? 0}분 운동
                 </Text>
                 <ChevronRight size={14} color={COLORS.textMuted} strokeWidth={2} />
               </View>
@@ -126,17 +126,17 @@ export default function ActivityScreen() {
                     key={ex.sessionId}
                     style={styles.exerciseCard}
                     activeOpacity={0.7}
-                    onPress={() => router.push(`/report/${ex.sessionId}` as any)}
+                    onPress={() => ex.scoreAvailable === false
+                      ? Alert.alert(ex.exerciseName, `${ex.setSummary}\n자세 점수는 측정하지 않았습니다.`)
+                      : router.push(`/report/${ex.sessionId}` as any)}
                   >
                     <View style={styles.exerciseInfo}>
                       <Text style={styles.exerciseName}>{ex.exerciseName}</Text>
                       <Text style={styles.exerciseSets}>{ex.setSummary}</Text>
                     </View>
-                    <View style={styles.syncBadge}>
-                      <Text style={[styles.syncValue, { color: getSyncColor(ex.syncRate) }]}>
-                        {Math.round(ex.syncRate)}%
-                      </Text>
-                      <Text style={styles.syncLabel}>싱크로율</Text>
+                    <View style={styles.detailBadge}>
+                      <Text style={styles.detailText}>{ex.scoreAvailable === false ? '횟수 기록' : '기록 보기'}</Text>
+                      <ChevronRight size={14} color={COLORS.textMuted} strokeWidth={2} />
                     </View>
                   </TouchableOpacity>
                 ))
@@ -159,13 +159,6 @@ function WeeklyStat({ Icon, value, label }: { Icon: LucideIcon; value: string; l
       <Text style={styles.statLabel}>{label}</Text>
     </View>
   );
-}
-
-// 싱크로율 색상 구간: 80%+ 정석 / 60~80% 교정 필요 / <60% 부상 위험
-function getSyncColor(rate: number) {
-  if (rate >= 80) return COLORS.primary;
-  if (rate >= 60) return COLORS.warning;
-  return COLORS.error;
 }
 
 const styles = StyleSheet.create({
@@ -246,9 +239,8 @@ const styles = StyleSheet.create({
   exerciseInfo: { flex: 1 },
   exerciseName: { fontSize: FONT_SIZE.md, fontWeight: '700', color: COLORS.text },
   exerciseSets: { fontSize: FONT_SIZE.sm, color: COLORS.textSecondary, marginTop: 2 },
-  syncBadge: { alignItems: 'flex-end' },
-  syncValue: { fontSize: FONT_SIZE.xl, fontWeight: '800' },
-  syncLabel: { fontSize: FONT_SIZE.xs, color: COLORS.textSecondary },
+  detailBadge: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+  detailText: { fontSize: FONT_SIZE.sm, fontWeight: '700', color: COLORS.textSecondary },
 
   loadingBox: {
     paddingVertical: SPACING.xxxl,

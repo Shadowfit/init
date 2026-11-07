@@ -16,9 +16,9 @@ import jakarta.validation.constraints.Size;
  * 붙는 순서라, 등록자가 {@code true} 를 실어 보낼 수 있으면 <b>분석기가 없는 종목의 세션이
  * 열린다</b> — 그리고 그건 W007 가드가 막으려던 바로 그 상황이다({@code Exercise.java} 주석).
  *
- * <p><b>임계값 4종도 없다.</b> 엔티티 기본값(60/85/70/50)으로 시작하고, 바꾸려면 등록 후
+ * <p><b>판정 기준(정석·위험, V34)도 없다.</b> 엔티티 기본값(80/60)으로 시작하고, 바꾸려면 등록 후
  * {@code PATCH /admin/exercises/{id}/thresholds} 를 쓴다. 그쪽에는
- * {@code beginner < advanced} 불변식 검증이 이미 있어서, 등록에도 실으면 같은 검증을 두 곳에서
+ * {@code 0 < warn < good ≤ 100} 불변식 검증이 이미 있어서, 등록에도 실으면 같은 검증을 두 곳에서
  * 하게 된다.
  */
 @Schema(description = "운동 종목 등록 요청")

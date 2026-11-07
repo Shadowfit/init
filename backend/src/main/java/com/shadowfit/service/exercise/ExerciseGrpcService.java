@@ -28,6 +28,7 @@ public class ExerciseGrpcService extends ExerciseServiceGrpc.ExerciseServiceImpl
     private final SessionService sessionService;
     private final FeedbackLogService feedbackLogService;
     private final SessionMetrics sessionMetrics;
+    private final RejectedAttemptService rejectedAttemptService;
 
     /**
      * 클라이언트가 <b>이미 포기한</b> 요청인가 (#206 결함 B).
@@ -276,8 +277,12 @@ public class ExerciseGrpcService extends ExerciseServiceGrpc.ExerciseServiceImpl
     }
 
     /**
-     * [AI -> Spring] 유튜브 영상에서 추출된 '정석 기준 좌표' 전체를 수신하여 저장합니다.
+     * [AI -> Spring] 기준 영상에서 추출된 '정석 기준 좌표' 전체를 수신하여 저장합니다.
      * 운동 종목 등록 시 AI 서버가 추출한 좌표 데이터를 DB에 영속화하는 역할을 합니다.
+     *
+     * <p>{@code error_message} 가 있으면 AI 가 백그라운드 추출에 실패했다는 통보다(2026-10-21) — 좌표는 비어 오고,
+     * 기존 기준은 그대로 둔 채 실패 사유만 종목 행에 남긴다({@code PoseDataService.saveReferencePoses}). 그 기록도
+     * «접수 완료» 라 응답은 success=true 다 — AI 가 재시도할 일이 아니다.
      */
     @Override
     public void extractReferenceData(com.shadowfit.grpc.ExtractRequest request,
@@ -288,7 +293,8 @@ public class ExerciseGrpcService extends ExerciseServiceGrpc.ExerciseServiceImpl
         try {
             log.info("기준 좌표 추출 데이터 수신 시작 - 운동 ID: {}", request.getExerciseId());
 
-            poseDataService.saveReferencePoses(request.getExerciseId(), request.getExtractedPosesList());
+            poseDataService.saveReferencePoses(request.getExerciseId(), request.getExtractedPosesList(),
+                    request.getErrorMessage());
 
             ExtractResponse extractResponse = ExtractResponse.newBuilder()
                     .setSuccess(true)
@@ -297,7 +303,8 @@ public class ExerciseGrpcService extends ExerciseServiceGrpc.ExerciseServiceImpl
 
             responseObserver.onNext(extractResponse);
             responseObserver.onCompleted();
-            log.info("기준 좌표 저장 완료 - 운동 ID: {}", request.getExerciseId());
+            log.info("기준 좌표 역호출 처리 완료 - 운동 ID: {} ({})", request.getExerciseId(),
+                    request.getErrorMessage().isBlank() ? "저장" : "실패 기록");
         } catch (com.shadowfit.global.error.BusinessException e) {
             rejectWith("기준 좌표 저장", request.getExerciseId(), e, responseObserver);
         } catch (Exception e) {
@@ -390,6 +397,50 @@ public class ExerciseGrpcService extends ExerciseServiceGrpc.ExerciseServiceImpl
                 log.error("피드백 batch 처리 중 에러: {}", e.getMessage());
                 responseObserver.onError(io.grpc.Status.INTERNAL
                         .withDescription(e.getMessage())
+                        .asRuntimeException());
+            }
+        }
+    }
+
+    /**
+     * [AI -> Spring] «미인정 시도» 1건 (2026-10-21, V35) — 내려갔다 올라왔지만 1회로 인정되지 않은 시도.
+     * 횟수·세트에는 안 들어가고 점수·리포트에만 들어간다({@link RejectedAttemptService}).
+     *
+     * <p>응답 규약은 다른 AI 콜백과 같다: 저장·중복(재전송)·종료된 세션에 늦게 도착 — 셋 다 {@code success=true}
+     * (재전송할 일이 아니다). 형식·범위 위반은 INVALID_ARGUMENT, 세션 없음은 NOT_FOUND({@link #rejectWith}),
+     * 잠금 경합에 진 것은 ABORTED(상대가 다시 던지면 대개 성공한다), 그 밖은 INTERNAL.
+     *
+     * <p>pose 배치와 달리 핸들러 안 데드락 재시도는 없다 — 시도는 세션당 몇 건이고 행 하나짜리 INSERT 라, 경합에
+     * 지는 일 자체가 드물고 지면 AI 쪽 재전송으로 충분하다.
+     */
+    @Override
+    public void saveRejectedAttempt(RejectedAttemptRequest request,
+                                    StreamObserver<RejectedAttemptResponse> responseObserver) {
+        if (abortIfClientGaveUp("SaveRejectedAttempt", responseObserver)) {
+            return;
+        }
+        try (CorrelationIds.Scope ignored = CorrelationIds.withSession(request.getSessionId())) {
+            try {
+                rejectedAttemptService.save(request);
+
+                responseObserver.onNext(RejectedAttemptResponse.newBuilder().setSuccess(true).build());
+                responseObserver.onCompleted();
+            } catch (CallAbandonedException e) {
+                log.warn("세션 {} : 호출자가 포기해 {}", request.getSessionId(), e.getMessage());
+                responseObserver.onError(io.grpc.Status.CANCELLED
+                        .withDescription(e.getMessage())
+                        .asRuntimeException());
+            } catch (com.shadowfit.global.error.BusinessException e) {
+                rejectWith("미인정 시도", request.getSessionId(), e, responseObserver);
+            } catch (PessimisticLockingFailureException e) {
+                log.warn("세션 {} : 미인정 시도 저장이 잠금 경합에 졌다 — ABORTED 로 돌려준다", request.getSessionId());
+                responseObserver.onError(io.grpc.Status.ABORTED
+                        .withDescription("LOCK_CONFLICT: " + e.getMessage())
+                        .asRuntimeException());
+            } catch (Exception e) {
+                log.error("미인정 시도 저장 실패: {} — {}", e.getClass().getSimpleName(), e.getMessage());
+                responseObserver.onError(io.grpc.Status.INTERNAL
+                        .withDescription(e.getClass().getSimpleName() + ": " + e.getMessage())
                         .asRuntimeException());
             }
         }

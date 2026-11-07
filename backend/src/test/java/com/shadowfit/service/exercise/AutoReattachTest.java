@@ -83,10 +83,12 @@ class AutoReattachTest {
         // 여기 mock 들(sessionService/poseDataRepository/referenceRepository)을 그대로 넣은
         // 실제 인스턴스를 조립해서 넘긴다 — ReattachFailurePathTest 와 같은 이유.
         ReattachRequestBuilder reattachRequestBuilder =
-                new ReattachRequestBuilder(sessionService, poseDataRepository, referenceRepository);
+                new ReattachRequestBuilder(sessionService, poseDataRepository, referenceRepository,
+                        mock(com.shadowfit.repository.exercise.RejectedAttemptRepository.class));
         service = new ExerciseAnalysisService(sessionRepository, exercisesRepository,
                 memberRepository, sessionService, referenceRepository,
-                circuitBreakerRegistry, metrics, outboxEventRepository, reattachRequestBuilder);
+                circuitBreakerRegistry, metrics, outboxEventRepository, reattachRequestBuilder,
+                mock(ReferenceExtractionStatusService.class));
         ReflectionTestUtils.setField(service, "internalToken", "test-token");
         ReflectionTestUtils.setField(service, "aiChannelPoolSize", 1);
         ReflectionTestUtils.setField(service, "aiBlockingStubPool", List.of(blockingStub));

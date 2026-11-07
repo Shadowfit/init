@@ -85,8 +85,8 @@ class SessionCompletedFeedFanoutRaceTest extends MySqlContainerSupport {
         Category category = categoryRepository.findByName("LOWER")
                 .orElseGet(() -> categoryRepository.save(Category.builder().name("LOWER").build()));
         exercise = exercisesRepository.saveAndFlush(Exercise.builder().name("스쿼트").category(category)
-                .expectedDurationMinutes(15).syncThresholdBeginner(new BigDecimal("60.00"))
-                .syncThresholdAdvanced(new BigDecimal("85.00")).build());
+                .expectedDurationMinutes(15)
+                .build());
         groupA = groupRepository.saveAndFlush(Group.builder().name("A").inviteCode("FANOUTA1").createdBy(alice).build());
         groupB = groupRepository.saveAndFlush(Group.builder().name("B").inviteCode("FANOUTB1").createdBy(bob).build());
         for (Member m : List.of(alice, bob)) {

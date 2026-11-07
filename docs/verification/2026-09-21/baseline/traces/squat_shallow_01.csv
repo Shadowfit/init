@@ -1,0 +1,22 @@
+time_sec,stage,phase,left_knee,right_knee,left_hip,right_hip,reps,guidance,coaching_event
+0.0,waiting_for_standing,transition,,142.95,,140.68,0,정면 기준 45도에서 머리부터 발목까지 보이도록 똑바로 서주세요.,
+0.365,waiting_for_standing,descending,,94.68,,95.6,0,정면 기준 45도에서 머리부터 발목까지 보이도록 똑바로 서주세요.,
+0.731,waiting_for_standing,ascending,,107.62,,102.22,0,정면 기준 45도에서 머리부터 발목까지 보이도록 똑바로 서주세요.,
+1.096,waiting_for_standing,ascending,,172.34,,147.05,0,정면 기준 45도에서 머리부터 발목까지 보이도록 똑바로 서주세요.,
+1.462,waiting_for_standing,descending,,156.05,,134.57,0,정면 기준 45도에서 머리부터 발목까지 보이도록 똑바로 서주세요.,
+1.827,waiting_for_standing,descending,,90.0,,82.85,0,정면 기준 45도에서 머리부터 발목까지 보이도록 똑바로 서주세요.,
+2.192,waiting_for_standing,ascending,,112.3,,93.91,0,정면 기준 45도에서 머리부터 발목까지 보이도록 똑바로 서주세요.,
+2.558,waiting_for_standing,ascending,,173.91,,142.83,0,정면 기준 45도에서 머리부터 발목까지 보이도록 똑바로 서주세요.,
+2.923,waiting_for_standing,descending,,146.89,,130.77,0,정면 기준 45도에서 머리부터 발목까지 보이도록 똑바로 서주세요.,
+3.288,waiting_for_standing,descending,,103.78,,97.96,0,정면 기준 45도에서 머리부터 발목까지 보이도록 똑바로 서주세요.,
+3.654,waiting_for_standing,ascending,,155.1,,135.98,0,정면 기준 45도에서 머리부터 발목까지 보이도록 똑바로 서주세요.,
+4.019,ready,standing,,171.04,,156.71,0,준비됐습니다. 제자리에서 스쿼트를 시작하세요.,
+4.385,descending,descending,,133.55,,132.81,0,편안한 범위에서 무릎과 고관절을 굽혀주세요.,
+4.75,descending,bottom,,101.49,,101.69,0,편안한 범위에서 무릎과 고관절을 굽혀주세요.,
+5.115,ready,standing,,166.25,,144.93,0,이번 동작은 세지 않았습니다. 준비 자세에서 다시 시작하세요.,이번 동작에서 충분히 내려간 장면을 확인하지 못했어요.
+5.481,ready,standing,,173.18,,152.47,0,이번 동작은 세지 않았습니다. 준비 자세에서 다시 시작하세요.,
+5.846,descending,bottom,,111.18,,106.8,0,편안한 범위에서 무릎과 고관절을 굽혀주세요.,
+6.212,descending,transition,,115.02,,103.65,0,편안한 범위에서 무릎과 고관절을 굽혀주세요.,
+6.577,ready,standing,,175.3,,149.2,0,이번 동작은 세지 않았습니다. 준비 자세에서 다시 시작하세요.,이번 동작에서 충분히 내려간 장면을 확인하지 못했어요.
+6.942,ready,standing,,178.86,,164.33,0,이번 동작은 세지 않았습니다. 준비 자세에서 다시 시작하세요.,
+7.308,ready,standing,,178.53,,171.71,0,이번 동작은 세지 않았습니다. 준비 자세에서 다시 시작하세요.,

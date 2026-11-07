@@ -1,11 +1,10 @@
-import { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, } from 'react-native';
+import { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Alert } from '@/utils/alert';
-import { BellRing, Heart } from 'lucide-react-native';
+import { Flame } from 'lucide-react-native';
 import { COLORS, FONT_SIZE, SPACING, RADIUS } from '@/constants/Colors';
 import { friendService } from '@/services/friendService';
 import type { MemberAttendanceStatus } from '@/types/social';
-import CheerModal from './CheerModal';
 
 // 백엔드 ErrorResponseDto 는 {status, message, timestamp} — code 필드가 없다(2026-09-17 실측, api.ts 주석과 같음).
 // 그래서 분기는 HTTP status 로만 하고, 문장은 서버 message(이미 한국어)를 그대로 쓴다.
@@ -32,20 +31,34 @@ interface FriendStatusListProps {
   emptyText?: string;
   // 최대 N명만 (홈 미리보기용). 생략하면 전부
   limit?: number;
+  // 목록에 나도 섞여 있으면 그 줄은 «(나)» 로 표시하고 버튼을 안 그린다
+  meId?: number;
 }
 
 /**
- * 친구/구성원 운동 현황 카드 목록 + 재촉·응원 동작.
+ * 친구/구성원 운동 현황 + 재촉하기.
  * 홈(«내 모임 친구 운동 현황»)과 모임 상세(«구성원 운동 현황»)가 같이 쓴다 — 데이터 모양이 같다(/friends ↔ /groups/{id}/members/status).
  *
- * 재촉 버튼은 오늘 완료한 사람에겐 숨긴다(서버는 안 막는다 — 핸드오프 문서). 응원은 누구에게나.
+ * 재촉하기는 **오늘 운동 안 한 사람에게만** 보인다(서버는 안 막는다 — 버튼 노출은 프론트 규칙).
+ * 응원 한마디는 여기가 아니라 모임 피드의 공유 글에 단다.
  */
-export default function FriendStatusList({ statuses, emptyText = '아직 모임 친구가 없어요', limit }: FriendStatusListProps) {
-  const [cheerTarget, setCheerTarget] = useState<MemberAttendanceStatus | null>(null);
-  const [sending, setSending] = useState(false);
-  // 이 화면에서 이미 보낸 사람 — 버튼을 바로 비활성화해 409 왕복을 줄인다 (서버가 최종 판정)
+export default function FriendStatusList({ statuses, emptyText = '아직 모임 친구가 없어요', limit, meId }: FriendStatusListProps) {
+  // 오늘 이미 재촉한 사람 — 버튼을 «재촉함» 으로 잠근다. 서버 기록에서 채우므로 다른 화면에 갔다 와도 유지된다.
+  // statuses 는 부모가 화면 포커스마다 새로 받아오므로, 그때마다 같이 다시 묻는다.
   const [nudged, setNudged] = useState<Set<number>>(new Set());
-  const [cheered, setCheered] = useState<Set<number>>(new Set());
+
+  useEffect(() => {
+    let alive = true;
+    friendService
+      .getNudgedToday()
+      .then((res) => alive && setNudged(new Set(res.data)))
+      .catch(() => {
+        // 못 받아와도 서버가 두 번째 재촉을 409 로 막는다 — 버튼만 덜 정확할 뿐
+      });
+    return () => {
+      alive = false;
+    };
+  }, [statuses]);
 
   const shown = limit ? statuses.slice(0, limit) : statuses;
 
@@ -53,26 +66,10 @@ export default function FriendStatusList({ statuses, emptyText = '아직 모임 
     try {
       await friendService.nudge(target.memberId);
       setNudged((prev) => new Set(prev).add(target.memberId));
-      Alert.alert('재촉 완료', `${target.username}님에게 재촉을 보냈어요 👊`);
+      Alert.alert('재촉 완료', `${target.username}님에게 재촉을 보냈어요 🔥`);
     } catch (e: any) {
       if (isConflict(e)) setNudged((prev) => new Set(prev).add(target.memberId));
       Alert.alert('재촉 실패', errorMessage(e, '재촉을 보내지 못했어요. 잠시 후 다시 시도해주세요.'));
-    }
-  };
-
-  const handleCheer = async (message: string) => {
-    if (!cheerTarget) return;
-    setSending(true);
-    try {
-      await friendService.cheer(cheerTarget.memberId, message);
-      setCheered((prev) => new Set(prev).add(cheerTarget.memberId));
-      setCheerTarget(null);
-      Alert.alert('응원 완료', `${cheerTarget.username}님에게 응원을 보냈어요 💛`);
-    } catch (e: any) {
-      if (isConflict(e)) setCheered((prev) => new Set(prev).add(cheerTarget.memberId));
-      Alert.alert('응원 실패', errorMessage(e, '응원을 보내지 못했어요. 잠시 후 다시 시도해주세요.'));
-    } finally {
-      setSending(false);
     }
   };
 
@@ -88,54 +85,33 @@ export default function FriendStatusList({ statuses, emptyText = '아직 모임 
     <View style={styles.card}>
       {shown.map((s, i) => {
         const label = statusLabel(s);
+        const isMe = meId != null && s.memberId === meId;
         const alreadyNudged = nudged.has(s.memberId);
-        const alreadyCheered = cheered.has(s.memberId);
         return (
           <View key={s.memberId} style={[styles.row, i < shown.length - 1 && styles.rowDivider]}>
             <View style={styles.avatar}>
               <Text style={styles.avatarText}>{s.username.slice(0, 1)}</Text>
             </View>
             <View style={styles.info}>
-              <Text style={styles.name} numberOfLines={1}>{s.username}</Text>
+              <Text style={styles.name} numberOfLines={1}>{s.username}{isMe ? ' (나)' : ''}</Text>
               <Text style={[styles.status, styles[`status_${label.tone}`]]}>{label.text}</Text>
             </View>
-            <View style={styles.actions}>
-              {!s.attendedToday && (
-                <TouchableOpacity
-                  style={[styles.actionBtn, alreadyNudged && styles.actionBtnDisabled]}
-                  onPress={() => handleNudge(s)}
-                  disabled={alreadyNudged}
-                  activeOpacity={0.8}
-                >
-                  <BellRing size={14} color={alreadyNudged ? COLORS.textMuted : COLORS.black} strokeWidth={2.25} />
-                  <Text style={[styles.actionText, alreadyNudged && styles.actionTextDisabled]}>
-                    {alreadyNudged ? '재촉함' : '재촉'}
-                  </Text>
-                </TouchableOpacity>
-              )}
+            {!isMe && !s.attendedToday && (
               <TouchableOpacity
-                style={[styles.actionBtn, styles.cheerBtn, alreadyCheered && styles.actionBtnDisabled]}
-                onPress={() => setCheerTarget(s)}
-                disabled={alreadyCheered}
+                style={[styles.nudgeBtn, alreadyNudged && styles.nudgeBtnDone]}
+                onPress={() => handleNudge(s)}
+                disabled={alreadyNudged}
                 activeOpacity={0.8}
               >
-                <Heart size={14} color={alreadyCheered ? COLORS.textMuted : COLORS.primary} strokeWidth={2.25} />
-                <Text style={[styles.actionText, styles.cheerText, alreadyCheered && styles.actionTextDisabled]}>
-                  {alreadyCheered ? '응원함' : '응원'}
+                <Text style={[styles.nudgeText, alreadyNudged && styles.nudgeTextDone]}>
+                  {alreadyNudged ? '재촉함' : '재촉하기'}
                 </Text>
+                {!alreadyNudged && <Flame size={14} color={COLORS.black} strokeWidth={2.25} fill={COLORS.black} />}
               </TouchableOpacity>
-            </View>
+            )}
           </View>
         );
       })}
-
-      <CheerModal
-        visible={!!cheerTarget}
-        targetName={cheerTarget?.username ?? ''}
-        sending={sending}
-        onClose={() => setCheerTarget(null)}
-        onSend={handleCheer}
-      />
     </View>
   );
 }
@@ -174,19 +150,16 @@ const styles = StyleSheet.create({
   status_done: { color: COLORS.primary },
   status_active: { color: COLORS.warning },
   status_idle: { color: COLORS.textMuted },
-  actions: { flexDirection: 'row', gap: SPACING.xs },
-  actionBtn: {
+  nudgeBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: SPACING.md,
-    paddingVertical: 6,
-    borderRadius: RADIUS.full,
+    paddingVertical: 7,
+    borderRadius: RADIUS.sm,
     backgroundColor: COLORS.primary,
   },
-  cheerBtn: { backgroundColor: COLORS.primaryDim, borderWidth: 1, borderColor: COLORS.primary },
-  actionBtnDisabled: { backgroundColor: COLORS.surfaceLight, borderColor: COLORS.surfaceLight },
-  actionText: { fontSize: FONT_SIZE.xs, fontWeight: '700', color: COLORS.black },
-  cheerText: { color: COLORS.primary },
-  actionTextDisabled: { color: COLORS.textMuted },
+  nudgeBtnDone: { backgroundColor: COLORS.surfaceLight },
+  nudgeText: { fontSize: FONT_SIZE.xs, fontWeight: '800', color: COLORS.black },
+  nudgeTextDone: { color: COLORS.textMuted },
 });

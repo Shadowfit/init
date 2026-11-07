@@ -9,6 +9,9 @@ export const friendService = {
   // 재촉하기 — 같은 사람 하루 1회 (409 N002). 오늘 완료한 친구에겐 버튼을 안 보이는 게 프론트 규칙
   nudge: (memberId: number) => api.post<Notification>(`/friends/${memberId}/nudge`),
 
+  // 오늘 내가 이미 재촉한 회원 id — 화면을 다시 열어도 «재촉함» 을 유지한다
+  getNudgedToday: () => api.get<number[]>('/friends/nudged-today'),
+
   // 응원 보내기 — 1~100자, 같은 사람 하루 1회 (409 N004). 재촉과 별개로 센다
   cheer: (memberId: number, message: string) =>
     api.post<Notification>(`/friends/${memberId}/cheer`, { message }),

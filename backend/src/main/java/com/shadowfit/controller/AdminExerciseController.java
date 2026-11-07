@@ -4,6 +4,8 @@ import com.shadowfit.dto.admin.AdminExerciseDetailDto;
 import com.shadowfit.dto.admin.AdminExerciseListItemDto;
 import com.shadowfit.dto.admin.AdminExerciseSearchCondition;
 import com.shadowfit.dto.admin.AdminExerciseSortKey;
+import com.shadowfit.dto.admin.AdminReferencePosesDto;
+import com.shadowfit.dto.admin.AdminReferenceSummaryDto;
 import com.shadowfit.dto.admin.AnalysisSupportUpdateDto;
 import com.shadowfit.dto.admin.ExerciseCreateDto;
 import com.shadowfit.dto.admin.ExerciseThresholdResponseDto;
@@ -57,8 +59,8 @@ public class AdminExerciseController {
     }
 
     @Operation(summary = "운동 종목 상세 조회",
-               description = "수정 폼을 채우는 데 필요한 전 필드를 돌려준다. 임계값 4종도 포함 — "
-                       + "값을 바꾸는 경로는 따로 있지만 보는 경로는 여기뿐이다.")
+               description = "수정 폼을 채우는 데 필요한 전 필드를 돌려준다. 판정 기준 한 쌍(syncGoodThreshold·syncWarnThreshold)도 "
+                       + "포함 — 값을 바꾸는 경로는 따로 있지만 보는 경로는 여기뿐이다.")
     @GetMapping("/{exerciseId}")
     public ResponseEntity<AdminExerciseDetailDto> getExercise(@PathVariable Long exerciseId) {
         return ResponseEntity.ok(adminExerciseService.getExercise(exerciseId));
@@ -66,7 +68,7 @@ public class AdminExerciseController {
 
     @Operation(summary = "운동 종목 등록",
                description = "analysisSupported 는 서버가 false 로 고정한다 — 분석기(ai-server)가 "
-                       + "붙기 전에 세션이 열리는 것을 막기 위해서다. 임계값 4종도 기본값(60/85/70/50)에서 "
+                       + "붙기 전에 세션이 열리는 것을 막기 위해서다. 판정 기준도 기본값(정석 80 / 위험 60)에서 "
                        + "시작하며, 바꾸려면 등록 후 PATCH /{id}/thresholds 를 쓴다.")
     @PostMapping
     public ResponseEntity<AdminExerciseDetailDto> createExercise(
@@ -94,8 +96,9 @@ public class AdminExerciseController {
     @Operation(summary = "기준 영상(mp4) 업로드 → 기준 좌표 추출",
                description = "multipart 필드 `file` 로 mp4 를 올리면 공유 볼륨에 저장하고 ai-server 에 기준 좌표 추출을 "
                        + "요청한다. **202 는 «추출이 시작됐다» 이지 «끝났다» 가 아니다** — 좌표는 AI 가 역호출로 "
-                       + "`exercise_references` 를 교체(#220)할 때 바뀌며, 그때까지 상세의 임계값·분석 지원 여부는 "
-                       + "그대로다. 재업로드는 이전 영상을 교체한다(운동당 1개 보관).\n\n"
+                       + "`exercise_references` 를 교체(#220)할 때 바뀐다. 진행 상황은 GET /{id}/reference 의 "
+                       + "extractionStatus(EXTRACTING → READY/FAILED, 실패 사유 extractionError)로 본다. "
+                       + "재업로드는 이전 영상을 교체한다(운동당 1개 보관).\n\n"
                        + "- 400(W016): 비었거나 .mp4 가 아니거나 mp4 파일 머리(ftyp)가 아니다\n"
                        + "- 413(C007): 크기 상한 초과(application.yml `spring.servlet.multipart.max-file-size`)\n"
                        + "- 503(W017): AI 서킷브레이커 OPEN — 파일·DB 를 건드리기 전에 거부한다")
@@ -106,8 +109,30 @@ public class AdminExerciseController {
         return ResponseEntity.accepted().body(referenceVideoService.upload(exerciseId, file));
     }
 
-    @Operation(summary = "운동 싱크로율 임계값 변경",
-               description = "4개 페르소나(초보자/고급자/다이어트/재활) 임계값을 즉시 갱신. 신규 세션부터 적용. beginner < advanced 필수.")
+    @Operation(summary = "기준 좌표 요약",
+               description = "등록된 기준 좌표의 프레임 수·출처(MANNEQUIN_3D/VIDEO)·길이(없으면 frameCount=0), "
+                       + "기준 깊이(minKneeDeg·minHipDeg — AI 와 같은 2D 각도, depthVerdict: 무릎 최솟값 60° 미만 STRICT · "
+                       + "95° 초과 LENIENT · 그 사이 OK), 가장 최근 등록 시도 결과(extractionStatus NONE/EXTRACTING/READY/FAILED, "
+                       + "extractionError, extractionAt). EXTRACTING 이 10분 넘게 그대로면 FAILED 로 보인다.")
+    @GetMapping("/{exerciseId}/reference")
+    public ResponseEntity<AdminReferenceSummaryDto> getReferenceSummary(@PathVariable Long exerciseId) {
+        return ResponseEntity.ok(adminExerciseService.referenceSummary(exerciseId));
+    }
+
+    @Operation(summary = "기준 좌표 직접 등록 (3D 시범)",
+               description = "관리자 웹이 3D 시범 마네킹의 관절을 가상 랜드마크 프레임으로 보내면 exercise_references 를 교체한다. "
+                       + "영상 업로드와 달리 AI 추출을 거치지 않는다. 형식이 틀리면 400(W021).")
+    @PutMapping("/{exerciseId}/reference-poses")
+    public ResponseEntity<AdminReferenceSummaryDto> putReferencePoses(
+            @PathVariable Long exerciseId,
+            @Valid @RequestBody AdminReferencePosesDto dto) {
+        return ResponseEntity.ok(adminExerciseService.replaceReferencePoses(exerciseId, dto));
+    }
+
+    @Operation(summary = "운동 싱크로율 판정 기준 변경",
+               description = "본문 {\"good\": 80, \"warn\": 60}. 점수 ≥ good = 정석, ≥ warn = 교정 필요, < warn = 위험 — "
+                       + "페르소나와 무관한 종목당 한 쌍(V34). 신규 세션부터 AI 판정과 앱 표시에 같이 적용된다. "
+                       + "0 < warn < good ≤ 100 이 아니면 400(W022), 값이 빠지면 400(C001).")
     @PatchMapping("/{exerciseId}/thresholds")
     public ResponseEntity<ExerciseThresholdResponseDto> updateThresholds(
             @PathVariable Long exerciseId,
