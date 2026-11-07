@@ -1,0 +1,11 @@
+# C 팔 진단 (2026-11-07, KEEP=1 로 C 한 판 뒤 컨테이너를 남겨 확인)
+## 재기동 뒤 (복구 조작 = START REPLICA 만)
+source  Rpl_semi_sync_source_status=OFF  clients=0
+replica @@rpl_semi_sync_replica_enabled=1  Rpl_semi_sync_replica_status=OFF
+replica 로그: 수신 스레드가 'ready for connections' 보다 먼저 소스에 붙었다
+  12:20:12.553701Z [MY-014001] Replica receiver thread ... connected to source  ← 재기동 시 자동 시작
+  12:20:12.604736Z [MY-010931] mysqld: ready for connections
+  (12:21:37 의 MY-014001 은 아래 수동 IO 재시작)
+## STOP/START REPLICA IO_THREAD 만 (SET 없음) → 2초 뒤
+source  status=ON  clients=1
+replica Rpl_semi_sync_replica_status=ON

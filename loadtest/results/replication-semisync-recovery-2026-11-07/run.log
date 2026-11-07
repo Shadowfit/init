@@ -1,0 +1,59 @@
+[srec] compose up
+ Network srec_net  Creating
+ Network srec_net  Created
+ Container srec_replica  Creating
+ Container srec_source  Creating
+ Container srec_source  Created
+ Container srec_replica  Created
+ Container srec_replica  Starting
+ Container srec_source  Starting
+ Container srec_replica  Started
+ Container srec_source  Started
+# D0 — 무대
+# 생성: 2026-11-07T12:04:10Z UTC
+source   version                                      8.0.46
+source   server_id                                    1
+source   gtid_mode                                    OFF
+source   binlog_format                                ROW
+source   sync_binlog                                  1
+source   innodb_flush_log_at_trx_commit               1
+source   rpl_semi_sync_source_enabled                 1
+source   rpl_semi_sync_source_timeout                 10000
+source   rpl_semi_sync_source_wait_point              AFTER_SYNC
+source   rpl_semi_sync_source_wait_for_replica_count  1
+replica  version                                      8.0.46
+replica  server_id                                    2
+replica  read_only                                    1
+source   plugin rpl_semi_sync_source                  ACTIVE
+replica  plugin rpl_semi_sync_replica                 ACTIVE
+[srec] ── 판 1 (버림) 팔 A
+1	버림	A	ON/1	10755	OFF	2	0	ACTIVE	Yes	-	OFF/0	0	미복귀	1
+[srec] ── 판 2 (본판) 팔 A
+2	본판	A	ON/1	11197	OFF	25	0	ACTIVE	Yes	-	OFF/0	0	미복귀	1
+[srec] ── 판 3 (본판) 팔 B
+3	본판	B	ON/1	10850	OFF	48	0	ACTIVE	Yes	1	ON/1	2	복귀	1
+[srec] ── 판 4 (본판) 팔 C
+4	본판	C	ON/1	10904	OFF	50	1	ACTIVE	Yes	-	OFF/0	0	미복귀	1
+[srec] ── 판 5 (본판) 팔 B
+5	본판	B	ON/1	13281	OFF	73	0	ACTIVE	Yes	1	ON/1	2	복귀	1
+[srec] ── 판 6 (본판) 팔 C
+6	본판	C	ON/1	10551	OFF	75	1	ACTIVE	Yes	-	OFF/0	0	미복귀	1
+[srec] ── 판 7 (본판) 팔 A
+7	본판	A	ON/1	10510	OFF	98	0	ACTIVE	Yes	-	OFF/0	0	미복귀	1
+[srec] ── 판 8 (본판) 팔 C
+8	본판	C	ON/1	12062	OFF	121	1	ACTIVE	Yes	-	OFF/0	0	미복귀	1
+[srec] ── 판 9 (본판) 팔 A
+9	본판	A	ON/1	11235	OFF	144	0	ACTIVE	Yes	-	OFF/0	0	미복귀	1
+[srec] ── 판 10 (본판) 팔 B
+10	본판	B	ON/1	11475	OFF	167	0	ACTIVE	Yes	1	ON/1	2	복귀	1
+[srec] 완료 → /e/init-wt-srec/loadtest/results/replication-semisync-recovery-2026-11-07/_out/trials.tsv
+ Container srec_source  Stopping
+ Container srec_replica  Stopping
+ Container srec_replica  Stopped
+ Container srec_replica  Removing
+ Container srec_source  Stopped
+ Container srec_source  Removing
+ Container srec_replica  Removed
+ Container srec_source  Removed
+ Network srec_net  Removing
+ Network srec_net  Removed
