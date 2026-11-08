@@ -44,12 +44,11 @@ die() { log "🔴 $*"; exit 1; }
 now_ms() { date +%s%3N; }
 rsh() { local h=$1; shift; "${SSH[@]}" "root@$h" "$@"; }
 # SQL 은 표준입력으로 넘긴다 — ssh 따옴표 안에 SQL 을 넣으면 따옴표가 두 번 풀린다
-dq() { local h=$1; printf '%s\n' "$2" | timeout "${3:-60}" "${SSH[@]}" "root@$h" "docker exec -i -e MYSQL_PWD=$PW m mysql -uroot -N -s 2>/dev/null"; }
+dq() { local h=$1; printf '%s\n' "$2" | timeout "${3:-60}" "${SSH[@]}" "root@$h" "docker exec -i -e MYSQL_PWD=$PW mdb mysql -uroot -N -s 2>/dev/null"; }
 
 db_start() {  # $1 host $2 server-id — 매 판 새로 (볼륨까지 지움)
-  rsh "$1" "iptables -F INPUT; iptables -F OUTPUT; docker rm -f m >/dev/null 2>&1; docker volume rm -f mvol >/dev/null 2>&1;
-    docker run -d --name m --network host -e MYSQL_ROOT_PASSWORD=$PW -e MYSQL_DATABASE=shadowfit \
-      -e MYSQL_USER=shadowfit -e MYSQL_PASSWORD=$PW -v mvol:/var/lib/mysql mysql:8.0 \
+  rsh "$1" "iptables -F INPUT; iptables -F OUTPUT; docker rm -f mdb >/dev/null 2>&1; docker volume rm -f mvol >/dev/null 2>&1;
+    docker run -d --name mdb --network host -e MYSQL_ROOT_PASSWORD=$PW -v mvol:/var/lib/mysql mysql:8.0 \
       --server-id=$2 --log-bin=binlog --binlog-format=ROW --gtid-mode=ON --enforce-gtid-consistency=ON \
       --innodb-flush-log-at-trx-commit=1 --sync-binlog=1 --innodb-buffer-pool-size=2G >/dev/null" || die "$1 DB 기동 실패"
   local i
@@ -64,12 +63,19 @@ db_pair() {
   dq "$DB2" "CHANGE REPLICATION SOURCE TO SOURCE_HOST='$DB1', SOURCE_USER='root', SOURCE_PASSWORD='$PW',
              SOURCE_AUTO_POSITION=1, GET_SOURCE_PUBLIC_KEY=1; START REPLICA;
              SET GLOBAL read_only=1; SET GLOBAL super_read_only=1;" >/dev/null || die "복제 연결 실패"
-  local i
+  local i ok=0
   for i in $(seq 1 30); do
-    [ "$(dq "$DB2" "SELECT SERVICE_STATE FROM performance_schema.replication_connection_status;")" = ON ] && return 0
+    [ "$(dq "$DB2" "SELECT SERVICE_STATE FROM performance_schema.replication_connection_status;")" = ON ] && { ok=1; break; }
     sleep 1
   done
-  die "리플리카 IO 스레드가 안 붙는다"
+  [ "$ok" = 1 ] || die "리플리카 IO 스레드가 안 붙는다"
+  # 앱 계정·DB 는 복제를 붙인 «뒤» 원본에서만 만든다 — 이미지 초기화(MYSQL_USER·MYSQL_DATABASE)로 두 대에 따로
+  # 만들면 원본 것이 복제돼 넘어갈 때 리플리카에서 «이미 있다» 로 SQL 스레드가 설 수 있다(promote.sh 와 같은 방식)
+  dq "$DB1" "CREATE DATABASE shadowfit; CREATE USER 'shadowfit'@'%' IDENTIFIED BY '$PW';
+             GRANT ALL ON shadowfit.* TO 'shadowfit'@'%';" >/dev/null || die "앱 계정 생성 실패"
+  local g; g=$(dq "$DB1" "SELECT @@gtid_executed;" | tr -d '\n ')
+  [ "$(dq "$DB2" "SELECT WAIT_FOR_EXECUTED_GTID_SET('$g', 30);")" = 0 ] || die "리플리카가 앱 계정 생성을 못 받았다"
+  [ "$(dq "$DB2" "SELECT SERVICE_STATE FROM performance_schema.replication_applier_status;")" = ON ] || die "리플리카 SQL 스레드가 섰다"
 }
 
 point_app() {  # $1 arm $2 ip — 유닛·DNS 를 고친다(재시작은 따로)
@@ -128,7 +134,7 @@ trial() {  # $1 번호 $2 arm $3 kill $4 kind
   local t_kill0 t_kill
   t_kill0=$(now_ms)
   if [ "$kill" = K1 ]; then
-    rsh "$DB1" "docker kill m >/dev/null"
+    rsh "$DB1" "docker kill mdb >/dev/null"
   else
     rsh "$DB1" "iptables -I INPUT -p tcp --dport 3306 -j DROP; iptables -I OUTPUT -p tcp --sport 3306 -j DROP"
   fi
