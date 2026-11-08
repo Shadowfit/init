@@ -56,11 +56,18 @@ local-ttl=0
 EOF
 grep -q '^conf-dir=/etc/dnsmasq.d' /etc/dnsmasq.conf || echo 'conf-dir=/etc/dnsmasq.d/,*.conf' >> /etc/dnsmasq.conf
 echo "$DB1 $NAME" > /etc/failover-hosts
-systemctl disable --now systemd-resolved 2>/dev/null || true
+# 🔴 스모크 1회차(11-08)가 여기서 죽었다 — github.com 은 풀리는데 $NAME 은 안 풀렸다. 추정: nsswitch 의
+#    `resolve` 가 systemd-resolved 를 다시 깨워(disable 만으로는 소켓 활성화가 남는다) dnsmasq 를 우회했다.
+#    resolved 를 mask 하고, nsswitch 에서 resolve 를 빼서 «glibc → resolv.conf → dnsmasq» 한 길만 남긴다.
+systemctl mask --now systemd-resolved systemd-resolved.socket systemd-resolved-varlink.socket systemd-resolved-monitor.socket 2>/dev/null || true
+sed -i -E '/^hosts:/ s/resolve( \[[^]]*\])?//' /etc/nsswitch.conf
 rm -f /etc/resolv.conf; printf 'nameserver 127.0.0.1\noptions timeout:1\n' > /etc/resolv.conf
 systemctl enable --now dnsmasq || finish DNSMASQ_START
-getent hosts github.com >/dev/null || finish DNS_FORWARD_BROKEN
-[ "$(getent hosts $NAME | awk '{print $1}')" = "$DB1" ] || finish DNS_NAME_BROKEN
+dns_diag() { echo "nsswitch: $(grep '^hosts:' /etc/nsswitch.conf)"; echo "resolved: $(systemctl is-active systemd-resolved)";
+             echo "getent: $(getent hosts $NAME)"; cat /etc/failover-hosts; journalctl -u dnsmasq --no-pager | tail -5; }
+getent hosts github.com >/dev/null || { dns_diag; finish DNS_FORWARD_BROKEN; }
+[ "$(getent hosts $NAME | awk '{print $1}')" = "$DB1" ] || { dns_diag; finish DNS_NAME_BROKEN; }
+dns_diag
 
 # ── DB 두 대 준비 기다림 ──
 for _ in $(seq 1 240); do
