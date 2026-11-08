@@ -1,0 +1,7 @@
+# 승격 실험 조건 (2026-11-08T03:49:25+00:00)
+mysql image      : mysql:8.0
+server opts      : --log-bin=binlog --binlog-format=ROW --gtid-mode=ON --enforce-gtid-consistency=ON --innodb-flush-log-at-trx-commit=1 --sync-binlog=1 --innodb-buffer-pool-size=1G --innodb-redo-log-capacity=2G
+replica workers  : (판마다 시작 후 기록하지 않음 — 기본값, 8.0.46 은 replica_parallel_workers 기본 4)
+trials           : paced stress stress paced paced stress stress paced paced stress (앞 paced·stress 각 첫 판은 버림)
+paced            : 45 행/초(문서 §8-1 가정) 120s · stress: 4 연결 240s
+제외             : 감지·판단·앱 연결 전환 시간
