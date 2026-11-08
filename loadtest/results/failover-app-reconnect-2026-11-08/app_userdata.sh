@@ -46,11 +46,16 @@ grep -q 'if \[ "$ROLE" = "app" \]' bootstrap.sh || finish BOOTSTRAP_ASSERT
 
 # ── 후보 B 의 DNS: dnsmasq (TTL 0) — 앱 박스의 모든 이름 풀이가 여기를 지난다 ──
 dnf -y -q install dnsmasq >/dev/null || finish DNSMASQ_INSTALL
+# 🔴 스모크 3회차: 위로 넘길 곳을 169.254.169.253 으로 박았더니 외부 이름(github.com)이 30초 내내 안 풀렸다(원인 미확인).
+#    그래서 systemd-resolved 가 원래 쓰던 위쪽 DNS(DHCP 로 받은 VPC DNS)를 그대로 쓴다
+UPSTREAM=$(awk '/^nameserver/{print $2; exit}' /run/systemd/resolve/resolv.conf 2>/dev/null)
+[ -n "$UPSTREAM" ] || UPSTREAM=169.254.169.253
+echo "dnsmasq 위쪽 DNS: $UPSTREAM"
 cat > /etc/dnsmasq.d/failover.conf <<EOF
 listen-address=127.0.0.1
 bind-interfaces
 no-resolv
-server=169.254.169.253
+server=$UPSTREAM
 addn-hosts=/etc/failover-hosts
 local-ttl=0
 EOF
@@ -64,7 +69,7 @@ sed -i -E '/^hosts:/ s/resolve( \[[^]]*\])?//' /etc/nsswitch.conf
 rm -f /etc/resolv.conf; printf 'nameserver 127.0.0.1\noptions timeout:1\n' > /etc/resolv.conf
 systemctl enable --now dnsmasq || finish DNSMASQ_START
 dns_diag() { echo "nsswitch: $(grep '^hosts:' /etc/nsswitch.conf)"; echo "resolved: $(systemctl is-active systemd-resolved)";
-             echo "getent: $(getent hosts $NAME)"; cat /etc/failover-hosts; journalctl -u dnsmasq --no-pager | tail -5; }
+             echo "getent: $(getent hosts $NAME) / github: $(getent hosts github.com | head -1)"; cat /etc/failover-hosts; journalctl -u dnsmasq --no-pager | tail -5; }
 # 🔴 스모크 2회차는 위 정리 뒤에도 같은 자리에서 죽었는데, 진단(바로 아래)에선 이름이 제대로 풀렸다 — dnsmasq 가
 #    «Started» 를 찍은 같은 초에 첫 조회를 던진 경합이었다. 1회차도 같은 원인이었을 수 있다(위 추정은 검증 안 됨).
 #    그래서 최대 30초 다시 묻는다.
