@@ -1,0 +1,6 @@
+# 프로세스 재기동 실험 조건 (2026-11-08T06:04:43+00:00)
+mysql image : mysql:8.0 (mysql@sha256:7dcddc01f13bab2f15cde676d44d01f61fc9f99fe7785e86196dfc07d358ae2b)
+server opts : --server-id=1 --log-bin=binlog --binlog-format=ROW --innodb-flush-log-at-trx-commit=1 --sync-binlog=1 --innodb-buffer-pool-size=2G --innodb-redo-log-capacity=2G
+trials      : idle paced stress  stress idle paced  paced stress idle  idle stress paced (앞 3 판 버림)
+idle 30s · paced 45행/초(문서 §8-1 가정) 120s · stress 4연결 240s
+recov_*/conn_ms 는 docker start 기준, 서버 로그 시각(초 단위 정밀도는 로그 형식에 따름)
