@@ -1,0 +1,5 @@
+[phase2 12:53:40] 기동 — 버퍼풀 512MB
+[phase2 12:53:50] [0] tpl_A 120000 행 · PK=id,created_at
+[phase2 12:54:08] [1] ✅ 서버가 INPLACE·LOCK=NONE 을 받았다 — 팔 N 은 온라인 DDL 이다
+[phase2 12:54:09] [2] 판 r1 팔 N — tpl_A 복사
+phase2_rebuild.sh: line 108: /e/init-wt-natpk/loadtest/r276-natpk/_work/w_r1.tsv: No such file or directory

@@ -1,0 +1,3 @@
+{"table": "t_A", "sessions": 20, "rows": 12000, "sec": 10.9}
+{"table": "t_B", "sessions": 20, "rows": 12000, "sec": 8.7}
+{"table": "t_Bp", "sessions": 20, "rows": 12000, "sec": 9.3}
