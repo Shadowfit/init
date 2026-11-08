@@ -14,13 +14,15 @@ REF=__REF__
 PHASES="__PHASES__"
 RUN_ID=__RUN_ID__
 DEADLINE_MIN=__DEADLINE_MIN__
+# 박스별 rig 설정(SEQ · ONLINE_LOG_BYTES · WRITER_SECS 등) — launch 가 «export K=V ...» 한 줄로 채운다. 없으면 빈 줄
+__ENV__
 BUCKET=s3://shadowfit-measure-055447613012/shadowfit/$RUN_ID
 DROP_CACHES=1
 
 LOG=/root/natpk_round.log
 exec > >(tee -a "$LOG") 2>&1
 set -uo pipefail
-echo "[round] start $(date -u +%FT%TZ) REF=$REF PHASES=$PHASES RUN_ID=$RUN_ID"
+echo "[round] start $(date -u +%FT%TZ) REF=$REF PHASES=$PHASES RUN_ID=$RUN_ID SEQ=${SEQ:-기본} ONLINE_LOG_BYTES=${ONLINE_LOG_BYTES:-기본} WRITER_SECS=${WRITER_SECS:-기본}"
 
 up(){ aws s3 cp --quiet "$@" || echo "[round] ⚠️ 업로드 실패: $*"; }
 finish(){
@@ -44,7 +46,7 @@ systemctl enable --now docker || finish "docker 기동 실패"
 git clone -q https://github.com/Shadowfit/init.git /root/init || finish "clone 실패"
 cd /root/init && git checkout -q "$REF" || finish "checkout $REF 실패"
 cd loadtest/r276-natpk || finish "rig 폴더 없음"
-grep -q "cmd_wsum" natpk.py && grep -q "load-at-startup=OFF" compose.yml || finish "rig 이 기대한 판이 아니다"
+grep -q "cmd_wsum" natpk.py && grep -q "load-at-startup=OFF" compose.yml && grep -q "N0" phase2_rebuild.sh && grep -q "ONLINE_LOG_BYTES" compose.yml || finish "rig 이 기대한 판이 아니다"
 echo "[round] rig $(git rev-parse --short HEAD) · $(nproc) vCPU · $(free -g | awk '/Mem/{print $2}')GB"
 
 for p in $PHASES; do

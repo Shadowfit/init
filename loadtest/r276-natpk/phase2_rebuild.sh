@@ -9,6 +9,7 @@
 #   [1] 사전 확인 — 작은 복사본에 INPLACE·LOCK=NONE 을 던져 서버가 받는지 본다(08-12 는 1845 로 거절됐다)
 #   [2] 판마다 tpl_A 를 t_rb 로 복사 → writer(0.2초마다 20행 묶음) 를 띄운 채 DDL → writer 를 멈추고 요약
 #       팔 N = 서버 DDL(받으면 INPLACE·LOCK=NONE, 아니면 COPY) · 팔 P = pt-online-schema-change
+#       팔 N0 = 팔 N 과 같은 DDL 을 writer 없이 — «DDL 자체 시간» 과 «쓰기 때문에 늘어난 시간» 을 가른다 (11-09 추가)
 #       판 순서는 08-12 와 같다: 버림 N·P → 본판 N P P N N P
 #   [3] 마지막 판의 결과 표를 r_B 로 남긴다 — ③ 읽기가 쓴다 (① 의 t_B 와 이름을 나눈다)
 #
@@ -22,6 +23,7 @@ SESSIONS=${SESSIONS:-16667}             # × 600 = 10,000,200 행
 POOL_MB=${POOL_MB:-4096}
 SEQ=${SEQ:-"discard:N discard:P r1:N r2:P r3:P r4:N r5:N r6:P"}
 GAP_MS=${GAP_MS:-200}
+WRITER_SECS=${WRITER_SECS:-7200}        # writer 가 이보다 먼저 끝나면 그 뒤 DDL 은 쓰기 없이 돈다 — 긴 DDL 엔 늘릴 것
 PTOSC_IMAGE=${PTOSC_IMAGE:-percona/percona-toolkit:3.6.0}
 OUT=${OUT:-$HERE/_out/phase2}
 mkdir -p "$OUT" "$HERE/_work"
@@ -63,7 +65,8 @@ docker pull -q "$PTOSC_IMAGE" >/dev/null || die "pt-osc 이미지를 못 받았�
   echo "# start $(date '+%F %T')"
   echo "host_cpu=$(grep -m1 'model name' /proc/cpuinfo 2>/dev/null | cut -d: -f2) nproc=$(nproc 2>/dev/null)"
   echo "mysql=$(SQL "SELECT VERSION()") pool=$(SQL "SELECT @@innodb_buffer_pool_size") ptosc=$PTOSC_IMAGE"
-  echo "SESSIONS=$SESSIONS SEQ=$SEQ GAP_MS=$GAP_MS git=$(git -C "$HERE" rev-parse --short HEAD 2>/dev/null)"
+  echo "SESSIONS=$SESSIONS SEQ=$SEQ GAP_MS=$GAP_MS WRITER_SECS=$WRITER_SECS git=$(git -C "$HERE" rev-parse --short HEAD 2>/dev/null)"
+  echo "online_alter_log_max_size=$(SQL "SELECT @@innodb_online_alter_log_max_size") innodb_sort_buffer_size=$(SQL "SELECT @@innodb_sort_buffer_size") tmpdir=$(SQL "SELECT @@innodb_tmpdir")/$(SQL "SELECT @@tmpdir")"
 } >> "$OUT/env.txt"
 
 # ── [0] 원본 표 ───────────────────────────────────────────────────────────
@@ -104,15 +107,19 @@ for item in $SEQ; do
 
   w="$HERE/_work/w_$tag.tsv"; rm -f "$w" "$w.stop"
   kill_writers
-  docker exec -d natpk_client python /work/natpk.py writer t_rb 7200 "$GAP_MS" "/work/out/w_$tag.tsv"
-  for _ in $(seq 1 30); do [ "$(wc -l < "$w" 2>/dev/null || echo 0)" -ge 3 ] && break; sleep 1; done
-  [ "$(wc -l < "$w" 2>/dev/null || echo 0)" -ge 3 ] || die "writer 가 30초 안에 두 건을 못 썼다"
+  if [ "$arm" != N0 ]; then
+    docker exec -d natpk_client python /work/natpk.py writer t_rb "$WRITER_SECS" "$GAP_MS" "/work/out/w_$tag.tsv"
+    # 2>/dev/null 을 < 앞에 — 뒤에 두면 파일이 아직 없을 때 리다이렉트 오류가 그대로 찍힌다(11-08 로그의 «No such file»)
+    for _ in $(seq 1 30); do [ "$(wc -l 2>/dev/null < "$w" || echo 0)" -ge 3 ] && break; sleep 1; done
+    [ "$(wc -l 2>/dev/null < "$w" || echo 0)" -ge 3 ] || die "writer 가 30초 안에 두 건을 못 썼다"
+  fi
 
   ( peak=0; while [ ! -f "$OUT/.disk_stop" ]; do d=$(disk_mb); [ "${d:-0}" -gt "$peak" ] && peak=$d && echo "$peak" > "$OUT/.disk_peak"; sleep 5; done ) &
   dpid=$!
   t0=$(date +%s.%N)
-  if [ "$arm" = N ]; then
-    SQL "ALTER TABLE t_rb $NEWKEY, $NATIVE" > "$OUT/${tag}_ddl.log" 2>&1; rc=$?
+  if [ "$arm" = N ] || [ "$arm" = N0 ]; then
+    # SQL() 은 stderr 를 mysql_stderr.log 로 보낸다 — 11-08 라운드는 그래서 1799 가 *_ddl.log 에 안 남았다. DDL 은 직접 부른다
+    docker exec -i natpk_mysql mysql -uroot -pnatpk natpk -N -s -e "ALTER TABLE t_rb $NEWKEY, $NATIVE" > "$OUT/${tag}_ddl.log" 2>&1; rc=$?
   else
     docker run --rm --network natpk_net "$PTOSC_IMAGE" pt-online-schema-change \
       --alter "$NEWKEY" --execute --no-check-alter --recursion-method=none --no-check-unique-key-change \
@@ -124,13 +131,18 @@ for item in $SEQ; do
   touch "$OUT/.disk_stop"; wait $dpid 2>/dev/null; rm -f "$OUT/.disk_stop"
   peak=$(cat "$OUT/.disk_peak" 2>/dev/null); rm -f "$OUT/.disk_peak"
   b1=$(binlog_bytes)
-  cp "$w" "$OUT/"
-  [ $rc -eq 0 ] || { log "  ✗ DDL 실패 rc=$rc — $OUT/${tag}_ddl.log"; continue; }
+  [ -f "$w" ] && cp "$w" "$OUT/"
+  sec=$(awk -v a="$t0" -v b="$t1" 'BEGIN{printf "%.1f", b-a}')
+  # 실패도 «몇 초 만에» 를 남긴다 — 11-08 은 1799 가 «DDL 이 끝나서» 가 아니라 «쓰기 로그가 차서» 났다
+  [ $rc -eq 0 ] || { log "  ✗ DDL 실패 rc=$rc · ${sec}초 — $(grep -m1 ERROR "$OUT/${tag}_ddl.log")"; continue; }
 
-  ws=$(PY wsum "/work/out/w_$tag.tsv")
+  if [ "$arm" = N0 ]; then
+    ws='{"attempts": "NA", "ok": "NA", "errors": "NA", "max_attempt_ms": "NA", "max_gap_ms": "NA"}'
+  else
+    ws=$(PY wsum "/work/out/w_$tag.tsv")
+  fi
   pk=$(pk_cols t_rb); rows=$(SQL "SELECT COUNT(*) FROM t_rb")
   [ "$pk" = "session_id,rep_number,timestamp_sec,created_at" ] || log "  🔴 PK 가 안 바뀌었다: $pk"
-  sec=$(awk -v a="$t0" -v b="$t1" 'BEGIN{printf "%.1f", b-a}')
   line=$(echo "$ws" | docker exec -i natpk_client python -c "import json,sys; j=json.load(sys.stdin); print('\t'.join(str(j[k]) for k in ['attempts','ok','errors','max_attempt_ms','max_gap_ms']))")
   printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\n" "$tag" "$arm" "$sec" "$line" "$(awk -v a="$b0" -v b="$b1" 'BEGIN{printf "%.0f",(b-a)/1048576}')" "${peak:-}" "$pk	$rows" >> "$RAW"
   log "  팔 $arm — DDL ${sec}초 · writer $ws · binlog +$(( (b1-b0)/1048576 ))MB · 디스크 최대 ${peak:-?}MB"
