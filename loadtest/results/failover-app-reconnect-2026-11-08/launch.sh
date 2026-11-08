@@ -31,7 +31,10 @@ launch() {  # $1 이름 $2 user-data 파일 $3 볼륨GB → 인스턴스 ID 와 
     --user-data "$(cat "$2")" --query 'Instances[0].[InstanceId,PrivateIpAddress]' --output text
 }
 
-fill() { sed -e "s|@@RUN_ID@@|$RUN_ID|" -e "s|@@CAP_MIN@@|$CAP_MIN|" "$@"; }
+# 🔴 user-data 는 «이 PC 의 파일» 을 그대로 보낸다 — Windows 체크아웃은 CRLF 라 값 끝에 \r 이 붙는다
+#    (스모크 1~4회차가 전부 이것으로 죽었다: DB1="IP\r" 이 getent 결과와 안 맞음). 그래서 CR 을 지운다.
+#    (rig 파일 자체는 GitHub raw 에서 받으므로 저장소의 LF 그대로다)
+fill() { sed -e "s|@@RUN_ID@@|$RUN_ID|" -e "s|@@CAP_MIN@@|$CAP_MIN|" "$@" | tr -d '\r'; }
 ips=()
 for n in db1 db2; do
   ud=$(mktemp); fill -e "s|@@NODE@@|$n|" "$HERE/db_userdata.sh" > "$ud"

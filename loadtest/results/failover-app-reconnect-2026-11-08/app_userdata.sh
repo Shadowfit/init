@@ -61,7 +61,8 @@ local-ttl=0
 EOF
 grep -q '^conf-dir=/etc/dnsmasq.d' /etc/dnsmasq.conf || echo 'conf-dir=/etc/dnsmasq.d/,*.conf' >> /etc/dnsmasq.conf
 echo "$DB1 $NAME" > /etc/failover-hosts
-# 🔴 스모크 1회차(11-08)가 여기서 죽었다 — $NAME 이 안 풀렸다. 그때 세운 추정(검증 안 됨): nsswitch 의
+# ⚠️ 스모크 1~4회차는 여기서 죽었는데 진짜 원인은 user-data 의 CRLF 였다(launch.sh fill). 아래 셋(resolved mask ·
+#    재시도 · 위쪽 DNS)은 그 사이 세운 추정으로 넣은 것이고 원인이 아니었다 — 해롭지 않아 남긴다. 당시 추정: nsswitch 의
 #    `resolve` 가 systemd-resolved 를 다시 깨워(disable 만으로는 소켓 활성화가 남는다) dnsmasq 를 우회했다.
 #    resolved 를 mask 하고, nsswitch 에서 resolve 를 빼서 «glibc → resolv.conf → dnsmasq» 한 길만 남긴다.
 systemctl mask --now systemd-resolved systemd-resolved.socket systemd-resolved-varlink.socket systemd-resolved-monitor.socket 2>/dev/null || true
