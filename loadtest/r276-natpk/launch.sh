@@ -34,6 +34,8 @@ case ${MODE:-first} in
   first)   # 11-08 첫 라운드
     launch c7i.xlarge "1"   360 100 natpk-insert
     launch m6i.xlarge "2 3" 600 300 natpk-rebuild ;;
+  smoke)   # 재측정 rig 이 끝까지 도는지만 — 세션 200개(약 12만 행), N0·N·P 한 판씩 + ③ 작게
+    launch m6i.xlarge "2 3" 60 60 natpk-smoke       "export SESSIONS=200 SEQ='d:N0 r1:N r2:P' ONLINE_LOG_BYTES=2147483648 WRITER_SECS=3600 N=50 ROUNDS=1" ;;
   rerun)   # 11-09 재측정 — 11-08 은 팔 N 이 매판 1799 로 실패하고 상한에 걸려 ③ 을 못 돌렸다
     # 박스 A: pt-osc 로 자연키 표를 한 번만 만들고 바로 ③ 읽기 (P 는 11-08 에 3판 성공해서 ② 쪽 숫자는 이미 있다)
     launch m6i.xlarge "2 3" 360 300 natpk-reads "export SEQ='r1:P'"
