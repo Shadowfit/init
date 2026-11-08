@@ -92,6 +92,7 @@ wait_health() {
 prep() {
   db_pair
   echo "$DB1 $NAME" > "$HOSTS_FILE"; pkill -HUP dnsmasq
+  local i; for i in $(seq 1 10); do [ "$(getent hosts $NAME | awk '{print $1}')" = "$DB1" ] && break; sleep 1; done
   [ "$(getent hosts $NAME | awk '{print $1}')" = "$DB1" ] || die "getent 가 $NAME 을 DB1 로 못 푼다 — 앱이 쓰는 경로가 dnsmasq 를 안 탄다"
   log "prep 끝 — DB 두 대 복제 연결, $NAME → DB1"
 }
