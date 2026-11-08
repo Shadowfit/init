@@ -1,0 +1,12 @@
+# D0 — 무대 (2026-11-07T20:22:07Z UTC)
+source  version                                  8.0.46
+source  innodb_buffer_pool_size                  2147483648
+source  innodb_flush_log_at_trx_commit           1
+source  sync_binlog                              1
+source  binlog_format                            ROW
+source  binlog_transaction_dependency_tracking   COMMIT_ORDER
+source  max_binlog_size                          1073741824
+BASE_ROWS=10000000 LEVELS_MB=512 2048 8192 REPS=3 CONNS=15 ROWS_PER_TX=25 WORKERS=4
+M2 판별 실제 병렬 설정 (workers · type · preserve_commit_order):
+4	LOGICAL_CLOCK	1
+nproc=4
