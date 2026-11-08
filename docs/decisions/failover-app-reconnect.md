@@ -1,7 +1,7 @@
 # DB 페일오버 때 앱이 새 DB 로 넘어가는 방법 — 측정 전 후보 정리
 
 작성일: 2026-11-08
-상태: 🟢 **잴 것·rig 세부 확정.** 2026-11-08 사용자 confirm — 후보 A + B, 흉내 K1 + K2. 운영 채택 문서가 아니다.
+상태: 🟢 **측정 끝(11-08, 결정 로그 마지막 줄).** 잴 것·rig 세부 확정. 2026-11-08 사용자 confirm — 후보 A + B, 흉내 K1 + K2. 운영 채택 문서가 아니다.
 연관: [`./rpo-rto-targets.md`](./rpo-rto-targets.md) §5 구성 3 · §7 · §8 R1 ·
 [`../../loadtest/results/replica-promotion-2026-11-08/README.md`](../../loadtest/results/replica-promotion-2026-11-08/README.md) (DB 쪽 승격 0.25~8초) ·
 [`./replication-lag-and-semisync.md`](./replication-lag-and-semisync.md)
@@ -90,3 +90,9 @@ K2 에서 시간이 길게 나오면, 그 다음 질문은 «`socketTimeout`·`c
 - 2026-11-08: 🟢 **Q1 A + B · Q2 K1 + K2 채택** (사용자 confirm «추천대로»). Q3 는 명시 답 없음. rig 세부 셋(§6-1 R-a~R-c)은 미정 — 특히 R-a 는 IAM 권한이 필요하다.
 - 2026-11-08: 🟢 **rig 세부 확정** (사용자 confirm) — R-a 는 **앱 박스에 DNS 를 직접 띄운다**(Route 53 아님 → 레코드 전파 시간이 빠져
   실제보다 낙관적이라는 것을 결과에 적는다), R-b 기본 타임아웃 그대로, R-c 초당 10번.
+- 2026-11-08: **측정 끝** (EC2 m6i.xlarge 3대 · 커밋 `f61c3d25` · 본판 12, [결과](../../loadtest/results/failover-app-reconnect-2026-11-08/README.md)).
+  회복 시각: **A 약 106초**(K1·K2 같음) · **B·K1 약 30초 · B·K2 약 5.3초**, 잃은 쓰기 16판 모두 0.
+  예상과 다른 것 셋 — ① A 의 106초 중 약 90초는 기동이 아니라 **종료 대기**(systemd 기본 90초에 걸린 것과 맞음, 무엇이 붙잡았는지 미확인 —
+  운영은 Docker 라 이 숫자가 아니다) ② B·K2 에서 끊긴 연결 위 요청 약 14개가 **약 16분 매달림**(`socketTimeout` 미지정, §3 예상대로)
+  ③ DB 장애가 클라이언트에 **401** 로 보임 — `JwtAuthFilter` 가 DB 예외를 토큰 불량과 같이 처리(#848).
+  `socketTimeout` 값과 운영에서 쓸 후보는 **정하지 않았다**. 목표 RTO 는 `rpo-rto-targets.md` §6-3 (리플리카 보류 유지라 이 측정은 Q5 근거로만 쓰였다).

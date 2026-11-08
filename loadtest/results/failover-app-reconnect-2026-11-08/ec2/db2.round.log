@@ -1,0 +1,4 @@
+== start 2026-11-08T05:46:48+00:00 node=db2 RUN_ID=failover-ec2-20261108-054629 CAP_MIN=420
+Created symlink /etc/systemd/system/multi-user.target.wants/docker.service → /usr/lib/systemd/system/docker.service.
+docker.io/library/mysql:8.0
+== ready 2026-11-08T05:47:45+00:00

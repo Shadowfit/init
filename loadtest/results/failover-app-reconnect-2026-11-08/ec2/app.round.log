@@ -1,0 +1,94 @@
+== start 2026-11-08T05:46:51+00:00 SHA=f61c3d259458227ace4ba2d4a8da2b64dc819ce1 RUN_ID=failover-ec2-20261108-054629 CAP_MIN=420 DB1=172.31.57.130 DB2=172.31.58.216 TRIALS= BURN=4
+dnsmasq 위쪽 DNS: 172.31.0.2
+Created symlink /etc/systemd/system/multi-user.target.wants/dnsmasq.service → /usr/lib/systemd/system/dnsmasq.service.
+nsswitch: hosts:      files dns myhostname
+resolved: inactive
+getent: 172.31.57.130   db.failover.internal / github: 20.200.245.247  github.com
+172.31.57.130 db.failover.internal
+Nov 08 05:47:14 ip-172-31-62-253.ap-northeast-2.compute.internal dnsmasq[5253]: compile time options: IPv6 GNU-getopt DBus no-UBus no-i18n IDN2 DHCP DHCPv6 no-Lua TFTP conntrack ipset no-nftset auth cryptohash DNSSEC loop-detect inotify dumpfile
+Nov 08 05:47:14 ip-172-31-62-253.ap-northeast-2.compute.internal dnsmasq[5253]: using nameserver 172.31.0.2#53
+Nov 08 05:47:14 ip-172-31-62-253.ap-northeast-2.compute.internal dnsmasq[5253]: read /etc/hosts - 6 names
+Nov 08 05:47:14 ip-172-31-62-253.ap-northeast-2.compute.internal dnsmasq[5253]: read /etc/failover-hosts - 1 names
+Nov 08 05:47:14 ip-172-31-62-253.ap-northeast-2.compute.internal systemd[1]: Started dnsmasq.service - DNS caching server..
+Warning: Permanently added '172.31.57.130' (ED25519) to the list of known hosts.
+Warning: Permanently added '172.31.58.216' (ED25519) to the list of known hosts.
+[failover 05:48:04] prep 끝 — DB 두 대 복제 연결, db.failover.internal → DB1
+
+──── root SSH (다른 박스가 이 박스로 붙는 라운드용, #642) ────
+  ec2-user 의 authorized_keys 를 root 로 복사(강제명령 줄 제거), PermitRootLogin prohibit-password
+
+──── 패키지 ────
+  buildx 0.12.2 → 0.19.3 으로 올린다 (compose build 는 0.17+ 를 요구한다)
+
+──── 저장소 — https://github.com/Shadowfit/init.git @ f61c3d259458227ace4ba2d4a8da2b64dc819ce1 ────
+  커밋: f61c3d25
+
+──── .env ────
+bootstrap.sh: line 281: compose: command not found
+bootstrap.sh: line 281: shadowfit-ai: command not found
+bootstrap.sh: line 281: INTERNAL_API_TOKEN:?: command not found
+bootstrap.sh: line 281: MYSQL_EXPORTER_PASSWORD: command not found
+bootstrap.sh: line 281: :?: command not found
+bootstrap.sh: line 281: shadowfit-ai: command not found
+bootstrap.sh: line 281: INTERNAL_API_TOKEN: command not found
+bootstrap.sh: line 281: unused-in-this-role: command not found
+  MYSQL_ROOT_PASSWORD 를 rig 기본값과 맞췄다 (+ 해석만 되면 되는 변수들)
+  compose 해석 확인 ✅ (mysql 만 띄워도 파일 전체가 해석된다)
+
+──── JDK 21 (bootJar 직접 실행 — build.gradle:13 languageVersion 21) ────
+  openjdk version "21.0.13" 2026-10-20 LTS
+
+──── Spring 빌드 (gradle bootJar, 5~15분) ────
+Downloading https://services.gradle.org/distributions/gradle-8.14.5-bin.zip
+.............10%.............20%.............30%.............40%.............50%..............60%.............70%.............80%.............90%.............100%
+
+Welcome to Gradle 8.14.5!
+
+Here are the highlights of this release:
+ - Java 24 support
+ - GraalVM Native Image toolchain selection
+ - Enhancements to test reporting
+ - Build Authoring improvements
+
+For more details see https://docs.gradle.org/8.14.5/release-notes.html
+
+Starting a Gradle Daemon (subsequent builds will be faster)
+> Task :protobufDummy UP-TO-DATE
+> Task :extractIncludeProto
+> Task :generateProto
+
+> Task :compileJava
+Note: /root/init/backend/src/main/java/com/shadowfit/global/security/jwt/JwtUtil.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+
+> Task :processProtoResources
+> Task :processResources
+> Task :classes
+> Task :resolveMainClassName
+> Task :bootJar
+
+[Incubating] Problems report is available at: file:///root/init/backend/build/reports/problems/problems-report.html
+
+BUILD SUCCESSFUL in 1m 27s
+7 actionable tasks: 7 executed
+  /root/init/backend/build/libs/backend-0.0.1-SNAPSHOT.jar
+
+──── systemd 유닛 — shadowfit-app (풀 스윕은 Environment= 한 줄을 sed 로 갈아 끼운다) ────
+Created symlink /etc/systemd/system/multi-user.target.wants/shadowfit-app.service → /etc/systemd/system/shadowfit-app.service.
+  헬스체크 대기(원격 DB 라 최초 기동은 pool 만큼 커넥션을 새로 튼다 — 여유를 둔다).... — 떴다
+
+──── App 준비됨 ────
+  포트                : 8080(HTTP) · 6565(gRPC) · 9090(actuator, 이 박스 안에서만)
+  DB_HOST             : db.failover.internal
+  INTERNAL_API_TOKEN  : nZyEpmhuFFYj2nthx5TMXsrehoGCbl
+  JWT_SECRET          : rVPlTn6fIinkaNu3Z0G4bycsCQPT37SqjQFL6FQ9DY
+  풀 크기(현재)       : 15
+
+  🔴 위 INTERNAL_API_TOKEN 을 부하기(ROLE=p6-loader)의 GHZ_TOKEN 에 그대로 넘긴다 — 다르면
+     전 요청이 401 이다. 풀 값을 바꾸려면:
+       sed -i 's/^Environment=SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=.*/Environment=SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=<값>/' \
+         /etc/systemd/system/shadowfit-app.service
+       systemctl daemon-reload && systemctl restart shadowfit-app
+     (measure_poolsizing_10_20.sh 의 apply_pool() 이 이 절차를 그대로 SSH 로 대신 한다)
+== rig exit 0
+== finish: DONE (2026-11-08T07:33:05+00:00)

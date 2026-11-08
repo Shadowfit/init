@@ -1,0 +1,5 @@
+instance_type=m6i.xlarge
+4
+               total        used        free      shared  buff/cache   available
+Mem:              15           1          11           0           1          13
+Swap:              0           0           0
