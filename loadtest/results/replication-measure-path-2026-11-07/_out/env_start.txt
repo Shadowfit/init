@@ -1,0 +1,18 @@
+# start  2026-11-07 22:34:57
+rp_src	mysql:8.0	Up 3 minutes
+mpath_client	python:3.12-slim	Up 4 minutes
+mpath_replica	mysql:8.0	Up 4 minutes
+mpath_source	mysql:8.0	Up 4 minutes
+shadowfit-backend	init-shadowfit-backend	Up 2 minutes
+smart-ebl-postgres	postgres:18-alpine	Up 2 hours (healthy)
+shadowfit-ai	init-shadowfit-ai	Up 2 hours (healthy)
+dockin-app-1	khyojae/dockin-app:latest	Up 2 minutes (health: starting)
+
+rp_src	9.59%	424.4MiB / 7.758GiB
+mpath_client	0.00%	10.09MiB / 7.758GiB
+mpath_replica	0.75%	444.1MiB / 7.758GiB
+mpath_source	0.90%	402.7MiB / 7.758GiB
+shadowfit-backend	0.81%	292.9MiB / 2GiB
+smart-ebl-postgres	0.00%	37.49MiB / 7.758GiB
+shadowfit-ai	0.76%	647.8MiB / 1.5GiB
+dockin-app-1	0.25%	231.6MiB / 512MiB
