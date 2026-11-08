@@ -1,0 +1,4 @@
+# D0 — 무대 (2026-11-07T17:34:48Z UTC)
+S3_BASE=(가짜 S3 볼륨 — 시간 값 무의미) REDO_CAPACITY=2G BASE_ROWS=20000 INTERVALS=10 20 REPS=1 CONNS=15 ROWS_PER_TX=25
+MySQL /usr/sbin/mysqld  Ver 8.0.46 for Linux on x86_64 (MySQL Community Server - GPL) · xtrabackup xtrabackup version 8.0.35-36 based on MySQL server 8.0.35 Linux (x86_64) (revision id: 7233322c)
+nproc=4
