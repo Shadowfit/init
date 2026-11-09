@@ -1,0 +1,12 @@
+[phase2 15:59:23] 기동 — 버퍼풀 4096MB
+[phase2 16:00:02] [0] tpl_A 시딩 — 세션 200 × 600 = 120000 행
+[phase2 16:00:18] [0] tpl_A 120000 행 · PK=id,created_at
+[phase2 16:00:19] [1] ✅ 서버가 INPLACE·LOCK=NONE 을 받았다 — 팔 N 은 온라인 DDL 이다
+[phase2 16:00:19] [2] 판 d 팔 N0 — tpl_A 복사
+[phase2 16:01:21]   팔 N0 — DDL 43.3초 · writer {"attempts": "NA", "ok": "NA", "errors": "NA", "max_attempt_ms": "NA", "max_gap_ms": "NA"} · binlog +0MB · 디스크 최대 1407MB
+[phase2 16:01:21] [2] 판 r1 팔 N — tpl_A 복사
+[phase2 16:02:16]   팔 N — DDL 37.1초 · writer {"attempts": 168, "ok": 168, "errors": 0, "err_kinds": [], "max_attempt_ms": 331, "p50_attempt_ms": 12.0, "max_gap_ms": 531} · binlog +5MB · 디스크 최대 1225MB
+[phase2 16:02:16] [2] 판 r2 팔 P — tpl_A 복사
+[phase2 16:02:47]   팔 P — DDL 11.0초 · writer {"attempts": 48, "ok": 48, "errors": 0, "err_kinds": [], "max_attempt_ms": 737, "p50_attempt_ms": 12.5, "max_gap_ms": 938} · binlog +205MB · 디스크 최대 1450MB
+[phase2 16:02:47] [3] r_B 남김 — PK=session_id,rep_number,timestamp_sec,created_at
+[phase2 16:02:48] 완료 → /root/init/loadtest/r276-natpk/_out/phase2/raw.tsv

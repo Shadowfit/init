@@ -1,0 +1,12 @@
+{"table": "t_A", "sessions": 2000, "rows": 1200000, "sec": 108.7}
+{"table": "t_B", "sessions": 2000, "rows": 1200000, "sec": 97.1}
+{"table": "t_Bp", "sessions": 2000, "rows": 1200000, "sec": 95.9}
+{"table": "t_A", "sessions": 2000, "rows": 1200000, "sec": 96.4}
+{"table": "t_B", "sessions": 2000, "rows": 1200000, "sec": 96.8}
+{"table": "t_Bp", "sessions": 2000, "rows": 1200000, "sec": 95.9}
+{"table": "t_A", "sessions": 2000, "rows": 1200000, "sec": 100.9}
+{"table": "t_B", "sessions": 2000, "rows": 1200000, "sec": 97.6}
+{"table": "t_Bp", "sessions": 2000, "rows": 1200000, "sec": 96.3}
+{"table": "t_A", "sessions": 2000, "rows": 1200000, "sec": 97.0}
+{"table": "t_B", "sessions": 2000, "rows": 1200000, "sec": 97.4}
+{"table": "t_Bp", "sessions": 2000, "rows": 1200000, "sec": 96.2}

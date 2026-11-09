@@ -1,0 +1,23 @@
+[round] start 2026-11-08T16:56:15Z REF=de7311cc8649a574a3e3f224b999ce08e8eaa932 PHASES=2 RUN_ID=natpk-ec2-20261108-165553 SEQ=discard:N0 r1:N r2:N0 r3:N r4:N0 r5:N ONLINE_LOG_BYTES=2147483648 WRITER_SECS=57600
+Created symlink /etc/systemd/system/multi-user.target.wants/docker.service → /usr/lib/systemd/system/docker.service.
+[round] rig de7311cc · 4 vCPU · 15GB
+[phase2 16:57:09] 기동 — 버퍼풀 4096MB
+[phase2 16:57:51] [0] tpl_A 시딩 — 세션 16667 × 600 = 10000200 행
+{"table": "tpl_A", "sessions": 16667, "rows": 10000200, "sec": 815.7}
+[phase2 17:11:30] [0] tpl_A 10000200 행 · PK=id,created_at
+[phase2 17:11:33] [1] ✅ 서버가 INPLACE·LOCK=NONE 을 받았다 — 팔 N 은 온라인 DDL 이다
+[phase2 17:11:33] [2] 판 discard 팔 N0 — tpl_A 복사
+[phase2 19:14:15]   팔 N0 — DDL 6118.5초 · writer {"attempts": "NA", "ok": "NA", "errors": "NA", "max_attempt_ms": "NA", "max_gap_ms": "NA"} · binlog +0MB · 디스크 최대 82013MB
+[phase2 19:14:15] [2] 판 r1 팔 N — tpl_A 복사
+[phase2 21:14:16]   팔 N — DDL 5958.9초 · writer {"attempts": 25067, "ok": 25067, "errors": 0, "err_kinds": [], "max_attempt_ms": 1025, "p50_attempt_ms": 38.0, "max_gap_ms": 1226} · binlog +853MB · 디스크 최대 84466MB
+[phase2 21:14:16] [2] 판 r2 팔 N0 — tpl_A 복사
+[phase2 23:17:21]   팔 N0 — DDL 6138.7초 · writer {"attempts": "NA", "ok": "NA", "errors": "NA", "max_attempt_ms": "NA", "max_gap_ms": "NA"} · binlog +0MB · 디스크 최대 82591MB
+[phase2 23:17:21] [2] 판 r3 팔 N — tpl_A 복사
+[phase2 01:17:54]   팔 N — DDL 5992.9초 · writer {"attempts": 25187, "ok": 25187, "errors": 0, "err_kinds": [], "max_attempt_ms": 1030, "p50_attempt_ms": 38.0, "max_gap_ms": 1230} · binlog +857MB · 디스크 최대 84636MB
+[phase2 01:17:54] [2] 판 r4 팔 N0 — tpl_A 복사
+[phase2 03:20:47]   팔 N0 — DDL 6132.2초 · writer {"attempts": "NA", "ok": "NA", "errors": "NA", "max_attempt_ms": "NA", "max_gap_ms": "NA"} · binlog +0MB · 디스크 최대 82595MB
+[phase2 03:20:47] [2] 판 r5 팔 N — tpl_A 복사
+[phase2 05:21:26]   팔 N — DDL 5996.5초 · writer {"attempts": 25212, "ok": 25212, "errors": 0, "err_kinds": [], "max_attempt_ms": 1151, "p50_attempt_ms": 38.0, "max_gap_ms": 1352} · binlog +858MB · 디스크 최대 84697MB
+[phase2 05:21:26] [3] r_B 남김 — PK=session_id,rep_number,timestamp_sec,created_at
+[phase2 05:21:27] 완료 → /root/init/loadtest/r276-natpk/_out/phase2/raw.tsv
+[round] finish 2026-11-09T05:21:28Z — done
