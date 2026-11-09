@@ -1,0 +1,4 @@
+# D0 — 무대 (2026-11-07T20:39:29Z UTC)
+S3_BASE=s3://shadowfit-measure-055447613012/shadowfit/hostloss-ec2-20261107-173709/s3store REDO_CAPACITY=2G BASE_ROWS=10000000 INTERVALS=60 300 REPS=3 CONNS=15 ROWS_PER_TX=25
+MySQL /usr/sbin/mysqld  Ver 8.0.46 for Linux on x86_64 (MySQL Community Server - GPL) · xtrabackup xtrabackup version 8.0.35-36 based on MySQL server 8.0.35 Linux (x86_64) (revision id: 7233322c)
+nproc=4

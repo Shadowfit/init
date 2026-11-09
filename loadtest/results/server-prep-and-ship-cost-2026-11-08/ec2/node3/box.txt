@@ -1,0 +1,7 @@
+instance_type=m6i.xlarge
+4
+               total        used        free      shared  buff/cache   available
+Mem:              15           0          10           0           4          14
+Swap:              0           0           0
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/nvme0n1p1  100G  6.3G   94G   7% /

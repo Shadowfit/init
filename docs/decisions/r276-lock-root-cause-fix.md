@@ -42,8 +42,8 @@ RR 에서 **중복 키 한 건**이 `PRIMARY` 의 파티션 끝(supremum)에 `X`
 |---|---|
 | supremum `X` 가 사라진다 · 동시 부하 0/960 | **한 방향 대기는 남는다** — 재전송 트랜잭션이 커밋할 때까지 «다음 세션 원본 앞 gap» 에 들어갈 신규 삽입이 기다린다 |
 | 코드 한 줄 · 되돌리기 쉽다 · 스키마 불변 | 「순환이 안 생긴다」는 **세션 키가 `session_id` 로 묶여 있다는 논증**이다. 한 트랜잭션이 여러 세션 키를 섞는 경로가 생기면 안 선다 |
-| | 같은 트랜잭션 안의 세션 조회(`findById`)도 RC 가 된다 — 이 경로에선 무해해 보이나 **확인 안 함** |
-| | binlog 는 8.0 기본값 ROW 에 기대고 있다(설정 파일에 명시 없음). STATEMENT 로 바뀌면 RC 와 못 산다 |
+| | ~~같은 트랜잭션 안의 세션 조회(`findById`)도 RC 가 된다 — 확인 안 함~~ → ✅ **확인함(2026-11-08, 코드 대조) — 보장이 달라지지 않는다.** 트랜잭션 안의 문장은 넷이다: 세션 조회(잠금 없는 읽기 1회 — 한 번만 읽으면 RR·RC 가 같은 시점을 본다) · 종목 조회(`isCountOnly` 의 지연 로딩, 잠금 없는 읽기 — «점수 칸을 비울지» 만 정하고 앞 읽기와 맞을 필요가 없다) · pose `INSERT … ON DUPLICATE`(의도한 변화) · `UPDATE exercise_sessions … WHERE id=?`(PK 등호라 RR 에서도 갭 락이 없다). «세션이 `IN_PROGRESS` 면 저장» 검사는 RR 에서도 잠금 없는 읽기라 원래 경쟁을 막지 않았다 — 잃은 보장이 없다. 재시도는 트랜잭션 밖(`ExerciseGrpcService.savePoseDataBatchWithDeadlockRetry`)이라 RC 가 바깥 트랜잭션에 묻히지 않는다 |
+| | binlog 는 8.0 기본값 ROW 에 기대고 있다(설정 파일에 명시 없음). STATEMENT 로 바뀌면 RC 쓰기가 **오류 1665 로 거부**된다 — 데이터가 조용히 깨지는 게 아니라 pose 저장이 전부 실패하는 장애다. → **기동 시 검사로 막는다(2026-11-08 사용자 confirm)**: `BinlogFormatStartupCheck` 가 `log_bin=ON` 이고 세션 `binlog_format=STATEMENT` 면 기동을 거부한다(ROW·MIXED·binlog 꺼짐은 통과). compose 에 `--binlog-format` 을 적는 안은 8.0.34+ 에서 deprecated 경고가 나고 compose 밖(관리형 DB)에선 효과가 없어 택하지 않았다. 전제(1665)는 `BinlogFormatStartupCheckRaceTest` 가 실 MySQL 에서 재현한다 |
 
 ### ㄷ. 멱등 키를 PK 로 — `(session_id, rep_number, timestamp_sec, created_at)`, id 는 AUTO_INCREMENT 보조 인덱스로 유지
 
@@ -157,4 +157,6 @@ RR 에서 **중복 키 한 건**이 `PRIMARY` 의 파티션 끝(supremum)에 `X`
   박스·규모·범위(§5-5 네 건)는 confirm 대기
 - 2026-11-08 — **§5-5 네 건 추천대로 확정 (사용자 confirm).** ① `c7i.xlarge` · ②③ `m6i.xlarge` · ② 1,000만 행 ·
   ③ 같이 · B′ 넣음. 다음은 rig 작성 → 로컬 축소 스모크 → EC2 무인 라운드
+- 2026-11-08 — **ㄴ 의 «모르는 것» 두 줄 닫음.** `findById` 등 같은 트랜잭션의 다른 문장은 코드 대조로 «보장 불변» 확인.
+  binlog 형식은 **기동 시 검사로 막기로 함 (사용자 confirm)** — `BinlogFormatStartupCheck` · 테스트 2벌(판정 · 실 MySQL 전제 1665)
 - 2026-11-09 — **ㄷ 비용 측정 완료(EC2 3라운드).** 결과 §5-6. 결정 없음 — ㄴ 을 다시 열지는 사용자 confirm 대기
