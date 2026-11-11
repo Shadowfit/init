@@ -129,6 +129,7 @@
 ## 인프라·운영
 
 - [backup-restore-rto-rpo.md](./backup-restore-rto-rpo.md) — 백업·복구 — "되돌릴 수 있다"를 시간으로 (진행중 — #202 실측 완료, 병렬 덤프 등은 범위 밖으로 남음)
+- [binlog-shipper-ops.md](./binlog-shipper-ops.md) — 운영 binlog 반출기 — 측정용 스크립트를 운영에서 믿고 맡길 것으로 (분기점 — 방향 «서버 옆 업로더 직접 구현», D1~D8 추천까지·채택 없음)
 - [major-version-upgrade-policy.md](./major-version-upgrade-policy.md) — 메이저 버전업 2건(springdoc 3.x·Gradle 9) (보류 — §8에 "재지 않은 것" 다수, 테스트·실측 안 됨)
 - [replication-lag-and-semisync.md](./replication-lag-and-semisync.md) — 복제 — "한 대가 죽어도 된다"를 지연과 대가로 (진행중 — 조건부 결론, 다른 AZ는 안 잼)
 - [rpo-rto-targets.md](./rpo-rto-targets.md) — RPO·RTO 목표 — "얼마 걸리나"에서 "얼마여야 하나"로 (진행중 — 방향 확정: 백업+binlog 서버 밖, 리플리카 보류, 반동기 미채택. 반출·백업 주기 숫자 미정)
