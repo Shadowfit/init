@@ -1,0 +1,9 @@
+[phase3 16:02:50] r_Bp 만들기 — r_B 에서 idx_session_timestamp 를 뺀 복사본
+[phase3 16:02:58] 표본 50 개 (세션·id 쌍)
+[phase3 16:03:12]   r0 session tpl_A — 차가움 "p50_ms": 10.602 · 데움 "p50_ms": 5.128
+[phase3 16:03:22]   r0 session r_B — 차가움 "p50_ms": 12.499 · 데움 "p50_ms": 4.839
+[phase3 16:03:32]   r0 session r_Bp — 차가움 "p50_ms": 10.944 · 데움 "p50_ms": 5.154
+[phase3 16:03:41]   r0 id tpl_A — 차가움 "p50_ms": 0.862 · 데움 "p50_ms": 0.141
+[phase3 16:03:49]   r0 id r_B — 차가움 "p50_ms": 1.588 · 데움 "p50_ms": 0.212
+[phase3 16:03:58]   r0 id r_Bp — 차가움 "p50_ms": 1.508 · 데움 "p50_ms": 0.166
+[phase3 16:03:58] 완료 → /root/init/loadtest/r276-natpk/_out/phase3/reads.jsonl

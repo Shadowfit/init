@@ -1,0 +1,3 @@
+{"table": "tpl_A", "rows": 10000200, "data_length": 20512309248, "index_length": 680656896, "bytes_per_row": 2119.3}
+{"table": "r_B", "rows": 10060340, "data_length": 20651507712, "index_length": 646053888, "bytes_per_row": 2117.0}
+{"table": "r_Bp", "rows": 10060340, "data_length": 20649410560, "index_length": 363397120, "bytes_per_row": 2088.7}

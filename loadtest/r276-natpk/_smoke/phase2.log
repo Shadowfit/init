@@ -1,0 +1,10 @@
+[phase2 12:19:17] 기동 — 버퍼풀 512MB
+[phase2 12:22:12] [0] tpl_A 시딩 — 세션 200 × 600 = 120000 행
+{"table": "tpl_A", "sessions": 200, "rows": 120000, "sec": 127.3}
+[phase2 12:24:27] [0] tpl_A 120000 행 · PK=id,created_at
+[phase2 12:25:03] [1] ✅ 서버가 INPLACE·LOCK=NONE 을 받았다 — 팔 N 은 온라인 DDL 이다
+[phase2 12:25:09] [2] 판 discard 팔 N — tpl_A 복사
+[phase2 12:32:58]   팔 N — DDL 235.2초 · writer {"attempts": 633, "ok": 633, "errors": 0, "err_kinds": [], "max_attempt_ms": 21492, "p50_attempt_ms": 104.0, "max_gap_ms": 21700} · binlog +21MB · 디스크 최대 1622MB
+[phase2 12:32:58] [2] 판 discard 팔 P — tpl_A 복사
+[phase2 12:39:47]   팔 P — DDL 288.8초 · writer {"attempts": 440, "ok": 440, "errors": 0, "err_kinds": [], "max_attempt_ms": 4480, "p50_attempt_ms": 309.5, "max_gap_ms": 4684} · binlog +232MB · 디스크 최대 1604MB
+[phase2 12:39:47] [2] 판 r1 팔 N — tpl_A 복사

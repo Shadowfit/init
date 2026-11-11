@@ -1,0 +1,8 @@
+[phase3 12:50:34] 표본 20 개 (세션·id 쌍)
+[phase3 12:51:20]   r0 session tpl_A — 차가움 "p50_ms": 22.739 · 데움 "p50_ms": 18.898
+[phase3 12:51:38]   r0 session t_B — 차가움 "p50_ms": 1.739 · 데움 "p50_ms": 0.928
+[phase3 12:51:54]   r0 session t_Bp — 차가움 "p50_ms": 0.687 · 데움 "p50_ms": 0.743
+[phase3 12:52:11]   r0 id tpl_A — 차가움 "p50_ms": 0.756 · 데움 "p50_ms": 1.062
+[phase3 12:52:28]   r0 id t_B — 차가움 "p50_ms": 0.686 · 데움 "p50_ms": 0.663
+[phase3 12:52:39]   r0 id t_Bp — 차가움 "p50_ms": 0.628 · 데움 "p50_ms": 0.397
+[phase3 12:52:39] 완료 → /e/init-wt-natpk/loadtest/r276-natpk/_smoke/phase3/reads.jsonl

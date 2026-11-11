@@ -1,0 +1,4 @@
+tag	arm	ddl_sec	attempts	ok	errors	max_attempt_ms	max_gap_ms	binlog_mb	disk_peak_mb	pk_after	rows_after
+d	N0	43.3	NA	NA	NA	NA	NA	0	1407	session_id,rep_number,timestamp_sec,created_at	120000
+r1	N	37.1	168	168	0	331	531	6	1225	session_id,rep_number,timestamp_sec,created_at	123360
+r2	P	11.0	48	48	0	737	938	206	1450	session_id,rep_number,timestamp_sec,created_at	120960
