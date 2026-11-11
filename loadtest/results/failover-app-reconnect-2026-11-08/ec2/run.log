@@ -1,0 +1,65 @@
+[failover 05:50:38] ── 판 1 (버림) A·K1
+계정 4개 준비 → /root/rig_out/t1/tokens
+[failover 05:53:59] 판 1: 새 요청 멈춤(stable) — 나간 요청 기다리는 중(최대 1000초)
+[failover 05:54:00] 판 1 끝 — 승격 1212ms · 회복 판정 stable · 잃은 쓰기 0
+[failover 05:54:00] ── 판 2 (버림) B·K1
+계정 4개 준비 → /root/rig_out/t2/tokens
+[failover 05:55:37] 판 2: 새 요청 멈춤(stable) — 나간 요청 기다리는 중(최대 1000초)
+[failover 05:55:37] 판 2 끝 — 승격 1298ms · 회복 판정 stable · 잃은 쓰기 0
+[failover 05:55:37] ── 판 3 (버림) A·K2
+계정 4개 준비 → /root/rig_out/t3/tokens
+[failover 05:59:01] 판 3: 새 요청 멈춤(stable) — 나간 요청 기다리는 중(최대 1000초)
+[failover 05:59:01] 판 3 끝 — 승격 1376ms · 회복 판정 stable · 잃은 쓰기 0
+[failover 05:59:01] ── 판 4 (버림) B·K2
+계정 4개 준비 → /root/rig_out/t4/tokens
+[failover 06:00:37] 판 4: 새 요청 멈춤(stable) — 나간 요청 기다리는 중(최대 1000초)
+[failover 06:16:12] 판 4 끝 — 승격 1245ms · 회복 판정 stable · 잃은 쓰기 0
+[failover 06:16:12] ── 판 5 (본판) B·K2
+계정 4개 준비 → /root/rig_out/t5/tokens
+[failover 06:17:47] 판 5: 새 요청 멈춤(stable) — 나간 요청 기다리는 중(최대 1000초)
+[failover 06:33:21] 판 5 끝 — 승격 1213ms · 회복 판정 stable · 잃은 쓰기 0
+[failover 06:33:21] ── 판 6 (본판) A·K2
+계정 4개 준비 → /root/rig_out/t6/tokens
+[failover 06:36:45] 판 6: 새 요청 멈춤(stable) — 나간 요청 기다리는 중(최대 1000초)
+[failover 06:36:46] 판 6 끝 — 승격 1214ms · 회복 판정 stable · 잃은 쓰기 0
+[failover 06:36:46] ── 판 7 (본판) B·K1
+계정 4개 준비 → /root/rig_out/t7/tokens
+[failover 06:38:24] 판 7: 새 요청 멈춤(stable) — 나간 요청 기다리는 중(최대 1000초)
+[failover 06:38:25] 판 7 끝 — 승격 1205ms · 회복 판정 stable · 잃은 쓰기 0
+[failover 06:38:25] ── 판 8 (본판) A·K1
+계정 4개 준비 → /root/rig_out/t8/tokens
+[failover 06:41:49] 판 8: 새 요청 멈춤(stable) — 나간 요청 기다리는 중(최대 1000초)
+[failover 06:41:50] 판 8 끝 — 승격 1262ms · 회복 판정 stable · 잃은 쓰기 0
+[failover 06:41:50] ── 판 9 (본판) A·K2
+계정 4개 준비 → /root/rig_out/t9/tokens
+[failover 06:45:14] 판 9: 새 요청 멈춤(stable) — 나간 요청 기다리는 중(최대 1000초)
+[failover 06:45:15] 판 9 끝 — 승격 1340ms · 회복 판정 stable · 잃은 쓰기 0
+[failover 06:45:15] ── 판 10 (본판) B·K1
+계정 4개 준비 → /root/rig_out/t10/tokens
+[failover 06:46:53] 판 10: 새 요청 멈춤(stable) — 나간 요청 기다리는 중(최대 1000초)
+[failover 06:46:54] 판 10 끝 — 승격 1172ms · 회복 판정 stable · 잃은 쓰기 0
+[failover 06:46:54] ── 판 11 (본판) B·K2
+계정 4개 준비 → /root/rig_out/t11/tokens
+[failover 06:48:29] 판 11: 새 요청 멈춤(stable) — 나간 요청 기다리는 중(최대 1000초)
+[failover 07:04:04] 판 11 끝 — 승격 1246ms · 회복 판정 stable · 잃은 쓰기 0
+[failover 07:04:04] ── 판 12 (본판) A·K1
+계정 4개 준비 → /root/rig_out/t12/tokens
+[failover 07:07:30] 판 12: 새 요청 멈춤(stable) — 나간 요청 기다리는 중(최대 1000초)
+[failover 07:07:31] 판 12 끝 — 승격 1313ms · 회복 판정 stable · 잃은 쓰기 0
+[failover 07:07:31] ── 판 13 (본판) B·K1
+계정 4개 준비 → /root/rig_out/t13/tokens
+[failover 07:09:04] 판 13: 새 요청 멈춤(stable) — 나간 요청 기다리는 중(최대 1000초)
+[failover 07:09:05] 판 13 끝 — 승격 1253ms · 회복 판정 stable · 잃은 쓰기 0
+[failover 07:09:05] ── 판 14 (본판) A·K1
+계정 4개 준비 → /root/rig_out/t14/tokens
+[failover 07:12:31] 판 14: 새 요청 멈춤(stable) — 나간 요청 기다리는 중(최대 1000초)
+[failover 07:12:31] 판 14 끝 — 승격 1231ms · 회복 판정 stable · 잃은 쓰기 0
+[failover 07:12:31] ── 판 15 (본판) A·K2
+계정 4개 준비 → /root/rig_out/t15/tokens
+[failover 07:15:52] 판 15: 새 요청 멈춤(stable) — 나간 요청 기다리는 중(최대 1000초)
+[failover 07:15:53] 판 15 끝 — 승격 1321ms · 회복 판정 stable · 잃은 쓰기 0
+[failover 07:15:53] ── 판 16 (본판) B·K2
+계정 4개 준비 → /root/rig_out/t16/tokens
+[failover 07:17:28] 판 16: 새 요청 멈춤(stable) — 나간 요청 기다리는 중(최대 1000초)
+[failover 07:33:05] 판 16 끝 — 승격 1205ms · 회복 판정 stable · 잃은 쓰기 0
+[failover 07:33:05] 완료 → /root/rig_out

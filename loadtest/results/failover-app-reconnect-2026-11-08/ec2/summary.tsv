@@ -1,0 +1,17 @@
+trial	kind	arm	kill	promoted	switch_at	first_fail	recovered	n_fail	fail_kinds	max_hang	n_over_5s	unreturned	lost_acked	rows_on_old	status
+1	버림	A	K1	1212	1375	1390	104831	1044	EXC:ConnectionRefusedError:1029,401:15	30009	15	0	0	NA	stable
+2	버림	B	K1	1298	1469	30029	30456	1	401:1	30335	254	0	0	NA	stable
+3	버림	A	K2	1376	1540	1584	105163	1045	EXC:ConnectionRefusedError:1030,401:14,EXC:RemoteDisconnected:1	31473	15	0	0	304	stable
+4	버림	B	K2	1245	1456	962991	5295	1	401:1	962953	14	0	0	304	stable
+5	본판	B	K2	1213	1424	961556	5395	2	401:2	961530	14	0	0	303	stable
+6	본판	A	K2	1214	1418	1497	105539	1050	EXC:ConnectionRefusedError:1035,401:13,EXC:RemoteDisconnected:2	31440	15	0	0	303	stable
+7	본판	B	K1	1205	1355	30075	30441	1	401:1	30275	255	0	0	NA	stable
+8	본판	A	K1	1262	1480	1538	105294	1047	EXC:ConnectionRefusedError:1032,401:15	30009	15	0	0	NA	stable
+9	본판	A	K2	1340	1506	1612	105756	1052	EXC:ConnectionRefusedError:1036,401:14,EXC:RemoteDisconnected:2	31513	16	0	0	304	stable
+10	본판	B	K1	1172	1396	30035	30469	1	401:1	30343	255	0	0	NA	stable
+11	본판	B	K2	1246	1422	963030	5341	1	401:1	962970	13	0	0	304	stable
+12	본판	A	K1	1313	1473	1575	106062	1054	EXC:ConnectionRefusedError:1039,401:15	30011	15	0	0	NA	stable
+13	본판	B	K1	1253	1417		30400	0		30336	253	0	0	NA	stable
+14	본판	A	K1	1231	1567	1609	106123	1057	EXC:ConnectionRefusedError:1040,401:17	30009	17	0	0	NA	stable
+15	본판	A	K2	1321	1540	1564	105823	1052	EXC:ConnectionRefusedError:1037,401:13,EXC:RemoteDisconnected:2	31495	15	0	0	304	stable
+16	본판	B	K2	1205	1363	959832	5445	2	401:2	964740	14	0	0	304	stable
