@@ -6,4 +6,4 @@
 # pytest 는 두 형태를 **모두** 걷으므로, 테스트를 한 판도 고쳐 쓰지 않고 47판이 살아난다.
 -r requirements.txt
 
-pytest==9.1.1
+pytest==9.2.0
