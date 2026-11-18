@@ -44,6 +44,7 @@ public class MemberService{
     private final RefreshTokenHasher refreshTokenHasher;
     private final LoginAttemptLimiter loginAttemptLimiter;
     private final PushTokenRepository pushTokenRepository;
+    private final com.shadowfit.service.group.GroupWithdrawalService groupWithdrawalService;
 
     /** 계정이 없을 때 BCrypt 를 한 번 돌리기 위한 해시. 첫 사용 때 한 번만 만든다(실제 비밀번호가 아니다). */
     private volatile String dummyPasswordHash;
@@ -378,6 +379,10 @@ public class MemberService{
 
         requireNoActiveWorkout(member.getId());
 
+        // 그룹 정리 — FK CASCADE 에 맡기면 ① 생성자 탈퇴로 모임 전체가 사라지고 ② 그룹장이 멤버를 두고 나가고
+        // ③ 피드 사진 파일이 남는다. 회원 행을 지우기 전에 해야 한다(GroupWithdrawalService 문서 참조).
+        List<String> feedPhotos = groupWithdrawalService.detachMember(member.getId());
+
         // pose_data는 파티셔닝을 위해 FK(ON DELETE CASCADE)를 제거했음 — 세션이 지워지기 전에
         // session_id 목록을 미리 확보해둬야 afterCommit 이후 정리할 수 있음
         // (docs/decisions/pose-data-partition-fk-tradeoff.md).
@@ -387,6 +392,8 @@ public class MemberService{
         // 수동으로도 지우면 이미 사라진 행을 또 지우려다 StaleStateException(0 row) 발생.
         // exercise_sessions.member_id 도 동일하게 CASCADE 유지(FK 그대로) — pose_data만 예외.
         memberRepository.delete(member);
+
+        groupWithdrawalService.deleteFilesAfterCommit(feedPhotos);
 
         // afterCommit: 탈퇴 트랜잭션이 확정된 직후, 스케줄 대기 없이 즉시 비동기로 pose_data 정리
         // 트리거 (개인정보보호법 제21조 "지체없이" 파기 요건 대응, 탈퇴 API 응답은 기다리지 않음).
