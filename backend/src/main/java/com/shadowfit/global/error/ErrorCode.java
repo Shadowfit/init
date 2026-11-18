@@ -21,7 +21,7 @@ public enum ErrorCode {
     ACCESS_DENIED(403, "A002", "해당 리소스에 대한 접근 권한이 없습니다."),
     TOKEN_EXPIRED(401, "A003", "인증 토큰이 만료되었습니다."),
     INVALID_TOKEN(401, "A004", "잘못된 인증 토큰입니다."),
-    LOGIN_INPUT_INVALID(401, "A005", "비밀번호가 틀렸습니다."),
+    LOGIN_INPUT_INVALID(401, "A005", "이메일 또는 비밀번호가 올바르지 않습니다."),
     // 폐기된 refresh token 이 도착했다 — 재시도 유예 밖이라 탈취로 본다 (이슈 #135).
     //
     // 문구에 «탈취» 라고 쓰지 않는 것은 의도다 — 낡은 기기가 살아 있을 때도 같은 코드가 나가고

@@ -29,3 +29,11 @@ server:
   # 없으면 ① 리다이렉트·절대 URL 이 http 로 생성되고 ② 접근 로그의 클라이언트 IP 가 전부
   # 프록시 IP 하나로 찍힌다. 둘 다 «돌긴 도는데 조용히 틀린» 부류다.
   forward-headers-strategy: ${FORWARD_HEADERS_STRATEGY:none}
+
+# gRPC reflection — 운영에서는 끈다.
+# 켜져 있으면 grpcurl 한 줄로 서비스·메서드·메시지 구조 전체가 노출된다. 호스트 포트를 닫아 두는 것이
+# 1차 방어지만(docker-compose.prod.yml 은 6565 를 호스트에 열지 않는다) 방어가 한 겹뿐인 상태를 피한다.
+# 측정 rig 에서 grpcurl 을 reflection 으로 쓰려면 GRPC_REFLECTION_ENABLED=true 를 준다.
+grpc:
+  server:
+    reflection-enabled: ${GRPC_REFLECTION_ENABLED:false}
