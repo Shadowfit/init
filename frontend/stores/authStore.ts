@@ -26,6 +26,9 @@ interface AuthState {
   logout: () => Promise<void>;
   // 토큰 만료 등으로 서버 호출 없이 로컬 세션만 정리할 때 사용
   forceLogout: () => Promise<void>;
+  // 회원 탈퇴 — 서버가 성공했을 때만 로컬 세션을 지운다. 서버가 거절하면(운동 중, 그룹장 양도 필요 등)
+  // 예외를 그대로 던지고 로그인 상태는 유지한다.
+  deleteAccount: () => Promise<void>;
   // api.ts 의 401 인터셉터가 재발급에 성공하면 호출한다 (이슈 #135).
   // SecureStore 쓰기는 인터셉터가 이미 했고, 여기서는 메모리 상태만 맞춘다.
   applyReissuedTokens: (accessToken: string, refreshToken: string) => void;
@@ -173,6 +176,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         isLoading: false,
       });
     }
+  },
+
+  deleteAccount: async () => {
+    const email = get().user?.email;
+    if (!email) {
+      throw new Error('로그인 정보를 찾을 수 없습니다');
+    }
+    // 서버가 실패하면 여기서 던진다 — 탈퇴가 안 됐는데 로그아웃시키면 사용자는 «됐다» 고 오해한다.
+    await authService.deleteAccount(email);
+    // 성공하면 서버의 refresh 행도 이미 지워졌다. 로컬 세션만 정리한다(logout API 는 부르지 않는다).
+    await get().forceLogout();
   },
 
   // 서버에 logout API 를 호출하지 않고 로컬만 정리 (토큰 만료 케이스용)
