@@ -208,4 +208,65 @@ class TokenReissueIntegrationTest {
                 .as("보수적 선택의 실제 결과 — 낡은 기기의 시도가 현재 세션까지 끊는다")
                 .isEmpty();
     }
+
+    private com.fasterxml.jackson.databind.JsonNode loginBody() throws Exception {
+        String body = mockMvc.perform(post("/member/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new LoginRequestDto(EMAIL, PASSWORD))))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(body);
+    }
+
+    @Test
+    @DisplayName("refresh 토큰을 Bearer 로 보내면 보호된 API 는 401 — access 는 통과한다")
+    void refreshToken_cannotAuthenticateApiCalls() throws Exception {
+        com.fasterxml.jackson.databind.JsonNode tokens = loginBody();
+        String access = tokens.get("accessToken").asText();
+        String refresh = tokens.get("refreshToken").asText();
+
+        // 대조군: access 로는 인증이 되어 401 이 아니다.
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .get("/reports/weekly-summary").header("Authorization", "Bearer " + access))
+                .andExpect(result -> assertThat(result.getResponse().getStatus()).isNotEqualTo(401));
+
+        // 같은 요청에 refresh 를 실으면 거절된다 — 이 검사가 없으면 7일짜리 토큰이 API 키가 된다.
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .get("/reports/weekly-summary").header("Authorization", "Bearer " + refresh))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("access 토큰으로 재발급을 시도하면 401 이고, 정상 사용자의 세션(refresh 행)은 끊기지 않는다")
+    void accessToken_cannotBeUsedToReissue() throws Exception {
+        com.fasterxml.jackson.databind.JsonNode tokens = loginBody();
+        String access = tokens.get("accessToken").asText();
+
+        mockMvc.perform(post("/member/reissue")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new ReissueRequestDto(access))))
+                .andExpect(status().isUnauthorized());
+
+        assertThat(refreshTokenRepository.findById(member.getId()))
+                .as("종류 검사를 해시 대조보다 먼저 하지 않으면 «폐기된 구본» 으로 오판해 세션을 지운다")
+                .isPresent();
+    }
+
+    @Test
+    @DisplayName("로그인 — 없는 계정과 틀린 비밀번호의 응답이 같다 (계정 존재 여부 오라클 차단)")
+    void login_unknownAccountAndWrongPassword_lookIdentical() throws Exception {
+        String unknown = mockMvc.perform(post("/member/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new LoginRequestDto("nobody@test.com", PASSWORD))))
+                .andExpect(status().isUnauthorized())
+                .andReturn().getResponse().getContentAsString();
+        String wrongPw = mockMvc.perform(post("/member/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new LoginRequestDto(EMAIL, "wrong-password"))))
+                .andExpect(status().isUnauthorized())
+                .andReturn().getResponse().getContentAsString();
+
+        assertThat(objectMapper.readTree(unknown).get("message"))
+                .isEqualTo(objectMapper.readTree(wrongPw).get("message"));
+    }
 }

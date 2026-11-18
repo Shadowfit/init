@@ -45,6 +45,18 @@ public class MemberService{
     private final LoginAttemptLimiter loginAttemptLimiter;
     private final PushTokenRepository pushTokenRepository;
 
+    /** 계정이 없을 때 BCrypt 를 한 번 돌리기 위한 해시. 첫 사용 때 한 번만 만든다(실제 비밀번호가 아니다). */
+    private volatile String dummyPasswordHash;
+
+    private String dummyPasswordHash() {
+        String h = dummyPasswordHash;
+        if (h == null) {
+            h = passwordEncoder.encode(java.util.UUID.randomUUID().toString());
+            dummyPasswordHash = h;
+        }
+        return h;
+    }
+
     /**
      * 이 시간 동안 프레임 유입이 없으면 그 세션은 죽은 것으로 본다(탈퇴 가드 판정 기준).
      *
@@ -108,8 +120,15 @@ public class MemberService{
     }
 
     private LoginResponseDto doLogin(LoginRequestDto dto) {
-        Member member = memberRepository.findByEmail(dto.getEmail()).
-                orElseThrow(()-> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        Member member = memberRepository.findByEmail(dto.getEmail()).orElse(null);
+
+        // 🔴 «없는 계정» 과 «틀린 비밀번호» 는 응답 코드·메시지·시간 모두 같아야 한다. 코드가 다르면
+        //    (예전: 404 U001 vs 401 A005) 그것이 곧 계정 존재 여부 오라클이다. 계정이 없을 때도
+        //    BCrypt 를 한 번 돌려 응답 시간 차이로 새지 않게 한다.
+        if (member == null) {
+            passwordEncoder.matches(dto.getPassword(), dummyPasswordHash());
+            throw new BusinessException(ErrorCode.LOGIN_INPUT_INVALID);
+        }
 
         if(!passwordEncoder.matches(dto.getPassword(), member.getPassword())){
             throw new BusinessException(ErrorCode.LOGIN_INPUT_INVALID);
@@ -181,6 +200,11 @@ public class MemberService{
 
         // 서명·만료 검증이 먼저다. 여기서 걸리면 DB 를 볼 이유가 없다.
         if (!jwtUtil.isValidToken(presented)) {
+            throw new BusinessException(ErrorCode.INVALID_TOKEN);
+        }
+        // access 토큰으로 재발급을 시도하는 경우 — 아래 해시 대조로 가면 «폐기된 구본» 으로 오판해
+        // 정상 사용자의 세션을 끊는다(REFRESH_TOKEN_REUSED). 종류부터 거른다.
+        if (!jwtUtil.isRefreshToken(presented)) {
             throw new BusinessException(ErrorCode.INVALID_TOKEN);
         }
 

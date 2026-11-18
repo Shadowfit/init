@@ -276,15 +276,17 @@ class MemberServiceTest {
         }
 
         @Test
-        @DisplayName("존재하지 않는 이메일이면 USER_NOT_FOUND")
+        @DisplayName("존재하지 않는 이메일도 비밀번호 불일치와 같은 LOGIN_INPUT_INVALID — 계정 존재 여부를 알려주지 않는다")
         void login_userNotFound_throws() {
             when(memberRepository.findByEmail(EMAIL)).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> memberService.login(new LoginRequestDto(EMAIL, "raw-pw")))
                     .isInstanceOf(BusinessException.class)
                     .extracting(e -> ((BusinessException) e).getErrorCode())
-                    .isEqualTo(ErrorCode.USER_NOT_FOUND);
+                    .isEqualTo(ErrorCode.LOGIN_INPUT_INVALID);
 
+            // 계정이 없어도 BCrypt 를 한 번 돌려 응답 시간으로 존재 여부가 새지 않게 한다.
+            verify(passwordEncoder).matches(org.mockito.ArgumentMatchers.eq("raw-pw"), org.mockito.ArgumentMatchers.any());
             verify(jwtUtil, never()).createAccessToken(any());
         }
 
