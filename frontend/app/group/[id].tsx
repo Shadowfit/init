@@ -1,3 +1,4 @@
+import { devWarn } from '@/utils/devLog';
 import { useCallback, useState } from 'react';
 import {
   View,
@@ -77,7 +78,7 @@ export default function GroupDetailScreen() {
     groupService
       .getAttendance(groupId, year, month)
       .then((res) => setAttendance(res.data))
-      .catch((e) => console.warn('[attendance] status=', e?.response?.status));
+      .catch((e) => devWarn('[attendance] status=', e?.response?.status));
   }, [groupId]);
 
   const loadFeed = useCallback(async (beforeSeq: number | null, replace: boolean) => {
@@ -87,7 +88,7 @@ export default function GroupDetailScreen() {
       setFeed((prev) => (replace ? res.data.items : [...prev, ...res.data.items]));
       setNextBeforeSeq(res.data.nextBeforeSeq);
     } catch (e: any) {
-      console.warn('[feed] status=', e?.response?.status, 'data=', JSON.stringify(e?.response?.data));
+      devWarn('[feed] status=', e?.response?.status, 'data=', JSON.stringify(e?.response?.data));
     } finally {
       setFeedLoading(false);
     }
@@ -101,7 +102,7 @@ export default function GroupDetailScreen() {
         setStatuses(s.data);
       })
       .catch((e) => {
-        console.warn('[group] status=', e?.response?.status, 'data=', JSON.stringify(e?.response?.data));
+        devWarn('[group] status=', e?.response?.status, 'data=', JSON.stringify(e?.response?.data));
         if (e?.response?.status === 403 || e?.response?.status === 404) {
           Alert.alert('모임', '이 모임에 접근할 수 없어요.', [{ text: '확인', onPress: () => router.back() }]);
         }

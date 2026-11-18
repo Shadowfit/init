@@ -1,3 +1,4 @@
+import { devError } from '@/utils/devLog';
 import { useState } from 'react';
 import {
   View,
@@ -225,7 +226,7 @@ function SignupForm() {
         sex,
       });
     } catch (e: any) {
-      console.error('[signup] status=', e.response?.status, 'data=', e.response?.data);
+      devError('[signup] status=', e.response?.status, 'data=', e.response?.data);
       const msg =
         e.response?.data?.message ||
         e.response?.data ||

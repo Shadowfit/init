@@ -1,3 +1,4 @@
+import { devError } from '@/utils/devLog';
 import { useEffect, useState } from 'react';
 import {
   View,
@@ -229,7 +230,7 @@ export default function OnboardingScreen() {
       markOnboardingCompleted(); // 가드가 (onboarding) 으로 다시 안 빠지게
       router.replace('/(tabs)');
     } catch (e: any) {
-      console.error('[onboarding patch] status=', e.response?.status, 'data=', e.response?.data);
+      devError('[onboarding patch] status=', e.response?.status, 'data=', e.response?.data);
       const msg = e.response?.data?.message || '온보딩 저장에 실패했습니다';
       Alert.alert(`온보딩 실패 (${e.response?.status ?? 'no-response'})`, msg);
     } finally {
