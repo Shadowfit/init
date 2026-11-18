@@ -1,3 +1,4 @@
+import { devError, devWarn } from '@/utils/devLog';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated, AppState, Platform, type AppStateStatus } from 'react-native';
 import { Alert } from '@/utils/alert';
@@ -127,7 +128,7 @@ export default function ExerciseScreen() {
     } catch (e) {
       if (__DEV__) {
         // eslint-disable-next-line no-console
-        console.warn('[camera] pictureSize 조회 실패 — 원본 해상도 유지:', (e as Error).message);
+        devWarn('[camera] pictureSize 조회 실패 — 원본 해상도 유지:', (e as Error).message);
       }
     }
   };
@@ -260,7 +261,7 @@ export default function ExerciseScreen() {
         if (id != null) router.replace(`/report/${id}` as any);
       }
     } catch (e: any) {
-      console.error('[exercise session] status=', e?.response?.status, 'data=', e?.response?.data);
+      devError('[exercise session] status=', e?.response?.status, 'data=', e?.response?.data);
       Alert.alert(
         '운동 세션 오류',
         e?.response?.data?.message ?? '세션 처리 중 오류가 발생했습니다',
@@ -383,7 +384,7 @@ export default function ExerciseScreen() {
         } catch (e) {
           if (__DEV__) {
             // eslint-disable-next-line no-console
-            console.warn('[camera capture]', (e as Error).message);
+            devWarn('[camera capture]', (e as Error).message);
           }
         }
 
@@ -473,7 +474,7 @@ export default function ExerciseScreen() {
           }
           if (__DEV__) {
             // eslint-disable-next-line no-console
-            console.warn('[ai pose] status=', e?.response?.status, e?.message);
+            devWarn('[ai pose] status=', e?.response?.status, e?.message);
           }
         }
       } finally {

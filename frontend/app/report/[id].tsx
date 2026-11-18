@@ -1,3 +1,4 @@
+import { devWarn } from '@/utils/devLog';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -160,7 +161,7 @@ export default function ReportScreen() {
           setTimeout(() => load(attempt + 1), RETRY_DELAY_MS);
           return;
         }
-        console.warn('[session-report] status=', status);
+        devWarn('[session-report] status=', status);
         setPending(false);
         setError(status === 404 ? '보고서를 찾을 수 없어요. 잠시 후 홈에서 다시 열어주세요.' : '보고서를 불러오지 못했어요.');
         setLoading(false);
@@ -171,7 +172,7 @@ export default function ReportScreen() {
       .getSessionFeedbackSummary(sessionId)
       .then((res) => setFeedbackSummary(res.data))
       .catch((e) => {
-        console.warn('[feedback-summary] status=', e?.response?.status);
+        devWarn('[feedback-summary] status=', e?.response?.status);
       });
     return () => {
       cancelled = true;
