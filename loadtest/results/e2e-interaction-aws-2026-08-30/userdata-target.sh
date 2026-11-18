@@ -6,8 +6,8 @@ cd /root || exit 1
 curl -fsSL "https://raw.githubusercontent.com/Shadowfit/init/${SHA}/loadtest/aws/bootstrap.sh" -o bootstrap.sh
 grep -q "p6-target" bootstrap.sh || { echo "FATAL: bootstrap.sh missing p6-target — bad fetch"; touch /root/BOOTSTRAP_FAILED; exit 1; }
 REF="$SHA" ROLE=p6-target \
-  AI_PUBLIC_TOKEN=cyyVMeCqTFdUQLlxfmVwLGJQQCPzRd9 \
-  INTERNAL_API_TOKEN=F2K5gSBzIvassfyWJH8ZojarqFXsd3 \
+  AI_PUBLIC_TOKEN=<REDACTED> \
+  INTERNAL_API_TOKEN=<REDACTED> \
   bash bootstrap.sh
 if [ $? -eq 0 ]; then
   touch /root/BOOTSTRAP_DONE

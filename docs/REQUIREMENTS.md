@@ -112,10 +112,12 @@
 > 편입 이유는 진척률 계산의 분모를 실제 산출물과 맞추기 위해서다 — 구현·측정·문서가 다 끝난 기능이
 > 요구사항 목록에 없으면 개수 기반 % 가 실제보다 낮게 나온다.
 >
-> 📌 **관리자 계정은 회원가입 시 `role` 을 지정해 만든다** (`MemberRequestDto.role`).
-> 권한을 클라이언트가 정하는 형태이므로 운영 서비스라면 권한 상승 경로지만,
-> **이 프로젝트는 데모 범위라 그대로 둔다** (2026-08-07 확인). 관리자 계정을 시연에서
-> 바로 만들 수 있어야 하고, 승격 전용 경로를 따로 만드는 것은 범위 밖이다.
+> 📌 **관리자 role 은 클라이언트가 정하지 않는다.** 2026-08-07 판에는 «회원가입 시 `role` 을 지정해
+> 관리자 계정을 만든다» 고 적혀 있었으나, 이슈 #138 이후 `MemberRequestDto` 에 `role` 필드가 없고
+> 서버가 `UserRole.USER` 로 고정한다(구버전 앱이 보내는 `role` 은 `@JsonIgnoreProperties` 로 버린다).
+> 회귀 테스트: `MemberServiceTest.signup_ignoresClientSuppliedRole`,
+> `MemberControllerIntegrationTest.signup_withAdminRole_cannotAccessAdminApi`.
+> 관리자 계정을 만드는 정식 경로는 `docs/decisions/admin-role-provisioning.md` 참조.
 
 ---
 
