@@ -20,8 +20,8 @@
   CPU 캡(팔 C·D 전용): AI=8 · MySQL=4 · Spring=4 vCPU
      합 16 vCPU / 이 박스 8 vCPU  ← 남는 만큼이 «노는 조건» 이다
      비율 4:2:2 는 «정한 값» 이다 (#212). 팔 B↔C 대조가 그 값에 근거를 붙이려는 시도다
-  AI_PUBLIC_TOKEN=IMl2pP1JfL9RfpPTtFJS6qMzSZ2E3c
-  INTERNAL_API_TOKEN=9YppFXULHXeAYc2R8PmNOoNZdjwKjkM
+  AI_PUBLIC_TOKEN=<REDACTED>
+  INTERNAL_API_TOKEN=<REDACTED>
   🔴 위 두 토큰을 부하기의 run_all.sh 에 그대로 넘긴다 — 다르면 401/전 요청 실패다
 
 ──── MySQL 컨테이너 ────
