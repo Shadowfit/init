@@ -33,6 +33,8 @@
 | `C003` `INTERNAL_SERVER_ERROR` | 500 | 서버 내부 오류가 발생했습니다. |
 | `C004` `INVALID_TYPE_VALUE` | 400 | 입력값의 타입이 적절하지 않습니다. |
 | `C005` `HANDLE_ACCESS_DENIED` | 403 | 접근이 거부되었습니다. |
+| `C006` `RESOURCE_NOT_FOUND` | 404 | 요청한 경로를 찾을 수 없습니다. |
+| `C007` `FILE_TOO_LARGE` | 413 | 파일 크기가 제한을 초과했습니다. |
 
 ### 인증/인가 (A00x)
 | 코드 | HTTP | 메시지 |
@@ -91,6 +93,20 @@
 | `W008` `SESSION_REATTACH_EXPIRED` | **410** | 재개할 수 있는 시간이 지난 세션입니다. 새로 시작해 주세요. |
 | `W009` `SESSION_REATTACH_UNAVAILABLE` | **503** | 지금은 이어하기를 할 수 없습니다. 잠시 후 다시 시도해 주세요. |
 | `W010` `WITHDRAWAL_BLOCKED_BY_ACTIVE_SESSION` | **409** | 운동을 종료한 뒤 탈퇴할 수 있습니다. |
+| `W011` `EXERCISE_DELETE_NOT_ALLOWED` | 409 | 운동 이력이 있는 종목은 삭제할 수 없습니다. |
+| `W012` `EXERCISE_ANALYSIS_ENABLE_BLOCKED` | 400 | 기준 좌표가 없어 분석을 활성화할 수 없습니다. |
+| `W013` `CATEGORY_NOT_FOUND` | 404 | 존재하지 않는 카테고리입니다. |
+| `W014` `CATEGORY_NAME_DUPLICATION` | 409 | 이미 존재하는 카테고리 이름입니다. |
+| `W015` `CATEGORY_IN_USE` | 409 | 사용 중인 카테고리는 삭제할 수 없습니다. |
+| `W016` `INVALID_REFERENCE_VIDEO` | 400 | mp4 영상 파일만 등록할 수 있습니다. |
+| `W017` `REFERENCE_EXTRACTION_UNAVAILABLE` | 503 | AI 서버에 연결할 수 없어 기준 영상을 등록할 수 없습니다. 잠시 후 다시 시도해 주세요. |
+| `W018` `EXERCISE_CODE_DUPLICATION` | 409 | 이미 사용 중인 종목 코드입니다. |
+| `W019` `EXERCISE_CODE_LOCKED` | 409 | 분석이 켜진 종목의 코드는 바꿀 수 없습니다. 분석을 끈 뒤 바꿔 주세요. |
+| `W020` `EXERCISE_CODE_REQUIRED` | 400 | 종목 코드가 없어 분석을 활성화할 수 없습니다. |
+| `W021` `INVALID_REFERENCE_POSES` | 400 | 기준 좌표 형식이 올바르지 않습니다 (JSON 배열, 시각은 오름차순). |
+| `W022` `INVALID_SYNC_THRESHOLDS` | 400 | 판정 기준은 0 < 위험 기준 < 정석 기준 ≤ 100 이어야 합니다. |
+
+> 📌 **W011~W022 는 2026-11-19 에 추가한 것이다** — 관리자 종목·카테고리·기준 영상 관리가 들어오면서 코드에 생겼는데 이 문서에 빠져 있었다(`ErrorCode.java`). 전부 관리자 API(`/admin/...`)에서 나온다. 앱(회원)이 보는 것은 아니다.
 
 > 🔴 **W005~W010 은 2026-08-08 에 추가한 것이다** — 코드에는 있었는데 이 문서에만 없었다(`ErrorCode.java:35-60`). 프론트가 이 문서를 계약으로 읽으면 **여섯 가지 응답을 «모르는 에러» 로 처리한다.**
 >
@@ -127,6 +143,7 @@
 | 코드 | HTTP | 메시지 |
 |------|------|--------|
 | `R001` `REPORT_NOT_FOUND` | 404 | 리포트를 찾을 수 없습니다. |
+| `R002` `WEEKLY_REPORT_WEEK_NOT_COMPLETED` | 400 | 아직 끝나지 않은 주의 리포트는 만들 수 없습니다 |
 
 ---
 
@@ -144,6 +161,9 @@
 | `G009` `GROUP_EVENT_NOT_FOUND` | 404 | 존재하지 않는 피드 글입니다. |
 | `G010` `OWNER_MUST_TRANSFER_FIRST` | 409 | 그룹장은 다른 멤버에게 양도한 뒤 탈퇴할 수 있습니다. |
 | `G011` `GROUP_MEMBER_NOT_FOUND` | 404 | 모임의 멤버가 아닌 회원입니다. |
+| `G012` `SESSION_ALREADY_SHARED` | 409 | 이미 이 모임에 공유한 운동입니다. |
+| `G013` `SHAREABLE_SESSION_NOT_FOUND` | 404 | 공유할 수 있는 운동 기록이 없습니다. |
+| `G014` `INVALID_FEED_PHOTO` | 400 | 사진은 10MB 이하의 jpg · png · webp 만 올릴 수 있습니다. |
 
 ### 알림/재촉/응원 (N00x)
 | 코드 | HTTP | 메시지 |
@@ -153,6 +173,17 @@
 | `N003` `NUDGE_SELF_NOT_ALLOWED` | 400 | 자기 자신은 재촉할 수 없습니다. |
 | `N004` `CHEER_ALREADY_SENT_TODAY` | 409 | 오늘은 이미 응원했습니다. (재촉과 별개로 센다) |
 | `N005` `CHEER_SELF_NOT_ALLOWED` | 400 | 자기 자신에게는 응원을 보낼 수 없습니다. |
+
+### 트레이너 (T00x)
+| 코드 | HTTP | 메시지 |
+|------|------|--------|
+| `T001` `NOT_ASSIGNED_TRAINER` | 403 | 담당 사용자가 아닙니다. |
+
+### 운동 목표 (GL00x)
+| 코드 | HTTP | 메시지 |
+|------|------|--------|
+| `GL001` `GOAL_NOT_FOUND` | 404 | 존재하지 않는 목표입니다. |
+| `GL002` `GOAL_TYPE_DUPLICATION` | 409 | 이미 같은 종류의 목표가 있습니다. |
 
 ---
 
