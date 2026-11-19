@@ -30,6 +30,9 @@ public class SessionTimeoutScheduler {
 
     private final SessionRepository sessionRepository;
     private final SessionService sessionService;
+    /** 지표의 scheduler 태그 값 — 알람 규칙이 이 이름을 쓴다. */
+    static final String SCHEDULER_NAME = "session-timeout";
+
     private final SessionMetrics sessionMetrics;
     private final Integer idleMinutes;
     private final Integer defaultBufferMinutes;
@@ -44,6 +47,8 @@ public class SessionTimeoutScheduler {
         this.sessionMetrics = sessionMetrics;
         this.idleMinutes = idleMinutes;
         this.defaultBufferMinutes = bufferMinutes;
+        // 게이지를 기동 시각으로 만들어 둔다 — 첫 tick 전에도 «마지막 성공 이후 경과» 를 계산할 수 있게.
+        this.sessionMetrics.registerScheduler(SCHEDULER_NAME);
     }
 
     /**
@@ -66,6 +71,9 @@ public class SessionTimeoutScheduler {
     }
 
     private void sweep() {
+        // tick 결과 — 예외를 삼키는 구조라 이 값을 밖으로 내보내지 않으면 스케줄러가 죽어도 아무 신호가 없다(T2).
+        String outcome = "error";
+        boolean itemErrors = false;
         try {
             log.debug("세션 타임아웃 체크 시작 - 버퍼시간: {}분", defaultBufferMinutes);
 
@@ -75,6 +83,7 @@ public class SessionTimeoutScheduler {
 
             if (candidates.isEmpty()) {
                 log.debug("타임아웃 체크 대상 세션 없음");
+                outcome = "success";
                 return;
             }
 
@@ -120,6 +129,7 @@ public class SessionTimeoutScheduler {
                         sessionMetrics.optimisticLockConflict("timeout-scheduler", "yield");
                         log.info("세션 타임아웃 양보 - 세션 ID: {} (FastAPI 결과 우선)", candidate.getId());
                     } catch (Exception e) {
+                        itemErrors = true;
                         log.error("세션 {} 타임아웃 처리 실패", candidate.getId(), e);
                     }
                 }
@@ -130,8 +140,12 @@ public class SessionTimeoutScheduler {
                         timeoutCount, yieldedCount);
             }
 
+            outcome = itemErrors ? "partial" : "success";
+
         } catch (Exception e) {
             log.error("세션 타임아웃 체크 중 에러 발생", e);
+        } finally {
+            sessionMetrics.schedulerTick(SCHEDULER_NAME, outcome);
         }
     }
 }

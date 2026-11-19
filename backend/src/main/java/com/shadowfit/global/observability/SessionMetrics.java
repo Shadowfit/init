@@ -93,10 +93,67 @@ public class SessionMetrics {
     /** 세션 검증 통과부터 커밋까지 — 고아가 생길 수 있는 창의 폭 (이슈 #87). */
     private static final String POSE_ORPHAN_WINDOW = "shadowfit.pose.orphan.window";
 
-    private final MeterRegistry registry;
+    /**
+     * 스케줄러 tick 1회의 결과. tags: scheduler(이름), outcome(success/partial/error)
+     *
+     * <p>{@code error} 는 tick 전체가 예외로 끝난 것(후보 조회 실패 등), {@code partial} 은 tick 은 돌았지만 건별 처리에서
+     * 예상 밖 예외가 난 것이다. 타임아웃 스케줄러는 예외를 삼키고 로그만 남기므로(try/catch 가 tick 을 감싼다) <b>죽어도
+     * 아무 지표가 안 변했다</b> — 이게 없으면 «orphan IN_PROGRESS 세션이 영구히 남는» 상황을 밖에서 알 수 없다
+     * (failure-modes T2).
+     */
+    private static final String SCHEDULER_TICK = "shadowfit.scheduler.tick";
 
+    /**
+     * 스케줄러가 <b>마지막으로 깨끗이 끝낸</b> 시각(epoch 초). Prometheus 에서는
+     * {@code shadowfit_scheduler_last_success_timestamp_seconds} 이고, 알람은 {@code time() - 이 값 > 주기의 몇 배} 로 건다.
+     * 등록 시점의 값은 «기동 시각» 이다 — 첫 tick 전에도 시계열이 있어, «기동했는데 한 번도 못 돌았다» 를 같은 식으로 잡는다.
+     */
+    private static final String SCHEDULER_LAST_SUCCESS = "shadowfit.scheduler.last.success.timestamp";
+
+    private final MeterRegistry registry;
+    private final java.time.Clock clock;
+    /** 게이지는 값 객체를 약참조로 잡는다 — 여기서 강참조를 들고 있어야 GC 로 사라지지 않는다. */
+    private final java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.atomic.AtomicLong> lastSuccess =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    @org.springframework.beans.factory.annotation.Autowired
     public SessionMetrics(MeterRegistry registry) {
+        this(registry, java.time.Clock.systemUTC());
+    }
+
+    /** 시계를 주입할 수 있는 생성자 — «마지막 성공 시각이 갱신됐는가» 를 테스트에서 가르려고 둔다. */
+    public SessionMetrics(MeterRegistry registry, java.time.Clock clock) {
         this.registry = registry;
+        this.clock = clock;
+    }
+
+    /**
+     * 스케줄러를 지표에 등록한다 — 게이지를 «지금(기동 시각)» 으로 만든다. 스케줄러 생성자에서 한 번 부른다.
+     * 이미 등록돼 있으면 아무것도 하지 않는다(재호출 안전).
+     */
+    public void registerScheduler(String scheduler) {
+        lastSuccess.computeIfAbsent(scheduler, name -> {
+            java.util.concurrent.atomic.AtomicLong holder =
+                    new java.util.concurrent.atomic.AtomicLong(clock.instant().getEpochSecond());
+            io.micrometer.core.instrument.Gauge.builder(SCHEDULER_LAST_SUCCESS, holder, java.util.concurrent.atomic.AtomicLong::doubleValue)
+                    .tag("scheduler", name)
+                    .baseUnit("seconds")
+                    .description("스케줄러가 마지막으로 깨끗이 끝낸 시각(epoch 초). 등록 직후에는 기동 시각")
+                    .register(registry);
+            return holder;
+        });
+    }
+
+    /**
+     * tick 1회의 결과를 남긴다. {@code success} 일 때만 «마지막 성공 시각» 을 갱신한다 —
+     * {@code partial}·{@code error} 가 계속되면 이 값이 멈춰 알람이 걸린다.
+     */
+    public void schedulerTick(String scheduler, String outcome) {
+        registry.counter(SCHEDULER_TICK, "scheduler", scheduler, "outcome", outcome).increment();
+        if ("success".equals(outcome)) {
+            registerScheduler(scheduler);   // 등록을 빠뜨린 호출부에서도 값이 생기게
+            lastSuccess.get(scheduler).set(clock.instant().getEpochSecond());
+        }
     }
 
     /**
