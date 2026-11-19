@@ -17,6 +17,8 @@ public enum ErrorCode {
     RESOURCE_NOT_FOUND(404, "C006", "요청한 경로를 찾을 수 없습니다."),
     FILE_TOO_LARGE(413, "C007", "파일 크기가 제한을 초과했습니다."),
     UNSUPPORTED_MEDIA_TYPE(415, "C008", "지원하지 않는 Content-Type 입니다."),
+    // 인증 필터가 회원 조회 중 DB 장애를 만났을 때(#848). 토큰이 틀린 것(401)이 아니라 서버가 잠시 못 받는 것이다.
+    SERVICE_UNAVAILABLE(503, "C009", "일시적으로 서비스를 이용할 수 없습니다. 잠시 후 다시 시도해 주세요."),
 
     // --- Auth ---
     UNAUTHORIZED(401, "A001", "로그인이 필요한 서비스입니다."),
