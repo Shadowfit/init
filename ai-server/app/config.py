@@ -47,6 +47,19 @@ class Settings(BaseSettings):
     def complete_callback_workers(self) -> int:
         return self.COMPLETE_CALLBACK_WORKERS or self.GRPC_MAX_WORKERS
 
+    # 방치된 세션 정리 (session_reaper) — Spring 의 StopAnalysis 가 안 오는 경우의 안전망.
+    #
+    # 🔴 **상한이 아니라 하한이 근거다.** 이 값은 Spring 의 최악 타임아웃보다 길어야 한다: 활동 기록이 없는 세션은
+    # 시작 + 예상 운동시간(15분) + 버퍼(30분) = 45분에 Spring 이 걷고(exercise.session.timeout), 그 뒤 아웃박스가
+    # StopAnalysis 를 보낸다(첫 시도 수 초, 백오프 최대 300초). 그 전에 AI 가 먼저 지우면 정상 종료 경로를 가로챈다.
+    # 45분 + 아웃박스 여유 15분 = 60분. «이보다 짧게 해도 되는가» 의 근거는 이 계산이 전부이고, «얼마나 길어도 되는가» 는
+    # 검출기(약 100MB)가 풀(= 동시 세션 상한)을 얼마나 오래 차지해도 되는지에 달려 있어 근거가 없다.
+    # ⚠️ Spring 설정의 복사본이다 — exercise.session.timeout 이 바뀌면 같이 바꿀 것(STOPPED_SESSION_RETENTION_SEC 과 같은 처지).
+    # 0 이면 정리를 끈다.
+    SESSION_IDLE_TTL_SEC: int = Field(default=3600, ge=0)
+    # 훑는 주기. TTL 이 분 단위라 초 단위 정밀도는 필요 없다 — 값 자체에 근거는 없다.
+    SESSION_REAP_INTERVAL_SEC: int = Field(default=60, ge=1)
+
     # 프로세스 워커 수 (2026-08-26, GIL 병목 회피로 프로세스 분리 도입).
     #
     # 🔴 memory_ceiling() 이 컨테이너 메모리 한도를 «내가 유일한 프로세스» 라고 가정하고
