@@ -39,8 +39,9 @@ function resolveBaseUrl(): string {
       apiConfigError = '서버 주소가 설정되지 않았습니다 (EXPO_PUBLIC_API_BASE_URL). 빌드 설정을 확인해 주세요.';
       return '';
     }
-    if (!override.startsWith('https://')) {
-      apiConfigError = '서버 주소가 https 가 아닙니다 (EXPO_PUBLIC_API_BASE_URL). 평문 HTTP 는 앱에서 차단됩니다.';
+    // https:// 뒤에 호스트가 실제로 있어야 한다("https://" 만 있는 값도 걸러낸다).
+    if (!/^https:\/\/[^/\s?#]+/.test(override)) {
+      apiConfigError = '서버 주소가 올바른 https 주소가 아닙니다 (EXPO_PUBLIC_API_BASE_URL). 평문 HTTP 는 앱에서 차단됩니다.';
       return '';
     }
     return override.replace(/\/+$/, '');
