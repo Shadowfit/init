@@ -1,6 +1,6 @@
 import { devError, devWarn } from '@/utils/devLog';
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, AppState, Platform, type AppStateStatus } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, AppState, Platform, Linking, type AppStateStatus } from 'react-native';
 import { Alert } from '@/utils/alert';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useLocalSearchParams, useFocusEffect } from 'expo-router';
@@ -504,11 +504,14 @@ export default function ExerciseScreen() {
         <CameraIcon size={48} color={COLORS.textMuted} strokeWidth={1.75} />
         <Text style={styles.permTitle}>카메라 권한이 필요합니다</Text>
         <Text style={styles.permDesc}>
-          실시간 자세 분석을 위해 카메라 접근을 허용해주세요.
+          {permission.canAskAgain
+            ? '실시간 자세 분석을 위해 카메라 접근을 허용해주세요.'
+            : '카메라 권한이 꺼져 있어요. 설정에서 카메라를 허용한 뒤 돌아와 주세요.'}
         </Text>
         <Button
-          title="카메라 허용"
-          onPress={requestPermission}
+          title={permission.canAskAgain ? '카메라 허용' : '설정 열기'}
+          // 영구 거부 뒤에는 requestPermission() 이 아무 일도 하지 않는다 — 버튼이 «눌러도 반응 없음» 이 되지 않게 설정 앱으로 보낸다.
+          onPress={permission.canAskAgain ? requestPermission : () => { void Linking.openSettings(); }}
           style={{ marginTop: SPACING.xl }}
         />
       </View>
