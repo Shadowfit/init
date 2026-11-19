@@ -1,0 +1,71 @@
+[s2r] compose up
+ Network s2r_net  Creating
+ Network s2r_net  Created
+ Container s2r_source  Creating
+ Container s2r_replica1  Creating
+ Container s2r_replica2  Creating
+ Container s2r_replica1  Created
+ Container s2r_source  Created
+ Container s2r_replica2  Created
+ Container s2r_replica1  Starting
+ Container s2r_replica2  Starting
+ Container s2r_source  Starting
+ Container s2r_replica2  Started
+ Container s2r_replica1  Started
+ Container s2r_source  Started
+# D0 — 무대
+# 생성: 2026-11-07T13:02:51Z UTC
+source    version                                      8.0.46
+source    server_id                                    1
+source    gtid_mode                                    OFF
+source    binlog_format                                ROW
+source    sync_binlog                                  1
+source    innodb_flush_log_at_trx_commit               1
+source    rpl_semi_sync_source_enabled                 1
+source    rpl_semi_sync_source_timeout                 10000
+source    rpl_semi_sync_source_wait_point              AFTER_SYNC
+source    rpl_semi_sync_source_wait_for_replica_count  1
+replica1  version                                      8.0.46
+replica1  server_id                                    2
+replica1  read_only                                    1
+replica1  rpl_semi_sync_replica_enabled                1
+replica2  version                                      8.0.46
+replica2  server_id                                    3
+replica2  read_only                                    1
+replica2  rpl_semi_sync_replica_enabled                1
+source    status/clients                               ON/2
+[s2r] ── 판 1 (버림) 팔 P  count=1  죽일 것: s2r_replica2
+1	버림	P	1	replica2	ON/2	1956	1223	1033	ON/2	3	0	버팀	1	ON/2
+[s2r] ── 판 2 (본판) 팔 P  count=1  죽일 것: s2r_replica2
+2	본판	P	1	replica2	ON/2	1482	2626	2713	ON/2	3	0	버팀	1	ON/2
+[s2r] ── 판 3 (본판) 팔 Q  count=1  죽일 것: s2r_replica1 s2r_replica2
+3	본판	Q	1	replica1+replica2	ON/2	11557	1365	1123	OFF/2	0	3	강등	1	ON/2
+[s2r] ── 판 4 (본판) 팔 R  count=2  죽일 것: s2r_replica2
+4	본판	R	2	replica2	ON/2	13437	1121	1665	OFF/2	0	3	강등	1	ON/2
+[s2r] ── 판 5 (본판) 팔 Q  count=1  죽일 것: s2r_replica1 s2r_replica2
+5	본판	Q	1	replica1+replica2	ON/2	10878	1395	1138	OFF/2	0	3	강등	1	ON/2
+[s2r] ── 판 6 (본판) 팔 R  count=2  죽일 것: s2r_replica2
+6	본판	R	2	replica2	ON/2	11058	916	1160	OFF/2	0	3	강등	1	ON/2
+[s2r] ── 판 7 (본판) 팔 P  count=1  죽일 것: s2r_replica2
+7	본판	P	1	replica2	ON/2	941	1470	764	ON/2	3	0	버팀	1	ON/2
+[s2r] ── 판 8 (본판) 팔 R  count=2  죽일 것: s2r_replica2
+8	본판	R	2	replica2	ON/2	11951	972	997	OFF/2	0	3	강등	1	ON/2
+[s2r] ── 판 9 (본판) 팔 P  count=1  죽일 것: s2r_replica2
+9	본판	P	1	replica2	ON/2	1122	1661	1142	ON/2	3	0	버팀	1	ON/2
+[s2r] ── 판 10 (본판) 팔 Q  count=1  죽일 것: s2r_replica1 s2r_replica2
+10	본판	Q	1	replica1+replica2	ON/2	11708	1783	921	OFF/2	0	3	강등	1	ON/2
+[s2r] 완료 → /e/init-wt-srec/loadtest/results/replication-semisync-two-replicas-2026-11-07/_out/trials.tsv
+ Container s2r_replica1  Stopping
+ Container s2r_replica2  Stopping
+ Container s2r_source  Stopping
+ Container s2r_replica1  Stopped
+ Container s2r_replica1  Removing
+ Container s2r_source  Stopped
+ Container s2r_source  Removing
+ Container s2r_replica2  Stopped
+ Container s2r_replica2  Removing
+ Container s2r_replica1  Removed
+ Container s2r_source  Removed
+ Container s2r_replica2  Removed
+ Network s2r_net  Removing
+ Network s2r_net  Removed

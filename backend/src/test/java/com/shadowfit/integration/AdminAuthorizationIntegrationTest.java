@@ -29,6 +29,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doNothing;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -63,7 +64,6 @@ class AdminAuthorizationIntegrationTest {
         Category category = categoryRepository.save(Category.builder().name("LOWER").build());
         exercise = exercisesRepository.saveAndFlush(Exercise.builder()
                 .name("스쿼트").category(category).expectedDurationMinutes(15)
-                .syncThresholdBeginner(new BigDecimal("60.00")).syncThresholdAdvanced(new BigDecimal("85.00"))
                 .build());
 
         userToken = jwtUtil.createAccessToken(CustomUserInfoDto.builder().email(user.getEmail()).role(user.getRole()).build());
@@ -73,21 +73,21 @@ class AdminAuthorizationIntegrationTest {
     @Test
     @DisplayName("임계값 변경 — USER 역할이면 403")
     void updateThresholds_userRole_returns403() throws Exception {
-        ThresholdUpdateDto dto = new ThresholdUpdateDto(
-                new BigDecimal("60"), new BigDecimal("85"), new BigDecimal("70"), new BigDecimal("50"));
+        ThresholdUpdateDto dto = new ThresholdUpdateDto(new BigDecimal("80"), new BigDecimal("60"));
 
         mockMvc.perform(patch("/admin/exercises/" + exercise.getId() + "/thresholds")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isForbidden())
+                // @PreAuthorize 403(MVC 안)도 필터체인 403 과 같은 code 여야 한다 — CustomAccessDeniedHandlerTest 와 짝
+                .andExpect(jsonPath("$.code").value("A002"));
     }
 
     @Test
     @DisplayName("임계값 변경 — ADMIN 역할이면 200")
     void updateThresholds_adminRole_returns200() throws Exception {
-        ThresholdUpdateDto dto = new ThresholdUpdateDto(
-                new BigDecimal("60"), new BigDecimal("85"), new BigDecimal("70"), new BigDecimal("50"));
+        ThresholdUpdateDto dto = new ThresholdUpdateDto(new BigDecimal("80"), new BigDecimal("60"));
 
         mockMvc.perform(patch("/admin/exercises/" + exercise.getId() + "/thresholds")
                         .header("Authorization", "Bearer " + adminToken)

@@ -2,6 +2,7 @@
 
 session_id가 함께 오면 누적 분석 + rep 감지를 수행하고,
 rep 1회가 완성될 때마다 Spring에 PoseData 묶음을 콜백한다.
+스쿼트의 «미인정 시도»(내려갔다 올라왔지만 인정되지 않은 시도)는 1건씩 요약해 SaveRejectedAttempt 로 남긴다(2026-10-21).
 """
 
 import logging
@@ -17,9 +18,10 @@ from fastapi.responses import ORJSONResponse
 import exercise_pb2
 from app.config import settings
 from app.core.analyzer_registry import get_analyzer
+from app.core.lunge_analyzer import StreamingLungeAnalyzer, lunge_geometry
 from app.core.angle_calculator import extract_angles
 from app.core.mediapipe_detector import get_detector, lease_detector
-from app.core.squat_analyzer import _torso_tilt_degrees
+from app.core.squat_analyzer import StreamingSquatAnalyzer, _torso_tilt_degrees
 from app.grpc import spring_client
 from app.grpc.session_state import (
     MIN_FRAME_INTERVAL_SEC,
@@ -28,7 +30,7 @@ from app.grpc.session_state import (
     elapsed_sec,
     get_registry,
 )
-from app.models.pose import Landmark, PoseRequest, PoseResponse, PoseSkipReason
+from app.models.pose import Landmark, PoseRequest, PoseResponse, PoseSkipReason, SquatProgress
 from app.observability import frame_path
 from app.utils.image_utils import base64_to_image
 
@@ -50,13 +52,54 @@ router = APIRouter(prefix="/pose", tags=["포즈 감지"], default_response_clas
 _BACK_BENT_TILT_THRESHOLD = 35.0
 
 
-def _landmarks_to_json(landmarks: list[Landmark]) -> str:
-    return orjson.dumps(
-        [
-            {"index": lm.index, "x": lm.x, "y": lm.y, "z": lm.z, "visibility": lm.visibility}
-            for lm in landmarks
-        ]
-    ).decode()
+def _landmarks_to_json(landmarks: list[Landmark], image_aspect_ratio: float | None = None) -> str:
+    """랜드마크 → joint_coordinates JSON. image_aspect_ratio 를 주면 맨 뒤에 index=-1 표식 항목으로 싣는다.
+
+    기준 좌표(exercise_references)는 정규화 좌표만 저장돼 «어떤 비율의 영상에서 찍혔는지» 를 잃는다. 그러면
+    각도를 2D 로 바로 재는 지금 방식에서 기준(가로 4:3)과 사용자(세로 9:16)의 x 축 눈금이 달라 자세가 같아도
+    각도가 어긋난다. 표식은 _parse_reference_poses 가 읽고 각도 계산에서 뺀다. 사용자 프레임(pose_data)에는
+    싣지 않는다 — Spring 이 그 JSON 을 그대로 리포트 그림에 쓴다.
+    """
+    items = [
+        {"index": lm.index, "x": lm.x, "y": lm.y, "z": lm.z, "visibility": lm.visibility}
+        for lm in landmarks
+    ]
+    if image_aspect_ratio is not None and image_aspect_ratio > 0:
+        items.append({"index": -1, "x": 0.0, "y": 0.0, "z": 0.0, "visibility": 0.0,
+                      "image_aspect_ratio": round(float(image_aspect_ratio), 4)})
+    return orjson.dumps(items).decode()
+
+
+def _rejected_count(state) -> int:
+    """응답의 rejected_count — 스쿼트 세션의 미인정 시도 수. 런지 등은 미인정 개념이 없어 0 이다(2026-10-21)."""
+    return state.rejected_count if state.exercise_type == "squat" else 0
+
+
+def _report_rejected_attempt(session_id: int, attempt, terminal_frame: PerRepFrame) -> None:
+    """미인정 시도 1건을 Spring 에 남긴다 (`SaveRejectedAttempt`, 2026-10-21). **세션 락 밖에서** 부른다.
+
+    무릎각·체간·시각·좌표는 그 시도에서 가장 깊이 앉은 프레임(squat_analyzer.RejectedAttemptEvent.deepest_frame)
+    에서 꺼낸다. 시도 프레임이 버퍼에 하나도 없었으면(시도 도중 발목 튐 등으로 비워진 드문 경우) 그 시도를 끝낸
+    프레임(다시 선 프레임)으로 대신한다 — 번호를 비우면 화면의 «미인정 M회» 와 리포트의 행 수가 어긋나서다.
+    pose_data 배치·피드백 배치·completed_reps 는 건드리지 않는다 — 미인정은 횟수와 CompleteAnalysis 합계 밖이다.
+    """
+    deepest = attempt.deepest_frame if attempt.deepest_frame is not None else terminal_frame
+    spring_client.send_rejected_attempt(
+        session_id=session_id,
+        attempt_number=attempt.attempt_number,
+        reason=attempt.reason,
+        sync_rate=attempt.sync_rate,
+        # PoseDataRequest.smoothed_knee_angle 과 같은 정의(좌우 평균 무릎각의 평활값)
+        min_knee_angle=deepest.smoothed_knee_angle,
+        torso_tilt_deg=deepest.torso_tilt_deg or 0.0,
+        timestamp_sec=deepest.timestamp_sec,
+        joint_coordinates=deepest.joint_coordinates,
+    )
+    logger.info(
+        "세션 %s 미인정 시도 %d (%s, sync_rate=%.2f, 최저 무릎 %.1f°)",
+        session_id, attempt.attempt_number, attempt.reason, attempt.sync_rate,
+        deepest.smoothed_knee_angle,
+    )
 
 
 def flush_pending_feedback(state) -> None:
@@ -199,8 +242,22 @@ def _detect_pose(req: PoseRequest):
         frame_path.mark_leased()
         landmarks = detector.detect(image_rgb)
     frame_path.mark_inferred()
+    image_aspect = image_rgb.shape[1] / image_rgb.shape[0]
 
     if not landmarks:
+        # Only the owner may invalidate an in-flight repetition.
+        missing_state = get_registry().get(req.session_id) if req.session_id is not None else None
+        if (missing_state is not None and missing_state.exercise_type in ("lunge", "squat")
+                and (missing_state.session_nonce is None or
+                     (req.session_nonce is not None and secrets.compare_digest(
+                         req.session_nonce, missing_state.session_nonce)))):
+            with missing_state.state_lock:
+                if missing_state.lunge_state is not None:
+                    missing_state.lunge_state.invalidate("전신을 찾을 수 없습니다. 원위치에서 다시 준비해주세요.")
+                    missing_state.current_rep_frames.clear()
+                if missing_state.squat_counter is not None:
+                    missing_state.squat_counter.invalidate()
+                    missing_state.current_rep_frames.clear()
         return PoseResponse(
             success=False,
             skip_reason=PoseSkipReason.NO_POSE,
@@ -209,8 +266,14 @@ def _detect_pose(req: PoseRequest):
 
     # 세션 미지정 — 기존 stateless 동작 (각도만 반환)
     if req.session_id is None:
-        angles = extract_angles(landmarks, req.exercise_type)
-        return PoseResponse(success=True, landmarks=landmarks, angles=angles)
+        if req.exercise_type == "lunge":
+            try:
+                _, _, angles = lunge_geometry(landmarks, image_rgb.shape[1] / image_rgb.shape[0])
+            except ValueError:
+                return PoseResponse(success=False, skip_reason=PoseSkipReason.LOW_VISIBILITY)
+            return PoseResponse(success=True, landmarks=landmarks, image_aspect_ratio=image_aspect, angles=angles)
+        angles = extract_angles(landmarks, req.exercise_type, image_aspect)
+        return PoseResponse(success=True, landmarks=landmarks, image_aspect_ratio=image_aspect, angles=angles)
 
     state = get_registry().get(req.session_id)
     if state is None:
@@ -301,14 +364,35 @@ def _detect_pose(req: PoseRequest):
                 success=False,
                 skip_reason=PoseSkipReason.RATE_LIMITED,
                 landmarks=landmarks,
+                image_aspect_ratio=image_aspect,
                 message="유입 속도 상한 초과 — 분석 스킵",
                 rep_count=state.rep_count,
+                rejected_count=_rejected_count(state),
             )
 
-        angles, smoothed_knee_angle, rep_event = analyzer.process_frame(
-            state, landmarks, timestamp_sec=received_at,
-            image_aspect_ratio=image_rgb.shape[1] / image_rgb.shape[0],
+        if isinstance(analyzer, (StreamingLungeAnalyzer, StreamingSquatAnalyzer)):
+            angles, smoothed_knee_angle, rep_event, torso_tilt_deg, stagger_ratio = analyzer.process_frame(
+                state, landmarks, timestamp_sec=received_at,
+                image_aspect_ratio=image_rgb.shape[1] / image_rgb.shape[0],
+            )
+        else:
+            angles, smoothed_knee_angle, rep_event = analyzer.process_frame(state, landmarks)
+            torso_tilt_deg = None
+            stagger_ratio = None
+        lunge_progress = state.lunge_state.progress() if state.lunge_state is not None else None
+        # 앱이 «준비됐는지/지금 뭘 해야 하는지»를 화면에 보여주도록 스쿼트 단계와 안내를 같이 싣는다.
+        squat_progress = (
+            SquatProgress(stage=state.squat_counter.stage, guidance=state.squat_counter.guidance)
+            if state.exercise_type == "squat" and state.squat_counter is not None else None
         )
+        coaching_message = (state.squat_counter.coaching_event
+                            if state.exercise_type == "squat" and state.squat_counter is not None
+                            else None)
+        # 미인정 시도 (2026-10-21, 스쿼트) — 이번 프레임에서 났으면 분석기가 상태에 올려 둔 요약을 꺼내고 비운다
+        # (비워야 같은 시도가 두 번 나가지 않는다). Spring 전송은 아래 락 밖에서 한다.
+        rejected_attempt = state.pending_rejected_attempt
+        state.pending_rejected_attempt = None
+        rejected_reason = rejected_attempt.reason if rejected_attempt is not None else None
 
         if angles is None:
             # visibility 부족 — 프레임 스킵. 🔴 success=False 다 (이슈 #267).
@@ -316,13 +400,19 @@ def _detect_pose(req: PoseRequest):
             # 이 자리가 #196 통주행이 속은 바로 그 자리다 — landmarks 는 들어 있어서 «검출
             # 30/31» 로 세면 정상으로 보이는데, 판정에 들어간 프레임은 0 이었다. 하체가
             # 프레임 밖이면 계속 이 갈래로 떨어지고 리포트가 전 필드 0 으로 끝난다.
+            # (미인정은 이 갈래와 겹치지 않는다 — 스쿼트 분석기는 관측값이 있으면 늘 각도를 내고, 미인정은 관측값이
+            # 있는 프레임에서만 난다. 그래서 위에서 꺼낸 rejected_attempt 는 여기서 항상 None 이다.)
             state.visibility_skip_count += 1
             return PoseResponse(
                 success=False,
                 skip_reason=PoseSkipReason.LOW_VISIBILITY,
                 landmarks=landmarks,
+                image_aspect_ratio=image_aspect,
                 message="가시성 부족으로 분석 스킵",
                 rep_count=state.rep_count,
+                rejected_count=_rejected_count(state),
+                lunge=lunge_progress,
+                squat=squat_progress,
             )
 
         # 프레임 시각은 **서버가 만든다** (이슈 #156). 예전에는 두 갈래였고 둘 다 틀렸다:
@@ -337,22 +427,43 @@ def _detect_pose(req: PoseRequest):
             angles=angles,
             smoothed_knee_angle=smoothed_knee_angle,
             landmarks=landmarks,
+            torso_tilt_deg=torso_tilt_deg,
+            stagger_ratio=stagger_ratio,
         )
         state.current_rep_frames.append(frame)
 
         if rep_event is None:
-            return PoseResponse(
+            # 응답은 락 안에서 만든다(rep_count·rejected_count 를 이 프레임의 판정 직후 값으로). 미인정 전송이 락 밖에서
+            # 끝난 뒤 돌려준다.
+            no_rep_response = PoseResponse(
                 success=True,
                 landmarks=landmarks,
+                image_aspect_ratio=image_aspect,
                 angles=angles,
                 rep_count=state.rep_count,
+                rejected_count=_rejected_count(state),
+                rejected_reason=rejected_reason,
+                lunge=lunge_progress,
+                squat=squat_progress,
+                message=coaching_message,
             )
+        else:
+            # rep 완성 — Spring 전송·로컬 요약에 쓸 프레임을 **한 번만** 스냅샷한다. 락을 풀고
+            # gRPC 콜백을 부른 뒤 다시 잡아 completed_reps 에 넣을 때 current_rep_frames 를 다시
+            # 읽으면, 그 사이 끼어든 다음 요청이 버퍼에 새 프레임을 넣어 두 기록(Spring 전송분과
+            # 로컬 completed_reps)이 서로 달라질 수 있다 — 스냅샷 하나를 양쪽에 같이 쓴다.
+            rep_frames_snapshot = list(state.current_rep_frames)
+            if state.exercise_type == "lunge":
+                # 다음 런지가 콜백 대기 중 시작돼도 새 프레임을 지우지 않도록 분리한다.
+                state.current_rep_frames.clear()
 
-        # rep 완성 — Spring 전송·로컬 요약에 쓸 프레임을 **한 번만** 스냅샷한다. 락을 풀고
-        # gRPC 콜백을 부른 뒤 다시 잡아 completed_reps 에 넣을 때 current_rep_frames 를 다시
-        # 읽으면, 그 사이 끼어든 다음 요청이 버퍼에 새 프레임을 넣어 두 기록(Spring 전송분과
-        # 로컬 completed_reps)이 서로 달라질 수 있다 — 스냅샷 하나를 양쪽에 같이 쓴다.
-        rep_frames_snapshot = list(state.current_rep_frames)
+    # 락 밖 — 미인정 시도 기록(gRPC). pose 배치와 같은 이유로 세션 락을 쥔 채 네트워크를 타지 않는다.
+    # 미인정과 rep 완성은 한 프레임에서 같이 나지 않는다(SquatCounter 가 둘 중 하나만 낸다).
+    if rejected_attempt is not None:
+        _report_rejected_attempt(state.session_id, rejected_attempt, frame)
+
+    if rep_event is None:
+        return no_rep_response
 
     # 락 밖 — Spring 전송(gRPC)은 다른 세션은 물론 이 세션의 다음 프레임도 막지 않는다.
     pose_data_list = [
@@ -367,6 +478,24 @@ def _detect_pose(req: PoseRequest):
             # 프레임을 남길지, 리포트에서 어느 프레임을 대표로 쓸지 고르는 기준이 이 값이다
             # (decisions/worst-section-rep-resolution.md §4-ㄹ). 작을수록 깊게 앉은 것.
             smoothed_knee_angle=f.smoothed_knee_angle,
+            # 런지 rep_event(LungeRepEvent)에만 있는 필드다. 스쿼트의 StreamingRepEvent는
+            # lead_leg가 없으므로 getattr 기본값(빈 문자열)이 그대로 나간다 — proto3 기본값과
+            # 같아 구버전 계약과도 구분되지 않는다(#156 등 다른 필드와 같은 규약).
+            lead_leg=getattr(rep_event, "lead_leg", "") or "",
+            # 체간 기울기 점수(백엔드 TrunkLeanAnalysisCalculator, 2026-09-28)용. 스쿼트·런지
+            # 공용이며 아래 BACK_BENT 실시간 판정과는 별개 경로다. None이면(landmark
+            # 가시성 부족 등으로 이번 프레임에서 계산 못 함) proto3 기본값 0.0이 나가는데, 이는
+            # "완전 직립"과 구분되지 않는다 — 백엔드가 이 필드를 nullable 컬럼에 그대로 못 박지
+            # 않고 0.0을 유효값으로 받아들이는 이유이기도 하다(어차피 세션 내내 계산 불가능한
+            # 프레임은 드물고, 드물게 섞여도 rep 평균에 0.0 하나가 끼는 정도라 왜곡이 작다).
+            torso_tilt_deg=f.torso_tilt_deg or 0.0,
+            # 보폭 점수(백엔드 LungeStepLengthAnalysisCalculator, 2026-09-28)용. 런지 전용 —
+            # 스쿼트 프레임은 항상 None이라 proto3 기본값 0.0이 나간다. 이 계산기는 런지
+            # 세션만 채점하므로(exercise_id 가드) 스쿼트 행에 0.0이 들어가도 소비되지 않는다.
+            # 런지 행에서 0.0은 이론상 "발이 완전히 붙음"이지만, 그 값이면 애초에 stagger_min
+            # 문턱을 못 넘어 "returning" 단계(=Spring 전송 구간)에 도달하지 못하므로 실제로는
+            # 나타나지 않는다.
+            stagger_ratio=f.stagger_ratio or 0.0,
         )
         for f in rep_frames_snapshot
     ]
@@ -378,7 +507,7 @@ def _detect_pose(req: PoseRequest):
     # 만들기 위해서"). 그런데 이 프레임을 만들 때 이미 감지된 원본 landmarks 객체가 있는데
     # 같은 요청 안에서 그걸 문자열로 만들었다가 도로 파싱하는 왕복이라, PerRepFrame에 필드
     # 하나(landmarks)를 얹어 그 왕복 자체를 없앴다.
-    if rep_event.feedback_message != "자세 양호" and rep_frames_snapshot:
+    if state.exercise_type == "squat" and rep_event.feedback_message != "자세 양호" and rep_frames_snapshot:
         tilts = []
         for f in rep_frames_snapshot:
             if not f.landmarks:
@@ -411,10 +540,11 @@ def _detect_pose(req: PoseRequest):
                 feedback_message=rep_event.feedback_message,
             )
         )
-        for _ in range(len(rep_frames_snapshot)):
-            if not state.current_rep_frames:
-                break
-            state.current_rep_frames.popleft()
+        if state.exercise_type != "lunge":
+            for _ in range(len(rep_frames_snapshot)):
+                if not state.current_rep_frames:
+                    break
+                state.current_rep_frames.popleft()
 
     logger.info(
         "세션 %s rep %d 완성 (sync_rate=%.2f)",
@@ -426,8 +556,13 @@ def _detect_pose(req: PoseRequest):
     return PoseResponse(
         success=True,
         landmarks=landmarks,
+        image_aspect_ratio=image_aspect,
         angles=angles,
         rep_count=state.rep_count,
+        rejected_count=_rejected_count(state),
         rep_completed=True,
-        sync_rate=rep_event.sync_rate,
+        sync_rate=rep_event.sync_rate if state.exercise_type != "lunge" else None,
+        lunge=lunge_progress,
+        squat=squat_progress,
+        message=coaching_message,
     )

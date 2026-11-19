@@ -137,6 +137,14 @@ public class WeeklySummaryQueryRepositoryImpl implements WeeklySummaryQueryRepos
         return value == null ? 0L : value.longValue();
     }
 
+    /**
+     * «N회차» 평균 곡선 — 인정 반복만 센다.
+     *
+     * <p>🔴 {@code jt.rep_number IS NOT NULL} (2026-10-21): 2026-10-21 부터 {@code repTrend} 에 «미인정 시도» 가
+     * {@code repNumber: null} 점으로 섞인다(V35). 거르지 않으면 그 점들이 {@code GROUP BY} 에서 «NULL 회차» 한 줄로 묶여
+     * 나오고, 아래 매핑의 {@code row[0].intValue()} 가 NPE 로 주간 요약 전체를 500 으로 만든다. 미인정 시도는 회차가 없어
+     * «N회차 곡선» 에 넣을 자리도 없다.
+     */
     @Override
     @SuppressWarnings("unchecked")
     public List<RepCurvePointDto> repCurveBetween(Long memberId, LocalDateTime from, LocalDateTime to) {
@@ -150,6 +158,7 @@ public class WeeklySummaryQueryRepositoryImpl implements WeeklySummaryQueryRepos
                  WHERE s.member_id = :memberId
                    AND s.status = 'COMPLETED'
                    AND s.start_time >= :from AND s.start_time < :to
+                   AND jt.rep_number IS NOT NULL
                  GROUP BY jt.rep_number
                  ORDER BY jt.rep_number
                 """)

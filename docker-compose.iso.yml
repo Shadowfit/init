@@ -2,9 +2,8 @@
 # 따로 띄운다. 사용법:
 #   docker compose -p shadowfit-iso -f docker-compose.yml -f docker-compose.iso.yml up -d mysql shadowfit-backend
 #
-# AI(shadowfit-ai)는 일부러 안 띄운다 — 여기 목적은 swagger·API 확인이고, backend 는
-# mysql 에만 depends_on 이 걸려 있어(#598 조사에서 확인) AI 없이도 기동한다. gRPC 콜이 실제로
-# 필요해지면 그때 shadowfit-ai 도 이 오버라이드에 추가할 것.
+# mysql + backend 만 띄우면 swagger·API 확인에 쓸 수 있다. 스쿼트의
+# 앱→AI→Spring 전체 경로를 확인할 때는 shadowfit-ai 와 ai-nginx 도 함께 띄운다.
 #
 # 🔴 ports 는 `!override` 로 덮어써야 한다 — compose 는 리스트 필드(ports 등)를 기본적으로
 #    "병합"이 아니라 "이어붙이기"한다. 그냥 ports: 를 새로 적으면 베이스 파일의 8080/6565/
@@ -31,3 +30,11 @@ services:
       - "127.0.0.1:${ISO_ACTUATOR_PORT:-19090}:9090"
     environment:
       DB_HOST: mysql
+
+  shadowfit-ai:
+    container_name: shadowfit-iso-ai
+
+  ai-nginx:
+    container_name: shadowfit-iso-ai-nginx
+    ports: !override
+      - "${ISO_AI_PORT:-18000}:8000"

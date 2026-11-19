@@ -8,12 +8,14 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public record SessionSetDto(
         @Schema(description = "세트 번호(1-based)", example = "2") int setNo,
         @Schema(description = "이 세트의 횟수. 마지막 세트만 목표 미달일 수 있다", example = "12") int reps,
-        @Schema(description = "rep 가중 평균 싱크로율", example = "78.5") double avgSyncRate,
+        @Schema(description = "rep 가중 평균 싱크로율. 횟수만 세는 종목(채점 없음)은 null", example = "78.5",
+                nullable = true) Double avgSyncRate,
         @Schema(description = "세트 시작 — 첫 프레임 기준 경과 초", example = "12.3") double startedSec,
         @Schema(description = "세트 끝 — 첫 프레임 기준 경과 초", example = "58.9") double endedSec
 ) {
     public static SessionSetDto from(SessionSet s) {
-        return new SessionSetDto(s.getSetNo(), s.getReps(), s.getAvgSyncRate().doubleValue(),
+        return new SessionSetDto(s.getSetNo(), s.getReps(),
+                s.getAvgSyncRate() == null ? null : s.getAvgSyncRate().doubleValue(),
                 s.getStartedSec(), s.getEndedSec());
     }
 }

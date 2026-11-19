@@ -4,6 +4,32 @@ import type { FeedbackType } from './feedback';
 // AI 가 돌려주는 자세 결함 유형 (백엔드 FeedbackType 8종과 동일)
 export type AiFeedbackType = FeedbackType;
 
+/** 미인정 사유(2026-10-21) — AI squat_counter 와 백엔드 리포트가 같은 코드를 쓴다 */
+export type RejectReason = 'DEPTH_NOT_CONFIRMED' | 'SPLIT_STANCE';
+export const REJECT_REASON_LABEL: Record<RejectReason, string> = {
+  DEPTH_NOT_CONFIRMED: '바닥 자세 미확인',
+  SPLIT_STANCE: '런지 자세',
+};
+
+export interface LungeProgress {
+  phase: 'calibrating' | 'ready' | 'descending' | 'returning';
+  lead_leg: 'left' | 'right' | null;
+  left_reps: number;
+  right_reps: number;
+  unassigned_reps: number;
+  guidance: string;
+  score_available: boolean;
+}
+
+// 스쿼트 카운터의 현재 단계 (AI SquatProgress). 화면이 «준비됐는지/지금 뭘 해야 하는지»를 보여준다.
+//   waiting_for_standing  똑바로 선 자세를 아직 못 봤다
+//   ready                 준비 완료 — 스쿼트를 시작해도 된다
+//   descending·bottom     동작 중
+export interface SquatProgress {
+  stage: string;
+  guidance: string;
+}
+
 // 실시간 포즈 감지 요청
 export interface PoseDetectRequest {
   image: string; // base64 인코딩 프레임
@@ -19,8 +45,8 @@ export interface PoseDetectRequest {
 }
 
 // 실시간 포즈 감지 응답
-// ⚠️ AI PoseResponse 에는 feedback_type 필드가 아직 없음. exercise.tsx 가 r.feedback_type 을
-//    읽으므로 optional 로 둠 — 실제 동작하려면 AI 서버 응답에 추가 필요(협의 대상).
+// AI 는 완료/깊이 미확인 스쿼트 안내를 message 로 보낸다. feedback_type 은 현재
+// PoseResponse 에 없으므로 향후 구조화 유형을 추가할 때까지 optional 호환 필드다.
 // 프레임이 판정에 못 들어간 사유 (이슈 #267). AI PoseSkipReason 과 1:1 이다.
 //   RATE_LIMITED         서버가 의도적으로 잘랐다 — 세션이 건강해도 나온다
 //   NO_POSE·LOW_VISIBILITY   입력 문제 — 프레임은 왔는데 쓸 수가 없다
@@ -45,9 +71,21 @@ export interface PoseDetectResponse {
   success: boolean;
   // success=false 일 때만 채워진다.
   skip_reason?: PoseSkipReason | null;
+  // MediaPipe 랜드마크 33개 — 스킵 프레임에도 채워 온다. 3D 동작 비교(lib/motion)가 운동 중 모아 둔다.
+  // x·y 는 이미지 너비·높이 기준 0~1, z 는 단안 추정 깊이(비교에 쓰지 않는다), visibility 0~1.
+  landmarks?: Array<{ index: number; x: number; y: number; z: number; visibility: number }> | null;
+  // 서버가 디코딩한 이미지의 너비/높이 — 랜드마크 x 를 y 와 같은 길이 단위로 돌리는 데 필요하다(구버전 서버는 없음).
+  image_aspect_ratio?: number | null;
   sync_rate?: number | null;
   rep_count?: number | null;
   rep_completed?: boolean;
+  // 이 세션의 «미인정» 시도 수(2026-10-21, 스쿼트) — 내려갔다 올라왔지만 1회로 인정되지 않은 시도.
+  // 횟수엔 안 들어가고 리포트 점수에만 들어간다. 구버전 서버는 없음.
+  rejected_count?: number | null;
+  // 이번 프레임에서 시도가 미인정됐을 때만 채워진다 — 사유 코드. 안내 문구는 message 에 온다.
+  rejected_reason?: RejectReason | null;
+  lunge?: LungeProgress | null;
+  squat?: SquatProgress | null;
   feedback_type?: AiFeedbackType | null;
   angles?: number[] | null;
   message?: string | null;

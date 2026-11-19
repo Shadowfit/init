@@ -35,10 +35,11 @@ def _count_reps(knee_sequence: list[float]) -> int:
     reps = 0
 
     for i, knee_angle in enumerate(knee_sequence):
-        # process_frame 은 (angles, smoothed_knee_angle, rep_event) 3-튜플이다. 가운데
-        # 깊이 지표는 이 테스트가 검증하는 대상이 아니라(test_streaming_depth_metric.py 담당)
-        # 버린다 — rep 집계는 이 값에 의존하지 않는다.
-        angles, _, rep_event = analyzer.process_frame(state, _frame(knee_angle), timestamp_sec=i / 3)
+        # process_frame 은 (angles, smoothed_knee_angle, rep_event, torso_tilt_deg) 4-튜플이다.
+        # 가운데 깊이 지표와 체간 기울기는 이 테스트가 검증하는 대상이 아니라
+        # (각각 test_streaming_depth_metric.py, 체간 기울기 전용 테스트 담당) 버린다 — rep
+        # 집계는 이 값들에 의존하지 않는다.
+        angles, _, rep_event, _, _ = analyzer.process_frame(state, _frame(knee_angle), timestamp_sec=i / 3)
         if angles is not None:
             state.current_rep_frames.append(
                 PerRepFrame(timestamp_sec=0.0, joint_coordinates="{}", angles=angles)
@@ -109,7 +110,7 @@ class StreamingRepCountingTests(unittest.TestCase):
         batch_sizes = []
 
         for i, knee_angle in enumerate(sequence):
-            angles, _, rep_event = analyzer.process_frame(state, _frame(knee_angle), timestamp_sec=i / 3)
+            angles, _, rep_event, _, _ = analyzer.process_frame(state, _frame(knee_angle), timestamp_sec=i / 3)
             if angles is not None:
                 state.current_rep_frames.append(
                     PerRepFrame(timestamp_sec=0.0, joint_coordinates="{}", angles=angles)
@@ -165,6 +166,36 @@ def test_process_frame_picks_thresholds_from_state_depth_mode():
     unknown_state = SessionState(session_id=4, exercise_id=1, depth_mode="BOGUS")
     analyzer.process_frame(unknown_state, _frame(175), timestamp_sec=0.0)
     assert unknown_state.squat_counter.thresholds == DEPTH_MODE_THRESHOLDS["FULL"]
+
+
+def test_rejected_attempt_frames_do_not_leak_into_the_next_counted_rep() -> None:
+    # 미인정 시도(2026-10-21)의 프레임은 그 시도의 요약에만 쓰이고, 다음 인정 반복의 버퍼(→ pose_data·싱크로율)에
+    # 섞이지 않는다. 미인정 끝(→ 준비)과 다음 시도 시작(준비 → 내려가는 중)에서 버퍼를 비우는 규칙이 이걸 지킨다.
+    state = SessionState(session_id=5, exercise_id=1)
+    analyzer = StreamingSquatAnalyzer("squat")
+    shallow = [175.0] * 3 + [120.0] * 4 + [175.0] * 3                    # 미인정 1회(무릎 120°, 바닥 조건 밖)
+    deep = [175.0] * 3 + [140.0, 95.0, 88.0, 95.0, 140.0] + [175.0] * 4  # 인정 1회
+    deep_start = len(shallow) + 3
+    rejected, rep_frame_times = [], None
+    for i, knee in enumerate(shallow + deep):
+        angles, smoothed, rep_event, _, _ = analyzer.process_frame(state, _frame(knee), timestamp_sec=i / 3)
+        if state.pending_rejected_attempt is not None:
+            # pose.py 가 끝(선) 프레임을 넣기 전의 버퍼 — 미인정 시도의 프레임이 남아 있으면 안 된다
+            rejected.append((i, state.pending_rejected_attempt, len(state.current_rep_frames)))
+        if rep_event is not None:
+            rep_frame_times = [f.timestamp_sec for f in state.current_rep_frames]
+            state.current_rep_frames.clear()
+        elif angles is not None:
+            state.current_rep_frames.append(PerRepFrame(
+                timestamp_sec=i / 3, joint_coordinates="{}", angles=angles, smoothed_knee_angle=smoothed))
+    assert state.rep_count == 1
+    assert state.rejected_count == 1
+    [(at, event, left_in_buffer)] = rejected
+    assert at < len(shallow) and left_in_buffer == 0
+    # 요약은 그 시도의 프레임에서 나왔다 — 가장 깊은 순간이 얕은 구간(3~6번 프레임) 안에 있다
+    assert 3 / 3 <= event.deepest_frame.timestamp_sec < 7 / 3
+    # 다음 반복의 버퍼는 그 반복의 하강부터다
+    assert rep_frame_times and min(rep_frame_times) >= deep_start / 3, rep_frame_times
 
 
 if __name__ == "__main__":

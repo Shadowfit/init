@@ -39,7 +39,9 @@ rep → 콜백 → pose_data 적재 → 리포트 선계산이 한 번도 안 �
 from __future__ import annotations
 
 import argparse
+import atexit
 import base64
+import math
 import sys
 import time
 
@@ -73,16 +75,28 @@ def main() -> int:
     p.add_argument("--ai-token", required=True, help="AI_PUBLIC_TOKEN")
     p.add_argument("--exercise-id", type=int, default=1)
     p.add_argument(
-        "--target-reps-per-set", type=int, default=None,
-        help="세트당 목표 횟수(V26). 생략하면 Spring 이 추천 공식으로 채운다 — 리포트의 sets[] 로 경계를 확인한다",
-    )
-    p.add_argument(
         "--fps",
         type=float,
         default=3.0,
         help="전송 프레임률 (앱과 같은 3fps). 영상에서 고르는 간격이자 **실제로 보내는 벽시계 간격**이다 (#714)",
     )
+    p.add_argument("--expected-reps", type=int, help="사람이 센 완료 횟수")
+    p.add_argument("--expect-complete-coaching", action="store_true",
+                   help="완료 이벤트마다 화면용 자세 안내가 있는지도 검사")
+    p.add_argument("--depth-mode", choices=["full", "half"], default="full",
+                   help="스쿼트 깊이 모드 (2026-09-21). 생략하면 기존과 동일한 full")
+    p.add_argument("--expected-depth-score-min", type=int,
+                   help="리포트 squatDepthAnalysis.depthScore가 이 값 이상이어야 한다")
+    p.add_argument("--expected-depth-grade",
+                   choices=["EXCELLENT", "GOOD", "FAIR", "NEEDS_WORK", "POOR"],
+                   help="리포트 squatDepthAnalysis.depthGrade가 이 값과 정확히 일치해야 한다")
+    p.add_argument(
+        "--target-reps-per-set", type=int, default=None,
+        help="세트당 목표 횟수(V26). 생략하면 Spring 이 추천 공식으로 채운다 — 리포트의 sets[] 로 경계를 확인한다",
+    )
     args = p.parse_args()
+    if not math.isfinite(args.fps) or args.fps <= 0 or (args.expected_reps is not None and args.expected_reps < 0):
+        p.error("fps must be positive and expected-reps must be nonnegative")
 
     # 매 판 새 계정을 쓴다 — 같은 계정을 재사용하면 «이미 진행 중인 세션»(W005)에 걸려
     # 두 번째 판부터 다른 것을 재게 된다.
@@ -125,7 +139,7 @@ def main() -> int:
     log("온보딩", "200")
 
     # ── ② 세션 시작 (여기서 Spring → AI gRPC StartAnalysis 가 일어난다) ──────
-    session_req = {"exerciseId": args.exercise_id}
+    session_req = {"exerciseId": args.exercise_id, "depthMode": args.depth_mode.upper()}
     if args.target_reps_per_set is not None:
         session_req["targetRepsPerSet"] = args.target_reps_per_set
     r = http.post(f"{args.spring}/exercises/sessions", json=session_req, headers=auth)
@@ -146,6 +160,20 @@ def main() -> int:
     log("세션 시작", f"{r.status_code} sessionId={session_id} aiWorker={ai_worker} "
                   f"targetRepsPerSet={session_body.get('targetRepsPerSet')} targetSets={session_body.get('targetSets')}")
 
+    # CLI 자체가 예외로 끝나더라도 AI 검출기 lease 를 남기지 않는다. 이전에는 출력 인코딩
+    # 오류 하나로 세션이 정리되지 않아 같은 워커의 다음 E1 이 풀 소진으로 실패했다.
+    cleanup = {"needed": True}
+
+    def _end_session_on_exit() -> None:
+        if not cleanup["needed"]:
+            return
+        try:
+            http.patch(f"{args.spring}/sessions/{session_id}/end", headers=auth, timeout=10.0)
+        except Exception as exc:  # 종료 중에는 원래 실패 원인을 가리지 않는다.
+            log("세션 자동 정리 실패", str(exc)[:160])
+
+    atexit.register(_end_session_on_exit)
+
     # ── ②-1 AI 세션 배정 대기 ───────────────────────────────────────────────
     # 세션 시작은 202 다 — Spring 이 받았다는 뜻이지 AI 가 배정을 끝냈다는 뜻이 아니다.
     # 배정 전에 프레임을 보내면 AI 는 200 + success=false 로 답한다("배정된 분석기가 없습니다").
@@ -161,12 +189,15 @@ def main() -> int:
         return 1
 
     src_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-    step = max(1, int(round(src_fps / args.fps)))
-    log("영상", f"{args.video} ({src_fps:.1f}fps → {step}프레임마다, {1000 / args.fps:.0f}ms 간격으로 전송)")
+    log("영상", f"{args.video} ({src_fps:.2f}fps → {args.fps:g}fps 시각 기준 추출, "
+              f"{1000 / args.fps:.0f}ms 간격으로 전송)")
 
     sent = detected = judged = 0
     max_rep = 0
+    complete_coaching = partial_coaching = 0
+    last_send_at = None
     idx = 0
+    next_sample_time = 0.0
     skipped_msgs: dict[str, int] = {}
     # 🔴 페이싱 (#714). `--fps` 는 영상에서 «몇 프레임마다 고르나» 만 정했고 보내는 속도는 영상을
     #    읽는 속도 그대로였다 — 그러면 AI 의 유입 상한(`session_state.MIN_FRAME_INTERVAL_SEC`,
@@ -181,10 +212,12 @@ def main() -> int:
         ok, frame = cap.read()
         if not ok:
             break
-        if idx % step:
+        timestamp = idx / src_fps
+        if timestamp + 1e-9 < next_sample_time:
             idx += 1
             continue
         idx += 1
+        next_sample_time = timestamp + 1 / args.fps
 
         ok, buf = cv2.imencode(".jpg", frame)
         if not ok:
@@ -201,6 +234,11 @@ def main() -> int:
         # 첫 프레임은 AI 배정이 끝날 때까지 재시도한다(위 ②-1 참고).
         attempts = 12 if sent == 0 else 1
         for attempt in range(attempts):
+            if last_send_at is not None:
+                remaining = last_send_at + 1 / args.fps - time.monotonic()
+                if remaining > 0:
+                    time.sleep(remaining)
+            last_send_at = time.monotonic()
             rr = http.post(f"{args.ai}/api/v1/pose", json=payload, headers=ai_headers)
             if rr.status_code != 200:
                 log("프레임 전송 실패", f"{rr.status_code} {rr.text[:160]}")
@@ -214,6 +252,9 @@ def main() -> int:
             if attempt == 0:
                 log("AI 배정 대기", str(body.get("message"))[:90])
             time.sleep(1.0)
+        if sent == 0 and body.get("skip_reason") in _NOT_ASSIGNED_YET:
+            log("AI 배정 실패", "12회 재시도 후에도 분석기가 배정되지 않았다")
+            return 1
         next_send_at = time.monotonic() + send_interval
         sent += 1
 
@@ -229,6 +270,11 @@ def main() -> int:
             continue
         if body.get("angles"):
             judged += 1
+        if body.get("message"):
+            if body.get("rep_completed"):
+                complete_coaching += 1
+            else:
+                partial_coaching += 1
         rep = body.get("rep_count") or 0
         if rep > max_rep:
             max_rep = rep
@@ -238,6 +284,7 @@ def main() -> int:
     # 「검출 N/N」이 아니라 «판정에 들어간 프레임» 을 따로 센다 — 가시성 미달·속도 상한 프레임은
     # landmarks 는 들어 있고 angles 가 없다. 둘을 같은 숫자로 세면 #196 처럼 오독한다.
     log("프레임 유입", f"전송 {sent} · 랜드마크 {detected} · 판정에 들어감 {judged} · rep {max_rep}회")
+    log("자세 안내", f"완료 {complete_coaching}건 · 깊이 미확인 {partial_coaching}건")
     for reason, n in skipped_msgs.items():
         log("  스킵", f"{n}회 — {reason}")
     # 페이싱을 넣은 뒤에도 이게 0 이 아니면 «영상» 이 아니라 «드라이버» 가 원인이다 — 판정
@@ -248,6 +295,9 @@ def main() -> int:
     # ── ④ 세션 종료 ─────────────────────────────────────────────────────────
     r = http.patch(f"{args.spring}/sessions/{session_id}/end", headers=auth)
     log("세션 종료", f"{r.status_code}")
+    if r.status_code != 200:
+        return 1
+    cleanup["needed"] = False
 
     # ── ⑤ 리포트 ────────────────────────────────────────────────────────────
     # 종료 PATCH 는 «클라가 끝냈다» 까지다. 리포트는 그 뒤 아웃박스 → AI → CompleteAnalysis
@@ -266,8 +316,30 @@ def main() -> int:
         return 1
     for key in ("totalReps", "avgSyncRate", "workoutMinutes", "caloriesBurned"):
         print(f"        {key:<18} {report.get(key)}")
-    print(f"        worstSection       {report.get('worstSection')}")
+    worst = report.get("worstSection") or {}
+    print(f"        worstSection       rep={worst.get('repNumber')} reason={worst.get('reason')}")
     print(f"        repTrend           {len(report.get('repTrend') or [])}건")
+    depth = report.get("squatDepthAnalysis") or {}
+    if depth:
+        print(f"        squatDepthAnalysis mode={depth.get('depthMode')} "
+              f"score={depth.get('depthScore')} grade={depth.get('depthGrade')}")
+        for line in depth.get("narrative") or []:
+            print(f"          - {line}")
+    # 2026-10-05: 런지 깊이·체간 기울기·보폭 카드도 같이 본다 — 시연 전 «새 채점이 리포트까지 나오는가»
+    extra_blocks = {
+        "lungeDepthAnalysis": ("depthScore", "depthGrade"),
+        "squatTrunkLeanAnalysis": ("tiltScore", "tiltGrade"),
+        "lungeTrunkLeanAnalysis": ("tiltScore", "tiltGrade"),
+        "lungeStepLengthAnalysis": ("stepScore", "stepGrade"),
+    }
+    present_blocks = []
+    for name, (score_key, grade_key) in extra_blocks.items():
+        block = report.get(name)
+        if block:
+            present_blocks.append(name)
+            print(f"        {name} score={block.get(score_key)} grade={block.get(grade_key)}")
+            for line in block.get("narrative") or []:
+                print(f"          - {line}")
     # 세트(V26) — Spring 이 pose_data 의 rep 집계를 ceil(rep/T) 로 묶은 것. 세트 도입 전 세션은 [].
     details = report.get("syncRateDetails") or []
     print(f"        setInfo            {details[0].get('setInfo') if details else None}")
@@ -280,10 +352,28 @@ def main() -> int:
     problems = []
     if max_rep == 0:
         problems.append("AI 가 rep 을 한 번도 완성하지 못했다 (영상이 못 쓰는 것이거나 #217)")
+    if args.expected_reps is not None and max_rep != args.expected_reps:
+        problems.append(f"검출 {max_rep}회가 사람 기준 {args.expected_reps}회와 다르다")
+    if args.expect_complete_coaching and complete_coaching != max_rep:
+        problems.append(f"완료 안내 {complete_coaching}건이 완료 횟수 {max_rep}회와 다르다")
     if not report.get("totalReps"):
         problems.append("리포트 totalReps 가 0 이다 (rep→콜백→적재 구간이 안 돌았다)")
-    if not report.get("avgSyncRate"):
+    # 런지(exercise-id 2)는 횟수만 측정해 avgSyncRate 가 의도적으로 비어 있다(V22 repetition_only).
+    if args.exercise_id == 1 and not report.get("avgSyncRate"):
         problems.append("avgSyncRate 가 0 이다 (정답지가 비었을 수 있다 — #192)")
+    expected_blocks = (["squatTrunkLeanAnalysis"] if args.exercise_id == 1
+                       else ["lungeDepthAnalysis", "lungeTrunkLeanAnalysis", "lungeStepLengthAnalysis"])
+    for name in expected_blocks:
+        if name not in present_blocks:
+            problems.append(f"리포트에 {name} 가 없다 (배관이 안 돌았거나 해당 데이터가 비었다)")
+    if args.expected_depth_score_min is not None:
+        if not depth:
+            problems.append("리포트에 squatDepthAnalysis 가 없다 (스쿼트가 아니거나 깊이 데이터 없음)")
+        elif (depth.get("depthScore") or 0) < args.expected_depth_score_min:
+            problems.append(
+                f"깊이 점수 {depth.get('depthScore')}가 기대 최소값 {args.expected_depth_score_min} 미만이다")
+    if args.expected_depth_grade is not None and depth.get("depthGrade") != args.expected_depth_grade:
+        problems.append(f"깊이 등급 {depth.get('depthGrade')}가 기대값 {args.expected_depth_grade}와 다르다")
 
     print()
     if problems:
@@ -296,4 +386,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     sys.exit(main())

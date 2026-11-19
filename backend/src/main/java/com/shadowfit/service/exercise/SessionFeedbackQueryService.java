@@ -4,7 +4,6 @@ import com.shadowfit.dto.exercises.feedback.SessionFeedbackEventDto;
 import com.shadowfit.dto.exercises.feedback.SessionFeedbackSummaryDto;
 import com.shadowfit.global.error.BusinessException;
 import com.shadowfit.global.error.ErrorCode;
-import com.shadowfit.model.exercise.Session;
 import com.shadowfit.repository.exercise.SessionFeedbackLogRepository;
 import com.shadowfit.repository.exercise.SessionRepository;
 import lombok.RequiredArgsConstructor;
@@ -46,11 +45,11 @@ public class SessionFeedbackQueryService {
         return new SessionFeedbackSummaryDto(sessionId, total, buckets);
     }
 
+    // 없거나 남의 세션이면 똑같이 404 — 존재 여부 비공개(decisions/resource-ownership-403-vs-404.md 후보 C).
+    // 세션 행 자체는 안 쓰므로 엔티티를 싣지 않고 존재만 본다.
     private void ensureOwnership(Long sessionId, Long currentMemberId) {
-        Session session = sessionRepository.findById(sessionId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.SESSION_NOT_FOUND));
-        if (!session.getMember().getId().equals(currentMemberId)) {
-            throw new BusinessException(ErrorCode.ACCESS_DENIED);
+        if (!sessionRepository.existsByIdAndMemberId(sessionId, currentMemberId)) {
+            throw new BusinessException(ErrorCode.SESSION_NOT_FOUND);
         }
     }
 

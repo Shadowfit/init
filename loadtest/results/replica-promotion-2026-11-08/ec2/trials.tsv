@@ -1,0 +1,11 @@
+trial	kind	arm	lag_s_at_kill	backlog_tx	io_stop_ms	apply_ms	switch_ms	write_ms	promote_ms	acked	lost_tx	exec_ms
+1	버림	paced	0	0	47	89	69	49	254	213	0	41
+2	버림	stress	21	3376	50	7647	75	50	7822	42380	0	49
+3	본판	stress	22	3440	51	7868	74	52	8045	42412	0	51
+4	본판	paced	0	0	48	89	64	49	250	213	0	44
+5	본판	paced	0	0	47	92	66	49	254	213	0	43
+6	본판	stress	22	3440	52	7657	76	51	7836	42354	0	45
+7	본판	stress	20	3258	52	7627	75	52	7806	42311	0	48
+8	본판	paced	0	0	48	89	68	50	255	213	0	44
+9	본판	paced	0	0	45	91	57	47	240	213	0	44
+10	본판	stress	21	3380	49	7635	89	49	7822	42391	0	44

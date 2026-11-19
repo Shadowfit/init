@@ -1,0 +1,34 @@
+[round] start 2026-11-08T16:56:09Z REF=de7311cc8649a574a3e3f224b999ce08e8eaa932 PHASES=2 3 RUN_ID=natpk-ec2-20261108-165553 SEQ=r1:P ONLINE_LOG_BYTES=기본 WRITER_SECS=기본
+Created symlink /etc/systemd/system/multi-user.target.wants/docker.service → /usr/lib/systemd/system/docker.service.
+[round] rig de7311cc · 4 vCPU · 15GB
+[phase2 16:57:04] 기동 — 버퍼풀 4096MB
+[phase2 16:57:46] [0] tpl_A 시딩 — 세션 16667 × 600 = 10000200 행
+{"table": "tpl_A", "sessions": 16667, "rows": 10000200, "sec": 823.7}
+[phase2 17:11:34] [0] tpl_A 10000200 행 · PK=id,created_at
+[phase2 17:11:36] [1] ✅ 서버가 INPLACE·LOCK=NONE 을 받았다 — 팔 N 은 온라인 DDL 이다
+[phase2 17:11:36] [2] 판 r1 팔 P — tpl_A 복사
+[phase2 17:48:37]   팔 P — DDL 975.7초 · writer {"attempts": 3007, "ok": 3007, "errors": 0, "err_kinds": [], "max_attempt_ms": 1042, "p50_attempt_ms": 33.0, "max_gap_ms": 1242} · binlog +17104MB · 디스크 최대 96883MB
+[phase2 17:48:37] [3] r_B 남김 — PK=session_id,rep_number,timestamp_sec,created_at
+[phase2 17:48:38] 완료 → /root/init/loadtest/r276-natpk/_out/phase2/raw.tsv
+[phase3 17:51:04] r_Bp 만들기 — r_B 에서 idx_session_timestamp 를 뺀 복사본
+[phase3 18:11:45] 표본 300 개 (세션·id 쌍)
+[phase3 18:11:58]   r0 session tpl_A — 차가움 "p50_ms": 13.824 · 데움 "p50_ms": 5.151
+[phase3 18:12:13]   r0 session r_B — 차가움 "p50_ms": 13.792 · 데움 "p50_ms": 5.202
+[phase3 18:12:28]   r0 session r_Bp — 차가움 "p50_ms": 11.974 · 데움 "p50_ms": 5.208
+[phase3 18:12:38]   r0 id tpl_A — 차가움 "p50_ms": 1.482 · 데움 "p50_ms": 0.142
+[phase3 18:12:48]   r0 id r_B — 차가움 "p50_ms": 2.126 · 데움 "p50_ms": 0.166
+[phase3 18:12:57]   r0 id r_Bp — 차가움 "p50_ms": 2.119 · 데움 "p50_ms": 0.163
+[phase3 18:13:12]   r1 session r_B — 차가움 "p50_ms": 13.749 · 데움 "p50_ms": 4.811
+[phase3 18:13:26]   r1 session r_Bp — 차가움 "p50_ms": 11.559 · 데움 "p50_ms": 4.8
+[phase3 18:13:41]   r1 session tpl_A — 차가움 "p50_ms": 14.303 · 데움 "p50_ms": 5.124
+[phase3 18:13:50]   r1 id r_B — 차가움 "p50_ms": 2.106 · 데움 "p50_ms": 0.166
+[phase3 18:14:00]   r1 id r_Bp — 차가움 "p50_ms": 2.146 · 데움 "p50_ms": 0.216
+[phase3 18:14:10]   r1 id tpl_A — 차가움 "p50_ms": 1.477 · 데움 "p50_ms": 0.187
+[phase3 18:14:24]   r2 session r_Bp — 차가움 "p50_ms": 11.465 · 데움 "p50_ms": 5.195
+[phase3 18:14:39]   r2 session tpl_A — 차가움 "p50_ms": 14.353 · 데움 "p50_ms": 5.723
+[phase3 18:14:53]   r2 session r_B — 차가움 "p50_ms": 13.946 · 데움 "p50_ms": 4.774
+[phase3 18:15:03]   r2 id r_Bp — 차가움 "p50_ms": 2.144 · 데움 "p50_ms": 0.216
+[phase3 18:15:12]   r2 id tpl_A — 차가움 "p50_ms": 1.475 · 데움 "p50_ms": 0.141
+[phase3 18:15:22]   r2 id r_B — 차가움 "p50_ms": 2.148 · 데움 "p50_ms": 0.212
+[phase3 18:15:22] 완료 → /root/init/loadtest/r276-natpk/_out/phase3/reads.jsonl
+[round] finish 2026-11-08T18:15:23Z — done

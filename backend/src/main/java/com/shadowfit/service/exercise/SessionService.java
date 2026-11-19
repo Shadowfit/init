@@ -21,6 +21,7 @@ import com.shadowfit.model.outbox.OutboxEvent;
 import com.shadowfit.repository.outbox.OutboxEventRepository;
 import com.shadowfit.model.exercise.Exercise;
 import com.shadowfit.model.exercise.Session;
+import com.shadowfit.model.exercise.SquatDepthMode;
 import com.shadowfit.model.exercise.Status;
 import com.shadowfit.model.member.Member;
 import com.shadowfit.repository.exercise.ExercisesRepository;
@@ -147,6 +148,7 @@ public class SessionService {
                 .startTime(LocalDateTime.now().withNano(0))
                 .status(Status.IN_PROGRESS)
                 .sessionNonce(sessionNonceGenerator.generate())
+                .squatDepthMode(appDto.getDepthMode() != null ? appDto.getDepthMode() : SquatDepthMode.FULL)
                 .difficultyLevel(recommendation.difficultyLevel())
                 .targetRepsPerSet(targetRepsPerSet)
                 .targetSets(appDto.getTargetSets())
@@ -294,17 +296,14 @@ public class SessionService {
      * - endTime 만 즉시 기록. 통계 갱신(totalReps/avgSync) 은 AI 의 CompleteAnalysis 콜백이 별도 처리
      * - AI 로의 gRPC 는 이 경로에서 <b>일어나지 않는다</b>. OutboxPublisher 가 행을 집어 송신하므로
      *   요청 스레드는 외부 호출을 기다리지 않고, 송신이 실패해도 행이 남아 재시도된다
-     * - 본인 세션이 아니면 ACCESS_DENIED, 이미 종료된 세션이면 멱등 (변경 없음, 200 OK)
+     * - 없거나 남의 세션이면 SESSION_NOT_FOUND(404) — 존재 여부 비공개, 이미 종료된 세션이면 멱등 (변경 없음, 200 OK)
+     *   (decisions/resource-ownership-403-vs-404.md 후보 C: 개인 소유 리소스는 소유권을 WHERE 에)
      * - 통보가 끝내 전달되지 못하면: SessionTimeoutScheduler 가 여전히 safety net (IN_PROGRESS → FAILED)
      */
     @Transactional
     public void endSession(Long sessionId, Long currentMemberId) {
-        Session session = sessionRepository.findById(sessionId)
+        Session session = sessionRepository.findByIdAndMemberId(sessionId, currentMemberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SESSION_NOT_FOUND));
-
-        if (!session.getMember().getId().equals(currentMemberId)) {
-            throw new BusinessException(ErrorCode.ACCESS_DENIED);
-        }
 
         // 멱등: 이미 endTime 기록된 세션은 변경 없음 (AI 재호출도 안 함)
         if (!session.markEnded(LocalDateTime.now())) {

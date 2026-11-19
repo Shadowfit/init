@@ -1,3 +1,4 @@
+import { devWarn } from '@/utils/devLog';
 import { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -48,7 +49,7 @@ export default function NotificationsScreen() {
       setPage(nextPage);
       setHasMore(nextPage + 1 < totalPages);
     } catch (e: any) {
-      console.warn('[notifications] status=', e?.response?.status, 'data=', JSON.stringify(e?.response?.data));
+      devWarn('[notifications] status=', e?.response?.status, 'data=', JSON.stringify(e?.response?.data));
     } finally {
       setLoading(false);
       setRefreshing(false);

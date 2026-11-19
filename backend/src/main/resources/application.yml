@@ -188,6 +188,10 @@ reference-video:
   dir: ${REFERENCE_VIDEO_DIR:./data/reference-videos}
   ai-dir: ${REFERENCE_VIDEO_AI_DIR:}
 
+# 모임 피드 공유 사진. compose 는 /data/feed-photos 로 넘긴다(./backend/data/feed-photos bind mount).
+feed-photo:
+  dir: ${FEED_PHOTO_DIR:./data/feed-photos}
+
 # [3] Swagger 및 기타 설정 (최상단 레벨)
 #
 # 기본은 꺼짐이고 **env var 로도 못 켠다** — 켜는 건 dev 프로파일(application-dev.yml)뿐이다.
@@ -201,6 +205,19 @@ springdoc:
   swagger-ui:
     path: /swagger-ui.html
     enabled: false
+
+# 약관·개인정보·건강정보 동의 (ConsentService, V36).
+consent:
+  # 🔴 기본은 꺼짐이다. 켜면 ① 가입에 이용약관·개인정보(현재 버전) 동의가 없으면 거절하고 ② 키·몸무게를 보내는 온보딩 요청은 건강정보
+  # 동의가 없으면 거절한다. 동의 화면이 있는 앱이 배포된 뒤에 켠다 — 먼저 켜면 동의를 모르는 현재 앱의 가입·온보딩이 전부 막힌다.
+  # 꺼져 있어도 기록과 조회(GET·POST /member/consents)는 동작한다.
+  enforce: false
+  # 문서 버전. 처리방침·약관을 개정하면 코드가 아니라 여기를 올린다 — 그러면 GET /member/consents 의 missing 에 다시 잡혀
+  # 앱이 재동의를 받는다. 문서 본문은 docs/legal/ (초안, 법률 검토 전).
+  version:
+    terms: v1
+    privacy: v1
+    health-info: v1
 
 security:
   whitelist:
@@ -222,6 +239,9 @@ security:
     # (decisions/token-lifecycle.md §4-2 — «요청자 기준으로 확인한다» 는 처음 안이 틀렸던 자리다)
     - "/member/reissue"
     - "/ws/**"
+    # 피드 사진 — <Image> 가 웹에서 Authorization 헤더를 못 싣는다. 파일명이 UUID 라 추측으로는 못 닿는다
+    # (링크를 아는 사람만 본다 — 모임 피드 응답에만 실리는 값).
+    - "/feed-photos/**"
     - "/actuator/health"
     - "/actuator/health/**"
     # ⚠️ 2026-08-08 — 이 줄이 필요하다는 것은 **실측으로 알았다.**
@@ -437,6 +457,20 @@ outbox:
     # 12회 = 누적 ≈68분 — «한 시간 넘게 못 부르면 포기하고 템플릿» 이 이 두 값의 뜻이다. 소진되면 행은 TEMPLATE_FALLBACK(exhausted).
     max-retry: 12
     max-backoff-seconds: 3600
+
+  # 보존 정리 (OutboxRetentionCleaner, #793 · docs/decisions/outbox-retention-cleanup.md). PENDING·PROCESSING 은 절대 지우지 않는다.
+  retention:
+    enabled: true
+    # 결정 2026-11-19. SENT 를 다시 읽는 코드가 없다 — 쓸모는 correlation_id 로 앱 로그와 잇는 것뿐이고 로그는 컨테이너 stdout 이다.
+    sent-days: 7
+    # 결정 2026-11-19. 사람이 봐야 할 사건인데 확인 화면·절차가 아직 없어 길게 둔다.
+    failed-days: 90
+    # 🔴 잠정값 — 측정으로 유도한 값이 아니다. 제약(상한)은 «배치 하나의 락 보유 시간이 발행기 tick(1초)보다 충분히 짧을 것» 이고
+    # 값은 문서 §6 M2 로 정한다. 그 전까지 작게 둔다.
+    batch-size: 200
+    # 주기·첫 실행 지연도 근거 값이 아니다(정리는 급하지 않다 — 하루 쌓이는 양이 작다). 한 번에 지울 양이 작아지도록 자주 돈다.
+    interval-minutes: 60
+    initial-delay-minutes: 5
 
 jwt:
   secret: ${JWT_SECRET}
