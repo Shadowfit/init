@@ -30,7 +30,6 @@ import {
   ClipboardList,
   Megaphone,
   HelpCircle,
-  KeyRound,
   type LucideIcon,
 } from 'lucide-react-native';
 
@@ -43,7 +42,6 @@ const DEV_ROUTES: { label: string; Icon: LucideIcon; path: string }[] = [
   { label: '운동 보고서', Icon: ClipboardList, path: '/report/1' },
   { label: '공지사항', Icon: Megaphone, path: '/board/notice' },
   { label: 'Q&A', Icon: HelpCircle, path: '/board/qna' },
-  { label: 'PW재설정', Icon: KeyRound, path: '/(auth)/reset-password' },
 ];
 
 export default function LoginScreen() {
@@ -168,11 +166,6 @@ function LoginForm() {
         loading={loading}
         style={styles.submitBtn}
       />
-      <TouchableOpacity onPress={() => router.push('/(auth)/reset-password' as any)}>
-        <Text style={styles.forgotText}>
-          비밀번호를 잊으셨나요? <Text style={styles.forgotLink}>재설정</Text>
-        </Text>
-      </TouchableOpacity>
     </>
   );
 }
@@ -364,16 +357,6 @@ const styles = StyleSheet.create({
   },
   submitBtn: {
     marginTop: SPACING.lg,
-  },
-  forgotText: {
-    textAlign: 'center',
-    fontSize: FONT_SIZE.sm,
-    color: COLORS.textSecondary,
-    marginTop: SPACING.xl,
-  },
-  forgotLink: {
-    color: COLORS.primary,
-    fontWeight: '600',
   },
 
   // 성별 선택
