@@ -445,6 +445,20 @@ outbox:
     max-retry: 12
     max-backoff-seconds: 3600
 
+  # 보존 정리 (OutboxRetentionCleaner, #793 · docs/decisions/outbox-retention-cleanup.md). PENDING·PROCESSING 은 절대 지우지 않는다.
+  retention:
+    enabled: true
+    # 결정 2026-11-19. SENT 를 다시 읽는 코드가 없다 — 쓸모는 correlation_id 로 앱 로그와 잇는 것뿐이고 로그는 컨테이너 stdout 이다.
+    sent-days: 7
+    # 결정 2026-11-19. 사람이 봐야 할 사건인데 확인 화면·절차가 아직 없어 길게 둔다.
+    failed-days: 90
+    # 🔴 잠정값 — 측정으로 유도한 값이 아니다. 제약(상한)은 «배치 하나의 락 보유 시간이 발행기 tick(1초)보다 충분히 짧을 것» 이고
+    # 값은 문서 §6 M2 로 정한다. 그 전까지 작게 둔다.
+    batch-size: 200
+    # 주기·첫 실행 지연도 근거 값이 아니다(정리는 급하지 않다 — 하루 쌓이는 양이 작다). 한 번에 지울 양이 작아지도록 자주 돈다.
+    interval-minutes: 60
+    initial-delay-minutes: 5
+
 jwt:
   secret: ${JWT_SECRET}
   # 30분. 24시간에서 줄였다 (이슈 #137, decisions/token-lifecycle.md §3-0-2).

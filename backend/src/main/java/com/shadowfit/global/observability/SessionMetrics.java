@@ -84,6 +84,12 @@ public class SessionMetrics {
     /** 아웃박스 적체(PENDING 행 수) 게이지. */
     private static final String OUTBOX_PENDING = "shadowfit.outbox.pending";
 
+    /** 보존 정리가 지운 outbox 행 수. tags: status(SENT/FAILED) — 배치 반복이 끝나는지·한 번에 얼마나 지워지는지 본다. */
+    private static final String OUTBOX_CLEANUP_DELETED = "shadowfit.outbox.cleanup.deleted";
+
+    /** 최종 실패(FAILED) 행 누적 수 게이지 — «지금 몇 건 남아 있나». 발생 수 카운터는 이 값을 모른다. */
+    private static final String OUTBOX_FAILED = "shadowfit.outbox.failed";
+
     /** 통보 지연 — 행 생성(created_at)부터 전달 성공(sent_at)까지. */
     private static final String OUTBOX_LAG = "shadowfit.outbox.lag";
 
@@ -160,6 +166,21 @@ public class SessionMetrics {
     public void registerOutboxPendingGauge(java.util.function.Supplier<Number> supplier) {
         io.micrometer.core.instrument.Gauge.builder(OUTBOX_PENDING, supplier)
                 .description("전달 대기 중인 아웃박스 행 수")
+                .register(registry);
+    }
+
+    /** 보존 정리가 지운 행 수를 센다. */
+    public void outboxCleanupDeleted(String status, long count) {
+        registry.counter(OUTBOX_CLEANUP_DELETED, "status", status).increment(count);
+    }
+
+    /**
+     * FAILED 누적 게이지. 터미널 실패는 사람이 봐야 할 사건인데(07-29 결정) 지금까지는 발생 카운터뿐이라
+     * «지금 몇 건이 확인을 기다리나» 를 볼 수단이 없었다. 스크레이프 때마다 {@code supplier} 를 부른다.
+     */
+    public void registerOutboxFailedGauge(java.util.function.Supplier<Number> supplier) {
+        io.micrometer.core.instrument.Gauge.builder(OUTBOX_FAILED, supplier)
+                .description("최종 실패(FAILED) 상태로 남아 있는 아웃박스 행 수")
                 .register(registry);
     }
 
