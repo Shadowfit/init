@@ -42,7 +42,7 @@
 | 마이크 권한 | ✅ **선언하지 않는다**(`microphonePermission: false`, `recordAudioAndroid: false`). 앱 코드는 오디오를 안 쓰는데, 플러그인 기본값은 `RECORD_AUDIO` 와 마이크 사용 문구를 선언해 스토어 심사·개인정보 라벨에 불리하다 |
 | 빌드 프로파일 | ✅ `development`(dev client·내부 배포) · `preview`(내부 배포, Android 는 APK) · `production`(빌드 번호 자동 증가, `appVersionSource: remote`) |
 | iOS `bundleIdentifier` · Android `package` | ⬜ **미정**(결정 D-2 — 개인 계정 확정, 문자열 미정). 한 번 정하면 바꾸기 어렵다. 이 값이 없으면 `development` 외 빌드는 EAS 가 입력을 묻는다 |
-| 환경변수 주입 | ⬜ **미정**. 프로파일별 `env` 를 일부러 비웠다 — 실제 도메인이 없어 값을 적으면 «지어낸 주소» 가 빌드에 들어간다. `api.ts` 의 백엔드 주소는 지금도 하드코딩된 자리표시자(`api.shadowfit.com`)라 **환경변수로 바꾸는 작업이 먼저**다. AI 쪽은 이미 `EXPO_PUBLIC_AI_BASE_URL`(릴리스에선 https 필수)을 쓴다 |
+| 환경변수 주입 | 🟨 **백엔드 주소는 `EXPO_PUBLIC_API_BASE_URL`(릴리스에서 https 필수, 없으면 모든 요청이 설정 오류로 실패)로 바꿨다** — 코드의 `api.shadowfit.com` 은 제거됐다. 프로파일별 `env` 값은 실제 도메인이 정해질 때까지 일부러 비워 둔다(지어낸 주소가 빌드에 들어가지 않게). AI 쪽은 `EXPO_PUBLIC_AI_BASE_URL` |
 | 약관·처리방침 주소 | ⬜ `EXPO_PUBLIC_TERMS_URL` · `EXPO_PUBLIC_PRIVACY_URL` — 문서를 게시한 뒤 |
 | 계정 | ⬜ Apple Developer · Google Play 가입, `eas init`(프로젝트 id 가 `app.json` 의 `extra.eas` 로 들어간다) |
 | 판단 보류 | `userInterfaceStyle` 은 `automatic` 인데 앱 테마는 다크 고정이다 — 라이트 모드 기기에서 상태바·스플래시가 어긋날 수 있어 `dark` 로 고정할지 **디자인 결정**이 필요하다. iOS `ITSAppUsesNonExemptEncryption`(수출 규정 신고)도 제출 직전에 정한다 |
