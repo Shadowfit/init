@@ -1,7 +1,7 @@
 # outbox_events 보존 정리 — 무엇을, 어떻게, 얼마나 자주 지우나
 
 작성일: 2026-09-23
-상태: **분기점 — 결정 전.** 후보와 트레이드오프, 측정 설계까지만 적었다. 채택은 사용자 confirm 뒤 §8 에 박제한다.
+상태: **결정·구현됨 (2026-11-19, §8 참고).** 아래 §0~§7 은 결정 당시의 분기점 분석이라 그대로 둔다. 무엇을 골랐고 무엇이 남았는지는 §8 이 정본이다.
 연관: [#793](https://github.com/Shadowfit/init/issues/793) · [`./outbox-reliable-messaging.md`](./outbox-reliable-messaging.md) §4-1-2 · [ADR 0001](../adr/0001-use-transactional-outbox-for-session-end-notification.md) · [`loadtest/results/delete-fragmentation-2026-08-09/`](../../loadtest/results/delete-fragmentation-2026-08-09/README.md)
 
 ---
@@ -157,3 +157,10 @@ M1 이 «C3 도 막힌다» 로 나오면 §3 추천을 거둔다. «C1 도 안 
 ## 8. 결정 로그
 
 - 2026-09-23: 신설. #793 의 «정할 것» 다섯 개를 분기로 풀고, 락 상호작용 가설(§3-1)과 측정 설계(§6)를 더했다. 결정 없음.
+- 2026-11-19: **결정·구현.** 사용자 confirm 으로 아래를 골랐고 `OutboxRetentionCleaner` 로 main 에 들어갔다.
+  - 보존 모델 **A1 유지** — SENT 는 짧게, FAILED 는 길게, 둘 다 주기 DELETE.
+  - 보존 기간 **SENT 7일 · FAILED 90일** (`outbox.retention.sent-days` · `failed-days`).
+  - 쿼리 모양 **C3 (PK 순회)** — 가장 오래된 쪽부터 id 커서로 걸으며 n행씩 지운다. 배치 크기는 **잠정 200** (`outbox.retention.batch-size`).
+  - 실행 — 기본 켜짐(`outbox.retention.enabled`), 초기 지연 5분 · 주기 60분. 설정값이 0 이하면 기동 때 실패한다.
+  - 관측 — 정리 결과를 카운터로 남긴다(SessionMetrics).
+  - **남은 것**: §6 의 M1(정리 DELETE ↔ 발행기 락 상호작용, §3-1 의 «추정, 미측정» 가설)은 **재지 않았다.** 배치 크기 200 도 그 측정 전의 잠정값이다. 운영 DB 가 없어 «첫 실행 때 쌓인 양» 도 모른다. 다중 인스턴스(§5-2)는 여전히 ShedLock 없이 단일 인스턴스 전제다.
