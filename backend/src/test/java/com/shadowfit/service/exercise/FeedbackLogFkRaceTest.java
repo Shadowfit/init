@@ -121,10 +121,27 @@ class FeedbackLogFkRaceTest extends MySqlContainerSupport {
         assertThat(countRows()).isEqualTo(3);
     }
 
-    // ⚠️ «한 배치 안에» 같은 (rep, 유형)이 두 번 있는 경우는 여기서 고정하지 않는다 — 실 MySQL 에서
-    //    재작성된 multi-row INSERT 가 에러 1869(Auto-increment value in UPDATE conflicts…)로 통째로
-    //    실패한다(2026-09-24 이 테스트를 쓰다 발견, #816). 지금 AI 는 배치를 항상 1건으로 보내
-    //    (ai-server pose.py flush_pending_feedback) 운영 경로에서는 나지 않는다.
+    @Test
+    @DisplayName("한 배치 안의 같은 (rep, 유형) 중복은 첫 건만 저장된다 — 1869 로 배치가 죽지 않는다 (#816)")
+    void duplicateWithinOneBatch_isAbsorbed() {
+        // [rep1, rep2, rep1] — 재작성된 multi-row INSERT 에서 같은 문장 안의 중복이 MySQL 에러 1869 를 냈다.
+        int inserted = feedbackLogService.saveBatch(batch(session.getId(), 1, 2, 1));
+
+        assertThat(inserted).as("중복 rep1 은 흡수되고 새 행은 2개").isEqualTo(2);
+        assertThat(countRows()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("배치 안 중복이 있는 배치를 재전송해도 0 으로 센다")
+    void duplicateWithinOneBatch_resendIsIdempotent() {
+        FeedbackBatchRequest request = batch(session.getId(), 1, 2, 1);
+
+        feedbackLogService.saveBatch(request);
+        int resent = feedbackLogService.saveBatch(request);
+
+        assertThat(resent).isZero();
+        assertThat(countRows()).isEqualTo(2);
+    }
 
     private int countRows() {
         return jdbcTemplate.queryForObject(
