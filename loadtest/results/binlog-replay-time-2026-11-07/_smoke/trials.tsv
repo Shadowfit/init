@@ -1,0 +1,6 @@
+trial	kind	method	level_mb	binlog_bytes	prep_ms	apply_ms	verify
+1	버림	M1	4	8392787	0	33824	OK
+2	본판	M1	4	8392787	0	26620	OK
+3	본판	M2	4	8392787	41244	49136	OK
+4	본판	M1	16	24155791	0	81822	OK
+5	본판	M2	16	24155791	33021	72874	OK

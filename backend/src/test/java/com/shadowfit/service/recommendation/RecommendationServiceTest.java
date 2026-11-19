@@ -68,7 +68,7 @@ class RecommendationServiceTest {
         assertThat(result.targetReps()).isEqualTo(10 + (5 - 1) * 2); // 18
         assertThat(result.targetSyncRate()).isEqualByComparingTo("68.0"); // 60 + (5-1)*2
         assertThat(result.restTimeSec()).isEqualTo(90 - (5 - 1) * 5); // 70
-        assertThat(result.reason()).contains("아직 완료한 스쿼트 세션이 없어");
+        assertThat(result.reason()).contains("아직 완료한 세션이 없어");
     }
 
     @Test

@@ -1,0 +1,6 @@
+instance_type=m6i.xlarge
+4
+               total        used        free      shared  buff/cache   available
+Mem:              15           0          13           0           1          14
+Swap:              0           0           0
+Docker version 25.0.14, build 0bab007

@@ -6,42 +6,40 @@ import lombok.Getter;
 @Getter
 public enum ErrorCode {
 
+    // code 값은 ErrorResponseDto.code 로 클라이언트에 나가는 계약이다 — 한 번 쓴 번호는 뜻을 바꾸거나
+    // 다른 항목에 재사용하지 않는다. 비어 있는 번호(C004·C005·A003·U002·W002·W004·V001~V003·AI*·I*)는
+    // 호출부 없이 정의만 있다가 2026-09-23 에 지운 것들이라 결번으로 남긴다.
 
     // --- Common ---
     INVALID_INPUT_VALUE(400, "C001", "올바르지 않은 입력값입니다."),
     METHOD_NOT_ALLOWED(405, "C002", "허용되지 않은 HTTP 메서드입니다."),
     INTERNAL_SERVER_ERROR(500, "C003", "서버 내부 오류가 발생했습니다."),
-    INVALID_TYPE_VALUE(400, "C004", "입력값의 타입이 적절하지 않습니다."),
-    HANDLE_ACCESS_DENIED(403, "C005", "접근이 거부되었습니다."),
     RESOURCE_NOT_FOUND(404, "C006", "요청한 경로를 찾을 수 없습니다."),
     FILE_TOO_LARGE(413, "C007", "파일 크기가 제한을 초과했습니다."),
+    UNSUPPORTED_MEDIA_TYPE(415, "C008", "지원하지 않는 Content-Type 입니다."),
 
     // --- Auth ---
     UNAUTHORIZED(401, "A001", "로그인이 필요한 서비스입니다."),
     ACCESS_DENIED(403, "A002", "해당 리소스에 대한 접근 권한이 없습니다."),
-    TOKEN_EXPIRED(401, "A003", "인증 토큰이 만료되었습니다."),
     INVALID_TOKEN(401, "A004", "잘못된 인증 토큰입니다."),
-    LOGIN_INPUT_INVALID(401, "A005", "비밀번호가 틀렸습니다."),
+    LOGIN_INPUT_INVALID(401, "A005", "이메일 또는 비밀번호가 올바르지 않습니다."),
     // 폐기된 refresh token 이 도착했다 — 재시도 유예 밖이라 탈취로 본다 (이슈 #135).
     //
     // 문구에 «탈취» 라고 쓰지 않는 것은 의도다 — 낡은 기기가 살아 있을 때도 같은 코드가 나가고
     // (decisions/token-lifecycle.md §4-3), 서버는 그 둘을 구분하지 못한다.
     //
-    // 🔴 **이 코드는 지금 클라에 도달하지 않는다.** ErrorResponseDto 가 status·message·timestamp
-    // 만 싣고 code 를 안 싣는다. 즉 프론트는 A004(단순 무효)와 이걸 **message 문자열로만** 가를 수
-    // 있다. 응답에 code 를 추가하는 것은 전 에러 응답의 계약 변경이라 이 작업 범위 밖으로 뒀다.
+    // 2026-09-23 부터 ErrorResponseDto 가 code 를 싣는다 — 프론트는 A004(단순 무효)와 이걸 code 로
+    // 가를 수 있다(그 전엔 message 문자열뿐이었다). 프론트가 실제로 가르는지는 별개다.
     REFRESH_TOKEN_REUSED(401, "A006", "만료된 로그인 정보입니다. 보안을 위해 다시 로그인해 주세요."),
 
     // --- User & Persona ---
     USER_NOT_FOUND(404, "U001", "존재하지 않는 사용자입니다."),
-    INVALID_PERSONA_TYPE(400, "U002", "유효하지 않은 페르소나 설정입니다."),
     USERID_DUPLICATION(400, "U003", "이미 가입된 사용자입니다."),
     // 이슈 #195 — username 도 UNIQUE(V1__baseline.sql:28)인데 사전검사가 email 에만 있어
     // 겹친 닉네임으로 가입하면 400 이 아니라 500 이 나갔다.
     //
-    // U003 을 재사용하지 않는 이유는 «코드» 가 아니라 «문구» 다. ErrorResponseDto 는 code 를
-    // 싣지 않고(29~31행), 프론트는 message 를 그대로 사용자에게 띄운다
-    // (frontend/app/(auth)/login.tsx:229-231). 즉 메시지가 유일한 식별자다 — 닉네임만 겹친
+    // U003 을 재사용하지 않는 이유는 «코드» 가 아니라 «문구» 다. 프론트는 message 를 그대로
+    // 사용자에게 띄운다(frontend/app/(auth)/login.tsx:229-231). 닉네임만 겹친
     // 신규 사용자에게 "이미 가입된 사용자입니다"가 나가면, 있지도 않은 자기 계정을 찾아
     // 로그인·비밀번호 찾기로 가게 된다.
     //
@@ -50,11 +48,18 @@ public enum ErrorCode {
     // 프론트에 해롭다. 옮기려면 U003 도 같이 옮겨야 하고 그건 계약 변경이다.
     USERNAME_DUPLICATION(400, "U004", "이미 사용 중인 닉네임입니다."),
 
+    // 약관·개인정보 동의 (V36, docs/tasks/39 §A-1). 400 — 요청에 필요한 동의가 빠졌다.
+    CONSENT_REQUIRED(400, "U005", "필수 약관에 동의해야 이용할 수 있습니다."),
+    // 409 — 요청은 형식이 맞지만 «현재 문서 버전» 과 어긋난다. 문서가 개정됐다는 뜻이라 앱이 최신 버전(GET /member/consents 의
+    // current)으로 다시 동의를 받아야 한다. 400 이 아닌 이유는 입력 오류가 아니라 서버 상태(현재 버전)와의 충돌이기 때문이다.
+    CONSENT_VERSION_MISMATCH(409, "U006", "약관이 개정되었습니다. 최신 버전에 동의해 주세요."),
+    // 키·몸무게를 저장하려는데 건강정보 동의가 없다. U005 와 문구를 나눈 것은 사용자가 «무엇에 동의해야 하는지» 를 알아야 해서다 —
+    // 이용약관·개인정보 동의는 이미 했는데 «필수 약관에 동의하라» 고 하면 막힌 이유를 알 수 없다.
+    CONSENT_HEALTH_REQUIRED(400, "U007", "키·몸무게를 저장하려면 건강정보 수집·이용에 동의해야 합니다."),
+
     // --- Workout Session  ---
     EXERCISE_NOT_FOUND(404, "W001", "존재하지 않는 운동 종목입니다."),
-    METADATA_NOT_FOUND(404, "W002", "운동 메타데이터(JSON/Video)를 찾을 수 없습니다."),
     SESSION_NOT_FOUND(404, "W003", "진행 중인 운동 세션을 찾을 수 없습니다."),
-    S3_UPLOAD_ERROR(500, "W004", "파일 저장소(S3) 연결에 실패했습니다."),
     SESSION_ALREADY_IN_PROGRESS(409, "W005", "이미 진행 중인 운동 세션이 있습니다."),
     SESSION_DELETE_NOT_ALLOWED(409, "W006", "진행 중인 세션은 삭제할 수 없습니다."),
     // 종목 행은 있으나 ai-server에 분석기가 아직 없는 경우(런지·플랭크). 409가 아닌 400인 이유는
@@ -110,6 +115,20 @@ public enum ErrorCode {
     // 됐는데 추출은 조용히 안 된 상태를 안 만들기 위해서다 — 재추출 API 가 없어 그 상태에서 복구하려면
     // 관리자가 같은 파일을 다시 올려야 한다.
     REFERENCE_EXTRACTION_UNAVAILABLE(503, "W017", "AI 서버에 연결할 수 없어 기준 영상을 등록할 수 없습니다. 잠시 후 다시 시도해 주세요."),
+    // 종목 코드(exercises.code, V25) — docs/decisions/lunge-and-set-backend.md §3-B.
+    //
+    // W018: 코드 하나 = 분석기 하나. UNIQUE 가 어차피 막지만 500 대신 이유를 준다(W014 와 같은 결).
+    // W019: 분석이 켜진 종목의 코드를 바꾸면 진행 중 세션이 다른 분석기 기준으로 넘어간다 — 먼저 끄고 바꾼다.
+    // W020: 코드가 없는 종목은 ai-server 가 어느 분석기를 쓸지 알 수 없어 StartAnalysis 를 거절한다(#147 ㄷ).
+    //       W012(기준 좌표 없음)와 나란한 «켜기 전 필요조건» 이다.
+    EXERCISE_CODE_DUPLICATION(409, "W018", "이미 사용 중인 종목 코드입니다."),
+    EXERCISE_CODE_LOCKED(409, "W019", "분석이 켜진 종목의 코드는 바꿀 수 없습니다. 분석을 끈 뒤 바꿔 주세요."),
+    EXERCISE_CODE_REQUIRED(400, "W020", "종목 코드가 없어 분석을 활성화할 수 없습니다."),
+    // 기준 좌표 직접 등록(3D 시범) — 프레임의 jointCoordinates 가 JSON 배열이 아니거나 시각이 뒤로 가면 거부
+    INVALID_REFERENCE_POSES(400, "W021", "기준 좌표 형식이 올바르지 않습니다 (JSON 배열, 시각은 오름차순)."),
+    // 싱크로율 판정 기준(V34, 정석 good · 위험 warn) — 두 값의 관계(0 < warn < good ≤ 100)가 깨진 것.
+    // C001 로 뭉개면 관리자가 «어느 숫자가 틀렸는지» 를 못 본다(W016 과 같은 이유).
+    INVALID_SYNC_THRESHOLDS(400, "W022", "판정 기준은 0 < 위험 기준 < 정석 기준 ≤ 100 이어야 합니다."),
 
     // --- 시도 제한 (이슈 #394) ---
     //
@@ -120,20 +139,7 @@ public enum ErrorCode {
     TOO_MANY_AUTH_REQUESTS(429, "A008", "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."),
 
     // --- F10-1 Filtering Engine ---
-    LOW_SYNC_RATE(400, "V001", "운동 싱크로율이 너무 낮아 기록되지 않았습니다."),
-    INVALID_WORKOUT_DATA(400, "V002", "부정행위 또는 유효하지 않은 움직임이 감지되었습니다."),
-    INSUFFICIENT_COUNT(400, "V003", "최소 운동 횟수를 채우지 못했습니다."),
     DATA_INTEGRITY_VIOLATION(422, "V004", "전달된 좌표 데이터가 손상되었거나 형식이 맞지 않습니다."),
-
-    // --- AI & GPT Factory ---
-    AI_FEEDBACK_FAILED(503, "AI001", "AI 피드백 생성 중 오류가 발생했습니다."),
-    PROMPT_TEMPLATE_ERROR(500, "AI002", "GPT 프롬프트 생성 로직에 오류가 발생했습니다."),
-    AI_QUOTA_EXCEEDED(429, "AI003", "AI 서비스 호출 할당량을 초과했습니다."),
-
-    // --- Infrastructure & Cache  ---
-    REDIS_CONNECTION_FAILURE(500, "I001", "캐시 서버 연결에 실패했습니다."),
-    API_RESPONSE_TIMEOUT(504, "I002", "API 응답 시간이 초과되었습니다. (Threshold: 500ms)"),
-    DATABASE_LOCK_FAILURE(500, "I003", "데이터베이스 트랜잭션 처리 중 오류가 발생했습니다."),
 
     //Report
     REPORT_NOT_FOUND(404,"R001","리포트를 찾을 수 없습니다"),
@@ -163,13 +169,21 @@ public enum ErrorCode {
     OWNER_MUST_TRANSFER_FIRST(409, "G010", "그룹장은 다른 멤버에게 양도한 뒤 탈퇴할 수 있습니다."),
     // 양도 대상이 이 모임의 ACTIVE 멤버가 아님 — 요청자 본인의 권한 문제(G002/G007)와 구분한다.
     GROUP_MEMBER_NOT_FOUND(404, "G011", "모임의 멤버가 아닌 회원입니다."),
+    // 같은 운동을 같은 모임에 두 번 공유 — uk_group_events_type_source(V19) 가 최종 판정한다.
+    SESSION_ALREADY_SHARED(409, "G012", "이미 이 모임에 공유한 운동입니다."),
+    // 공유 대상 세션이 내 것이 아니거나 아직 끝나지 않음 — 남의 세션도 «없음» 과 같게.
+    SHAREABLE_SESSION_NOT_FOUND(404, "G013", "공유할 수 있는 운동 기록이 없습니다."),
+    // jpg·png·webp 가 아니거나 비었거나 10MB 초과.
+    INVALID_FEED_PHOTO(400, "G014", "사진은 10MB 이하의 jpg · png · webp 만 올릴 수 있습니다."),
 
     // --- 알림·재촉 (social-cheer-and-group-feed.md §3-C) ---
     // 남의 알림 id 도 «없음» 과 같게 404 — 세션 삭제(본인 것 아니면 404)와 같은 모양.
     NOTIFICATION_NOT_FOUND(404, "N001", "존재하지 않는 알림입니다."),
     // uk_notifications_sender_recipient_type_date(V17) 위반 — 같은 사람에게 같은 날 1회. goals 의 GL002 와 같은 결.
     NUDGE_ALREADY_SENT_TODAY(409, "N002", "오늘은 이미 재촉했습니다."),
-    NUDGE_SELF_NOT_ALLOWED(400, "N003", "자기 자신은 재촉할 수 없습니다.");
+    NUDGE_SELF_NOT_ALLOWED(400, "N003", "자기 자신은 재촉할 수 없습니다."),
+    CHEER_ALREADY_SENT_TODAY(409, "N004", "오늘은 이미 응원했습니다."),
+    CHEER_SELF_NOT_ALLOWED(400, "N005", "자기 자신에게는 응원을 보낼 수 없습니다.");
 
     private final int status;
     private final String code;

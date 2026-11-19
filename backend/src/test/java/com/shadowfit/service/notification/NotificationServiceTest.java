@@ -61,7 +61,7 @@ class NotificationServiceTest {
         when(groupMemberRepository.shareGroupWithStatus(1L, 2L, GroupMemberStatus.ACTIVE)).thenReturn(true);
         when(notificationRepository.existsBySenderIdAndRecipientIdAndTypeAndTargetDate(1L, 2L, NotificationType.NUDGE, TODAY))
                 .thenReturn(false);
-        when(notificationWriter.insert(me, friend, NotificationType.NUDGE, TODAY))
+        when(notificationWriter.insert(me, friend, NotificationType.NUDGE, TODAY, null))
                 .thenReturn(notification(10L, me, friend));
 
         NotificationDto dto = service.nudge(1L, 2L, TODAY);
@@ -95,7 +95,7 @@ class NotificationServiceTest {
     void nudge_notSameGroup() {
         when(groupMemberRepository.shareGroupWithStatus(1L, 2L, GroupMemberStatus.ACTIVE)).thenReturn(false);
         assertCode(() -> service.nudge(1L, 2L, TODAY), ErrorCode.NOT_GROUP_MEMBER);
-        verify(notificationWriter, never()).insert(any(), any(), any(), any());
+        verify(notificationWriter, never()).insert(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -105,7 +105,7 @@ class NotificationServiceTest {
         when(notificationRepository.existsBySenderIdAndRecipientIdAndTypeAndTargetDate(1L, 2L, NotificationType.NUDGE, TODAY))
                 .thenReturn(true);
         assertCode(() -> service.nudge(1L, 2L, TODAY), ErrorCode.NUDGE_ALREADY_SENT_TODAY);
-        verify(notificationWriter, never()).insert(any(), any(), any(), any());
+        verify(notificationWriter, never()).insert(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -114,12 +114,50 @@ class NotificationServiceTest {
         when(groupMemberRepository.shareGroupWithStatus(1L, 2L, GroupMemberStatus.ACTIVE)).thenReturn(true);
         when(notificationRepository.existsBySenderIdAndRecipientIdAndTypeAndTargetDate(1L, 2L, NotificationType.NUDGE, TODAY))
                 .thenReturn(false);
-        when(notificationWriter.insert(me, friend, NotificationType.NUDGE, TODAY))
+        when(notificationWriter.insert(me, friend, NotificationType.NUDGE, TODAY, null))
                 .thenThrow(new DataIntegrityViolationException("uk_notifications_sender_recipient_type_date"));
 
         assertCode(() -> service.nudge(1L, 2L, TODAY), ErrorCode.NUDGE_ALREADY_SENT_TODAY);
         // 저장이 안 됐으면 밀어줄 것도 없다
         verify(notificationRelay, never()).relay(any(), any());
+    }
+
+    @Test
+    @DisplayName("cheer — 본문을 strip 해서 CHEER 로 저장하고, 재촉과 같은 전달 경로를 탄다")
+    void cheer_happyPath() {
+        when(groupMemberRepository.shareGroupWithStatus(1L, 2L, GroupMemberStatus.ACTIVE)).thenReturn(true);
+        when(notificationRepository.existsBySenderIdAndRecipientIdAndTypeAndTargetDate(1L, 2L, NotificationType.CHEER, TODAY))
+                .thenReturn(false);
+        Notification saved = Notification.builder().id(11L).sender(me).recipient(friend)
+                .type(NotificationType.CHEER).targetDate(TODAY).message("오늘도 힘내!").build();
+        when(notificationWriter.insert(me, friend, NotificationType.CHEER, TODAY, "오늘도 힘내!")).thenReturn(saved);
+
+        NotificationDto dto = service.cheer(1L, 2L, "  오늘도 힘내!  ", TODAY);
+
+        assertThat(dto.getType()).isEqualTo(NotificationType.CHEER);
+        assertThat(dto.getMessage()).isEqualTo("오늘도 힘내!");
+        verify(notificationRelay).relay(eq(2L), any(NotificationDto.class));
+    }
+
+    @Test
+    @DisplayName("cheer — 하루 1회는 종류별: 오늘 재촉이 있어도 응원은 되고, 응원이 있으면 CHEER_ALREADY_SENT_TODAY")
+    void cheer_dailyLimitIsPerType() {
+        when(groupMemberRepository.shareGroupWithStatus(1L, 2L, GroupMemberStatus.ACTIVE)).thenReturn(true);
+        when(notificationRepository.existsBySenderIdAndRecipientIdAndTypeAndTargetDate(1L, 2L, NotificationType.NUDGE, TODAY))
+                .thenReturn(true);
+        when(notificationRepository.existsBySenderIdAndRecipientIdAndTypeAndTargetDate(1L, 2L, NotificationType.CHEER, TODAY))
+                .thenReturn(true);
+
+        assertCode(() -> service.cheer(1L, 2L, "힘내", TODAY), ErrorCode.CHEER_ALREADY_SENT_TODAY);
+        assertCode(() -> service.nudge(1L, 2L, TODAY), ErrorCode.NUDGE_ALREADY_SENT_TODAY);
+        verify(notificationWriter, never()).insert(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("cheer — 자기 자신은 CHEER_SELF_NOT_ALLOWED")
+    void cheer_self_rejected() {
+        assertCode(() -> service.cheer(1L, 1L, "힘내", TODAY), ErrorCode.CHEER_SELF_NOT_ALLOWED);
+        verify(groupMemberRepository, never()).shareGroupWithStatus(any(), any(), any());
     }
 
     @Test

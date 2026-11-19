@@ -70,9 +70,32 @@ public class Session {
     @Builder.Default
     private Integer difficultyLevel = 1;
 
+    /**
+     * 세트당 목표 횟수 — 세션 시작 때 body 값 또는 {@code RecommendationService} 공식으로 채워진다(V26,
+     * lunge-and-set-backend.md §7). 세트 경계는 «rep 이 이 값에 닿는 순간» 하나뿐이라 프레임의 세트는
+     * {@code ceil(rep_number / targetRepsPerSet)} 로 역산된다. NULL = 세트 도입 전 세션(세트 행 없음).
+     * 세션 도중 바꾸지 않는다 — 바꾸면 이미 저장된 프레임의 세트가 흔들린다.
+     */
+    @Column(name = "target_reps_per_set")
+    private Integer targetRepsPerSet;
+
+    /** 목표 세트 수 — 사용자가 정한 값만(세트 «수» 는 공식이 없다). NULL = 열린 세트. */
+    @Column(name = "target_sets")
+    private Integer targetSets;
+
     @Enumerated(EnumType.STRING) // 숫자가 아닌 문자열 이름으로 저장
     @Builder.Default
     private Status status = Status.IN_PROGRESS;
+
+    /**
+     * 스쿼트 깊이 모드 FULL/HALF (2026-09-21). 종목 선택과 같은 화면에서 세션 시작 시 고른다.
+     * 스쿼트가 아닌 세션에는 의미가 없지만 항상 채워진다(V29가 NOT NULL DEFAULT 'FULL') —
+     * {@code SquatDepthAnalysisCalculator}가 스쿼트 세션에서만 이 값을 읽는다.
+     */
+    @Enumerated(EnumType.STRING)
+    @Builder.Default
+    @Column(nullable = false, length = 10)
+    private SquatDepthMode squatDepthMode = SquatDepthMode.FULL;
 
     /**
      * 세션 소유권 검증용 비밀값 (#187 안 (d)). 생성은 {@code SessionNonceGenerator} 가 한다.

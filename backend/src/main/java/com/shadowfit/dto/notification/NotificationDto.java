@@ -44,6 +44,9 @@ public class NotificationDto {
     @Schema(description = "하루 1회 판정 날짜 (서버 기준)", requiredMode = Schema.RequiredMode.REQUIRED)
     private LocalDate targetDate;
 
+    @Schema(description = "응원 본문 (CHEER). 재촉(NUDGE)은 null")
+    private String message;
+
     @Schema(description = "읽었는가", requiredMode = Schema.RequiredMode.REQUIRED)
     private boolean read;
 
@@ -64,6 +67,7 @@ public class NotificationDto {
                 .senderUsername(sender == null ? null : sender.getUsername())
                 .senderProfileImageUrl(sender == null ? null : sender.getProfileImageUrl())
                 .targetDate(n.getTargetDate())
+                .message(n.getMessage())
                 .read(n.isRead())
                 .readAt(n.getReadAt())
                 .createdAt(n.getCreatedAt())

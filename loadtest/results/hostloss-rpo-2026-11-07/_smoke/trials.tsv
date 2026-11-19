@@ -1,0 +1,4 @@
+trial	kind	interval_s	loss_after_backup_s	loss_frac	binlogs_shipped	acked_tx	restored_tx	lost_tx	rpo_s	backup_attempts	backup_upload_ms	dl_backup_ms	prepare_copyback_ms	start_ms	dl_binlog_ms	replay_ms
+1	버림	10	26	0.657	3	2360	2222	138	4.3	1	102427	29990	41408	10819	22844	217087
+2	본판	10	27	0.743	3	2373	2149	224	9.0	1	99691	18095	31514	19045	20493	174385
+3	본판	20	51	0.596	4	3278	2776	502	16.0	1	83644	16857	30230	18018	18320	328106

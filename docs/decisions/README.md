@@ -71,6 +71,7 @@
 ## 세션·도메인 로직
 
 - [2026-05-27-channel-and-youtube-review.md](./2026-05-27-channel-and-youtube-review.md) — 실시간 채널 심층분석 + 유튜브 좌표 활용 가능성 검토 기록 (미상)
+- [counted-reps-vs-scored-attempts.md](./counted-reps-vs-scored-attempts.md) — 센 반복만 채점하면 리포트가 좋게만 나온다 — 인정 반복·채점 시도 분리 (확정 — 2026-10-21 «2번»: 횟수는 원래 규칙, 미인정 시도를 세어 화면·리포트에 반영. «1번» 은 사람 판정과 충돌해 되돌림)
 - [feedback-238-review-triage.md](./feedback-238-review-triage.md) — PR #238 리뷰 지적 11건 분류·처리 (진행중 — 일부 반영, 수단·상한·지터 실측 등 열린 질문 다수)
 - [feedback-argmax-rules.md](./feedback-argmax-rules.md) — argmax 귀속 계산 규칙(#228) (진행중 — 결정은 났으나 정답지 기울기 실측 등 미검증 다수)
 - [feedback-batch-retransmission.md](./feedback-batch-retransmission.md) — 피드백 배치 재전송 설계(#193) (확정 — 버퍼·flush 규칙 구현 세부 확정)
@@ -102,12 +103,14 @@
 - [ai-backend-coupling.md](./ai-backend-coupling.md) — AI↔Backend 결합 방식(분기 A~I) (확정 — H2 프론트 직결 등 다수 분기 채택 확정)
 - [ai-session-ownership-verification.md](./ai-session-ownership-verification.md) — 세션 소유권 검증 — 신원은 채널①에서만(#187) (진행중 — 정적 사실은 확정, 동적 재현은 미착수)
 - [api-improvement-opportunities.md](./api-improvement-opportunities.md) — 지금까지 만든 API 표면 감사 (확정 — 9개 항목 전부 커밋 반영 완료)
+- [resource-ownership-403-vs-404.md](./resource-ownership-403-vs-404.md) — 남의 리소스에 403 인가 404 인가 — 세션 안에서도 갈림 (확정 — 2026-09-23 C 채택: 개인 소유 404·그룹 403, 로그 구분 안 함)
 - [architecture-review-2026-08-11.md](./architecture-review-2026-08-11.md) — 아키텍처 회고 — 결함·재조립·점수 (확정 — 새 결함 발견 즉시 수정, 결함 ⑤는 철회)
 - [circuit-breaker-worker-aggregation.md](./circuit-breaker-worker-aggregation.md) — 서킷브레이커 워커 3개 실패율 합산(#556) (진행중 — 워킹트리에 반영, 커밋은 별도 요청 시)
 - [grpc-integration-checklist.md](./grpc-integration-checklist.md) — gRPC 좌표 송수신(AI↔Backend) 설계 체크리스트 (진행중 — 일부 완료, 관련 이슈 열려있음)
 - [grpc-vs-webclient.md](./grpc-vs-webclient.md) — gRPC vs WebClient 통신 방식 (보류 — 결정 로그가 "사용자 confirm 대기"로 비어있음)
 - [latency-perception.md](./latency-perception.md) — Latency 단위(ms·s) 의미와 컴포넌트 매핑 (진행중 — 계속 갱신, 분기 7 격상 검토 트리거 남음)
 - [observability-correlation-id.md](./observability-correlation-id.md) — 관측성 1차 — correlation id 전파 + 커스텀 메트릭 (확정 — PR #54 머지 완료)
+- [outbox-retention-cleanup.md](./outbox-retention-cleanup.md) — outbox_events 보존 정리(#793): 보존 모델·DELETE 모양·인덱스·다중 인스턴스·관측, 정리 DELETE ↔ markSent 락 가설 (분기점 — 결정 전)
 - [outbox-reliable-messaging.md](./outbox-reliable-messaging.md) — 신뢰성 있는 비동기 통보(Outbox, 세션종료 통보 유실 E1) (확정 — 설계·구현·측정·리뷰반영 전부 완료)
 - [performance-tactics-availability-tradeoff.md](./performance-tactics-availability-tradeoff.md) — 아키텍처 품질속성 — 성능 택틱과 가용성 트레이드오프 (진행중 — 택틱 A 착수 확정(2026-09-04), B·C는 보류)
 - [pose-batch-midflight-cancellation.md](./pose-batch-midflight-cancellation.md) — SavePoseDataBatch mid-flight 취소(#206 B-2) 가치 판단 (보류 — 재측정 완료했으나 채택 여부는 미결)
@@ -128,8 +131,10 @@
 ## 인프라·운영
 
 - [backup-restore-rto-rpo.md](./backup-restore-rto-rpo.md) — 백업·복구 — "되돌릴 수 있다"를 시간으로 (진행중 — #202 실측 완료, 병렬 덤프 등은 범위 밖으로 남음)
+- [binlog-shipper-ops.md](./binlog-shipper-ops.md) — 운영 binlog 반출기 — 측정용 스크립트를 운영에서 믿고 맡길 것으로 (분기점 — 방향 «서버 옆 업로더 직접 구현», D1~D8 추천까지·채택 없음)
 - [major-version-upgrade-policy.md](./major-version-upgrade-policy.md) — 메이저 버전업 2건(springdoc 3.x·Gradle 9) (보류 — §8에 "재지 않은 것" 다수, 테스트·실측 안 됨)
 - [replication-lag-and-semisync.md](./replication-lag-and-semisync.md) — 복제 — "한 대가 죽어도 된다"를 지연과 대가로 (진행중 — 조건부 결론, 다른 AZ는 안 잼)
+- [rpo-rto-targets.md](./rpo-rto-targets.md) — RPO·RTO 목표 — "얼마 걸리나"에서 "얼마여야 하나"로 (진행중 — 방향 확정: 백업+binlog 서버 밖, 리플리카 보류, 반동기 미채택. 목표 RTO 확정, 반출 주기 60초 확정(FLUSH 측정 뒤 재확인), 백업 주기·보존 기간 미정)
 - [reverse-proxy-and-tls.md](./reverse-proxy-and-tls.md) — 리버스 프록시·TLS 종료 — nginx를 넣어야 하나 (진행중 — 이슈 일부 등록, CORS PATCH 누락은 여전히 미등록)
 
 ## 포트폴리오·전략·서사

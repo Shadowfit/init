@@ -107,14 +107,22 @@ export interface ReactionSummary {
   myReactions: ReactionKind[];
 }
 
+/** 피드 글 아래 응원 한 줄 — 한 글에 회원당 하나 */
+export interface EventCheer {
+  memberId: number;
+  username: string;
+  message: string;
+}
+
 export interface GroupFeedItem {
   seq: number;
   groupId: number;
-  type: string;                    // SESSION_COMPLETED | MEMBER_JOINED | 그 외(무시)
+  type: string;                    // SESSION_SHARED | SESSION_COMPLETED | MEMBER_JOINED | 그 외(무시)
   senderId: number | null;
   payload: string;                 // ⚠️ JSON **문자열** — parseFeedPayload 로 풀어서 쓴다
   occurredAt: string;
   reactionSummary: ReactionSummary;
+  cheers: EventCheer[];
 }
 
 export interface GroupFeedResponse {
@@ -135,7 +143,20 @@ export interface MemberJoinedPayload {
   username: string;
 }
 
+// 회원이 직접 올린 공유 글. 공개 항목은 종목 · 유효 횟수 · 운동 시간 (싱크로율은 비공개)
+export interface SessionSharedPayload {
+  sessionId: number;
+  memberId: number;
+  username: string;
+  exerciseName: string;
+  totalReps: number;
+  workoutMinutes: number;
+  caption: string | null;
+  photoUrl: string | null;         // "/feed-photos/{uuid}.jpg" — API 주소를 앞에 붙여 쓴다
+}
+
 export type FeedPayload =
+  | { type: 'SESSION_SHARED'; data: SessionSharedPayload }
   | { type: 'SESSION_COMPLETED'; data: SessionCompletedPayload }
   | { type: 'MEMBER_JOINED'; data: MemberJoinedPayload }
   | { type: 'UNKNOWN' };
@@ -144,6 +165,7 @@ export type FeedPayload =
 export function parseFeedPayload(item: GroupFeedItem): FeedPayload {
   try {
     const data = JSON.parse(item.payload);
+    if (item.type === 'SESSION_SHARED') return { type: 'SESSION_SHARED', data };
     if (item.type === 'SESSION_COMPLETED') return { type: 'SESSION_COMPLETED', data };
     if (item.type === 'MEMBER_JOINED') return { type: 'MEMBER_JOINED', data };
   } catch {

@@ -14,7 +14,6 @@ import com.shadowfit.repository.exercise.SessionRepository;
 import com.shadowfit.repository.member.MemberRepository;
 import com.shadowfit.repository.member.RefreshTokenRepository;
 import com.shadowfit.repository.notification.PushTokenRepository;
-import com.shadowfit.service.exercise.PoseDataCleanupService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.hibernate.exception.ConstraintViolationException;
@@ -23,8 +22,6 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -39,11 +36,25 @@ public class MemberService{
     private final MemberRepository memberRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final SessionRepository sessionRepository;
-    private final PoseDataCleanupService poseDataCleanupService;
+    private final MemberPurgeService memberPurgeService;
     private final PasswordEncoder passwordEncoder;
     private final RefreshTokenHasher refreshTokenHasher;
     private final LoginAttemptLimiter loginAttemptLimiter;
     private final PushTokenRepository pushTokenRepository;
+    private final com.shadowfit.service.group.GroupWithdrawalService groupWithdrawalService;
+    private final ConsentService consentService;
+
+    /** 계정이 없을 때 BCrypt 를 한 번 돌리기 위한 해시. 첫 사용 때 한 번만 만든다(실제 비밀번호가 아니다). */
+    private volatile String dummyPasswordHash;
+
+    private String dummyPasswordHash() {
+        String h = dummyPasswordHash;
+        if (h == null) {
+            h = passwordEncoder.encode(java.util.UUID.randomUUID().toString());
+            dummyPasswordHash = h;
+        }
+        return h;
+    }
 
     /**
      * 이 시간 동안 프레임 유입이 없으면 그 세션은 죽은 것으로 본다(탈퇴 가드 판정 기준).
@@ -108,8 +119,15 @@ public class MemberService{
     }
 
     private LoginResponseDto doLogin(LoginRequestDto dto) {
-        Member member = memberRepository.findByEmail(dto.getEmail()).
-                orElseThrow(()-> new BusinessException(ErrorCode.USER_NOT_FOUND));
+        Member member = memberRepository.findByEmail(dto.getEmail()).orElse(null);
+
+        // 🔴 «없는 계정» 과 «틀린 비밀번호» 는 응답 코드·메시지·시간 모두 같아야 한다. 코드가 다르면
+        //    (예전: 404 U001 vs 401 A005) 그것이 곧 계정 존재 여부 오라클이다. 계정이 없을 때도
+        //    BCrypt 를 한 번 돌려 응답 시간 차이로 새지 않게 한다.
+        if (member == null) {
+            passwordEncoder.matches(dto.getPassword(), dummyPasswordHash());
+            throw new BusinessException(ErrorCode.LOGIN_INPUT_INVALID);
+        }
 
         if(!passwordEncoder.matches(dto.getPassword(), member.getPassword())){
             throw new BusinessException(ErrorCode.LOGIN_INPUT_INVALID);
@@ -181,6 +199,11 @@ public class MemberService{
 
         // 서명·만료 검증이 먼저다. 여기서 걸리면 DB 를 볼 이유가 없다.
         if (!jwtUtil.isValidToken(presented)) {
+            throw new BusinessException(ErrorCode.INVALID_TOKEN);
+        }
+        // access 토큰으로 재발급을 시도하는 경우 — 아래 해시 대조로 가면 «폐기된 구본» 으로 오판해
+        // 정상 사용자의 세션을 끊는다(REFRESH_TOKEN_REUSED). 종류부터 거른다.
+        if (!jwtUtil.isRefreshToken(presented)) {
             throw new BusinessException(ErrorCode.INVALID_TOKEN);
         }
 
@@ -277,6 +300,9 @@ public class MemberService{
      */
     @Transactional
     public String signup(MemberRequestDto dto) {
+        // 동의부터 본다 — 필수 약관에 동의하지 않은 요청이 «이미 가입된 이메일» 같은 정보를 알아내는 데 쓰이지 않게.
+        // 강제가 꺼져 있으면(기본) 아무것도 하지 않는다 — 동의 화면이 없는 현재 앱의 가입을 막지 않는다.
+        consentService.requireAtSignup(dto.getConsents());
         if(memberRepository.existsByEmail((dto.getEmail()))) {
             throw new BusinessException(ErrorCode.USERID_DUPLICATION);
         }
@@ -305,6 +331,8 @@ public class MemberService{
         } catch (DataIntegrityViolationException e) {
             throw duplicationOf(e);
         }
+        // 가입과 같은 트랜잭션 — 회원만 생기고 동의 기록이 빠지는 일이 없다. 동의를 보내지 않았으면 기록할 것이 없다.
+        consentService.record(member, dto.getConsents());
         return member.getUsername();
     }
 
@@ -354,6 +382,10 @@ public class MemberService{
 
         requireNoActiveWorkout(member.getId());
 
+        // 그룹 정리 — FK CASCADE 에 맡기면 ① 생성자 탈퇴로 모임 전체가 사라지고 ② 그룹장이 멤버를 두고 나가고
+        // ③ 피드 사진 파일이 남는다. 회원 행을 지우기 전에 해야 한다(GroupWithdrawalService 문서 참조).
+        List<String> feedPhotos = groupWithdrawalService.detachMember(member.getId());
+
         // pose_data는 파티셔닝을 위해 FK(ON DELETE CASCADE)를 제거했음 — 세션이 지워지기 전에
         // session_id 목록을 미리 확보해둬야 afterCommit 이후 정리할 수 있음
         // (docs/decisions/pose-data-partition-fk-tradeoff.md).
@@ -364,18 +396,10 @@ public class MemberService{
         // exercise_sessions.member_id 도 동일하게 CASCADE 유지(FK 그대로) — pose_data만 예외.
         memberRepository.delete(member);
 
-        // afterCommit: 탈퇴 트랜잭션이 확정된 직후, 스케줄 대기 없이 즉시 비동기로 pose_data 정리
-        // 트리거 (개인정보보호법 제21조 "지체없이" 파기 요건 대응, 탈퇴 API 응답은 기다리지 않음).
-        if (!sessionIds.isEmpty()) {
-            TransactionSynchronizationManager.registerSynchronization(
-                    new TransactionSynchronization() {
-                        @Override
-                        public void afterCommit() {
-                            poseDataCleanupService.cleanupBySessionIds(sessionIds);
-                        }
-                    }
-            );
-        }
+        // DB 가 못 지우는 것(pose_data·사진 파일)은 삭제 이벤트를 «같은 커밋으로» 아웃박스에 적재한다 — 탈퇴가 롤백되면
+        // 이벤트도 사라지고, 커밋되면 발행기가 지울 때까지 재시도한다. 예전의 afterCommit @Async 는 한 번 실패하면 끝이었다
+        // (개인정보보호법 제21조 «지체 없이» 파기 요건 — 탈퇴 API 응답은 기다리지 않는다).
+        memberPurgeService.enqueue(member.getId(), sessionIds, feedPhotos);
     }
 
     /**

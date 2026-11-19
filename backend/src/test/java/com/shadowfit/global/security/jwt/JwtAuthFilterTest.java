@@ -85,6 +85,24 @@ class JwtAuthFilterTest {
     }
 
     @Test
+    @DisplayName("서명이 유효해도 refresh 토큰이면 인증하지 않는다 — 7일짜리가 access 자리에서 통하면 안 된다")
+    void refreshToken_isNotAuthenticated() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/sessions/1");
+        request.addHeader("Authorization", "Bearer refresh-token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain chain = mock(FilterChain.class);
+
+        when(jwtUtil.isValidToken("refresh-token")).thenReturn(true);
+        when(jwtUtil.isRefreshToken("refresh-token")).thenReturn(true);
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        verify(customUserDetailsService, never()).loadUserByUsername(org.mockito.ArgumentMatchers.anyString());
+        verify(chain, times(1)).doFilter(request, response);
+    }
+
+    @Test
     @DisplayName("Authorization 헤더가 없으면 인증 없이 체인만 진행")
     void noAuthHeader_skipsAuthentication() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/sessions/1");

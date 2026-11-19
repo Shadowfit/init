@@ -162,6 +162,13 @@ sourceSets {
 	tasks.named('test') {
 		useJUnitPlatform()
 
+		// 테스트 JVM 의 시간대를 운영과 같게 둔다 (#846). 운영·dev 백엔드 컨테이너는 TZ=Asia/Seoul 이고
+		// JDBC URL 의 serverTimezone 도 Asia/Seoul 이다. 둘이 다르면 Hibernate 로 쓴 세션 시작 시각과
+		// JdbcTemplate 로 쓴 pose_data.created_at 이 9시간 어긋나 완료 집계가 rep 을 못 찾는다.
+		// CI 러너는 UTC 라 RejectedAttemptRaceTest 가 이 차이로만 실패했다. 운영에서는
+		// JvmTimezoneStartupCheck 가 같은 전제를 기동 때 막는다.
+		jvmArgs '-Duser.timezone=Asia/Seoul'
+
 		// 아래 셋은 같은 문제의 서로 다른 사례다 — gradlew 에 준 -D 는 Gradle 자신의 JVM 에만
 		// 붙고 포크된 테스트 JVM 으로 자동 전달되지 않아, 그대로 두면 @EnabledIfSystemProperty 가
 		// 테스트 쪽에서 못 보고 **조용히 스킵**된다. 셋 다 기본값이 없으므로 평소에는 프로퍼티

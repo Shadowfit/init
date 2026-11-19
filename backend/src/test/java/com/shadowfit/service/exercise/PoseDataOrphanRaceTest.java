@@ -20,7 +20,6 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -211,8 +210,6 @@ class PoseDataOrphanRaceTest extends MySqlContainerSupport {
                 .orElseGet(() -> categoryRepository.save(Category.builder().name("LOWER").build()));
         Exercise exercise = exercisesRepository.saveAndFlush(Exercise.builder()
                 .name("스쿼트").category(category).expectedDurationMinutes(15)
-                .syncThresholdBeginner(new BigDecimal("60.00"))
-                .syncThresholdAdvanced(new BigDecimal("85.00"))
                 .build());
 
         // status 는 IN_PROGRESS 여야 한다 — #304 가 붙인 가드가 그 외 상태의 배치를 «조용히»
@@ -221,7 +218,14 @@ class PoseDataOrphanRaceTest extends MySqlContainerSupport {
                 .member(member).exercise(exercise).startTime(LocalDateTime.now())
                 .status(Status.IN_PROGRESS).totalReps(0).difficultyLevel(1).build());
         sessionId = session.getId();
-        seededSession = session;
+        // saveAndFlush 가 돌려준 인스턴스를 그대로 쓰면 안 된다 — Session.version 이 @Builder.Default 0L 이라
+        // Spring Data 가 «새 엔티티가 아니다» 로 보고 merge 하고, 그 복사본의 exercise 는 getReference 프록시다.
+        // 서비스는 횟수만 세는 종목인지(ExerciseAnalysisCapabilities.isCountOnly) 보려고 session.getExercise()
+        // 를 읽는데, 이 테스트는 그 엔티티를 findById 스파이로 트랜잭션 밖에서 돌려주므로 프록시를 건드리는
+        // 순간 LazyInitializationException 이 난다. 운영 경로(트랜잭션 안 findById)에는 없는, 시딩만의 문제라
+        // exercise 를 fetch join 으로 함께 실은 엔티티를 붙잡아 둔다.
+        seededSession = sessionRepository.findSessionWithExerciseByIdAndMemberId(sessionId, memberId)
+                .orElseThrow();
     }
 
     /**

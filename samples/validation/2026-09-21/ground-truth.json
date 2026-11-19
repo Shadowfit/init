@@ -1,0 +1,143 @@
+{
+  "captured": "2026-09-21",
+  "reviewed_by": "human visual review (cv2 contact-sheet frame extraction) cross-checked against the raw MediaPipe knee/hip angle trace from scripts/evaluate_squat.py --trace",
+  "method": "Each clip was first resampled into labeled contact-sheet images (cv2, ~0.13-0.4s spacing, finer 0.06-0.2s spacing around ambiguous transitions) and inspected before running any evaluator. Where the visual read and the angle trace disagreed, the angle trace was treated as authoritative for DEPTH/EXTENSION (a silhouette's torso lean is a poor proxy for knee angle; see the methodology note below) while the visual review stayed authoritative for things eyeballing is actually reliable for: presence/absence of a rep attempt, camera angle, occlusion, full-body framing, and start/end standing timing.",
+  "methodology_note": "Initial thumbnail-only review of squat_side_01.mp4 misjudged 5 real reps as '1 clear rep plus 7.5s of non-standard movement' because the subject's torso stayed pitched forward the whole time and the reviewer was reading torso angle, not knee angle. The raw knee-angle trace (docs/verification/2026-09-21/baseline/traces/squat_side_01.csv) shows the knee cycling cleanly between ~55-100 degrees (bottom) and ~150-178 degrees (near-full extension) on a steady ~1.8s rhythm -- genuine repeated squats, just with unusually heavy forward trunk lean. Ground truth below reflects the corrected, angle-verified counts. Do not repeat the mistake of eyeballing depth from torso posture alone in future verification passes.",
+  "source_dir": "ai-server/sample (untouched originals)",
+  "copied_to": "samples/validation/2026-09-21 (working copies used for evaluation; identical bytes to source)",
+  "final_holdout_status": "INCOMPLETE. Only squat_negative_01.mp4 qualifies as an independent final-holdout clip after this pass -- it was never used to diagnose the counting fix and its expected result (0 reps) is unaffected by it. squat_normal_01.mp4 and squat_normal_02.mp4 both meet the depth/count bar but were the exact clips used to find and justify the standing-confirm-timing fix in squat_counter.py, so counting them as final proof would be validation leakage; they are DEV clips now. squat_shallow_01.mp4 fails the shooting protocol (no 2s pre-roll stand hides 3 of 5 attempts from the app) and has inconsistent depth, so it cannot serve as a clean shallow-rejection holdout either. squat_front_01.mp4 and squat_side_01.mp4 are off-protocol camera angles (0 deg and ~90 deg instead of ~45 deg). Net: do not report 100% final-holdout accuracy from this data set. See the verification report's 'what to shoot next' section for the specific new clips needed (a normal-depth 45-degree clip not used in this debugging session, and a shallow clip with a genuine 2s pre-roll stand and consistently sub-threshold depth).",
+  "clips": [
+    {
+      "file": "squat_normal_01.mp4",
+      "duration_sec": 13.29,
+      "view_angle": "~45 degree front-ish profile (subject facing left, near side-on)",
+      "full_body_visible": true,
+      "occlusion": "none",
+      "lighting": "sufficient",
+      "start_standing_sec": [0.0, 1.99],
+      "end_standing_sec": [12.56, 13.29],
+      "protocol_note": "start stand is ~2.0s (borderline OK); end stand is only ~0.7s, short of the 2s requirement",
+      "human_rep_count_normal_depth": 5,
+      "human_rep_count_shallow": 0,
+      "rep_events": [
+        {"rep": 1, "bottom_sec": [3.19, 3.32], "stand_confirmed_sec": 4.02, "note": "clean, good depth"},
+        {"rep": 2, "bottom_sec": [4.78, 5.18], "stand_confirmed_sec": 6.05, "note": "clean, good depth; brief stand (knee ~161 deg at 4.02s) that a naive frame-gap reading can miss -- confirmed by the raw angle trace, not by eyeballing"},
+        {"rep": 3, "bottom_sec": [6.64, 7.17], "stand_confirmed_sec": 7.97, "note": "clean, good depth"},
+        {"rep": 4, "bottom_sec": [8.90, 9.83], "stand_confirmed_sec": 10.23, "note": "clean, good depth; brief top pause, verified via knee ~164-169 deg"},
+        {"rep": 5, "bottom_sec": [10.60, 10.96], "stand_confirmed_sec": 12.42, "note": "clean, good depth"}
+      ],
+      "notes": "Matches the shoot plan's 5 normal reps. Earlier thumbnail-only review undercounted this as 4 because two of the top pauses are brief (well under 1 second); the raw knee-angle trace confirms all 5 are genuine separate stand-squat-stand cycles.",
+      "recommended_for_final_holdout": false,
+      "recommended_reason": "USED TO DIAGNOSE the standing-confirm-timing fix in squat_counter.py (this clip's brief top pause is exactly what exposed the bug). Using it as final-holdout proof of the fix would be validation leakage -- it is now a DEV clip. A fresh normal-depth clip not seen during this debugging pass is needed for an honest final holdout claim."
+    },
+    {
+      "file": "squat_normal_02.mp4",
+      "duration_sec": 14.81,
+      "view_angle": "~45 degree front-ish profile (same setup as normal_01)",
+      "full_body_visible": true,
+      "occlusion": "none",
+      "lighting": "sufficient",
+      "start_standing_sec": [0.0, 1.73],
+      "end_standing_sec": [13.82, 14.81],
+      "protocol_note": "start stand ~1.7s and end stand ~1.0s, both short of the 2s target",
+      "human_rep_count_normal_depth": 5,
+      "human_rep_count_shallow": 0,
+      "rep_events": [
+        {"rep": 1, "bottom_sec": [3.89, 4.75], "stand_confirmed_sec": 7.67, "note": "clean, good depth"},
+        {"rep": 2, "bottom_sec": [6.21, 6.58], "stand_confirmed_sec": 7.67, "note": "clean, good depth; brief top pause around 5.48s (knee ~158-167 deg) between reps 1 and 2 -- verified via the angle trace, easy to misread as one rep from thumbnails alone"},
+        {"rep": 3, "bottom_sec": [8.40, 8.77], "stand_confirmed_sec": 9.50, "note": "clean, good depth"},
+        {"rep": 4, "bottom_sec": [10.23, 10.60], "stand_confirmed_sec": 11.33, "note": "clean, good depth"},
+        {"rep": 5, "bottom_sec": [12.06, 12.79], "stand_confirmed_sec": 13.89, "note": "clean, good depth"}
+      ],
+      "notes": "Matches the shoot plan's 5 normal reps once read from the raw angle trace instead of thumbnails; earlier thumbnail-only review undercounted this as 3.",
+      "recommended_for_final_holdout": false,
+      "recommended_reason": "Also used to diagnose/confirm the standing-confirm-timing fix (its bounce-looking rep 1+2 pair is the same failure mode as normal_01's). DEV clip, not an independent final holdout."
+    },
+    {
+      "file": "squat_shallow_01.mp4",
+      "duration_sec": 7.41,
+      "view_angle": "~45 degree front-ish profile (same setup)",
+      "full_body_visible": true,
+      "occlusion": "none",
+      "lighting": "sufficient",
+      "start_standing_sec": null,
+      "end_standing_sec": null,
+      "protocol_note": "movement begins almost immediately at 0.00-0.23s; no clean 2s standing hold at start or end. Protocol NOT met. Only the right leg is visible/tracked throughout (left leg visibility stays below threshold).",
+      "human_rep_count_normal_depth": 0,
+      "human_rep_count_shallow_visual": 5,
+      "rep_events": [
+        {"rep": 1, "bottom_sec": [0.23, 0.47], "note": "shallow by eye; occurs before the counter ever reaches standing calibration (calibration only completes at 4.02s), so the app cannot see this attempt at all"},
+        {"rep": 2, "bottom_sec": [1.63, 1.86], "note": "shallow by eye; also before calibration, invisible to the app"},
+        {"rep": 3, "bottom_sec": [2.79, 3.26], "note": "shallow by eye; also before calibration, invisible to the app"},
+        {"rep": 4, "bottom_sec": [4.19, 4.65], "note": "shallow by eye (forward hip-hinge silhouette), but the raw angle trace shows a single 3fps sample at knee=101/hip=102 deg -- technically inside the app's bottom-depth band for one sample. The app does NOT credit a single-sample bottom as confirmed depth (bottom_confirm_sec requires the condition to still hold on a later sample), so it is correctly reported as depth-not-confirmed. Flagging this because it shows the person's depth was inconsistent across 'shallow' attempts, not because the app is wrong."},
+        {"rep": 5, "bottom_sec": [5.81, 6.05], "note": "marginal dip; also touches the bottom band on a single sample per the trace (knee ~111-115 deg), same caveat as rep 4"}
+      ],
+      "notes": "This clip does not actually demonstrate 5 clean, consistently-shallow reps: 3 of the 5 attempts happen before the app ever finishes standing calibration (so it never evaluates them at all), and the other 2 briefly touch the app's own bottom-depth band for a single sample each, meaning this person's 'shallow' technique was not fully consistent. The app's current behavior (0 counted reps, 2 depth-not-confirmed feedback events) is a defensible, conservative reading of ambiguous single-sample depth data, not a bug -- but this clip should not be read as a clean depth-rejection demo because of the missing pre-roll stand and the inconsistent depth.",
+      "recommended_for_final_holdout": false,
+      "recommended_reason": "protocol violation (no 2s pre-roll stand) hides 3 of 5 attempts from the app entirely, and the remaining 2 are borderline rather than clearly shallow; re-shoot needed for a clean depth-rejection holdout"
+    },
+    {
+      "file": "squat_negative_01.mp4",
+      "duration_sec": 22.26,
+      "view_angle": "~45 degree front-ish profile (same setup)",
+      "full_body_visible": true,
+      "occlusion": "none",
+      "lighting": "sufficient",
+      "start_standing_sec": [0.0, 22.26],
+      "end_standing_sec": [0.0, 22.26],
+      "protocol_note": "continuous standing with light weight shifts, arm swings, torso/head turns; never a knee bend of any kind",
+      "human_rep_count_normal_depth": 0,
+      "human_rep_count_shallow": 0,
+      "rep_events": [],
+      "notes": "Confirmed 0 squats across the entire clip by full frame-by-frame review (36 sampled frames at 0.6s spacing covering the whole 22.26s). Matches the shoot plan exactly.",
+      "recommended_for_final_holdout": true,
+      "recommended_reason": "clean negative control; matches shoot plan exactly. The standing-confirm-timing fix only changes rep-completion behavior, which this clip never exercises (no descent ever happens), so using it as a holdout after the fix is not leakage."
+    },
+    {
+      "file": "squat_front_01.mp4",
+      "duration_sec": 11.92,
+      "view_angle": "TRUE FRONT (0 degree, facing camera directly) -- NOT the ~45 degree angle the shooting protocol specifies",
+      "full_body_visible": true,
+      "occlusion": "none",
+      "lighting": "sufficient",
+      "start_standing_sec": [0.0, 1.46],
+      "end_standing_sec": [11.33, 11.69],
+      "protocol_note": "camera angle deviates from protocol (front instead of 45deg); start/end stands are ~1.5s / ~0.6s, both short of 2s",
+      "human_rep_count_normal_depth": 5,
+      "human_rep_count_shallow": 0,
+      "rep_events": [
+        {"rep": 1, "bottom_sec": [1.83, 2.56], "stand_confirmed_sec": 3.29, "note": "clean, good depth"},
+        {"rep": 2, "bottom_sec": [3.65, 4.38], "stand_confirmed_sec": 5.12, "note": "clean, good depth; the app DOES count this one (only 1 of 5 counted at 3fps)"},
+        {"rep": 3, "bottom_sec": [6.94, 7.31], "stand_confirmed_sec": 8.04, "note": "clean, good depth by eye, but every 3fps sample during this quick descent landed above the app's bottom-knee threshold (min sampled ~130 deg) -- the true minimum fell between samples and was never captured"},
+        {"rep": 4, "bottom_sec": [8.77, 9.13], "stand_confirmed_sec": 9.87, "note": "same sampling-miss as rep 3 (min sampled ~119 deg)"},
+        {"rep": 5, "bottom_sec": [10.60, 10.96], "stand_confirmed_sec": 11.69, "note": "min sampled knee ~112 deg, right at the edge; only touches the band for one sample so is not confirmed as bottom stage under the (intentionally conservative, unchanged) bottom-confirm timing"}
+      ],
+      "notes": "The only clip that matches the planned rep count (5) by eye, with no bounces. Camera is directly in front of the subject, not at the ~45 degree angle the protocol requires. At the product's mandated 3fps analysis rate, 4 of these 5 real reps are too quick for the fixed sampling grid to reliably catch the true minimum knee angle -- this is a sampling-resolution limitation, not a depth-threshold or FSM bug (see the failure analysis in the verification report).",
+      "recommended_for_final_holdout": false,
+      "recommended_reason": "off-protocol camera angle AND a fast tempo that exposes the 3fps sampling-resolution limitation; valuable as a diagnostic clip, not as the primary 45-degree holdout"
+    },
+    {
+      "file": "squat_side_01.mp4",
+      "duration_sec": 12.16,
+      "view_angle": "TRUE SIDE / profile (~90 degree) -- NOT the ~45 degree angle the shooting protocol specifies",
+      "full_body_visible": true,
+      "occlusion": "none (only the near/right leg is inside the visibility threshold throughout -- expected for a pure side view)",
+      "lighting": "sufficient",
+      "start_standing_sec": [0.0, 0.37],
+      "end_standing_sec": null,
+      "protocol_note": "no clean 2s standing hold at start (movement starts at ~0.73s); camera angle deviates from protocol",
+      "human_rep_count_normal_depth": 5,
+      "human_rep_count_shallow": 0,
+      "rep_events": [
+        {"rep": 1, "bottom_sec": [0.73, 1.46], "stand_confirmed_sec": 2.19, "note": "deep (knee down to ~57-60 deg); torso stays pitched forward ~45-60 deg the whole rep, which is what makes this easy to misjudge from a silhouette alone -- the knee genuinely extends to ~150-178 deg at the top"},
+        {"rep": 2, "bottom_sec": [2.56, 3.29], "stand_confirmed_sec": 4.02, "note": "same pattern, ~1.8s cadence"},
+        {"rep": 3, "bottom_sec": [4.38, 5.12], "stand_confirmed_sec": 5.85, "note": "same pattern"},
+        {"rep": 4, "bottom_sec": [6.21, 6.94], "stand_confirmed_sec": 7.67, "note": "same pattern"},
+        {"rep": 5, "bottom_sec": [9.87, 10.60], "stand_confirmed_sec": 11.69, "note": "after a longer stand (7.67-9.5s), one final clean rep"}
+      ],
+      "notes": "CORRECTED after cross-checking the raw knee-angle trace: this is 5 genuine deep squats at a brisk ~1.8s cadence, not '1 clear rep plus 7.5s of ambiguous movement' as an earlier thumbnail-only pass concluded. Separately from the count, the very heavy, sustained forward trunk lean (torso pitched ~45-60 degrees throughout, hand often near the head/face) is a real form concern worth flagging for future coaching-feedback work -- it does not look like a safe/ideal squat pattern even though the knee depth and rep count are correct. Camera angle is also pure side/profile (~90 degrees), not the protocol's ~45 degrees.",
+      "recommended_for_final_holdout": false,
+      "recommended_reason": "off-protocol camera angle and no clean start-stand; good diagnostic evidence that counting logic generalizes past 45 degrees, but not the protocol-compliant holdout clip"
+    }
+  ]
+}

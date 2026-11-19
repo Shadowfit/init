@@ -77,8 +77,9 @@ class AdminExerciseCrudIntegrationTest {
                 .email("admin@test.com").username("a").password("dummy").role(UserRole.ADMIN).build());
         Category category = categoryRepository.save(Category.builder().name("LOWER").build());
         categoryBack = categoryRepository.save(Category.builder().name("BACK").build()).getId();
+        // code 가 있어야 분석을 켤 수 있다(W020) — 활성화 테스트가 그 검사에 걸리지 않게 준다.
         exercise = exercisesRepository.saveAndFlush(Exercise.builder()
-                .name("스쿼트").category(category).build());
+                .name("스쿼트").code("SQUAT").category(category).build());
 
         userToken = jwtUtil.createAccessToken(
                 CustomUserInfoDto.builder().email(user.getEmail()).role(user.getRole()).build());
@@ -118,6 +119,24 @@ class AdminExerciseCrudIntegrationTest {
     }
 
     @Nested
+    @DisplayName("회원용 종목 목록 GET /exercises")
+    class MemberCatalog {
+
+        @Test
+        @DisplayName("일반 회원 토큰으로 200 — 분석 미지원 종목도 analysisSupported=false 로 함께 내려온다")
+        void catalog_user_returns200WithUnsupported() throws Exception {
+            exercisesRepository.saveAndFlush(Exercise.builder()
+                    .name("런지").code("LUNGE").category(exercise.getCategory()).build());
+
+            mockMvc.perform(get("/exercises").header("Authorization", "Bearer " + userToken))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$[?(@.code == 'SQUAT')].name").value("스쿼트"))
+                    .andExpect(jsonPath("$[?(@.code == 'LUNGE')].analysisSupported").value(false))
+                    .andExpect(jsonPath("$[?(@.code == 'LUNGE')].categoryName").value("LOWER"));
+        }
+    }
+
+    @Nested
     @DisplayName("등록")
     class Create {
 
@@ -125,7 +144,7 @@ class AdminExerciseCrudIntegrationTest {
         @DisplayName("201 + Location, analysisSupported 는 false 로 내려온다")
         void create_returns201WithLocation() throws Exception {
             ExerciseCreateDto dto = new ExerciseCreateDto(
-                    "데드리프트", categoryBack, "설명", null, "[\"hip\"]", 20);
+                    "데드리프트", null, categoryBack, "설명", null, "[\"hip\"]", 20);
 
             mockMvc.perform(post("/admin/exercises")
                             .header("Authorization", "Bearer " + adminToken)
@@ -141,7 +160,7 @@ class AdminExerciseCrudIntegrationTest {
         @DisplayName("이름이 비면 400")
         void create_blankName_returns400() throws Exception {
             ExerciseCreateDto dto = new ExerciseCreateDto(
-                    "  ", categoryBack, null, null, null, null);
+                    "  ", null, categoryBack, null, null, null, null);
 
             mockMvc.perform(post("/admin/exercises")
                             .header("Authorization", "Bearer " + adminToken)
@@ -151,10 +170,37 @@ class AdminExerciseCrudIntegrationTest {
         }
 
         @Test
+        @DisplayName("code 가 규칙(대문자·숫자·밑줄) 밖이면 400")
+        void create_badCodePattern_returns400() throws Exception {
+            ExerciseCreateDto dto = new ExerciseCreateDto(
+                    "데드리프트", "dead-lift", categoryBack, null, null, null, null);
+
+            mockMvc.perform(post("/admin/exercises")
+                            .header("Authorization", "Bearer " + adminToken)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(dto)))
+                    .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("이미 쓰는 code 면 500 이 아니라 409")
+        void create_duplicateCode_returns409() throws Exception {
+            ExerciseCreateDto dto = new ExerciseCreateDto(
+                    "스쿼트 복제", "SQUAT", categoryBack, null, null, null, null);
+
+            mockMvc.perform(post("/admin/exercises")
+                            .header("Authorization", "Bearer " + adminToken)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(dto)))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.message").value("이미 사용 중인 종목 코드입니다."));
+        }
+
+        @Test
         @DisplayName("targetJoints 가 깨진 JSON 이면 500 이 아니라 400")
         void create_invalidJson_returns400() throws Exception {
             ExerciseCreateDto dto = new ExerciseCreateDto(
-                    "데드리프트", categoryBack, null, null, "{깨진", null);
+                    "데드리프트", null, categoryBack, null, null, "{깨진", null);
 
             mockMvc.perform(post("/admin/exercises")
                             .header("Authorization", "Bearer " + adminToken)
@@ -172,7 +218,7 @@ class AdminExerciseCrudIntegrationTest {
         @DisplayName("보낸 필드만 바뀐다 — 생략한 카테고리는 유지")
         void update_partial_keepsOmitted() throws Exception {
             ExerciseUpdateDto dto = new ExerciseUpdateDto(
-                    "스쿼트(개선)", null, null, null, null, null);
+                    "스쿼트(개선)", null, null, null, null, null, null);
 
             mockMvc.perform(patch("/admin/exercises/" + exercise.getId())
                             .header("Authorization", "Bearer " + adminToken)
@@ -196,6 +242,22 @@ class AdminExerciseCrudIntegrationTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{\"supported\":true}"))
                     .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("code 가 없는 종목은 기준 좌표가 있어도 400(W020)")
+        void enable_withoutCode_returns400() throws Exception {
+            Exercise noCode = exercisesRepository.saveAndFlush(Exercise.builder()
+                    .name("케틀벨 스윙").category(exercise.getCategory()).build());
+            referenceRepository.saveAndFlush(ExerciseReference.builder()
+                    .exercise(noCode).timestampSec(0.0).jointCoordinates("{}").build());
+
+            mockMvc.perform(patch("/admin/exercises/" + noCode.getId() + "/analysis-support")
+                            .header("Authorization", "Bearer " + adminToken)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"supported\":true}"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.message").value("종목 코드가 없어 분석을 활성화할 수 없습니다."));
         }
 
         @Test

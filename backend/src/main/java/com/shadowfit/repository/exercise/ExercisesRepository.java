@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -21,4 +22,13 @@ public interface ExercisesRepository extends JpaRepository<Exercise,Long> {
 
     // 카테고리 삭제 전 사용 여부 확인용 (AdminCategoryService, #CATEGORY_IN_USE).
     boolean existsByCategoryId(Long categoryId);
+
+    // 종목 코드 중복 검사 (AdminExerciseService, W018). 수정 경로는 자기 행을 제외한다.
+    boolean existsByCode(String code);
+    boolean existsByCodeAndIdNot(String code, Long id);
+
+    // 회원용 종목 목록 (GET /exercises). 카테고리를 같이 읽는다 — LAZY 를 행마다 따로 치면 N+1 이고,
+    // 이 목록의 행마다 카테고리 이름이 필요하다. 캐시하지 않는 이유는 ExerciseCatalogService 주석.
+    @Query("SELECT e FROM Exercise e JOIN FETCH e.category ORDER BY e.id")
+    List<Exercise> findAllForCatalog();
 }

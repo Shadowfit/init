@@ -1,9 +1,11 @@
 import api from './api';
 import type {
   CreateGroupRequest,
+  EventCheer,
   Group,
   GroupAttendanceCalendar,
   GroupDetail,
+  GroupFeedItem,
   GroupFeedResponse,
   Invitation,
   InviteCodeResponse,
@@ -56,6 +58,23 @@ export const groupService = {
     api.put<ReactionSummary>(`/groups/${groupId}/events/${seq}/reactions/${kind}`),
   removeReaction: (groupId: number, seq: number, kind: ReactionKind) =>
     api.delete<ReactionSummary>(`/groups/${groupId}/events/${seq}/reactions/${kind}`),
+
+  // 운동 공유 — 끝낸 세션을 이 모임 피드에 올린다(사진 · 한마디 선택). 같은 운동을 같은 모임에 두 번이면 409
+  shareSession: (groupId: number, form: FormData) =>
+    api.post<GroupFeedItem>(`/groups/${groupId}/shares`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 30000,
+    }),
+
+  // 이 세션을 이미 공유한 내 모임 id 들 — 공유 화면에서 «공유됨» 으로 잠근다
+  getSharedGroupIds: (sessionId: number) =>
+    api.get<number[]>('/groups/shares', { params: { sessionId } }),
+
+  // 피드 글 응원 한마디 — 회원당 한 줄, 다시 보내면 문구가 바뀐다. 응답은 그 글의 응원 전부
+  cheerEvent: (groupId: number, seq: number, message: string) =>
+    api.put<EventCheer[]>(`/groups/${groupId}/events/${seq}/cheers`, { message }),
+  uncheerEvent: (groupId: number, seq: number) =>
+    api.delete<EventCheer[]>(`/groups/${groupId}/events/${seq}/cheers`),
 
   // 초대
   invite: (groupId: number, inviteeId: number) =>

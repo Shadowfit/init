@@ -47,6 +47,19 @@ class Settings(BaseSettings):
     def complete_callback_workers(self) -> int:
         return self.COMPLETE_CALLBACK_WORKERS or self.GRPC_MAX_WORKERS
 
+    # 방치된 세션 정리 (session_reaper) — Spring 의 StopAnalysis 가 안 오는 경우의 안전망.
+    #
+    # 🔴 **상한이 아니라 하한이 근거다.** 이 값은 Spring 의 최악 타임아웃보다 길어야 한다: 활동 기록이 없는 세션은
+    # 시작 + 예상 운동시간(15분) + 버퍼(30분) = 45분에 Spring 이 걷고(exercise.session.timeout), 그 뒤 아웃박스가
+    # StopAnalysis 를 보낸다(첫 시도 수 초, 백오프 최대 300초). 그 전에 AI 가 먼저 지우면 정상 종료 경로를 가로챈다.
+    # 45분 + 아웃박스 여유 15분 = 60분. «이보다 짧게 해도 되는가» 의 근거는 이 계산이 전부이고, «얼마나 길어도 되는가» 는
+    # 검출기(약 100MB)가 풀(= 동시 세션 상한)을 얼마나 오래 차지해도 되는지에 달려 있어 근거가 없다.
+    # ⚠️ Spring 설정의 복사본이다 — exercise.session.timeout 이 바뀌면 같이 바꿀 것(STOPPED_SESSION_RETENTION_SEC 과 같은 처지).
+    # 0 이면 정리를 끈다.
+    SESSION_IDLE_TTL_SEC: int = Field(default=3600, ge=0)
+    # 훑는 주기. TTL 이 분 단위라 초 단위 정밀도는 필요 없다 — 값 자체에 근거는 없다.
+    SESSION_REAP_INTERVAL_SEC: int = Field(default=60, ge=1)
+
     # 프로세스 워커 수 (2026-08-26, GIL 병목 회피로 프로세스 분리 도입).
     #
     # 🔴 memory_ceiling() 이 컨테이너 메모리 한도를 «내가 유일한 프로세스» 라고 가정하고
@@ -56,7 +69,12 @@ class Settings(BaseSettings):
     AI_WORKER_COUNT: int = 1
 
     # DTW 설정
-    DTW_WINDOW_SIZE: int = 10  # Sakoe-Chiba band 크기
+    DTW_WINDOW_SIZE: int = 10  # 비대칭 DTW 에서 사용자 한 점(시간축으로 편 ~12점/초) 사이에 기준이 건너뛸 수 있는 최대 프레임 수
+    # 싱크로율 = 100 × exp(−합성 거리(도) / τ), 합성 거리 = 0.6·최저점 무릎 차 + 0.2·최저점 고관절 차 + 0.2·궤적 평균 차
+    # (dtw_calculator.compute_sync_distance). 2026-10-21 제품 결정으로 조금 엄하게 30→24 (허용 오차 무릎 8→5°·
+    # 고관절 10→8° 와 한 묶음). 실촬영 반복(3D 마네킹 기준, 최저 무릎 71°)으로 잰 값 — 깊고 바른 반복(무릎 48~66°)
+    # 89~95, 무릎 76~78° 81~87, 81° 76, 84° 69, 93° 47.
+    SYNC_RATE_TAU_DEG: float = 24.0
 
     # 영상 전처리 설정
     VIDEO_MAX_FPS: int = 30

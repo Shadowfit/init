@@ -3,6 +3,7 @@ package com.shadowfit.repository.outbox;
 import com.shadowfit.model.outbox.OutboxEvent;
 import com.shadowfit.model.outbox.OutboxEventType;
 import com.shadowfit.model.outbox.OutboxStatus;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -174,11 +175,44 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEvent, Long> 
      */
     long countByStatus(OutboxStatus status);
 
-    /** 보존 정책 정리용 — SENT 는 짧게, 터미널 FAILED 는 길게 두고 각각 다른 기준으로 호출한다. */
+    /**
+     * 보존 정책 정리용 — 상태 하나를 기준 시각으로 한 번에 지운다.
+     *
+     * <p>⚠️ {@code LIMIT} 이 없고 {@code status} 인덱스의 해당 구간 전체를 훑는다 — 처음 켜는 순간 쌓인 행 전체를 문장 하나로
+     * 지우고, 발행기의 {@code markSent} 와 락 구간이 겹칠 수 있다(docs/decisions/outbox-retention-cleanup.md §3-1).
+     * 운영 정리는 이걸 쓰지 않고 {@link #findIdAndCreatedAtAfter} + {@link #deleteExpiredInRange} 의 PK 범위 배치를 쓴다
+     * ({@code OutboxRetentionCleaner}). 이 메서드는 테스트·수동 정리용으로 남긴다.
+     */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("DELETE FROM OutboxEvent e WHERE e.status = :status AND e.createdAt < :threshold")
     int deleteByStatusAndCreatedAtBefore(@Param("status") OutboxStatus status,
                                          @Param("threshold") LocalDateTime threshold);
+
+    /** 정리 순회용 프로젝션 — 엔티티 전체를 올리지 않는다. */
+    interface IdAndCreatedAt {
+        Long getId();
+
+        LocalDateTime getCreatedAt();
+    }
+
+    /**
+     * 정리 순회 한 걸음 — {@code cursor} 보다 큰 id 를 오름차순으로 {@code pageable} 크기만큼.
+     * PK 범위 스캔이라 {@code status} 인덱스를 타지 않는다.
+     */
+    @Query("select e.id as id, e.createdAt as createdAt from OutboxEvent e where e.id > :cursor order by e.id")
+    List<IdAndCreatedAt> findIdAndCreatedAtAfter(@Param("cursor") Long cursor, Pageable pageable);
+
+    /**
+     * PK 범위 안에서 기준 시각보다 오래된 {@code status} 행을 지운다. 범위는 {@link #findIdAndCreatedAtAfter} 가
+     * 돌려준 첫·끝 id 이고, 행마다 status·created_at 조건을 다시 걸므로 id 순서가 시각 순서와 어긋나도 틀린 행은 지우지 않는다.
+     * 호출자가 짧은 트랜잭션 하나로 감싼다.
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("DELETE FROM OutboxEvent e WHERE e.id BETWEEN :fromId AND :toId "
+            + "AND e.status = :status AND e.createdAt < :threshold")
+    int deleteExpiredInRange(@Param("fromId") Long fromId, @Param("toId") Long toId,
+                             @Param("status") OutboxStatus status,
+                             @Param("threshold") LocalDateTime threshold);
 
     /**
      * 이미 대기·처리 중인 같은 종류 이벤트가 있는가 — 중복 등록 가드.

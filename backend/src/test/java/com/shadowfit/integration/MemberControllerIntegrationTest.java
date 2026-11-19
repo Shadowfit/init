@@ -77,10 +77,9 @@ class MemberControllerIntegrationTest {
      * ({@code V1__baseline.sql:28}) 사전검사가 email 에만 있어, DB 가 거부한 것을
      * {@code GlobalExceptionHandler} 의 {@code Exception} 핸들러가 받아 서버 결함으로 보고했다.
      *
-     * <p><b>status 뿐 아니라 문구도 단언한다.</b> {@code ErrorResponseDto} 는 code 를 싣지 않아
-     * 프론트가 message 로만 구분하므로({@code login.tsx:229-231}), U003 의 "이미 가입된
-     * 사용자입니다"로 되돌아가면 status 는 400 그대로여도 사용자에게는 틀린 안내가 된다 —
-     * 그 회귀를 잡는 자리가 여기다.
+     * <p><b>status 뿐 아니라 code·문구도 단언한다.</b> 프론트는 message 를 그대로 띄우므로
+     * ({@code login.tsx:229-231}), U003 의 "이미 가입된 사용자입니다"로 되돌아가면 status 는
+     * 400 그대로여도 사용자에게는 틀린 안내가 된다 — 그 회귀를 잡는 자리가 여기다.
      */
     @Test
     @DisplayName("#195 이미 쓰는 username 으로 가입하면 500 이 아니라 400 + 닉네임 문구")
@@ -92,6 +91,7 @@ class MemberControllerIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("U004"))
                 .andExpect(jsonPath("$.message").value("이미 사용 중인 닉네임입니다."));
     }
 
