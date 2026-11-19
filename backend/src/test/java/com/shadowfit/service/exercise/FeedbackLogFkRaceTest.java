@@ -27,7 +27,6 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
@@ -80,7 +79,6 @@ class FeedbackLogFkRaceTest extends MySqlContainerSupport {
         // 멘트 템플릿이 없는 종목 — 유형 지원 검사가 «제한 없음» 으로 통과한다(검증 대상이 아니다).
         Exercise exercise = exercisesRepository.saveAndFlush(Exercise.builder()
                 .name("feedback-fk-race").category(category).expectedDurationMinutes(15)
-                .syncThresholdBeginner(new BigDecimal("60.00")).syncThresholdAdvanced(new BigDecimal("85.00"))
                 .build());
         session = sessionRepository.saveAndFlush(Session.builder()
                 .member(member).exercise(exercise).startTime(LocalDateTime.now().minusMinutes(5))

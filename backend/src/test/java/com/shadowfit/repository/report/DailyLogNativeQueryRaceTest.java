@@ -80,7 +80,6 @@ class DailyLogNativeQueryRaceTest extends MySqlContainerSupport {
         Category category = categoryRepository.saveAndFlush(Category.builder().name("DAILYLOG_RACE").build());
         exercise = exercisesRepository.saveAndFlush(Exercise.builder()
                 .name("dailylog-race-squat").category(category).expectedDurationMinutes(15)
-                .syncThresholdBeginner(new BigDecimal("60.00")).syncThresholdAdvanced(new BigDecimal("85.00"))
                 .build());
     }
 
