@@ -84,6 +84,12 @@ public class SessionMetrics {
     /** 아웃박스 적체(PENDING 행 수) 게이지. */
     private static final String OUTBOX_PENDING = "shadowfit.outbox.pending";
 
+    /** 보존 정리가 지운 outbox 행 수. tags: status(SENT/FAILED) — 배치 반복이 끝나는지·한 번에 얼마나 지워지는지 본다. */
+    private static final String OUTBOX_CLEANUP_DELETED = "shadowfit.outbox.cleanup.deleted";
+
+    /** 최종 실패(FAILED) 행 누적 수 게이지 — «지금 몇 건 남아 있나». 발생 수 카운터는 이 값을 모른다. */
+    private static final String OUTBOX_FAILED = "shadowfit.outbox.failed";
+
     /** 통보 지연 — 행 생성(created_at)부터 전달 성공(sent_at)까지. */
     private static final String OUTBOX_LAG = "shadowfit.outbox.lag";
 
@@ -93,10 +99,67 @@ public class SessionMetrics {
     /** 세션 검증 통과부터 커밋까지 — 고아가 생길 수 있는 창의 폭 (이슈 #87). */
     private static final String POSE_ORPHAN_WINDOW = "shadowfit.pose.orphan.window";
 
-    private final MeterRegistry registry;
+    /**
+     * 스케줄러 tick 1회의 결과. tags: scheduler(이름), outcome(success/partial/error)
+     *
+     * <p>{@code error} 는 tick 전체가 예외로 끝난 것(후보 조회 실패 등), {@code partial} 은 tick 은 돌았지만 건별 처리에서
+     * 예상 밖 예외가 난 것이다. 타임아웃 스케줄러는 예외를 삼키고 로그만 남기므로(try/catch 가 tick 을 감싼다) <b>죽어도
+     * 아무 지표가 안 변했다</b> — 이게 없으면 «orphan IN_PROGRESS 세션이 영구히 남는» 상황을 밖에서 알 수 없다
+     * (failure-modes T2).
+     */
+    private static final String SCHEDULER_TICK = "shadowfit.scheduler.tick";
 
+    /**
+     * 스케줄러가 <b>마지막으로 깨끗이 끝낸</b> 시각(epoch 초). Prometheus 에서는
+     * {@code shadowfit_scheduler_last_success_timestamp_seconds} 이고, 알람은 {@code time() - 이 값 > 주기의 몇 배} 로 건다.
+     * 등록 시점의 값은 «기동 시각» 이다 — 첫 tick 전에도 시계열이 있어, «기동했는데 한 번도 못 돌았다» 를 같은 식으로 잡는다.
+     */
+    private static final String SCHEDULER_LAST_SUCCESS = "shadowfit.scheduler.last.success.timestamp";
+
+    private final MeterRegistry registry;
+    private final java.time.Clock clock;
+    /** 게이지는 값 객체를 약참조로 잡는다 — 여기서 강참조를 들고 있어야 GC 로 사라지지 않는다. */
+    private final java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.atomic.AtomicLong> lastSuccess =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    @org.springframework.beans.factory.annotation.Autowired
     public SessionMetrics(MeterRegistry registry) {
+        this(registry, java.time.Clock.systemUTC());
+    }
+
+    /** 시계를 주입할 수 있는 생성자 — «마지막 성공 시각이 갱신됐는가» 를 테스트에서 가르려고 둔다. */
+    public SessionMetrics(MeterRegistry registry, java.time.Clock clock) {
         this.registry = registry;
+        this.clock = clock;
+    }
+
+    /**
+     * 스케줄러를 지표에 등록한다 — 게이지를 «지금(기동 시각)» 으로 만든다. 스케줄러 생성자에서 한 번 부른다.
+     * 이미 등록돼 있으면 아무것도 하지 않는다(재호출 안전).
+     */
+    public void registerScheduler(String scheduler) {
+        lastSuccess.computeIfAbsent(scheduler, name -> {
+            java.util.concurrent.atomic.AtomicLong holder =
+                    new java.util.concurrent.atomic.AtomicLong(clock.instant().getEpochSecond());
+            io.micrometer.core.instrument.Gauge.builder(SCHEDULER_LAST_SUCCESS, holder, java.util.concurrent.atomic.AtomicLong::doubleValue)
+                    .tag("scheduler", name)
+                    .baseUnit("seconds")
+                    .description("스케줄러가 마지막으로 깨끗이 끝낸 시각(epoch 초). 등록 직후에는 기동 시각")
+                    .register(registry);
+            return holder;
+        });
+    }
+
+    /**
+     * tick 1회의 결과를 남긴다. {@code success} 일 때만 «마지막 성공 시각» 을 갱신한다 —
+     * {@code partial}·{@code error} 가 계속되면 이 값이 멈춰 알람이 걸린다.
+     */
+    public void schedulerTick(String scheduler, String outcome) {
+        registry.counter(SCHEDULER_TICK, "scheduler", scheduler, "outcome", outcome).increment();
+        if ("success".equals(outcome)) {
+            registerScheduler(scheduler);   // 등록을 빠뜨린 호출부에서도 값이 생기게
+            lastSuccess.get(scheduler).set(clock.instant().getEpochSecond());
+        }
     }
 
     /**
@@ -160,6 +223,21 @@ public class SessionMetrics {
     public void registerOutboxPendingGauge(java.util.function.Supplier<Number> supplier) {
         io.micrometer.core.instrument.Gauge.builder(OUTBOX_PENDING, supplier)
                 .description("전달 대기 중인 아웃박스 행 수")
+                .register(registry);
+    }
+
+    /** 보존 정리가 지운 행 수를 센다. */
+    public void outboxCleanupDeleted(String status, long count) {
+        registry.counter(OUTBOX_CLEANUP_DELETED, "status", status).increment(count);
+    }
+
+    /**
+     * FAILED 누적 게이지. 터미널 실패는 사람이 봐야 할 사건인데(07-29 결정) 지금까지는 발생 카운터뿐이라
+     * «지금 몇 건이 확인을 기다리나» 를 볼 수단이 없었다. 스크레이프 때마다 {@code supplier} 를 부른다.
+     */
+    public void registerOutboxFailedGauge(java.util.function.Supplier<Number> supplier) {
+        io.micrometer.core.instrument.Gauge.builder(OUTBOX_FAILED, supplier)
+                .description("최종 실패(FAILED) 상태로 남아 있는 아웃박스 행 수")
                 .register(registry);
     }
 

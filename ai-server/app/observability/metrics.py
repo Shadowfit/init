@@ -59,6 +59,22 @@ active_sessions = Gauge(
 )
 
 
+# 방치로 AI 가 정리한 세션 수. 0 이 아니면 Spring 의 StopAnalysis 가 오지 않은 세션이 있었다는 뜻이다 —
+# 정상 운영에서는 Spring 의 타임아웃 스케줄러가 먼저 걷으므로 0 이어야 한다.
+sessions_reaped_total = Counter(
+    "shadowfit_ai_sessions_reaped",
+    "방치(유입 없음 SESSION_IDLE_TTL_SEC 초과)로 AI 가 직접 정리한 세션 수 — Spring 의 StopAnalysis 가 안 온 세션",
+)
+
+
+def record_sessions_reaped(count: int) -> None:
+    """정리한 세션 수를 센다. 지표 때문에 정리가 죽으면 안 되므로 절대 던지지 않는다."""
+    try:
+        sessions_reaped_total.inc(count)
+    except Exception:  # pragma: no cover - 계측이 본 경로를 깨뜨리지 않는다
+        pass
+
+
 def record_callback(rpc: str, outcome: str) -> None:
     """콜백 결과를 센다. 지표 때문에 콜백이 죽으면 안 되므로 절대 던지지 않는다."""
     try:

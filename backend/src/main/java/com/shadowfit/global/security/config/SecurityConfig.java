@@ -25,6 +25,7 @@ public class SecurityConfig {
     private final CustomAccessDeniedHandler accessDeniedHandler;
     private final CustomAuthenticationEntryPoint authenticationEntryPoint;
     private final SecurityPathConfig securityPathConfig;
+    private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
     // 🔴 SecurityContextHolder 의 저장 전략을 건드리지 않는다 (이슈 #177, 2026-08-12).
     //
@@ -60,7 +61,7 @@ public class SecurityConfig {
 
 
         // JWT 필터 추가
-        http.addFilterBefore(new JwtAuthFilter(customUserDetailsService, jwtUtil),
+        http.addFilterBefore(new JwtAuthFilter(customUserDetailsService, jwtUtil, objectMapper),
                 UsernamePasswordAuthenticationFilter.class);
 
         http.exceptionHandling(exception -> exception

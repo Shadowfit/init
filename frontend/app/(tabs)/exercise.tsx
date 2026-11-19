@@ -1,5 +1,6 @@
+import { devError, devWarn } from '@/utils/devLog';
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, AppState, Platform, type AppStateStatus } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, AppState, Platform, Linking, type AppStateStatus } from 'react-native';
 import { Alert } from '@/utils/alert';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useLocalSearchParams, useFocusEffect } from 'expo-router';
@@ -127,7 +128,7 @@ export default function ExerciseScreen() {
     } catch (e) {
       if (__DEV__) {
         // eslint-disable-next-line no-console
-        console.warn('[camera] pictureSize 조회 실패 — 원본 해상도 유지:', (e as Error).message);
+        devWarn('[camera] pictureSize 조회 실패 — 원본 해상도 유지:', (e as Error).message);
       }
     }
   };
@@ -260,7 +261,7 @@ export default function ExerciseScreen() {
         if (id != null) router.replace(`/report/${id}` as any);
       }
     } catch (e: any) {
-      console.error('[exercise session] status=', e?.response?.status, 'data=', e?.response?.data);
+      devError('[exercise session] status=', e?.response?.status, 'data=', e?.response?.data);
       Alert.alert(
         '운동 세션 오류',
         e?.response?.data?.message ?? '세션 처리 중 오류가 발생했습니다',
@@ -383,7 +384,7 @@ export default function ExerciseScreen() {
         } catch (e) {
           if (__DEV__) {
             // eslint-disable-next-line no-console
-            console.warn('[camera capture]', (e as Error).message);
+            devWarn('[camera capture]', (e as Error).message);
           }
         }
 
@@ -473,7 +474,7 @@ export default function ExerciseScreen() {
           }
           if (__DEV__) {
             // eslint-disable-next-line no-console
-            console.warn('[ai pose] status=', e?.response?.status, e?.message);
+            devWarn('[ai pose] status=', e?.response?.status, e?.message);
           }
         }
       } finally {
@@ -503,11 +504,15 @@ export default function ExerciseScreen() {
         <CameraIcon size={48} color={COLORS.textMuted} strokeWidth={1.75} />
         <Text style={styles.permTitle}>카메라 권한이 필요합니다</Text>
         <Text style={styles.permDesc}>
-          실시간 자세 분석을 위해 카메라 접근을 허용해주세요.
+          {permission.canAskAgain
+            ? '실시간 자세 분석을 위해 카메라 접근을 허용해주세요.\n\n'
+              + '운동 중 카메라 화면은 자세 분석을 위해 서버로 전송돼요. 분석에만 쓰이고 화면은 보관하지 않으며, 자세 좌표만 기록돼요.'
+            : '카메라 권한이 꺼져 있어요. 설정에서 카메라를 허용한 뒤 돌아와 주세요.'}
         </Text>
         <Button
-          title="카메라 허용"
-          onPress={requestPermission}
+          title={permission.canAskAgain ? '카메라 허용' : '설정 열기'}
+          // 영구 거부 뒤에는 requestPermission() 이 아무 일도 하지 않는다 — 버튼이 «눌러도 반응 없음» 이 되지 않게 설정 앱으로 보낸다.
+          onPress={permission.canAskAgain ? requestPermission : () => { void Linking.openSettings(); }}
           style={{ marginTop: SPACING.xl }}
         />
       </View>

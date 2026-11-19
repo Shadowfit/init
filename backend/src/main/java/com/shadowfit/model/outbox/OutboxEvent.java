@@ -113,6 +113,17 @@ public class OutboxEvent {
                 .build();
     }
 
+    /** 탈퇴 후 삭제 한 건 — 탈퇴 트랜잭션 안에서 호출된다. payload 는 1000자 이하여야 한다(호출자가 쪼갠다). */
+    public static OutboxEvent purgeMemberData(Long memberId, String payload, String correlationId) {
+        return OutboxEvent.builder()
+                .aggregateType(AGGREGATE_TYPE_MEMBER)
+                .aggregateId(memberId)
+                .eventType(OutboxEventType.PURGE_MEMBER_DATA)
+                .payload(payload)
+                .correlationId(correlationId)
+                .build();
+    }
+
     /**
      * 재부착 통보 한 건을 만든다 — 서킷브레이커 OPEN 감지 시(요청 트랜잭션 밖) 호출된다.
      * {@code stopAnalysis} 와 달리 도메인 커밋에 얹히지 않는다 — 이 행 자체가 "장애 감지"라는
@@ -167,6 +178,7 @@ public class OutboxEvent {
     }
 
     public static final String AGGREGATE_TYPE_SESSION = "SESSION";
+    public static final String AGGREGATE_TYPE_MEMBER = "MEMBER";
     public static final String AGGREGATE_TYPE_NOTIFICATION = "NOTIFICATION";
     public static final String AGGREGATE_TYPE_WEEKLY_REPORT = "WEEKLY_REPORT";
 }

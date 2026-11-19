@@ -1,3 +1,4 @@
+import { devError, devWarn } from '@/utils/devLog';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -83,7 +84,7 @@ export default function HomeScreen() {
         .getCalendar(viewYear, viewMonth)
         .then((res) => setData(res.data))
         .catch((e) => {
-          console.error('[calendar] status=', e.response?.status, 'data=', e.response?.data);
+          devError('[calendar] status=', e.response?.status, 'data=', e.response?.data);
         });
     }, [viewYear, viewMonth]),
   );
@@ -94,7 +95,7 @@ export default function HomeScreen() {
       friendService
         .getStatuses()
         .then((res) => setFriends(res.data))
-        .catch((e) => console.warn('[friends] status=', e?.response?.status));
+        .catch((e) => devWarn('[friends] status=', e?.response?.status));
     }, []),
   );
 
@@ -179,7 +180,7 @@ export default function HomeScreen() {
       .getDaily(targetDate)
       .then((res) => setDaily(res.data))
       .catch((e) => {
-        console.warn('[daily] 에러 status=', e?.response?.status, 'data=', JSON.stringify(e?.response?.data));
+        devWarn('[daily] 에러 status=', e?.response?.status, 'data=', JSON.stringify(e?.response?.data));
         setDaily(null);
       })
       .finally(() => setDailyLoading(false));

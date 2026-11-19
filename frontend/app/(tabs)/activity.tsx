@@ -1,3 +1,4 @@
+import { devError } from '@/utils/devLog';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -26,7 +27,7 @@ export default function ActivityScreen() {
         .getWeeklySummary()
         .then((res) => setData(res.data))
         .catch((e) => {
-          console.error('[weekly-summary] status=', e.response?.status, 'data=', e.response?.data);
+          devError('[weekly-summary] status=', e.response?.status, 'data=', e.response?.data);
         })
         .finally(() => setLoading(false));
     }, []),

@@ -1,3 +1,4 @@
+import { devError } from '@/utils/devLog';
 import { useEffect, useState } from 'react';
 import {
   View,
@@ -32,6 +33,10 @@ import {
 } from 'lucide-react-native';
 import { COLORS, FONT_SIZE, SPACING, RADIUS } from '@/constants/Colors';
 import Button from '@/components/ui/Button';
+import Checkbox from '@/components/ui/Checkbox';
+import { consentService } from '@/services/consentService';
+import { CONSENT_VERSION } from '@/constants/consent';
+import { openLegalDocument } from '@/utils/legalLinks';
 import type {
   WorkoutLevel,
   SelectedPersona,
@@ -160,6 +165,8 @@ export default function OnboardingScreen() {
   const markOnboardingCompleted = useAuthStore((s) => s.markOnboardingCompleted);
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  // 건강정보(키·몸무게) 수집·이용 동의 — 일반 가입 동의와 분리해 몸 정보를 받기 직전에 따로 받는다.
+  const [healthConsent, setHealthConsent] = useState(false);
   // 백엔드 OnboardingRequestDto 와 키 이름 일치
   const [data, setData] = useState<OnboardingData>({
     workoutLevel: null,
@@ -189,10 +196,26 @@ export default function OnboardingScreen() {
       });
   }, [userEmail]);
 
+  // 이미 건강정보에 동의한 회원(마이페이지에서 수정 진입 등)은 체크된 채로 시작한다.
+  useEffect(() => {
+    if (!userEmail) return;
+    consentService
+      .getStatus()
+      .then((res) => {
+        const { agreed, current } = res.data;
+        if (agreed.some((a) => a.type === 'HEALTH_INFO' && a.version === current.HEALTH_INFO)) {
+          setHealthConsent(true);
+        }
+      })
+      .catch(() => {
+        // 현황을 못 읽으면 체크 안 된 채로 둔다 — 사용자가 직접 동의하면 된다.
+      });
+  }, [userEmail]);
+
   const canNext = () => {
     switch (step) {
       case 0: return data.workoutLevel !== null;
-      case 1: return true; // 키 (슬라이더, 항상 값 있음)
+      case 1: return healthConsent; // 키 (슬라이더, 항상 값 있음) — 건강정보 동의가 있어야 다음
       case 2: return true; // 몸무게 (슬라이더, 항상 값 있음)
       case 3: return data.persona !== null;
       case 4: return data.preferredUrl !== null;
@@ -219,6 +242,9 @@ export default function OnboardingScreen() {
 
     setSubmitting(true);
     try {
+      // 키·몸무게를 보내기 전에 건강정보 동의를 기록한다(멱등 — 이미 했어도 안전하다). 서버가 동의를 강제하는 중이면
+      // 이 기록이 없을 때 몸 정보 저장을 거절한다.
+      await consentService.record([{ type: 'HEALTH_INFO', version: CONSENT_VERSION.HEALTH_INFO }]);
       await memberService.updateOnboarding(userEmail, {
         selectedPersona: data.persona,
         workoutLevel: data.workoutLevel,
@@ -229,7 +255,7 @@ export default function OnboardingScreen() {
       markOnboardingCompleted(); // 가드가 (onboarding) 으로 다시 안 빠지게
       router.replace('/(tabs)');
     } catch (e: any) {
-      console.error('[onboarding patch] status=', e.response?.status, 'data=', e.response?.data);
+      devError('[onboarding patch] status=', e.response?.status, 'data=', e.response?.data);
       const msg = e.response?.data?.message || '온보딩 저장에 실패했습니다';
       Alert.alert(`온보딩 실패 (${e.response?.status ?? 'no-response'})`, msg);
     } finally {
@@ -268,7 +294,14 @@ export default function OnboardingScreen() {
         showsVerticalScrollIndicator={false}
       >
         {step === 0 && <StepLevel data={data} setData={setData} />}
-        {step === 1 && <StepHeight data={data} setData={setData} />}
+        {step === 1 && (
+          <StepHeight
+            data={data}
+            setData={setData}
+            healthConsent={healthConsent}
+            onHealthConsentChange={setHealthConsent}
+          />
+        )}
         {step === 2 && <StepWeight data={data} setData={setData} />}
         {step === 3 && <StepPersona data={data} setData={setData} />}
         {step === 4 && <StepVideo data={data} setData={setData} />}
@@ -337,9 +370,13 @@ function StepLevel({
 function StepHeight({
   data,
   setData,
+  healthConsent,
+  onHealthConsentChange,
 }: {
   data: OnboardingData;
   setData: React.Dispatch<React.SetStateAction<OnboardingData>>;
+  healthConsent: boolean;
+  onHealthConsentChange: (v: boolean) => void;
 }) {
   return (
     <View>
@@ -369,6 +406,20 @@ function StepHeight({
       <View style={styles.sliderLabels}>
         <Text style={styles.sliderLabel}>100cm</Text>
         <Text style={styles.sliderLabel}>220cm</Text>
+      </View>
+
+      {/* 건강정보 동의 — 키·몸무게는 건강에 관한 정보라 일반 가입 동의와 분리해 받는다 */}
+      <View style={styles.healthConsent}>
+        <Checkbox
+          checked={healthConsent}
+          onToggle={() => onHealthConsentChange(!healthConsent)}
+          label="키·몸무게 등 건강정보 수집·이용에 동의합니다"
+          tag="필수"
+          onView={() => openLegalDocument('privacy')}
+        />
+        <Text style={styles.healthConsentHint}>
+          운동 강도와 칼로리 계산에만 쓰이고, 탈퇴하면 삭제돼요.
+        </Text>
       </View>
     </View>
   );
@@ -747,6 +798,19 @@ const styles = StyleSheet.create({
   slider: { width: '100%', height: 40 },
   sliderLabels: { flexDirection: 'row', justifyContent: 'space-between' },
   sliderLabel: { fontSize: FONT_SIZE.sm, color: COLORS.textMuted },
+  healthConsent: {
+    marginTop: SPACING.xxl,
+    padding: SPACING.md,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    backgroundColor: COLORS.surface,
+  },
+  healthConsentHint: {
+    marginTop: SPACING.xs,
+    fontSize: FONT_SIZE.xs,
+    color: COLORS.textMuted,
+  },
 
   // Video selection
   categoryTabs: {
