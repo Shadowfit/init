@@ -1,15 +1,19 @@
 package com.shadowfit.dto.login;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.shadowfit.dto.consent.ConsentItemDto;
 import com.shadowfit.model.member.Sex;
 import io.swagger.v3.oas.annotations.media.Schema;
 import com.shadowfit.global.validation.MaxUtf8Bytes;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
+import java.util.List;
 
 //회원가입용 Dto
 @Data
@@ -42,6 +46,17 @@ public class MemberRequestDto {
 
     @Schema(description = "성별", example = "MALE",requiredMode = Schema.RequiredMode.REQUIRED)
     private Sex sex;
+
+    // 약관·개인정보 동의 (V36). 서버가 동의를 강제하는 중(consent.enforce=true)이면 이용약관·개인정보 둘이 현재 버전으로
+    // 있어야 가입된다. 꺼져 있는 동안은 비어 있어도 되고, 보내면 기록한다 — 앱이 동의 화면을 갖추기 전의 호환 구간이다.
+    @Valid
+    @Schema(description = "가입 시 동의한 문서들(이용약관·개인정보 필수 — 서버가 강제할 때)")
+    private List<ConsentItemDto> consents;
+
+    /** 동의 필드 이전의 4-인자 형태 — 호출부 호환용. */
+    public MemberRequestDto(String username, String email, String password, Sex sex) {
+        this(username, email, password, sex, null);
+    }
 
     // role 은 여기에 없다 — 있으면 안 된다 (이슈 #138).
     //

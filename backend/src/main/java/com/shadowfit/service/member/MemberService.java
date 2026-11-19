@@ -42,6 +42,7 @@ public class MemberService{
     private final LoginAttemptLimiter loginAttemptLimiter;
     private final PushTokenRepository pushTokenRepository;
     private final com.shadowfit.service.group.GroupWithdrawalService groupWithdrawalService;
+    private final ConsentService consentService;
 
     /** 계정이 없을 때 BCrypt 를 한 번 돌리기 위한 해시. 첫 사용 때 한 번만 만든다(실제 비밀번호가 아니다). */
     private volatile String dummyPasswordHash;
@@ -299,6 +300,9 @@ public class MemberService{
      */
     @Transactional
     public String signup(MemberRequestDto dto) {
+        // 동의부터 본다 — 필수 약관에 동의하지 않은 요청이 «이미 가입된 이메일» 같은 정보를 알아내는 데 쓰이지 않게.
+        // 강제가 꺼져 있으면(기본) 아무것도 하지 않는다 — 동의 화면이 없는 현재 앱의 가입을 막지 않는다.
+        consentService.requireAtSignup(dto.getConsents());
         if(memberRepository.existsByEmail((dto.getEmail()))) {
             throw new BusinessException(ErrorCode.USERID_DUPLICATION);
         }
@@ -327,6 +331,8 @@ public class MemberService{
         } catch (DataIntegrityViolationException e) {
             throw duplicationOf(e);
         }
+        // 가입과 같은 트랜잭션 — 회원만 생기고 동의 기록이 빠지는 일이 없다. 동의를 보내지 않았으면 기록할 것이 없다.
+        consentService.record(member, dto.getConsents());
         return member.getUsername();
     }
 

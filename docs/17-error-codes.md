@@ -74,6 +74,9 @@
 | `U002` `INVALID_PERSONA_TYPE` | 400 | 유효하지 않은 페르소나 설정입니다. |
 | `U003` `USERID_DUPLICATION` | 400 | 이미 가입된 사용자입니다. |
 | `U004` `USERNAME_DUPLICATION` | 400 | 이미 사용 중인 닉네임입니다. |
+| `U005` `CONSENT_REQUIRED` | 400 | 필수 약관에 동의해야 이용할 수 있습니다. |
+| `U006` `CONSENT_VERSION_MISMATCH` | 409 | 약관이 개정되었습니다. 최신 버전에 동의해 주세요. (`GET /member/consents` 의 `current` 버전으로 다시 동의) |
+| `U007` `CONSENT_HEALTH_REQUIRED` | 400 | 키·몸무게를 저장하려면 건강정보 수집·이용에 동의해야 합니다. |
 
 > `U003`(email)과 `U004`(username)를 나눈 것은 **문구 때문**이다 (이슈 #195). `ErrorResponseDto` 가
 > `code` 를 싣지 않아 프론트는 `message` 로만 구분한다 — 닉네임만 겹친 신규 사용자에게
