@@ -205,6 +205,14 @@ class SessionState:
     # 서버 안에서 닫는 것이 ㄱ-2 를 고른 이유이고, 벽시계는 NTP 보정으로 뒤로 갈 수 있다.
     next_frame_deadline: float | None = None
 
+    # --- 방치 판정 (session_reaper) ---
+    #
+    # 마지막으로 이 세션을 «클라이언트가 건드린» 시각(time.monotonic). `registry.get()`(= /pose 프레임 경로의 조회)과
+    # 재부착이 갱신한다. None 이면 한 번도 안 건드렸다 — 그때는 생성 시각(`created_mono`)부터 센다. 단조시계인 것은
+    # 벽시계가 NTP 보정으로 뒤로 가도 «방치 시간» 이 음수가 되지 않게 하려는 것이다(next_frame_deadline 과 같은 이유).
+    created_mono: float = field(default_factory=time.monotonic)
+    last_seen_mono: float | None = None
+
     # 드롭률 관측 (#143 · #151). AI 쪽에는 메트릭 익스포터가 아예 없어서(#151) 우선 카운터 +
     # 세션 종료 로그로 시작한다. 이 값이 있어야 «클라가 빨라졌다» 는 사실 자체를 알아챌 수 있다 —
     # 없으면 드롭은 조용하고, 그건 상한을 안 건 것과 관측 면에서 같다.
@@ -428,6 +436,7 @@ class SessionStateRegistry:
                         "세션 %s 재부착 — 보관 중인 소유권 값과 다른 값이 왔다. 보관값을 유지한다 (#187)",
                         session_id,
                     )
+                existing.last_seen_mono = time.monotonic()
                 return existing, True
 
             state = SessionState(
@@ -448,8 +457,29 @@ class SessionStateRegistry:
             return state, False
 
     def get(self, session_id: int) -> SessionState | None:
+        """상태를 돌려준다. 이 조회는 /pose 프레임 경로가 쓰므로 «클라이언트가 살아 있다» 로 센다(방치 판정용)."""
         with self._lock:
-            return self._sessions.get(session_id)
+            state = self._sessions.get(session_id)
+            if state is not None:
+                state.last_seen_mono = time.monotonic()
+            return state
+
+    def reap_idle(self, max_idle_sec: float, now: float | None = None) -> list[int]:
+        """유입이 `max_idle_sec` 보다 오래 없는 세션을 상태에서 꺼내고 id 를 돌려준다.
+
+        `remove()` 와 다른 점 — «최근 종료» 기록을 **남기지 않는다.** 정리된 세션에 `StopAnalysis` 가 늦게 오면
+        «이미 중단 처리됨» 으로 위장하지 말고 «세션 없음» 으로 답해 Spring 의 `session-missing` 지표에 보이게 한다.
+        검출기 반납은 호출부(session_reaper)가 한다 — 이 모듈은 풀을 모른다.
+        """
+        stamp = time.monotonic() if now is None else now
+        with self._lock:
+            idle = [
+                sid for sid, st in self._sessions.items()
+                if stamp - (st.last_seen_mono if st.last_seen_mono is not None else st.created_mono) > max_idle_sec
+            ]
+            for sid in idle:
+                del self._sessions[sid]
+            return idle
 
     def active_count(self) -> int:
         """살아 있는 세션 수 (#151 지표용). Lock 하에 읽는다 — 다른 접근과 같은 규약이다."""
