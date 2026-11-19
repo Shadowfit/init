@@ -1,6 +1,6 @@
 # 배포 가이드
 
-마지막 업데이트: 2026-08-07
+마지막 업데이트: 2026-08-07 · **2026-11-19 부분 갱신**(§5 지표 두 행 — 코드와 어긋나 있던 것만 고쳤다. 나머지는 8월 시점 그대로다)
 범위: ShadowFit 배포 절차, 환경 변수 관리, 롤백 전략. 운영 호스팅이 아직 정해지지 않아 **본 문서는 "지금 가능한 절차" + "결정해야 할 사항"** 두 축으로 구성합니다.
 
 > 🔴 **가장 먼저 알아야 할 것**: 배포 대상 호스트가 없다. 상시 EC2 인스턴스가 없고
@@ -247,10 +247,10 @@ docker compose up -d
 | **메트릭 (RPS·풀·JVM + 커스텀 9종)** | Prometheus + Grafana | ✅ **dev 완료** (compose profile `obs`, 대시보드 JSON 프로비저닝) — [`../monitoring/README.md`](../monitoring/README.md). 🔶 **prod 미적용** (§5-1) |
 | **correlation id 전파** | MDC + `%X{cid}` | ✅ **완료** — HTTP·gRPC 양방향·`@Async`·스케줄러. 두 서비스 로그를 한 요청으로 이어 본다 |
 | 애플리케이션 로그 집계 | ELK, Loki | ❌ 미도입. 로그는 여전히 컨테이너 stdout. **JSON 구조화도 안 했다** — 수집기를 붙일 때 같이 한다 |
-| **AI 서버 지표** | (Prometheus 타깃) | ❌ **의도적 제외.** FastAPI 에 계측이 없어 타깃만 적으면 영원히 DOWN 인 타깃이 생긴다. 🔴 **그래서 관측성이 Spring 만 덮는다** — 서킷브레이커가 회로를 열어도 AI 쪽 상태를 볼 지표가 없다 |
+| **AI 서버 지표** | Prometheus `/metrics` | 🔶 **dev 에서 수집된다** (2026-11-19 갱신 — 이 행은 «의도적 제외, 계측 없음» 이라 적혀 있었으나 낡았다). `ai-server/app/observability/metrics.py` 에 콜백 결과 카운터(`spring_callback_total`)·활성 세션 게이지·`CompleteAnalysis` 콜백 큐 게이지가 있고, `/metrics`(`main.py:194`)로 노출하며 `monitoring/prometheus.yml` 의 `shadowfit-ai` 잡이 워커 3개(8000~8002)를 긁는다.<br>🔶 **한계**: 활성 세션·콜백 큐 게이지는 `FRAME_PATH_METRICS` 를 켠 때만 바인딩된다(`main.py:131-141`, **기본 꺼짐**) — 기본 설정에서는 이 둘이 안 나온다. 잡의 타깃이 워커 3개로 고정이라 `AI_WORKER_COUNT` 를 늘리면 어긋난다. prod 에는 관측 스택 자체가 없다(§5-1) |
 | AI 서버 헬스 | 컨테이너 헬스체크(`urllib`) | 🔶 그대로 |
 | gRPC 채널 상태 | (없음) | ❌ 미도입 |
-| **MySQL 내부 지표** | mysqld_exporter | ❌ 미도입. 🔴 **우선순위가 올라갔다** — 2026-08-08 부하 실험에서 *"MySQL 이 놀고 있었다"* 를 말하려 했는데 근거가 없었다.<br>🔴 **2026-08-09 정정**: ~~"수집한 적 없는 지표였다"~~ 는 **과했다.** 뜨는 수단은 있다 — `loadtest/measure_bufferpool.sh`(`Innodb_buffer_pool_*` 6종)·`measure_lock.sh`. 정확히는 **① 그 실험(`conn_sweep.sh`)에 물려 있지 않았고 ② 그것들은 전후 스냅샷이라 부하 중 시계열이 애초에 안 나온다.** 결론(지표로 좁힌 게 아니라 설정을 바꿔 재현하는 우회로로 갔다)은 그대로다 ([#151](https://github.com/Shadowfit/init/issues/151)) |
+| **MySQL 내부 지표** | mysqld_exporter | 🔶 **dev 에서 수집된다** (2026-11-19 갱신: `docker-compose.yml` 의 `mysqld-exporter`(profile `obs`) + `monitoring/prometheus.yml` 의 `mysql` 잡). prod 에는 없다(§5-1). 아래는 8월 시점의 경위다 — 🔴 **그때는 우선순위가 올라갔었다** — 2026-08-08 부하 실험에서 *"MySQL 이 놀고 있었다"* 를 말하려 했는데 근거가 없었다.<br>🔴 **2026-08-09 정정**: ~~"수집한 적 없는 지표였다"~~ 는 **과했다.** 뜨는 수단은 있다 — `loadtest/measure_bufferpool.sh`(`Innodb_buffer_pool_*` 6종)·`measure_lock.sh`. 정확히는 **① 그 실험(`conn_sweep.sh`)에 물려 있지 않았고 ② 그것들은 전후 스냅샷이라 부하 중 시계열이 애초에 안 나온다.** 결론(지표로 좁힌 게 아니라 설정을 바꿔 재현하는 우회로로 갔다)은 그대로다 ([#151](https://github.com/Shadowfit/init/issues/151)) |
 | 알람 | Slack 웹훅, PagerDuty | ❌ 미도입. 상시 운영이 아니라 울릴 대상이 없다 |
 | 에러 추적 | Sentry | ❌ 미도입 |
 | **판단 기준선(SLO)** | — | 🔴 **없다.** 그래프는 생겼는데 *"얼마면 나쁜가"* 가 없다. 실제로 부하 실험에서 판정 기준으로 SLO 를 쓸 수 없어 임의값(plateau 90%)을 미리 못박아 우회했다 |

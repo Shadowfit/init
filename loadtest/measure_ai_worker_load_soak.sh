@@ -34,6 +34,12 @@ EMAILS="$OUT/emails.txt"; TOKENS="$OUT/tokens.txt"
 : > "$EMAILS"; : > "$TOKENS"
 echo "## 계정 준비 ($ACCOUNTS 개, ${PREP_SLEEP}s 간격 — 레이트리밋 60/60s 보호)"
 for i in $(seq 1 "$ACCOUNTS"); do
+  # 🔴 간격은 반복 **머리**에서 둔다 — 성공이든 실패든 매 계정 사이에 한 번씩(#689 댓글).
+  #    예전엔 꼬리(성공 경로 끝)에 있어서 실패 경로의 `continue` 가 이걸 건너뛰었다. 그래서 한 번
+  #    실패가 나면 남은 계정이 **간격 없이** 레이트리밋에 부딪혀 전부 실패했다 —
+  #    2026-09-08 판 2 에서 203건이 1초 만에 소진됐다(emails.txt 전부 같은 `date +%s`).
+  #    실패한 시도도 signup·login 두 요청을 이미 썼으므로 레이트리밋 예산은 똑같이 먹는다.
+  [ "$i" -eq 1 ] || sleep "$PREP_SLEEP"
   email="${PREFIX}${i}_$(date +%s)@test.local"
   curl -s -o /dev/null -m 30 -X POST "$BASE/member/signup" -H 'Content-Type: application/json' \
     -d "{\"username\":\"${PREFIX}${i}\",\"email\":\"$email\",\"password\":\"$PASSWORD\",\"sex\":\"MALE\",\"role\":\"USER\"}"
@@ -53,7 +59,6 @@ for i in $(seq 1 "$ACCOUNTS"); do
   fi
   echo "$email" >> "$EMAILS"
   echo "$tok" >> "$TOKENS"
-  sleep "$PREP_SLEEP"
 done
 N_READY=$(wc -l < "$TOKENS" | tr -d '[:space:]')
 echo "  ✅ 계정 $N_READY / $ACCOUNTS 준비됨"

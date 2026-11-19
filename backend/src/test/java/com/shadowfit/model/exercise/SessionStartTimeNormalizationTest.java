@@ -15,7 +15,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -61,8 +60,6 @@ class SessionStartTimeNormalizationTest {
                 .name("스쿼트" + unique)
                 .category(category)
                 .expectedDurationMinutes(15)
-                .syncThresholdBeginner(new BigDecimal("60.00"))
-                .syncThresholdAdvanced(new BigDecimal("85.00"))
                 .analysisSupported(true)
                 .build());
     }

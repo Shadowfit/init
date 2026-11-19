@@ -22,12 +22,15 @@ import java.util.List;
 /**
  * 다음 스쿼트 세션 강도·볼륨 추천 (BE-08, recommendation-algorithm.md).
  *
- * <p>순수 함수다 — {@code Session.difficultyLevel}을 읽지도 쓰지도 않는다. 그 컬럼은 세션 생성
- * 흐름 어디서도 실제로 채워지지 않아(항상 기본값 1) "직전 난이도에서 +1"이라는 원 규칙(§6)의
- * "직전 난이도"를 DB에서 가져올 수가 없다. 그래서 매 호출마다 <b>프로필 기반 시작 level +
- * 최근 N세션 평균으로 딱 한 단계 조정</b>을 새로 계산한다 — 상태를 어디에도 안 쌓으므로
- * 세션 생성 흐름을 건드릴 필요가 없고, GET이 정말로 멱등하다(2026-08-30 사용자 confirm,
+ * <p>순수 함수다 — {@code Session.difficultyLevel}을 읽지 않는다. 이 문서를 처음 쓸 때 그 컬럼은 세션 생성
+ * 흐름 어디서도 채워지지 않아(항상 기본값 1) "직전 난이도에서 +1"이라는 원 규칙(§6)의 "직전 난이도"를
+ * DB에서 가져올 수가 없었고, 그래서 매 호출마다 <b>프로필 기반 시작 level + 최근 N세션 평균으로 딱 한 단계
+ * 조정</b>을 새로 계산한다 — 상태를 어디에도 안 쌓으므로 GET이 정말로 멱등하다(2026-08-30 사용자 confirm,
  * "1번: 추천 API만, 세션 생성 안 건드림").
+ *
+ * <p>2026-09-22(세트 도입, V26)부터 {@code SessionService.createSession} 이 이 추천을 불러 세트당 목표를
+ * 채우고 그 level 을 {@code difficultyLevel} 에 <b>쓴다</b>. 읽는 쪽은 여전히 없다 — «직전 난이도」 규칙을
+ * 되살릴지는 별도 결정(recommendation-algorithm.md §6).
  *
  * <p>🔴 원 규칙의 "하락 추세" 조건(§6 "avg &lt; 60% OR 하락 추세")은 구현하지 않는다 — N=3개
  * 샘플로는 추세 판정이 통계적으로 얇고, 평균 임계값만으로도 규칙의 방향성은 그대로 유지된다.
@@ -38,8 +41,9 @@ import java.util.List;
 @RequiredArgsConstructor
 public class RecommendationService {
 
-    // squat-first([[project_squat_first]]) — 분석 가능한 운동이 스쿼트(id=1)뿐이라 하드코딩.
-    // 운동이 늘어나면(2학기) 이 상수부터 goalType처럼 파라미터화해야 한다.
+    // GET /recommendations/next-session 의 기본 종목. 2026-09-22 세트 도입 때 종목을 파라미터로 뺐다
+    // (getNextSessionRecommendation(memberId, exerciseId)) — 세션 시작이 «그 종목의» 최근 세션으로
+    // 세트당 목표를 채우기 위해서다. 화면 API 는 아직 스쿼트만 부르므로 기본값을 남긴다.
     private static final Long SQUAT_EXERCISE_ID = 1L;
 
     // 규칙 임계값 — 🔴 미검증 잠정치(recommendation-algorithm.md §6·§9, 2026-08-30 사용자
@@ -57,11 +61,21 @@ public class RecommendationService {
 
     @Transactional(readOnly = true)
     public NextSessionRecommendationResponseDto getNextSessionRecommendation(Long memberId) {
+        return getNextSessionRecommendation(memberId, SQUAT_EXERCISE_ID);
+    }
+
+    /**
+     * 종목별 추천 — 세션 시작({@code SessionService.createSession})이 body 에 세트당 목표가 없을 때 이 값으로
+     * 채운다. 최근 세션은 <b>같은 종목</b>만 본다: 런지 세션의 목표를 스쿼트 이력으로 정하면 «안정적이라
+     * 상향» 의 근거가 다른 운동이 된다.
+     */
+    @Transactional(readOnly = true)
+    public NextSessionRecommendationResponseDto getNextSessionRecommendation(Long memberId, Long exerciseId) {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
         List<Session> recentCompleted = sessionRepository.findByMemberIdAndExerciseIdAndStatusOrderByStartTimeDesc(
-                memberId, SQUAT_EXERCISE_ID, Status.COMPLETED, Limit.of(RECENT_SESSION_WINDOW));
+                memberId, exerciseId, Status.COMPLETED, Limit.of(RECENT_SESSION_WINDOW));
 
         int coldStartLevel = coldStartLevel(member.getWorkoutLevel());
         int level;
@@ -69,7 +83,7 @@ public class RecommendationService {
 
         if (recentCompleted.isEmpty()) {
             level = coldStartLevel;
-            reason = "아직 완료한 스쿼트 세션이 없어 프로필 기준 시작 난이도로 추천합니다.";
+            reason = "아직 완료한 세션이 없어 프로필 기준 시작 난이도로 추천합니다.";
         } else {
             BigDecimal avgSyncRate = averageSyncRate(recentCompleted);
             double avg = avgSyncRate.doubleValue();

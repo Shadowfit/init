@@ -1,0 +1,12 @@
+[srec] compose up
+ Network srec_net  Creating
+ Network srec_net  Created
+ Container srec_source  Creating
+ Container srec_replica  Creating
+ Container srec_source  Created
+ Container srec_replica  Created
+ Container srec_replica  Starting
+ Container srec_source  Starting
+ Container srec_replica  Started
+ Container srec_source  Started
+[srec] !! srec_replica 가 안 뜬다

@@ -1,0 +1,21 @@
+[promote] ── 판 1 (버림) 팔=paced
+[promote] 판 1: 밀림 0s·0tx → 승격 254ms (적용 89) · 잃은 트랜잭션 0
+[promote] ── 판 2 (버림) 팔=stress
+[promote] 판 2: 밀림 21s·3376tx → 승격 7822ms (적용 7647) · 잃은 트랜잭션 0
+[promote] ── 판 3 (본판) 팔=stress
+[promote] 판 3: 밀림 22s·3440tx → 승격 8045ms (적용 7868) · 잃은 트랜잭션 0
+[promote] ── 판 4 (본판) 팔=paced
+[promote] 판 4: 밀림 0s·0tx → 승격 250ms (적용 89) · 잃은 트랜잭션 0
+[promote] ── 판 5 (본판) 팔=paced
+[promote] 판 5: 밀림 0s·0tx → 승격 254ms (적용 92) · 잃은 트랜잭션 0
+[promote] ── 판 6 (본판) 팔=stress
+[promote] 판 6: 밀림 22s·3440tx → 승격 7836ms (적용 7657) · 잃은 트랜잭션 0
+[promote] ── 판 7 (본판) 팔=stress
+[promote] 판 7: 밀림 20s·3258tx → 승격 7806ms (적용 7627) · 잃은 트랜잭션 0
+[promote] ── 판 8 (본판) 팔=paced
+[promote] 판 8: 밀림 0s·0tx → 승격 255ms (적용 89) · 잃은 트랜잭션 0
+[promote] ── 판 9 (본판) 팔=paced
+[promote] 판 9: 밀림 0s·0tx → 승격 240ms (적용 91) · 잃은 트랜잭션 0
+[promote] ── 판 10 (본판) 팔=stress
+[promote] 판 10: 밀림 21s·3380tx → 승격 7822ms (적용 7635) · 잃은 트랜잭션 0
+[promote] 완료 → /root/rig_out/trials.tsv

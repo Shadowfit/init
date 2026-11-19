@@ -77,6 +77,20 @@ public class ActiveSessionResponseDto {
     @Schema(description = "AI 워커 인덱스. POST /pose 의 X-AI-Worker 헤더에 그대로 실을 것")
     private Integer aiWorkerIndex;
 
+    /** 이어하기 화면이 «12회 x 3세트» 와 세트 cue 를 복원할 근거(V26). null = 세트 도입 전 세션. */
+    @Schema(description = "세트당 목표 횟수. null 이면 세트 도입 전 세션", example = "12")
+    private Integer targetRepsPerSet;
+
+    @Schema(description = "목표 세트 수. null = 열린 세트", example = "3")
+    private Integer targetSets;
+
+    /** 싱크로율 판정 기준 한 쌍(V34) — 세션 종목의 현재 값. 의미는 {@code ExercisesResponseDto} 와 같다. */
+    @Schema(description = "정석 기준 — 싱크로율이 이 점수 이상이면 정석", example = "80.0")
+    private Double syncGoodThreshold;
+
+    @Schema(description = "위험 기준 — 이 점수 이상이면 교정 필요, 미만이면 위험", example = "60.0")
+    private Double syncWarnThreshold;
+
     /**
      * exercise 는 호출부에서 JOIN FETCH 로 미리 가져온 상태여야 한다 —
      * open-in-view: false 라 트랜잭션 밖에서 lazy 접근하면 터진다.
@@ -97,6 +111,14 @@ public class ActiveSessionResponseDto {
                 //    복구는 되는데 그 뒤 POST /pose 가 전부 거절되는 상태가 된다(2단계에서).
                 .sessionNonce(session.getSessionNonce())
                 .aiWorkerIndex(aiWorkerIndex)
+                .targetRepsPerSet(session.getTargetRepsPerSet())
+                .targetSets(session.getTargetSets())
+                .syncGoodThreshold(toDouble(session.getExercise().getSyncGoodThreshold()))
+                .syncWarnThreshold(toDouble(session.getExercise().getSyncWarnThreshold()))
                 .build();
+    }
+
+    private static Double toDouble(java.math.BigDecimal value) {
+        return value == null ? null : value.doubleValue();
     }
 }

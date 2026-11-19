@@ -48,7 +48,7 @@ export default function RootLayout() {
 function RootLayoutNav() {
   const router = useRouter();
   const segments = useSegments();
-  const { isAuthenticated, isLoading, onboardingCompleted, restoreSession } =
+  const { isAuthenticated, isLoading, onboardingCompleted, consentMissing, restoreSession } =
     useAuthStore();
 
   useEffect(() => {
@@ -60,11 +60,22 @@ function RootLayoutNav() {
 
     const inAuth = segments[0] === '(auth)';
     const inOnboarding = segments[0] === '(onboarding)';
+    const inConsent = segments[0] === 'consent';
 
     // 1. 비로그인 + 인증 화면 외 다른 곳 → 로그인으로
     if (!isAuthenticated) {
       if (!inAuth && !__DEV__) {
         router.replace('/(auth)/login');
+      }
+      return;
+    }
+
+    // 1-1. 동의 현황 조회 중이면 대기. 필수 약관에 현재 버전으로 동의하지 않았다면(약관 개정·동의 화면 이전 가입)
+    //      재동의 화면으로 보낸다 — 온보딩보다 먼저다. 조회가 실패하면 consentMissing 이 빈 배열이라 막지 않는다.
+    if (consentMissing === null) return;
+    if (consentMissing.length > 0) {
+      if (!inConsent) {
+        router.replace('/consent' as any);
       }
       return;
     }
@@ -86,7 +97,7 @@ function RootLayoutNav() {
     if (inAuth) {
       router.replace('/(tabs)');
     }
-  }, [isAuthenticated, isLoading, onboardingCompleted, segments]);
+  }, [isAuthenticated, isLoading, onboardingCompleted, consentMissing, segments]);
 
   return (
     <ThemeProvider value={ShadowFitTheme}>
@@ -94,9 +105,11 @@ function RootLayoutNav() {
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(onboarding)" />
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="consent" />
         <Stack.Screen name="report/[id]" />
         <Stack.Screen name="group/[id]" />
         <Stack.Screen name="notifications" />
+        <Stack.Screen name="compare/[id]" />
         <Stack.Screen name="board/notice" />
         <Stack.Screen name="board/qna" />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />

@@ -25,7 +25,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -64,7 +63,6 @@ class PoseDataServiceTest {
         Category category = categoryRepository.save(Category.builder().name("LOWER").build());
         exercise = exercisesRepository.saveAndFlush(Exercise.builder()
                 .name("스쿼트").category(category).expectedDurationMinutes(15)
-                .syncThresholdBeginner(new BigDecimal("60.00")).syncThresholdAdvanced(new BigDecimal("85.00"))
                 .build());
         session = sessionRepository.saveAndFlush(Session.builder()
                 .member(member).exercise(exercise).startTime(LocalDateTime.now())
@@ -393,27 +391,51 @@ class PoseDataServiceTest {
     @Test
     @DisplayName("기준 좌표 저장 — 정상 등록")
     void saveReferencePoses_success() {
-        poseDataService.saveReferencePoses(exercise.getId(), List.of(frame(0.0, 100.0), frame(0.1, 100.0)));
+        poseDataService.saveReferencePoses(exercise.getId(), List.of(frame(0.0, 100.0), frame(0.1, 100.0)), "");
 
         List<ExerciseReference> refs = referenceRepository.findByExerciseId(exercise.getId());
         assertThat(refs).hasSize(2);
+        // V34 — 교체와 같은 트랜잭션에서 등록 상태가 READY 로 닫힌다
+        Exercise reloaded = exercisesRepository.findById(exercise.getId()).orElseThrow();
+        assertThat(reloaded.getReferenceExtractionStatus())
+                .isEqualTo(com.shadowfit.model.exercise.ReferenceExtractionStatus.READY);
+        assertThat(reloaded.getReferenceExtractionError()).isNull();
+        assertThat(reloaded.getReferenceExtractionAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("기준 좌표 저장 — AI 가 실패 사유를 실어 보내면 FAILED + 사유, 기존 기준 좌표는 그대로")
+    void saveReferencePoses_errorMessage_marksFailedAndKeepsRows() {
+        poseDataService.saveReferencePoses(exercise.getId(), List.of(frame(0.0, 100.0), frame(0.1, 100.0)), "");
+
+        poseDataService.saveReferencePoses(exercise.getId(), List.of(), "영상에서 사람을 찾지 못했어요.");
+
+        assertThat(referenceRepository.findByExerciseId(exercise.getId())).hasSize(2);
+        Exercise reloaded = exercisesRepository.findById(exercise.getId()).orElseThrow();
+        assertThat(reloaded.getReferenceExtractionStatus())
+                .isEqualTo(com.shadowfit.model.exercise.ReferenceExtractionStatus.FAILED);
+        assertThat(reloaded.getReferenceExtractionError()).isEqualTo("영상에서 사람을 찾지 못했어요.");
     }
 
     @Test
     @DisplayName("기준 좌표 저장 — 존재하지 않는 운동이면 EXERCISE_NOT_FOUND")
     void saveReferencePoses_unknownExercise_throws() {
-        assertThatThrownBy(() -> poseDataService.saveReferencePoses(999999L, List.of(frame(0.0, 100.0))))
+        assertThatThrownBy(() -> poseDataService.saveReferencePoses(999999L, List.of(frame(0.0, 100.0)), ""))
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.EXERCISE_NOT_FOUND);
     }
 
     @Test
-    @DisplayName("기준 좌표 저장 — 빈 리스트면 조용히 반환")
-    void saveReferencePoses_empty_noop() {
-        poseDataService.saveReferencePoses(exercise.getId(), List.of());
+    @DisplayName("기준 좌표 저장 — 빈 리스트면 행은 안 건드리고 FAILED(«추출된 기준 좌표가 없어요.») 로 남긴다")
+    void saveReferencePoses_empty_marksFailed() {
+        poseDataService.saveReferencePoses(exercise.getId(), List.of(), "");
 
         assertThat(referenceRepository.findByExerciseId(exercise.getId())).isEmpty();
+        Exercise reloaded = exercisesRepository.findById(exercise.getId()).orElseThrow();
+        assertThat(reloaded.getReferenceExtractionStatus())
+                .isEqualTo(com.shadowfit.model.exercise.ReferenceExtractionStatus.FAILED);
+        assertThat(reloaded.getReferenceExtractionError()).isEqualTo(PoseDataService.REFERENCE_EMPTY_MESSAGE);
     }
 
     // --- 멱등 (#188) ---

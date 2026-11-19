@@ -81,6 +81,13 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 return null;
             }
 
+            // refresh 토큰(7일)은 재발급 엔드포인트에서만 쓴다. 서명 키가 같아 이 검사가 없으면
+            // API 인증에도 통과해, 30분으로 줄여 둔 access 수명이 의미를 잃는다.
+            if (jwtUtil.isRefreshToken(token)) {
+                log.warn("refresh 토큰은 API 인증에 사용할 수 없습니다.");
+                return null;
+            }
+
             String userEmail = jwtUtil.getUserEmail(token);
             if (userEmail == null) {
                 log.warn("토큰의 Subject(Email)가 비어있습니다.");

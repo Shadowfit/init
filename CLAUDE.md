@@ -63,7 +63,7 @@ frontend --(HTTP, 카메라 프레임)--> ai-server   # 분기 H2: 프론트→A
 
 - **gRPC 계약은 저장소 루트 `proto/exercise.proto` 한 벌**이다 — backend 는 Gradle 이 `../proto` 에서 Java 스텁을 생성하고, ai-server 는 이미지 빌드에서 같은 파일로 생성한다. 그래서 두 Dockerfile 의 빌드 컨텍스트가 **저장소 루트**다(`context: .`). 로컬 실행·pytest 는 커밋된 `ai-server/exercise_pb2*.py` 를 import 하므로 **proto 를 고쳤으면 `cd ai-server && ./scripts/gen_proto.sh` 로 재생성해서 같이 커밋**할 것 — CI(`ai-server-test.yml`)가 원본에서 재생성한 것과 다르면 막는다. (2026-09-11 이전엔 두 서비스에 사본이 있어 손으로 맞춰야 했다.)
 - **AI 서버는 멀티프로세스**(`AI_WORKER_COUNT`, 기본 3) — `entrypoint.sh`가 워커별로 다른 포트(8000/8001/8002)에 띄우고, `ai-nginx`가 Spring이 세션 시작 응답으로 알려준 워커 인덱스(`X-AI-Worker` 헤더)로 고정 라우팅한다. 이 구조는 GIL이 프로세스당 처리량을 직렬화한다는 실측(`docs/decisions/per-process-ceiling-cause.md`)에서 나왔다 — 스레드가 아니라 프로세스를 늘리는 이유가 여기 있다.
-- **AI→Spring 완료 콜백은 아웃박스 패턴**(`OutboxEvent`/`OutboxPublisher`)으로 전달을 보장한다 — 예전엔 dual-write라 3회 실패 시 유실됐다.
+- **아웃박스(`OutboxEvent`/`OutboxPublisher`)는 Spring→AI 방향만** 보장한다 — `STOP_ANALYSIS`·`REATTACH_ANALYSIS` 등을 상태 변경과 같은 트랜잭션에 적재해 dual-write 유실을 없앴다. 반대 방향 **AI→Spring `CompleteAnalysis` 콜백은 아웃박스가 아니다** — AI 쪽 3회 재시도(최대 약 19초, `ai-server/app/grpc/spring_client.py`)뿐이고, 소진되면 세션은 타임아웃이 `FAILED` 로 정리한다.
 - **검출기 풀 크기는 컨테이너 메모리 한도에서 유도**한다(`mediapipe_detector.py`) — 검출기 1개 ≈ 98.7MB(실측)이므로 `POSE_DETECTOR_POOL_SIZE`를 안 주면 `(mem_limit − 기본 RSS) / 98.7MB`로 자동 계산된다. 근거 없는 숫자를 코드에 안 박는다는 원칙(둘 다 없으면 기동 거부).
 - **`docs/architecture/`**는 Spring↔AI 결합을 4가지 각도(현황 스냅샷·시간순 changelog·커밋 단위·월별 로그)로 다룬다 — 결합면을 고칠 때(RPC 추가/삭제, 전달 보장, proto 밖 계약, 실패 처리, 판정 기준 변경) 반드시 같이 갱신한다.
 - **`docs/decisions/`는 결정된 문서가 아니라 분기점 문서**다 — 후보와 트레이드오프까지만 적혀 있고 실제 채택은 사용자 confirm 후 별도로 박제된다. "이 문서에 뭐라고 적혀 있다"를 "이미 결정됐다"로 읽지 말 것.

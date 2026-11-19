@@ -1,12 +1,19 @@
 package com.shadowfit.dto.login;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.shadowfit.dto.consent.ConsentItemDto;
 import com.shadowfit.model.member.Sex;
 import io.swagger.v3.oas.annotations.media.Schema;
+import com.shadowfit.global.validation.MaxUtf8Bytes;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
+import java.util.List;
 
 //회원가입용 Dto
 @Data
@@ -17,18 +24,39 @@ import lombok.NoArgsConstructor;
 public class MemberRequestDto {
     @Schema(description = "사용자 아이디 (화면 표시용 고유 식별자)", example = "shadow_fit_01", requiredMode = Schema.RequiredMode.REQUIRED)
     @NotBlank(message="ID는 필수 입력 값입니다.")
+    // 3자: 앱의 가입 폼과 같다. 50자: members.username 컬럼 길이 — 넘으면 DB 오류(500)가 아니라 여기서 400 으로 막는다.
+    @Size(min = 3, max = 50, message = "ID는 3자 이상 50자 이하로 입력해주세요.")
     private String username;  // 화면 내 아이디 표시
 
     @Schema(description = "Email", requiredMode = Schema.RequiredMode.REQUIRED)
     @NotBlank(message="Email는 필수 입력 값입니다.")
+    // regexp: 앱의 가입 폼(/\S+@\S+\.\S+/)과 같은 «점이 있는 도메인» 요건. @Email 기본은 도메인에 점이 없어도(a@b) 통과시킨다.
+    // 100자: users.email 컬럼 길이.
+    @Email(regexp = "^\\S+@\\S+\\.\\S+$", message = "올바른 이메일 형식이 아닙니다.")
+    @Size(max = 100, message = "이메일은 100자 이하로 입력해주세요.")
     private String email;
 
     @Schema(description = "PASSWORD", requiredMode = Schema.RequiredMode.REQUIRED)
     @NotBlank(message="PASSWORD는 필수 입력 값입니다.")
+    // 6자: 앱의 가입 폼과 같다(복잡도 정책은 제품 결정이라 넣지 않았다).
+    // 72바이트: BCrypt 는 앞 72바이트만 해시에 반영한다 — 그 뒤는 조용히 무시되므로 처음부터 받지 않는다.
+    @Size(min = 6, message = "비밀번호는 6자 이상 입력해주세요.")
+    @MaxUtf8Bytes(value = 72, message = "비밀번호가 너무 깁니다. (영문·숫자 기준 72자, 한글은 24자 이내)")
     private String password;
 
     @Schema(description = "성별", example = "MALE",requiredMode = Schema.RequiredMode.REQUIRED)
     private Sex sex;
+
+    // 약관·개인정보 동의 (V36). 서버가 동의를 강제하는 중(consent.enforce=true)이면 이용약관·개인정보 둘이 현재 버전으로
+    // 있어야 가입된다. 꺼져 있는 동안은 비어 있어도 되고, 보내면 기록한다 — 앱이 동의 화면을 갖추기 전의 호환 구간이다.
+    @Valid
+    @Schema(description = "가입 시 동의한 문서들(이용약관·개인정보 필수 — 서버가 강제할 때)")
+    private List<ConsentItemDto> consents;
+
+    /** 동의 필드 이전의 4-인자 형태 — 호출부 호환용. */
+    public MemberRequestDto(String username, String email, String password, Sex sex) {
+        this(username, email, password, sex, null);
+    }
 
     // role 은 여기에 없다 — 있으면 안 된다 (이슈 #138).
     //

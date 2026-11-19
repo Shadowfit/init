@@ -12,9 +12,16 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from app.grpc import spring_client
+from app.core.lunge_analyzer import LungeState
+from app.core.squat_counter import SquatCounter
 from app.models.pose import Landmark
+from app.utils.constants import DEFAULT_SYNC_GOOD, DEFAULT_SYNC_WARN
+
+if TYPE_CHECKING:  # 타입 표기 전용 — 상태 모듈이 런타임에 분석 모듈을 끌어오지 않게 한다
+    from app.core.squat_analyzer import RejectedAttemptEvent
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +93,21 @@ class PerRepFrame:
     # BACK_BENT 재판정(pose.py)이 joint_coordinates를 다시 파싱하지 않도록 원본 객체도 들고 있는다.
     landmarks: list[Landmark] = field(default_factory=list)
 
+    # 어깨 중점-엉덩이 중점 벡터가 수직에서 벗어난 각도(도). 0=완전 직립, 값이 클수록 전방/후방
+    # 기울임이 크다(2026-09-28). 체간 자세 점수(TrunkLeanAnalysisCalculator, 백엔드)가 rep 내
+    # 평균으로 "얼마나 무너졌는가"를 채점하는 근거값이다 — smoothed_knee_angle과 달리 이건
+    # BACK_BENT 재판정(위 landmarks 재계산)과는 별개 경로다: 그쪽은 스쿼트 전용 실시간 이진
+    # 판정이고, 이 필드는 스쿼트·런지 공용으로 세션 종료 후 점수화에 쓰인다. None이면 이 프레임에서
+    # 계산되지 않았다는 뜻(예: 스쿼트/런지가 아닌 옛 경로).
+    torso_tilt_deg: float | None = None
+
+    # 두 발목 사이 거리 / 어깨-엉덩이 길이 — "보폭이 얼마나 벌어졌는가" 비율(2026-09-28).
+    # 런지 전용(lunge_analyzer.py의 stagger_min 판정과 같은 값) — 스쿼트는 보폭 개념이
+    # 없어 항상 None이다. 백엔드 LungeStepLengthAnalysisCalculator가 이 값으로 "보폭이
+    # 짧아 무릎 부담이 커질 수 있는 rep"을 채점한다(짧은 보폭이 깊은 굴곡 구간에서
+    # 슬개대퇴 관절 부하를 늘린다는 문헌 근거, Escamilla et al. 계열).
+    stagger_ratio: float | None = None
+
 
 @dataclass
 class CompletedRep:
@@ -101,6 +123,15 @@ class SessionState:
     exercise_id: int
     exercise_type: str = "squat"
     persona: str = "BEGINNER"
+    # 스쿼트 깊이 모드 "FULL"/"HALF" (2026-09-21). persona와 동일한 규약 — 세션 생성 시
+    # 정해지고, 재부착에서는 덮어쓰지 않는다(create_if_absent의 "이미 살아있음" 분기가
+    # 이 필드를 건드리지 않으므로 자동으로 보존된다). 스쿼트가 아니면 무의미하되 해롭지 않다.
+    depth_mode: str = "FULL"
+    # 싱크로율 판정 임계값 — 운동별 한 쌍 (2026-10-21 사용자 결정). Spring 이 StartAnalysis/
+    # ReattachAnalysis 로 내려주고, servicer 가 0·잘못된 값을 기본값으로 바꿔 넣는다. depth_mode 와
+    # 같은 규약 — 세션 생성 시 정해지고 재부착에서는 덮어쓰지 않는다. 페르소나는 여기에 관여하지 않는다.
+    sync_good_threshold: float = DEFAULT_SYNC_GOOD
+    sync_warn_threshold: float = DEFAULT_SYNC_WARN
     # 세션 소유권 검증용 비밀값 (이슈 #187 안 (d)).
     #
     # Spring 이 세션 생성 시 만들어 ① REST 응답으로 클라에, ② StartAnalysis/ReattachAnalysis 로
@@ -131,19 +162,18 @@ class SessionState:
 
     # 분석기 내부 상태 (StreamingSquatAnalyzer가 관리)
     rep_count: int = 0
+    # 스쿼트 «미인정 시도» 수 (2026-10-21, SquatCounter.rejected_count 의 사본) — 내려갔다 올라왔지만 1회로
+    # 인정되지 않은 시도. rep_count 와 같은 규약: 재부착 때 Spring 이 저장한 행 수(initial_rejected_count)에서
+    # 시작하고, 횟수·세트·CompleteAnalysis 합계에는 절대 안 들어간다. 응답의 rejected_count 와 미인정 번호가 이 값이다.
+    rejected_count: int = 0
+    # 이번 프레임에서 난 미인정 시도의 요약(squat_analyzer.RejectedAttemptEvent) — process_frame 이 채우고
+    # pose.py 가 같은 락 안에서 꺼내(None 으로 되돌려) 락 밖에서 Spring 에 보낸다.
+    pending_rejected_attempt: RejectedAttemptEvent | None = None
+    lunge_state: LungeState | None = None
+    squat_counter: SquatCounter | None = None
     rep_state: str = "waiting_for_standing"
-    last_rep_frame_index: int = -10_000
-    # bottom 구간에서 **실제로 100° 아래에 있던** 프레임 수. 앉아서 쉬는 것과 스쿼트를 가르는
-    # 축이다 (이슈 #93).
-    #
-    # 진입 프레임 인덱스가 아니라 카운터인 이유(이슈 #159): 진입~이탈 프레임 차이로 재면 이탈
-    # 임계가 150° 라서 **상승 중 100~150° 구간이 통째로 「바닥 체류」에 포함된다.** 그러면 하강이
-    # 느린 사용자일수록 체류 예산이 줄어, 속도를 안 보려고 만든 상수가 속도에 의존하게 된다.
-    # 측정: 3fps·체류 0.5초 고정에서 하강 5.1초부터 정상 rep 이 사라졌다.
-    bottom_frame_count: int = 0
     frame_index: int = 0
     previous_smoothed_knee: float | None = None
-    recent_raw_knees: list[float] = field(default_factory=list)
 
     # 완료된 rep 요약 (StopAnalysis 시 평균 계산용)
     completed_reps: list[CompletedRep] = field(default_factory=list)
@@ -174,6 +204,14 @@ class SessionState:
     # 안 받았다는 뜻이다. 벽시계가 아니라 monotonic 인 것은 의도적이다 — 이 판정의 신뢰 경계를
     # 서버 안에서 닫는 것이 ㄱ-2 를 고른 이유이고, 벽시계는 NTP 보정으로 뒤로 갈 수 있다.
     next_frame_deadline: float | None = None
+
+    # --- 방치 판정 (session_reaper) ---
+    #
+    # 마지막으로 이 세션을 «클라이언트가 건드린» 시각(time.monotonic). `registry.get()`(= /pose 프레임 경로의 조회)과
+    # 재부착이 갱신한다. None 이면 한 번도 안 건드렸다 — 그때는 생성 시각(`created_mono`)부터 센다. 단조시계인 것은
+    # 벽시계가 NTP 보정으로 뒤로 가도 «방치 시간» 이 음수가 되지 않게 하려는 것이다(next_frame_deadline 과 같은 이유).
+    created_mono: float = field(default_factory=time.monotonic)
+    last_seen_mono: float | None = None
 
     # 드롭률 관측 (#143 · #151). AI 쪽에는 메트릭 익스포터가 아예 없어서(#151) 우선 카운터 +
     # 세션 종료 로그로 시작한다. 이 값이 있어야 «클라가 빨라졌다» 는 사실 자체를 알아챌 수 있다 —
@@ -334,6 +372,10 @@ class SessionStateRegistry:
         persona: str = "BEGINNER",
         initial_rep_count: int = 0,
         session_nonce: str | None = None,
+        depth_mode: str = "FULL",
+        sync_good_threshold: float = DEFAULT_SYNC_GOOD,
+        sync_warn_threshold: float = DEFAULT_SYNC_WARN,
+        initial_rejected_count: int = 0,
     ) -> SessionState:
         with self._lock:
             state = SessionState(
@@ -343,7 +385,11 @@ class SessionStateRegistry:
                 persona=persona,
                 reference_angles=reference_angles,
                 rep_count=initial_rep_count,
+                rejected_count=initial_rejected_count,
                 session_nonce=session_nonce,
+                depth_mode=depth_mode,
+                sync_good_threshold=sync_good_threshold,
+                sync_warn_threshold=sync_warn_threshold,
             )
             self._sessions[session_id] = state
             return state
@@ -357,6 +403,10 @@ class SessionStateRegistry:
         persona: str = "BEGINNER",
         initial_rep_count: int = 0,
         session_nonce: str | None = None,
+        depth_mode: str = "FULL",
+        sync_good_threshold: float = DEFAULT_SYNC_GOOD,
+        sync_warn_threshold: float = DEFAULT_SYNC_WARN,
+        initial_rejected_count: int = 0,
     ) -> tuple[SessionState, bool]:
         """재부착 전용. 상태가 이미 있으면 **보존하고** 그대로 돌려준다.
 
@@ -386,6 +436,7 @@ class SessionStateRegistry:
                         "세션 %s 재부착 — 보관 중인 소유권 값과 다른 값이 왔다. 보관값을 유지한다 (#187)",
                         session_id,
                     )
+                existing.last_seen_mono = time.monotonic()
                 return existing, True
 
             state = SessionState(
@@ -395,14 +446,40 @@ class SessionStateRegistry:
                 persona=persona,
                 reference_angles=reference_angles,
                 rep_count=initial_rep_count,
+                # rep_count 와 같은 길 — 미인정 번호·화면 카운트를 Spring 이 저장한 행 수에서 잇는다.
+                rejected_count=initial_rejected_count,
                 session_nonce=session_nonce,
+                depth_mode=depth_mode,
+                sync_good_threshold=sync_good_threshold,
+                sync_warn_threshold=sync_warn_threshold,
             )
             self._sessions[session_id] = state
             return state, False
 
     def get(self, session_id: int) -> SessionState | None:
+        """상태를 돌려준다. 이 조회는 /pose 프레임 경로가 쓰므로 «클라이언트가 살아 있다» 로 센다(방치 판정용)."""
         with self._lock:
-            return self._sessions.get(session_id)
+            state = self._sessions.get(session_id)
+            if state is not None:
+                state.last_seen_mono = time.monotonic()
+            return state
+
+    def reap_idle(self, max_idle_sec: float, now: float | None = None) -> list[int]:
+        """유입이 `max_idle_sec` 보다 오래 없는 세션을 상태에서 꺼내고 id 를 돌려준다.
+
+        `remove()` 와 다른 점 — «최근 종료» 기록을 **남기지 않는다.** 정리된 세션에 `StopAnalysis` 가 늦게 오면
+        «이미 중단 처리됨» 으로 위장하지 말고 «세션 없음» 으로 답해 Spring 의 `session-missing` 지표에 보이게 한다.
+        검출기 반납은 호출부(session_reaper)가 한다 — 이 모듈은 풀을 모른다.
+        """
+        stamp = time.monotonic() if now is None else now
+        with self._lock:
+            idle = [
+                sid for sid, st in self._sessions.items()
+                if stamp - (st.last_seen_mono if st.last_seen_mono is not None else st.created_mono) > max_idle_sec
+            ]
+            for sid in idle:
+                del self._sessions[sid]
+            return idle
 
     def active_count(self) -> int:
         """살아 있는 세션 수 (#151 지표용). Lock 하에 읽는다 — 다른 접근과 같은 규약이다."""

@@ -1,0 +1,69 @@
+# 반동기 리플리카 2대 rig — 소스 1 + 리플리카 2 (로컬 전용)
+#
+# 11-07 미복귀 실험(../replication-semisync-recovery-2026-11-07/)과 같은 서버 설정이고,
+# 리플리카 반동기는 그 실험에서 재기동 뒤 자동 복귀가 확인된 «시작 옵션» 방식으로 켠다(D 팔).
+# 그래야 이번 실험의 판정(강등되나)이 «재기동 뒤 반동기가 안 붙는» 복구 절차 문제와 섞이지 않는다.
+#
+# 이 무대가 답하는 것은 «리플리카 한 대가 죽으면 소스가 강등되나» 라는 이진 사실과
+# 첫 쓰기가 timeout 을 무는지다. 처리량·지연 크기는 재지 않는다(같은 호스트·RTT ≈ 0).
+
+services:
+  source:
+    image: mysql:8.0
+    container_name: s2r_source
+    command:
+      - --server-id=1
+      - --log-bin=binlog
+      - --binlog-format=ROW
+      - --gtid-mode=OFF
+      - --log-replica-updates=ON
+      - --enforce-gtid-consistency=OFF
+      - --innodb-flush-log-at-trx-commit=1
+      - --sync-binlog=1
+    environment:
+      MYSQL_ROOT_PASSWORD: repl
+    networks: [s2r]
+
+  replica1:
+    image: mysql:8.0
+    container_name: s2r_replica1
+    command:
+      - --server-id=2
+      - --log-bin=binlog
+      - --binlog-format=ROW
+      - --gtid-mode=OFF
+      - --log-replica-updates=ON
+      - --enforce-gtid-consistency=OFF
+      - --innodb-flush-log-at-trx-commit=1
+      - --sync-binlog=1
+      - --read-only=ON
+      - --plugin-load-add=semisync_replica.so
+      # loose- 가 없으면 이미지 첫 기동(--initialize)이 unknown variable 로 거부한다(11-07 실험 §3-2)
+      - --loose-rpl-semi-sync-replica-enabled=ON
+    environment:
+      MYSQL_ROOT_PASSWORD: repl
+    networks: [s2r]
+
+  replica2:
+    image: mysql:8.0
+    container_name: s2r_replica2
+    command:
+      - --server-id=3
+      - --log-bin=binlog
+      - --binlog-format=ROW
+      - --gtid-mode=OFF
+      - --log-replica-updates=ON
+      - --enforce-gtid-consistency=OFF
+      - --innodb-flush-log-at-trx-commit=1
+      - --sync-binlog=1
+      - --read-only=ON
+      - --plugin-load-add=semisync_replica.so
+      # loose- 가 없으면 이미지 첫 기동(--initialize)이 unknown variable 로 거부한다(11-07 실험 §3-2)
+      - --loose-rpl-semi-sync-replica-enabled=ON
+    environment:
+      MYSQL_ROOT_PASSWORD: repl
+    networks: [s2r]
+
+networks:
+  s2r:
+    name: s2r_net

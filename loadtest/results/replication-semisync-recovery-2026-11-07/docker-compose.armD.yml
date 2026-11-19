@@ -1,0 +1,22 @@
+# D 팔 — 리플리카 반동기를 «시작 옵션» 으로 켠다 (MySQL 문서가 권하는 방식 — 옵션 파일과 같은 효과)
+#
+# 기본 compose 위에 겹쳐 쓴다: docker compose -f docker-compose.yml -f docker-compose.armD.yml
+# command 는 목록 전체가 교체되므로 기본 compose 의 replica 옵션을 그대로 옮기고 두 줄만 더한다.
+# 컨테이너 설정이 달라 A·B·C 와 한 무대에서 섞어 돌릴 수 없다 — 그래서 D 는 따로 돈다.
+
+services:
+  replica:
+    command:
+      - --server-id=2
+      - --log-bin=binlog
+      - --binlog-format=ROW
+      - --gtid-mode=OFF
+      - --log-replica-updates=ON
+      - --enforce-gtid-consistency=OFF
+      - --innodb-flush-log-at-trx-commit=1
+      - --sync-binlog=1
+      - --read-only=ON
+      - --plugin-load-add=semisync_replica.so
+      # loose- = 모르는 변수면 무시. 이미지 첫 기동의 --initialize 는 플러그인을 안 올려서,
+      # 접두사 없이 쓰면 «unknown variable» 로 기동을 거부한다(1회차가 실제로 그랬다 — run_armD_fail1.log)
+      - --loose-rpl-semi-sync-replica-enabled=ON

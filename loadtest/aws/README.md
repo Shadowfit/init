@@ -37,6 +37,20 @@
    > 그것이 안전한 이유는 하나뿐이다 — **`run_all.sh` 는 S3 업로드가 성공했을 때만 끈다**
    > (`FINAL_OK`). 업로드가 실패하면 박스를 남긴다. 그 가드가 없으면 이 결정은 위험하다.
    >
+   > 🔴 **가드가 하나 더 있다 — 단계가 실패하면 안 끈다**([#641](https://github.com/Shadowfit/init/issues/641),
+   > 사용자 승인 규칙). 이번 판의 `phases.tsv` 에 `FAIL(rc)`·`TIMEOUT` 이 하나라도 있으면 **업로드가
+   > 성공했어도** 이 박스·리플리카·대상 **전부** 남긴다(`PHASES_OK`). 실패 로그만 올라간 판도 업로드는
+   > 성공하므로, `FINAL_OK` 하나로는 `repl_preflight`·`q2` 가 즉시 FAIL 한 판에서 원인 로그가 볼륨째
+   > 사라졌다. `SKIP` 은 실패로 안 센다 — 리허설·게이트 실패로 막힌 SKIP 은 원인 행이 이미 FAIL 이고,
+   > 일부러 건너뛴 SKIP(`calibration`)은 실패가 아니다. 이렇게 남은 박스는 **사람이 들여다본 뒤 직접 끈다.**
+   >
+   > 🔴 **2대 구성이면 저쪽 박스도 같은 조건으로 같이 끈다** — P4 의 `REPLICA_HOST`, 그리고
+   > P6·httpwrite·httpread·poolsizing 의 `TARGET_HOST`([#688](https://github.com/Shadowfit/init/issues/688) —
+   > 예전엔 대상을 안 꺼서 09-08 P6 라운드의 대상이 2시간 24분 초과 과금됐다). 대상이 이 박스 자신이면
+   > (`TARGET_SSH="bash -c"`) 따로 안 건다. ⚠️ 같은 대상을 **다음 라운드가 또 쓰면** 앞 호출에
+   > `AUTO_SHUTDOWN=0` 을 줄 것. ⚠️ poolsizing 3대 구성의 `DB_HOST` 는 여전히 안 끈다 —
+   > 사람이 끈다([#812](https://github.com/Shadowfit/init/issues/812)).
+   >
    > 🔴 **손으로 도는 판은 이 보호가 없다.** rig 을 SSH 로 직접 부르면(`run_arms.py` 등)
    > `run_all.sh` 를 안 거치므로 **아무것도 안 끄고, 아무것도 안 지킨다.** 그때는 사람이 끈다.
    >
@@ -327,7 +341,9 @@ D 를 넣을지부터 정할 것** — 여유 시간이 없으면 `CORES_ARMS="A
 5. **AZ 를 정하고 라벨로 넘긴다** — 같은 AZ / 다른 AZ. **이 선택이 Q2 의 답을 자릿수
    단위로 바꾼다**(설계 §9-1 ②).
    🟢 **08-22 라운드는 «같은 AZ» 로 정해서 돌았다**([결정](../../docs/decisions/replication-lag-and-semisync.md) §10-2 ㉯) — 그래서
-   그 결과에는 **「같은 AZ」 조건이 붙어 있고 다른 AZ 는 실측이 없다.**
+   그 결과에는 **「같은 AZ」 조건이 붙어 있다.** 다른 AZ 는 별도 라운드(2026-09-02, 2a→2c)가
+   쟀다 — 처리량 −17.2% · 커밋 p50 +23.1%([결과](../results/replication-aws-cross-az-2026-09-02/README.md) ·
+   [결정](../../docs/decisions/replication-lag-and-semisync.md) §0-5). 「자릿수 단위」 예견은 반증됐다(최대 약 3.8배)
    🔴 **다음 라운드에도 이건 손잡이다** — 라벨(`REPL_AZ_MODE`)이 조건 칸에 그대로 박힌다
 
 **실행 — 소스 박스에서**
@@ -404,7 +420,7 @@ nohup python3 loadtest/results/frame-path-overhead-2026-08-23/run_arms.py \
 | 팔 | A(기준) · B(구간·`lease` + 앵커) · `A@0.0005`·`A@0.05`(GIL **양방향**) · `B@0.0005`(계측×GIL **상호작용**, 2×2 를 닫는 칸) 🔴 **정본은 [설계 §13](../../docs/decisions/ai-receive-path-scaling.md) 이고 위 판 문자열은 거기서 옮긴 것이다** — 바꾸려면 설계부터 고칠 것 |
 | 배열 | **5×5 라틴 방격 + 버림 1 = 26판.** 각 팔이 **각 위치에 정확히 한 번** 온다 — 재기동이 −24%, 판 순서가 −6.4% 를 흔들기 때문(설계 §9-4) |
 | ⏱ 소요 | 판당 120초면 **52분**, 160초면 **69분** — `setup`(160세션 여는 시간)이 미측정이라 **버림판이 처음 준다.** 인스턴스 1.5시간 |
-| 🔴 **안 읽는 값** | `handler_concurrency` — 부하기가 동거해서 **절대값이 다친다.** R10-b(2대)의 몫이다(§7) |
+| 🔴 **안 읽는 값** | `handler_concurrency` — 부하기가 동거해서 **절대값이 다친다.** R10-b(2대, 아래)의 몫이다(§7) |
 | 러너 | 🟢 **`PHASES="framepath collect"` 로 돈다** — 아래 「무인으로 돌리려면」. 위 손 명령도 그대로 유효하다(회수만 손으로) |
 
 ⚠️ **이 절차로 실제로 띄워 본 적은 없다.** ROLE 은 `bash -n` 과 역할 분기 검증만 거쳤고,
@@ -464,21 +480,18 @@ ROLE=ai-venv bash bootstrap.sh
 ROLE=ai-venv bash bootstrap.sh
 ```
 
-**실행 — 부하기에서**
-
-```bash
-cd /root/init
-S3_BASE=s3://내버킷/shadowfit \
-FP_REMOTE_TARGET=<대상 사설 IP> \
-FP_REMOTE_SSH="ssh -i /root/.ssh/measure.pem -o StrictHostKeyChecking=no root@<대상 사설 IP>" \
-FP_PLAN="B,B,B#5,B#20,B#5,B#20,B,B#20,B,B#5" \
-PHASES="framepath collect" \
-  nohup bash loadtest/aws/run_all.sh > /root/run_all.log 2>&1 &
-```
+🔴 **`run_all.sh` 로는 더 못 돌린다 (2026-09-23, #813 ㉡).** R10-b 의 원격 배선
+(`FP_REMOTE_TARGET`·`FP_REMOTE_SSH`·`FP_REMOTE_ROOT`·`FP_REMOTE_PYTHON`, `fp_gate()` 여섯째 게이트,
+`phase_framepath()` 의 `--remote-*` 인자)은 #708 의 되돌리기 커밋 `3258ff0a` 가 `run_all.sh` 에서
+지웠고, R10-b 는 이미 닫힌 라운드라 **되살리지 않기로 했다.** 지금 `FP_REMOTE_TARGET` 을 넘기면
+**경고 없이 R10-a 와 같은 로컬(동거) 경로로 돈다** — 그 판을 2대 측정으로 인용하면 안 된다.
+다시 재야 하면: ① 부하기에서 `run_arms.py --remote-target <IP> --remote-ssh "..."` 를 직접
+부르거나(원격 모드는 rig 쪽에 그대로 있다 — 단 `run_all.sh` 를 안 거치므로 자동 정지·게이트·S3
+업로드가 없다) ② #649(`4f009007`)의 `run_all.sh` 배선을 되살린다. 아래 표는 **당시 판 설계의 기록**이다.
 
 | | |
 |---|---|
-| 최소 격자(사용자 확정, 2026-09-02) | **팔은 `GRPC_MAX_WORKERS` 값 하나**(계측은 켠 채 고정 — `B` 만 쓴다, `A/B` 대조는 R10-a 가 이미 닫았다). 기본(10) 대조군 + 5·20 두 값. 버림 1 + 각 3판, 위치 균형(`feedback_measure_design_needs_repeats`) — 위 `FP_PLAN` 예시가 그 배열이다 |
+| 최소 격자(사용자 확정, 2026-09-02) | **팔은 `GRPC_MAX_WORKERS` 값 하나**(계측은 켠 채 고정 — `B` 만 쓴다, `A/B` 대조는 R10-a 가 이미 닫았다). 기본(10) 대조군 + 5·20 두 값. 버림 1 + 각 3판, 위치 균형(`feedback_measure_design_needs_repeats`) — 그 배열이 `FP_PLAN="B,B,B#5,B#20,B#5,B#20,B,B#20,B,B#5"` 였다 |
 | 규모 | R10-a 와 같은 조건(160세션·90초·풀201)을 유지할 것 — 다르면 비교가 안 된다 |
 | 🔴 CPU | **판 전체 평균만**(`cpu_remote.avg_vcpu`), warmup 미제외. R10-a 의 시계열 `cpu` 와 **같은 표에 놓지 말 것** — 이 판이 진짜 답하는 것은 처리량·지연이 `GRPC_MAX_WORKERS` 로 갈리는가다 |
 | ⏱ 소요 | 미실측 — R10-a(26판·52~69분)보다 판 수는 적지만(8판) SSH 왕복(원격 기동·종료·CPU 스냅샷)이 더 걸린다. 축소 리허설로 먼저 잰다 |
@@ -492,22 +505,8 @@ R10-a 의 GIL 반증에 이어 이 후보도 지워지고 「16 중 9.5」는 **
 종류였다. 🔴 **깨진 채 남은 것**: 원격 CPU 계측(`cpu_remote`)이 전 판 실패
 ([#647](https://github.com/Shadowfit/init/issues/647)) · 리허설도 `run_all.sh` 를 그대로
 태우면 AUTO_SHUTDOWN 대상이 되는데 **러너(부하기) 쪽에 취소용 root SSH 가 없었다**
-([#648](https://github.com/Shadowfit/init/issues/648), 아래 리허설 명령에 `AUTO_SHUTDOWN=0`
-을 넣은 이유).
-
-⚠️ **리허설은 `AUTO_SHUTDOWN=0` 을 꼭 넣을 것** — `PHASES` 에 무엇을 넣든 `run_all.sh` 를
-직접 부르면 끝에 자동종료 로직을 그대로 탄다(#648). 축소 리허설로 먼저 밟고, 문제없으면
-본판(위 「실행」 명령, `AUTO_SHUTDOWN` 기본값 1)을 돌린다.
-
-```bash
-cd /root/init
-AUTO_SHUTDOWN=0 \
-FP_REMOTE_TARGET=<대상 사설 IP> \
-FP_REMOTE_SSH="ssh -i /root/.ssh/measure.pem -o StrictHostKeyChecking=no root@<대상 사설 IP>" \
-FP_SESSIONS=8 FP_DUR=15 FP_PLAN="B,B,B#5,B#20" \
-PHASES="framepath" \
-  bash loadtest/aws/run_all.sh
-```
+([#648](https://github.com/Shadowfit/init/issues/648) — 그래서 리허설 명령에 `AUTO_SHUTDOWN=0`
+을 박아뒀었다. 그 실행·리허설 명령은 위 🔴 때문에 걷었다).
 
 ### 보정값 (從 R11) — `calibrate_box` 가 모든 라운드에서 자동으로 남긴다
 
@@ -553,11 +552,8 @@ PHASES="framepath" \
 | `REPL_AZ_MODE` | (없음) | P4 — 조건 칸에 그대로 들어간다. 비면 경고(막지는 않는다) |
 | `REPL_SESSIONS` | `13334` | P4 무대 = 1,000만 행 |
 | `TIMEOUT_REPL_GATE` / `TIMEOUT_REPL` | `10800` / `14400` | 3시간 / 4시간 |
-| `FP_REMOTE_TARGET` | (없음) | R10-b — 대상 사설 IP. 비면 R10-a 와 같은 로컬(동거) 경로 |
-| `FP_REMOTE_SSH` | `ssh root@$FP_REMOTE_TARGET` | R10-b — 키를 쓰면 직접 지정 |
-| `FP_REMOTE_ROOT` | `/root/init` | R10-b — 대상의 저장소 루트 |
-| `AUTO_SHUTDOWN` | **`1`** | **업로드 성공 시에만** 정지. 기본이 켜짐(2026-08-24 결정) — 박스를 남기려면 `0` |
-| `SHUTDOWN_DELAY_MIN` | `5` | 정지까지의 유예(분). 취소: 박스 안에서 `pkill -f 'shutdown'`. ⚠️ **취소하려면 그 박스에 SSH 로 들어가야 하는데, 리허설을 `run_all.sh` 로 직접 돌리면 러너(예: R10-b 의 부하기)가 대상이 아닌 경우가 있다**(#648) — 2026-09-02부터 부트스트랩이 role 과 무관하게 모든 박스에 `root@` 접근을 열어두므로(#642), 어느 박스가 러너든 `measure.pem` 으로 들어가 취소할 수 있다 |
+| `AUTO_SHUTDOWN` | **`1`** | **업로드 성공 + 실패 단계 없음(FAIL·TIMEOUT 0개, #641)일 때만** 정지 — `REPLICA_HOST`·`TARGET_HOST`(#688)도 같이. 기본이 켜짐(2026-08-24 결정) — 박스를 남기려면 `0` |
+| `SHUTDOWN_DELAY_MIN` | `5` | 정지까지의 유예(분). 취소: 박스 안에서 `pkill -f 'shutdown'`. ⚠️ **취소하려면 그 박스에 SSH 로 들어가야 하는데, 리허설을 `run_all.sh` 로 직접 돌리면 러너(예: 2026-09-02 R10-b 구성의 부하기, 지금은 run_all.sh 로 못 돈다 — #813)가 대상이 아닌 경우가 있다**(#648) — 2026-09-02부터 부트스트랩이 role 과 무관하게 모든 박스에 `root@` 접근을 열어두므로(#642), 어느 박스가 러너든 `measure.pem` 으로 들어가 취소할 수 있다 |
 | `SYNC_SEC` | `300` | S3 주기 업로드 간격 |
 | `WRITER_MAX_SEC` | `14400` | ⚠️ rig 기본은 5,400. 아래 참고 |
 | `TIMEOUT_DDL` | `43200` | 12시간 (로컬 추정 5.9시간 × 2) |

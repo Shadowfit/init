@@ -21,12 +21,16 @@ import com.shadowfit.model.outbox.OutboxEvent;
 import com.shadowfit.repository.outbox.OutboxEventRepository;
 import com.shadowfit.model.exercise.Exercise;
 import com.shadowfit.model.exercise.Session;
+import com.shadowfit.model.exercise.SquatDepthMode;
 import com.shadowfit.model.exercise.Status;
 import com.shadowfit.model.member.Member;
 import com.shadowfit.repository.exercise.ExercisesRepository;
 import com.shadowfit.repository.exercise.PoseDataRepository;
 import com.shadowfit.repository.member.MemberRepository;
 import com.shadowfit.repository.exercise.SessionRepository;
+import com.shadowfit.repository.exercise.SessionSetRepository;
+import com.shadowfit.service.recommendation.RecommendationService;
+import com.shadowfit.dto.recommendation.NextSessionRecommendationResponseDto;
 import com.shadowfit.service.report.DailyLogService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -51,6 +55,8 @@ public class SessionService {
     private final SessionMetrics sessionMetrics;
     private final OutboxEventRepository outboxRepository;
     private final SessionNonceGenerator sessionNonceGenerator;
+    private final SessionSetRepository sessionSetRepository;
+    private final RecommendationService recommendationService;
     private final DailyLogService dailyLogService;
     // completeSession의 실제 반영(@Transactional)을 갖는 별도 빈 — self 주입 대신 이걸 부른다
     // (이슈 #175). 자기호출은 AOP 프록시를 우회해 @Transactional이 조용히 무시되는데, 다른 빈으로
@@ -125,6 +131,16 @@ public class SessionService {
         //   ② 아직 DB 를 안 거친 엔티티로 조회하면 나노초가 남아 등호가 안 맞고 **조용히 0행**이 된다
         // 자르면 둘 다 사라진다 — 이건 정밀도를 «버리는» 게 아니라, 저장소가 이미 버리고 있던
         // 것을 애플리케이션이 **명시**하는 것이다.
+        // 세트 목표(V26). body 에 없으면 추천 공식으로 채운다 — 이 세션의 세트 경계가 «rep 이 이 값에 닿는
+        // 순간» 이므로 세션이 생기는 이 자리에서 확정돼야 한다. 추천의 level 은 그동안 죽어 있던
+        // difficultyLevel 에 같이 넣는다(RecommendationService 클래스 주석의 «직전 난이도» 결손이 이걸로 풀린다).
+        // targetSets 는 사용자 값만 — 세트 «수» 공식은 어디에도 없다.
+        NextSessionRecommendationResponseDto recommendation =
+                recommendationService.getNextSessionRecommendation(currentMemberId, exercise.getId());
+        int targetRepsPerSet = appDto.getTargetRepsPerSet() != null
+                ? appDto.getTargetRepsPerSet()
+                : recommendation.targetReps();
+
         Session session = Session.builder()
                 .member(member)
                 .exercise(exercise)
@@ -132,6 +148,10 @@ public class SessionService {
                 .startTime(LocalDateTime.now().withNano(0))
                 .status(Status.IN_PROGRESS)
                 .sessionNonce(sessionNonceGenerator.generate())
+                .squatDepthMode(appDto.getDepthMode() != null ? appDto.getDepthMode() : SquatDepthMode.FULL)
+                .difficultyLevel(recommendation.difficultyLevel())
+                .targetRepsPerSet(targetRepsPerSet)
+                .targetSets(appDto.getTargetSets())
                 .build();
 
         return sessionRepository.save(session);
@@ -276,17 +296,14 @@ public class SessionService {
      * - endTime 만 즉시 기록. 통계 갱신(totalReps/avgSync) 은 AI 의 CompleteAnalysis 콜백이 별도 처리
      * - AI 로의 gRPC 는 이 경로에서 <b>일어나지 않는다</b>. OutboxPublisher 가 행을 집어 송신하므로
      *   요청 스레드는 외부 호출을 기다리지 않고, 송신이 실패해도 행이 남아 재시도된다
-     * - 본인 세션이 아니면 ACCESS_DENIED, 이미 종료된 세션이면 멱등 (변경 없음, 200 OK)
+     * - 없거나 남의 세션이면 SESSION_NOT_FOUND(404) — 존재 여부 비공개, 이미 종료된 세션이면 멱등 (변경 없음, 200 OK)
+     *   (decisions/resource-ownership-403-vs-404.md 후보 C: 개인 소유 리소스는 소유권을 WHERE 에)
      * - 통보가 끝내 전달되지 못하면: SessionTimeoutScheduler 가 여전히 safety net (IN_PROGRESS → FAILED)
      */
     @Transactional
     public void endSession(Long sessionId, Long currentMemberId) {
-        Session session = sessionRepository.findById(sessionId)
+        Session session = sessionRepository.findByIdAndMemberId(sessionId, currentMemberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.SESSION_NOT_FOUND));
-
-        if (!session.getMember().getId().equals(currentMemberId)) {
-            throw new BusinessException(ErrorCode.ACCESS_DENIED);
-        }
 
         // 멱등: 이미 endTime 기록된 세션은 변경 없음 (AI 재호출도 안 함)
         if (!session.markEnded(LocalDateTime.now())) {
@@ -326,6 +343,7 @@ public class SessionService {
         }
 
         poseDataRepository.deleteBySessionIdIn(List.of(session.getId()));
+        sessionSetRepository.deleteBySessionId(session.getId());
         sessionRepository.delete(session);
         sessionRepository.flush();
 

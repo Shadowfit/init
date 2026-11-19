@@ -1,3 +1,4 @@
+import { devWarn } from '@/utils/devLog';
 import { useCallback, useState } from 'react';
 import {
   View,
@@ -6,11 +7,11 @@ import {
   ScrollView,
   TouchableOpacity,
   Modal,
-  Alert,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { Alert } from '@/utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Users, Plus, KeyRound, ChevronRight, Mail, X } from 'lucide-react-native';
@@ -45,7 +46,7 @@ export default function GroupsScreen() {
         setGroups(g.data);
         setInvitations(inv.data.filter((i) => i.status === 'PENDING'));
       })
-      .catch((e) => console.warn('[groups] status=', e?.response?.status, 'data=', JSON.stringify(e?.response?.data)))
+      .catch((e) => devWarn('[groups] status=', e?.response?.status, 'data=', JSON.stringify(e?.response?.data)))
       .finally(() => setLoading(false));
   }, []);
 

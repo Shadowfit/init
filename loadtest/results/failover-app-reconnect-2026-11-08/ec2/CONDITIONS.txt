@@ -1,0 +1,16 @@
+# 페일오버 앱 전환 조건 (2026-11-08T05:50:38+00:00)
+DB1=172.31.57.130 DB2=172.31.58.216 NAME=db.failover.internal RATE=10 PRE_S=30 STABLE_S=30 POST_CAP_S=1200 CLIENT_TIMEOUT_S=1000 ACCOUNTS=4
+TRIALS=A:K1 B:K1 A:K2 B:K2  B:K2 A:K2 B:K1 A:K1  A:K2 B:K1 B:K2 A:K1  B:K1 A:K1 A:K2 B:K2 (앞 4 판 버림)
+java: openjdk version "21.0.13" 2026-10-20 LTS
+JVM DNS 캐시 설정(java.security): #networkaddress.cache.ttl=-1 networkaddress.cache.negative.ttl=10 
+tcp_retries2=15 · tcp_syn_retries=6
+앱 유닛:
+Environment=SPRING_PROFILES_ACTIVE=prod
+Environment=DB_HOST=db.failover.internal
+Environment=DB_USERNAME=shadowfit
+Environment=AI_SERVER_HOST=127.0.0.1
+Environment=AI_SERVER_GRPC_PORT=8585
+Environment=AI_CHANNEL_POOL_SIZE=1
+Environment=SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=15
+ExecStart=/usr/bin/java -XX:MaxRAMPercentage=75.0 -jar /root/init/backend/build/libs/backend-0.0.1-SNAPSHOT.jar
+dnsmasq: listen-address=127.0.0.1 bind-interfaces no-resolv server=172.31.0.2 addn-hosts=/etc/failover-hosts local-ttl=0 

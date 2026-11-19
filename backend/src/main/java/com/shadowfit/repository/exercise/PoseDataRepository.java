@@ -46,7 +46,7 @@ public interface PoseDataRepository extends JpaRepository<PoseData, Long> {
      * "프레임이 아예 없다"와 "rep 을 알 수 없는 프레임뿐이다"를 계산기가 구분해 다룰 수 있다.
      */
     @Query("SELECT new com.shadowfit.dto.report.PoseFrameProjection(" +
-           "p.id, p.timestampSec, p.syncRate, p.repNumber, p.smoothedKneeAngle) " +
+           "p.id, p.timestampSec, p.syncRate, p.repNumber, p.smoothedKneeAngle, p.leadLeg, p.torsoTiltDeg, p.staggerRatio) " +
            "FROM PoseData p WHERE p.session.id = :sessionId AND p.createdAt = :sessionAnchor " +
            "ORDER BY p.repNumber ASC, p.timestampSec ASC")
     List<PoseFrameProjection> findFramesBySessionId(@Param("sessionId") Long sessionId,
@@ -105,9 +105,36 @@ public interface PoseDataRepository extends JpaRepository<PoseData, Long> {
      *
      * <p>반환 행 수는 세션의 rep 수(수십 규모)라 호출부에서 avg/max/min 을 계산해도 부담이 없다.
      * DB 에서 한 번에 접으려면 파생 테이블(native)이 필요한데, 그 대가로 얻는 게 없다.
+     *
+     * <p>2026-09-22(세트 도입, V26): 같은 GROUP BY 에 rep 의 시작·끝 시각을 얹었다. 세트 요약
+     * ({@code SessionSetAssembler})이 같은 rep 목록에서 나오므로 두 집계가 한 쿼리를 나눠 쓴다 —
+     * 싱크 통계와 세트 평균이 서로 다른 rep 집합을 보는 일이 구조적으로 없다.
+     */
+    @Query("SELECT p.repNumber AS repNumber, AVG(p.syncRate) AS avgSyncRate, " +
+           "MIN(p.timestampSec) AS startedSec, MAX(p.timestampSec) AS endedSec FROM PoseData p " +
+           "WHERE p.session.id = :sessionId AND p.createdAt = :sessionAnchor AND p.repNumber > 0 " +
+           "GROUP BY p.repNumber ORDER BY p.repNumber")
+    List<RepSummaryProjection> findRepSummaries(@Param("sessionId") Long sessionId,
+                                                @Param("sessionAnchor") LocalDateTime sessionAnchor);
+
+    /** {@link #findRepSummaries} 의 한 행 = rep 하나. */
+    interface RepSummaryProjection {
+        Integer getRepNumber();
+        Double getAvgSyncRate();
+        Double getStartedSec();
+        Double getEndedSec();
+    }
+
+    /**
+     * {@link #findRepSummaries} 의 sync_rate 전용 축약 — rep 별 평균만 필요한 호출부용(2026-09-21 계통).
+     *
+     * <p>{@code syncRate IS NOT NULL} 을 거는 이유: 횟수만 세는 종목({@code ExerciseAnalysisCapabilities.isCountOnly})
+     * 은 프레임에 sync_rate 가 없다. 그 행이 섞이면 {@code AVG} 가 null 인 rep 이 생겨 "미측정" 이 통계에 끼어든다.
+     * {@link #findRepSummaries} 는 세트 경계(시작·끝 시각)도 같이 쓰므로 거기서는 거르지 않고, 호출부
+     * ({@code SessionCompletionTx.resolveSyncStats})가 null 을 건너뛴다 — 두 쿼리의 통계 의미는 같다.
      */
     @Query("SELECT AVG(p.syncRate) FROM PoseData p " +
-           "WHERE p.session.id = :sessionId AND p.createdAt = :sessionAnchor AND p.repNumber > 0 " +
+           "WHERE p.session.id = :sessionId AND p.createdAt = :sessionAnchor AND p.repNumber > 0 AND p.syncRate IS NOT NULL " +
            "GROUP BY p.repNumber ORDER BY p.repNumber")
     List<Double> findRepAverageSyncRates(@Param("sessionId") Long sessionId,
                                          @Param("sessionAnchor") LocalDateTime sessionAnchor);

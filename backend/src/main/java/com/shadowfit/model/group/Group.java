@@ -71,6 +71,14 @@ public class Group {
         return this.nextSeq;
     }
 
+    /**
+     * 생성자 표시를 다른 회원으로 옮긴다. {@code created_by} 가 {@code ON DELETE CASCADE} 라서, 생성자가
+     * 탈퇴하면 그룹장 자리를 넘겨 두었어도 그룹이 통째로 지워진다 — 탈퇴 전에 현재 그룹장으로 옮겨 막는다.
+     */
+    public void reassignCreator(Member newCreator) {
+        this.createdBy = newCreator;
+    }
+
     /** 초대 코드를 새 값으로 바꾼다. 이전 코드로는 더 이상 참여할 수 없다. */
     public void regenerateInviteCode(String newCode) {
         this.inviteCode = newCode;
