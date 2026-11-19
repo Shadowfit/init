@@ -35,28 +35,26 @@
 ## 아키텍처
 
 ```mermaid
-flowchart LR
-    App["📱 앱<br/>React Native · Expo"]
-    Admin["🖥 관리자 웹<br/>Vite · React"]
-
-    subgraph Server["서버"]
-        direction TB
-        API["Spring Boot API<br/>인증 · 세션 · 리포트 · 모임"]
-        Outbox[("outbox_events<br/>at-least-once")]
-        DB[("MySQL 8<br/>Flyway · 월별 파티션")]
-        NG["nginx<br/>세션 → 워커 라우팅"]
-        AI["FastAPI × 3 프로세스<br/>MediaPipe · DTW"]
-    end
+flowchart TB
+    App["📱 앱<br/>React Native"]
+    Admin["🖥 관리자 웹"]
+    API["Spring Boot API<br/>인증 · 세션 · 리포트 · 모임"]
+    NG["nginx<br/>세션별 워커 라우팅"]
+    AI["FastAPI AI 서버 × 3<br/>MediaPipe · DTW"]
+    DB[("MySQL 8<br/>Flyway · 월별 파티션")]
+    OB[("outbox_events<br/>at-least-once")]
 
     App -->|"REST · JWT"| API
     Admin -->|"REST"| API
-    App -->|"카메라 프레임 · HTTP"| NG --> AI
-    API <-->|"gRPC<br/>시작·중단·재부착 ⇄ 좌표 적재·완료 콜백"| AI
+    App -->|"카메라 프레임"| NG
+    NG --> AI
+    API -->|"gRPC · 시작 / 중단 / 재부착"| AI
+    AI -->|"gRPC · 좌표 적재 / 완료 콜백"| API
     API --- DB
-    API --- Outbox
-    API -.->|"주간 리포트 문장"| Gemini["Gemini API"]
-    API -.->|"푸시"| Expo["Expo Push"]
-    API -.->|"/actuator/prometheus"| Obs["Prometheus · Grafana"]
+    API --- OB
+    API -.-> G["Gemini<br/>주간 리포트 문장"]
+    API -.-> E["Expo Push"]
+    API -.-> M["Prometheus · Grafana"]
 ```
 
 - 앱은 **프레임을 AI 서버에 직접** 보내고(분석 지연을 줄이려고), 세션·기록·리포트는 Spring 이 맡습니다.
