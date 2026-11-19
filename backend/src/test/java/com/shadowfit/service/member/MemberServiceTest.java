@@ -16,7 +16,6 @@ import com.shadowfit.model.member.UserRole;
 import com.shadowfit.repository.exercise.SessionRepository;
 import com.shadowfit.repository.member.MemberRepository;
 import com.shadowfit.repository.member.RefreshTokenRepository;
-import com.shadowfit.service.exercise.PoseDataCleanupService;
 import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -27,8 +26,6 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.sql.SQLException;
 import java.util.List;
@@ -63,7 +60,7 @@ class MemberServiceTest {
     @Mock private MemberRepository memberRepository;
     @Mock private RefreshTokenRepository refreshTokenRepository;
     @Mock private SessionRepository sessionRepository;
-    @Mock private PoseDataCleanupService poseDataCleanupService;
+    @Mock private MemberPurgeService memberPurgeService;
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private com.shadowfit.repository.notification.PushTokenRepository pushTokenRepository;
     @Mock private com.shadowfit.service.group.GroupWithdrawalService groupWithdrawalService;
@@ -86,7 +83,7 @@ class MemberServiceTest {
         // mock 을 쓰면 기존 테스트들이 "제한이 안 걸린다"를 우연히 전제하게 된다 —
         // 여기 진짜를 넣어야 로그인 테스트가 제한 로직까지 같이 지난다.
         memberService = new MemberService(jwtUtil, memberRepository, refreshTokenRepository,
-                sessionRepository, poseDataCleanupService, passwordEncoder,
+                sessionRepository, memberPurgeService, passwordEncoder,
                 new com.shadowfit.global.security.jwt.RefreshTokenHasher(),
                 new LoginAttemptLimiter(new AuthRateLimitProperties()), pushTokenRepository,
                 groupWithdrawalService);
@@ -371,52 +368,37 @@ class MemberServiceTest {
         }
 
         @Test
-        @DisplayName("세션이 있으면 삭제 후 커밋 시점에만 pose_data 비동기 정리가 트리거됨")
-        void deleteAccount_withSessions_triggersCleanupOnlyAfterCommit() {
+        @DisplayName("탈퇴 시 세션·사진 정보를 삭제 이벤트로 적재한다 — 회원 삭제 뒤, 같은 트랜잭션 안에서")
+        void deleteAccount_enqueuesPurgeEvents() {
             Member member = Member.builder().id(1L).email(EMAIL).username("u").password("p").build();
             when(memberRepository.findByEmail(EMAIL)).thenReturn(Optional.of(member));
             // 탈퇴 가드가 createSession 과 같은 회원 행 락을 잡는다(이슈 #87). 진행 중 세션 조회는
             // 스텁하지 않아 빈 목록이 오므로 가드는 통과한다 — 가드 자체의 검증은
-            // MemberWithdrawalGuardTest(실제 DB) 몫이고, 여기 관심사는 정리 트리거 조건이다.
+            // MemberWithdrawalGuardTest(실제 DB) 몫이고, 여기 관심사는 삭제 이벤트 적재다.
             when(memberRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(member));
             when(sessionRepository.findIdsByMemberId(1L)).thenReturn(List.of(101L, 102L));
+            when(groupWithdrawalService.detachMember(1L)).thenReturn(List.of("a.jpg"));
 
-            // 실제 트랜잭션 없이도 동기화 등록/발동만 검증하기 위해 동기화 컨텍스트를 직접 활성화
-            TransactionSynchronizationManager.initSynchronization();
-            try {
-                memberService.deleteAccount(EMAIL);
+            memberService.deleteAccount(EMAIL);
 
-                verify(memberRepository).delete(member);
-                // 커밋 전이라 아직 호출되면 안 됨
-                verify(poseDataCleanupService, never()).cleanupBySessionIds(any());
-
-                List<TransactionSynchronization> syncs = TransactionSynchronizationManager.getSynchronizations();
-                assertThat(syncs).hasSize(1);
-                syncs.forEach(TransactionSynchronization::afterCommit); // 커밋 시뮬레이션
-
-                verify(poseDataCleanupService, times(1)).cleanupBySessionIds(List.of(101L, 102L));
-            } finally {
-                TransactionSynchronizationManager.clearSynchronization();
-            }
+            org.mockito.InOrder order = org.mockito.Mockito.inOrder(memberRepository, memberPurgeService);
+            order.verify(memberRepository).delete(member);
+            // 회원 행을 지운 뒤에 적재한다. 같은 트랜잭션이라 탈퇴가 롤백되면 이벤트도 같이 사라진다.
+            order.verify(memberPurgeService).enqueue(1L, List.of(101L, 102L), List.of("a.jpg"));
         }
 
         @Test
-        @DisplayName("세션이 없으면 커밋 동기화 자체를 등록하지 않음 (불필요한 비동기 트리거 방지)")
-        void deleteAccount_withoutSessions_registersNoSynchronization() {
+        @DisplayName("세션도 사진도 없어도 적재를 호출한다 — 비었는지는 MemberPurgeService 가 판단한다")
+        void deleteAccount_withoutAnything_stillDelegates() {
             Member member = Member.builder().id(1L).email(EMAIL).username("u").password("p").build();
             when(memberRepository.findByEmail(EMAIL)).thenReturn(Optional.of(member));
             when(memberRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(member));
             when(sessionRepository.findIdsByMemberId(1L)).thenReturn(List.of());
 
-            TransactionSynchronizationManager.initSynchronization();
-            try {
-                memberService.deleteAccount(EMAIL);
+            memberService.deleteAccount(EMAIL);
 
-                verify(memberRepository).delete(member);
-                assertThat(TransactionSynchronizationManager.getSynchronizations()).isEmpty();
-            } finally {
-                TransactionSynchronizationManager.clearSynchronization();
-            }
+            verify(memberRepository).delete(member);
+            verify(memberPurgeService).enqueue(1L, List.of(), List.of());
         }
     }
 }
