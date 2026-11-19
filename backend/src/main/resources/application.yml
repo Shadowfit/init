@@ -206,6 +206,19 @@ springdoc:
     path: /swagger-ui.html
     enabled: false
 
+# 약관·개인정보·건강정보 동의 (ConsentService, V36).
+consent:
+  # 🔴 기본은 꺼짐이다. 켜면 ① 가입에 이용약관·개인정보(현재 버전) 동의가 없으면 거절하고 ② 키·몸무게를 보내는 온보딩 요청은 건강정보
+  # 동의가 없으면 거절한다. 동의 화면이 있는 앱이 배포된 뒤에 켠다 — 먼저 켜면 동의를 모르는 현재 앱의 가입·온보딩이 전부 막힌다.
+  # 꺼져 있어도 기록과 조회(GET·POST /member/consents)는 동작한다.
+  enforce: false
+  # 문서 버전. 처리방침·약관을 개정하면 코드가 아니라 여기를 올린다 — 그러면 GET /member/consents 의 missing 에 다시 잡혀
+  # 앱이 재동의를 받는다. 문서 본문은 docs/legal/ (초안, 법률 검토 전).
+  version:
+    terms: v1
+    privacy: v1
+    health-info: v1
+
 security:
   whitelist:
     - "/"
