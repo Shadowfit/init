@@ -59,6 +59,19 @@ class MemberControllerIntegrationTest {
     }
 
     @Test
+    @DisplayName("인증 없이 DELETE /member/login — 500(NPE) 이 아니라 401 이다 (#810)")
+    void deleteOnWhitelistedPath_withoutAuth_returns401_not500() throws Exception {
+        // whitelist 의 /member/login 이 메서드 구분 없이 열려 있어 @DeleteMapping("/{email}") 에 email=login 으로 매칭된다.
+        mockMvc.perform(delete("/member/login"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("A001"));
+        // 같은 구조인 signup 도 확인 — 회원이 지워지지 않아야 한다.
+        mockMvc.perform(delete("/member/signup"))
+                .andExpect(status().isUnauthorized());
+        org.assertj.core.api.Assertions.assertThat(memberRepository.findByEmail("http@test.com")).isPresent();
+    }
+
+    @Test
     @DisplayName("회원가입 — 인증 없이 호출 가능, 200 + username 반환")
     void signup_noAuthRequired_returns200() throws Exception {
         MemberRequestDto dto = new MemberRequestDto("newuser", "new@test.com", "pw1234", Sex.MALE);
