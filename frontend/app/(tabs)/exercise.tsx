@@ -505,7 +505,8 @@ export default function ExerciseScreen() {
         <Text style={styles.permTitle}>카메라 권한이 필요합니다</Text>
         <Text style={styles.permDesc}>
           {permission.canAskAgain
-            ? '실시간 자세 분석을 위해 카메라 접근을 허용해주세요.'
+            ? '실시간 자세 분석을 위해 카메라 접근을 허용해주세요.\n\n'
+              + '운동 중 카메라 화면은 자세 분석을 위해 서버로 전송돼요. 분석에만 쓰이고 화면은 보관하지 않으며, 자세 좌표만 기록돼요.'
             : '카메라 권한이 꺼져 있어요. 설정에서 카메라를 허용한 뒤 돌아와 주세요.'}
         </Text>
         <Button
