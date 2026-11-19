@@ -14,7 +14,6 @@ import com.shadowfit.repository.exercise.SessionRepository;
 import com.shadowfit.repository.member.MemberRepository;
 import com.shadowfit.repository.member.RefreshTokenRepository;
 import com.shadowfit.repository.notification.PushTokenRepository;
-import com.shadowfit.service.exercise.PoseDataCleanupService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.hibernate.exception.ConstraintViolationException;
@@ -23,8 +22,6 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -39,7 +36,7 @@ public class MemberService{
     private final MemberRepository memberRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final SessionRepository sessionRepository;
-    private final PoseDataCleanupService poseDataCleanupService;
+    private final MemberPurgeService memberPurgeService;
     private final PasswordEncoder passwordEncoder;
     private final RefreshTokenHasher refreshTokenHasher;
     private final LoginAttemptLimiter loginAttemptLimiter;
@@ -393,20 +390,10 @@ public class MemberService{
         // exercise_sessions.member_id 도 동일하게 CASCADE 유지(FK 그대로) — pose_data만 예외.
         memberRepository.delete(member);
 
-        groupWithdrawalService.deleteFilesAfterCommit(feedPhotos);
-
-        // afterCommit: 탈퇴 트랜잭션이 확정된 직후, 스케줄 대기 없이 즉시 비동기로 pose_data 정리
-        // 트리거 (개인정보보호법 제21조 "지체없이" 파기 요건 대응, 탈퇴 API 응답은 기다리지 않음).
-        if (!sessionIds.isEmpty()) {
-            TransactionSynchronizationManager.registerSynchronization(
-                    new TransactionSynchronization() {
-                        @Override
-                        public void afterCommit() {
-                            poseDataCleanupService.cleanupBySessionIds(sessionIds);
-                        }
-                    }
-            );
-        }
+        // DB 가 못 지우는 것(pose_data·사진 파일)은 삭제 이벤트를 «같은 커밋으로» 아웃박스에 적재한다 — 탈퇴가 롤백되면
+        // 이벤트도 사라지고, 커밋되면 발행기가 지울 때까지 재시도한다. 예전의 afterCommit @Async 는 한 번 실패하면 끝이었다
+        // (개인정보보호법 제21조 «지체 없이» 파기 요건 — 탈퇴 API 응답은 기다리지 않는다).
+        memberPurgeService.enqueue(member.getId(), sessionIds, feedPhotos);
     }
 
     /**

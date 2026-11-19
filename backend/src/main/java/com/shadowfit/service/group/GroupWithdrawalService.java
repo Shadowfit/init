@@ -16,8 +16,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -49,7 +47,6 @@ public class GroupWithdrawalService {
     private final GroupRepository groupRepository;
     private final GroupMemberRepository groupMemberRepository;
     private final GroupEventRepository groupEventRepository;
-    private final FeedPhotoStorage feedPhotoStorage;
     private final ObjectMapper objectMapper;
 
     /**
@@ -108,19 +105,6 @@ public class GroupWithdrawalService {
         groupEventRepository.deleteBySenderId(memberId);
 
         return new ArrayList<>(photos);
-    }
-
-    /** 커밋이 확정된 뒤에 사진 파일을 지운다 — 롤백된 탈퇴가 파일만 지워 버리는 일을 막는다. */
-    public void deleteFilesAfterCommit(List<String> photoNames) {
-        if (photoNames == null || photoNames.isEmpty()) {
-            return;
-        }
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                photoNames.forEach(feedPhotoStorage::deleteQuietly);
-            }
-        });
     }
 
     private void addPhotoName(Set<String> sink, String payload) {
