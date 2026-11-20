@@ -1,9 +1,9 @@
-fastapi==0.141.1
-uvicorn[standard]==0.52.4
-pydantic==2.13.5
-pydantic-settings==2.15.0
-orjson==3.12.0
-pybase64==1.5.0
+fastapi==0.163.1
+uvicorn[standard]==0.54.0
+pydantic==2.14.3
+pydantic-settings==2.16.3
+orjson==3.13.0
+pybase64==1.5.2
 
 # 🔴 mediapipe 는 0.10.21 이 «solutions API 가 있는 마지막 버전» 이다 — 0.10.30 부터 휠에
 # mediapipe/python/solutions/ 가 아예 없다(0.10.30·0.10.31·0.10.35 휠 목록으로 확인, 2026-09-15).
@@ -15,9 +15,9 @@ mediapipe==0.10.21
 opencv-python-headless==4.11.0.86
 numpy<2
 
-dtaidistance==2.5.0
+dtaidistance==2.5.1
 
-python-multipart==0.0.32
+python-multipart==0.0.34
 
 grpcio>=1.83.1
 # 생성기 버전 고정 — 커밋된 exercise_pb2*.py 는 이 버전의 protoc 로 만든 것이고, CI 가 재생성해서
