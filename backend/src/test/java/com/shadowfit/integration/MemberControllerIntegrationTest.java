@@ -72,6 +72,31 @@ class MemberControllerIntegrationTest {
     }
 
     @Test
+    @DisplayName("로그인·가입·재발급은 POST 만 열려 있다 — 다른 메서드는 핸들러에 닿기 전에 401 (#810 ㄱ)")
+    void whitelistedAuthPaths_openForPostOnly() throws Exception {
+        for (String path : new String[]{"/member/login", "/member/signup", "/member/reissue"}) {
+            mockMvc.perform(delete(path)).andExpect(status().isUnauthorized());
+            mockMvc.perform(get(path)).andExpect(status().isUnauthorized());
+            mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put(path))
+                    .andExpect(status().isUnauthorized());
+            mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(path))
+                    .andExpect(status().isUnauthorized());
+        }
+    }
+
+    @Test
+    @DisplayName("POST 는 여전히 인증 없이 들어간다 — 잘못된 본문은 401 이 아니라 400 (게이트가 아닌 검증이 답한다)")
+    void whitelistedAuthPaths_postStillPermitted() throws Exception {
+        for (String path : new String[]{"/member/login", "/member/signup", "/member/reissue"}) {
+            mockMvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content("{}"))
+                    .andExpect(result -> org.assertj.core.api.Assertions
+                            .assertThat(result.getResponse().getStatus())
+                            .describedAs("%s 가 인증 게이트(401)에 막히면 안 된다", path)
+                            .isNotEqualTo(401));
+        }
+    }
+
+    @Test
     @DisplayName("회원가입 — 인증 없이 호출 가능, 200 + username 반환")
     void signup_noAuthRequired_returns200() throws Exception {
         MemberRequestDto dto = new MemberRequestDto("newuser", "new@test.com", "pw1234", Sex.MALE);

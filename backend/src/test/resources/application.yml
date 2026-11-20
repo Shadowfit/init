@@ -86,11 +86,6 @@ security:
     - "/swagger-ui/**"
     - "/swagger-ui.html"
     - "/webjars/**"
-    - "/member/login"
-    - "/member/signup"
-    # access 가 만료된 상태로 불리는 것이 정상 경로라 permitAll 이 전제다 (이슈 #135).
-    # 신원은 refresh token 의 서명에서 나온다 — decisions/token-lifecycle.md §4-2
-    - "/member/reissue"
     - "/ws/**"
     - "/feed-photos/**"
     - "/actuator/health"
@@ -99,6 +94,13 @@ security:
     # 필요하다. 지표가 안 새는 근거는 인증이 아니라 **포트 경계**다(prod compose 가 9090 을
     # 호스트에 매핑하지 않는다). main 쪽 주석에 그 실측 로그가 있다.
     - "/actuator/prometheus"
+  # POST(와 CORS 사전요청)만 여는 경로 — main 쪽 주석 참고(#810). SecurityWhitelistParityTest 가 두 사본이 같은지 본다.
+  whitelist-post:
+    - "/member/login"
+    - "/member/signup"
+    # access 가 만료된 상태로 불리는 것이 정상 경로라 permitAll 이 전제다 (이슈 #135).
+    # 신원은 refresh token 의 서명에서 나온다 — decisions/token-lifecycle.md §4-2
+    - "/member/reissue"
 
 exercise:
   session:

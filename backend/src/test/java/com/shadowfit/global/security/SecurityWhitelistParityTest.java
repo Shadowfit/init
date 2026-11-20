@@ -55,8 +55,25 @@ class SecurityWhitelistParityTest {
         assertThat(readWhitelist("src/test/resources/application.yml")).isNotEmpty();
     }
 
-    @SuppressWarnings("unchecked")
+    @Test
+    @DisplayName("security.whitelist-post 도 main 과 test 사본이 같다 (#810)")
+    void whitelistPost_copies_are_identical() {
+        List<String> mainList = readList("src/main/resources/application.yml", "whitelist-post");
+        List<String> testList = readList("src/test/resources/application.yml", "whitelist-post");
+
+        assertThat(mainList).describedAs("main 의 whitelist-post 가 비었다 — 로그인·가입·재발급이 막힌다").isNotEmpty();
+        assertThat(testList)
+                .describedAs("두 사본이 갈렸다.%n  main 에만: %s%n  test 에만: %s",
+                        subtract(mainList, testList), subtract(testList, mainList))
+                .containsExactlyInAnyOrderElementsOf(mainList);
+    }
+
     private static List<String> readWhitelist(String path) {
+        return readList(path, "whitelist");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<String> readList(String path, String key) {
         // 파일에서 직접 읽는다 — 스프링 컨텍스트로 읽으면 «지금 활성인 한쪽» 만 보이고,
         // 이 테스트가 물어야 하는 것은 **두 파일이 같은가** 다.
         java.nio.file.Path p = java.nio.file.Path.of(path);
@@ -70,7 +87,7 @@ class SecurityWhitelistParityTest {
             if (security == null) {
                 return List.of();
             }
-            Object list = security.get("whitelist");
+            Object list = security.get(key);
             return list == null ? List.of() : (List<String>) list;
         } catch (Exception e) {
             throw new IllegalStateException(path + " 를 읽지 못했다", e);

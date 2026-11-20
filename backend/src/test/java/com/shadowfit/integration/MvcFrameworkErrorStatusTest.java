@@ -81,14 +81,14 @@ class MvcFrameworkErrorStatusTest {
     }
 
     /**
-     * PUT 을 쓰는 이유: DELETE 는 {@code DELETE /member/{email}} 에 {@code email="login"} 으로 <b>매칭돼</b>
-     * 405 가 아니라 그 핸들러로 들어간다(별건 — whitelist 경로라 인증 없이 닿아 NPE→500).
+     * 인증된 요청으로 POST 전용 경로(/member/logout)에 PUT 을 보낸다. 예전에는 whitelist 경로(/member/login)에 인증 없이
+     * PUT 을 보냈는데, 이제 로그인·가입·재발급은 POST 만 열려 있어(#810 ㄱ) 그 요청은 405 가 아니라 401 이다.
      * /member 아래에는 PUT 매핑이 하나도 없어 순수하게 «메서드 불일치» 만 본다.
      */
     @Test
     @DisplayName("POST 전용 경로에 PUT → 405 + Allow 헤더 + C002")
     void wrongMethod_returns405() throws Exception {
-        mockMvc.perform(put("/member/login"))
+        mockMvc.perform(put("/member/logout").header("Authorization", "Bearer " + token))
                 .andExpect(status().isMethodNotAllowed())
                 .andExpect(header().exists("Allow"))
                 .andExpect(jsonPath("$.status").value(405))

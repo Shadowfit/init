@@ -6,6 +6,7 @@ import com.shadowfit.service.member.CustomUserDetailsService;
 import lombok.AllArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -52,6 +53,11 @@ public class SecurityConfig {
 
                 // 화이트리스트 (배열을 그대로 전달)
                 .requestMatchers(securityPathConfig.getWhiteListArray()).permitAll()
+
+                // 로그인·가입·재발급은 POST 만 연다 (#810). 모든 메서드를 열면 DELETE /member/login 이 /{email} 핸들러에
+                // 인증 없이 닿았다. OPTIONS 는 브라우저(관리자 웹)의 CORS 사전요청이라 같이 연다.
+                .requestMatchers(HttpMethod.POST, securityPathConfig.getWhitelistPostArray()).permitAll()
+                .requestMatchers(HttpMethod.OPTIONS, securityPathConfig.getWhitelistPostArray()).permitAll()
 
                 // 그 외 모든 요청 인증 필요
                 .anyRequest().authenticated());
