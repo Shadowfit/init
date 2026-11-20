@@ -5,6 +5,7 @@ import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import { currentSessionVersion } from './sessionVersion';
 import { metroProxyOrigin } from './devProxy';
+import { isTransientFailure } from './transientFailure';
 
 // Expo dev 모드에서는 Metro 가 알려주는 호스트(=PC LAN IP)를 자동으로 사용한다.
 // 안드로이드 에뮬레이터는 호스트 PC 를 10.0.2.2 로 봐야 하므로 별도 처리.
@@ -98,7 +99,7 @@ declare module 'axios' {
   }
 }
 
-// 재발급 결과. **세 갈래여야 한다** (이슈 #170).
+// 재발급 결과. **네 갈래여야 한다** (이슈 #170, 네 번째는 #848 후속).
 //
 // 예전에는 `string | null` 이라 «실패» 와 «세션이 바뀌어 버려진 결과» 가 똑같이 null 이었다.
 // 그 둘을 합치면 후자에서도 forceLogout 이 돌아 **새 세션이 로그아웃된다** — 고치려던 것과
@@ -106,7 +107,8 @@ declare module 'axios' {
 type ReissueResult =
   | { status: 'ok'; accessToken: string }
   | { status: 'stale' }    // 세션이 바뀌었다 — 이 요청만 실패시키고 현재 세션은 건드리지 않는다
-  | { status: 'failed' };  // 재발급 자체가 실패했다 — 세션이 끝났다
+  | { status: 'unavailable' } // 서버가 잠시 못 받는다(네트워크 단절·타임아웃·5xx) — 세션은 두고 이 요청만 실패시킨다
+  | { status: 'failed' };  // 서버가 «이 토큰은 안 된다» 고 답했다 — 세션이 끝났다
 
 // 재발급이 진행 중이면 그 약속을 공유한다 (이슈 #135).
 //
@@ -169,8 +171,11 @@ async function reissueOnce(): Promise<ReissueResult> {
         useAuthStore.getState().applyReissuedTokens(accessToken, rotated);
 
         return { status: 'ok', accessToken };
-      } catch {
-        return { status: 'failed' };
+      } catch (e) {
+        // 🔴 «서버가 못 받는다» 와 «토큰이 틀렸다» 를 가른다. 둘을 합치면 서버·DB 가 몇 초 흔들리는 사이 만료된
+        //    access 의 재발급이 실패해 사용자가 로그아웃된다 — 백엔드가 DB 장애를 401 이 아니라 503 으로 바꾼 것(#848)이
+        //    로그인 유지에 도움이 되려면 여기서도 같은 구분이 있어야 한다.
+        return isTransientFailure(e) ? { status: 'unavailable' } : { status: 'failed' };
       } finally {
         // 내 것일 때만 치운다. 세션이 바뀌어 새 promise 가 들어섰다면 그걸 지우면 안 된다.
         if (reissuePromiseVersion === startedVersion) {
@@ -214,6 +219,10 @@ api.interceptors.response.use(
       }
       if (result.status === 'stale') {
         // 재발급이 도는 사이에 세션이 바뀌었다. 이 요청만 실패시키고 아래 로그아웃 경로는 타지 않는다.
+        return Promise.reject(error);
+      }
+      if (result.status === 'unavailable') {
+        // 서버가 잠시 못 받는다. 로그아웃하지 않는다 — 이 요청만 실패시키고, 서버가 돌아오면 다음 요청이 다시 재발급을 시도한다.
         return Promise.reject(error);
       }
     }
