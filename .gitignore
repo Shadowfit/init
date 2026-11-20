@@ -173,3 +173,8 @@ docs/portfolio/career-statement-*
 # 관리자가 올린 기준 영상(mp4) — docker-compose 가 /data/reference-videos 로 bind mount 한다
 backend/data/
 data/
+
+# 로컬 산출물 — 루트에 떨어지는 QR·모델 파일 (모델은 필요할 때 내려받는다)
+/*-qr.png
+/pose_landmarker*.task
+/output/qr/

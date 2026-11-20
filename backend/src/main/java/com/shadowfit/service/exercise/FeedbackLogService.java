@@ -195,6 +195,23 @@ public class FeedbackLogService {
             parsedTypes.add(type);
         }
 
+        // 🔴 한 배치 안의 (rep_number, feedback_type) 중복은 여기서 먼저 걸러낸다 (#816, 첫 건 유지).
+        //
+        // 이미 커밋된 행과의 중복은 ON DUPLICATE KEY UPDATE 가 흡수하지만, **같은 문장 안에서 방금 들어간 행**과의
+        // 중복은 실 MySQL 에서 1869(«Auto-increment value in UPDATE conflicts with internally generated values»)로
+        // 배치 전체가 실패한다 — rewriteBatchedStatements=true 가 배치를 multi-row INSERT 한 문장으로 다시 쓰기 때문이다.
+        // H2 에는 이 재작성이 없어서 단위 테스트가 통과시킨다. 지금 AI 는 1건짜리 배치만 보내 운영에선 안 나지만,
+        // proto 계약(repeated events)은 여러 건을 받는 것이라 AI 가 배치를 키우는 순간 드러나는 잠복 결함이었다.
+        List<FeedbackEvent> toInsert = new java.util.ArrayList<>(events.size());
+        List<FeedbackType> toInsertTypes = new java.util.ArrayList<>(events.size());
+        Set<String> seenKeys = new java.util.HashSet<>();
+        for (int i = 0; i < events.size(); i++) {
+            if (seenKeys.add(events.get(i).getRepNumber() + ":" + parsedTypes.get(i).name())) {
+                toInsert.add(events.get(i));
+                toInsertTypes.add(parsedTypes.get(i));
+            }
+        }
+
         LocalDateTime now = LocalDateTime.now(SEOUL);
 
         // 배치 전후로 행 수를 센다. batchUpdate 의 반환값으로는 셀 수 없다 — 운영 URL 의
@@ -207,11 +224,11 @@ public class FeedbackLogService {
             jdbcTemplate.batchUpdate(INSERT_ON_DUPLICATE_SQL, new BatchPreparedStatementSetter() {
                 @Override
                 public void setValues(PreparedStatement ps, int i) throws SQLException {
-                    FeedbackEvent event = events.get(i);
+                    FeedbackEvent event = toInsert.get(i);
 
                     // 유형은 위에서 이미 파싱·검증됐다 (#297). 여기서 다시 valueOf 하면 실패
                     // 자리가 배치 한가운데가 된다.
-                    FeedbackType type = parsedTypes.get(i);
+                    FeedbackType type = toInsertTypes.get(i);
 
                     ps.setLong(1, sessionId);
                     ps.setInt(2, event.getRepNumber());
@@ -227,7 +244,7 @@ public class FeedbackLogService {
 
                 @Override
                 public int getBatchSize() {
-                    return events.size();
+                    return toInsert.size();
                 }
             });
         } catch (DataIntegrityViolationException e) {

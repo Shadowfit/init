@@ -73,6 +73,23 @@ public class FeedPhotoStorage {
         return p.startsWith(root) && Files.isRegularFile(p) ? Optional.of(p) : Optional.empty();
     }
 
+    /**
+     * 파일을 지운다. <b>없는 파일은 성공</b>(이미 지워졌다 — 멱등)이고, 이름이 우리 형식이 아니면 건드리지 않고 넘어간다.
+     * {@link #deleteQuietly} 와 달리 지우다 I/O 가 실패하면 <b>예외로 올린다</b> — 탈퇴 후 삭제를 아웃박스가 재시도하려면
+     * 실패가 보여야 한다.
+     */
+    public void deleteOrThrow(String name) {
+        Optional<Path> p = resolve(name);
+        if (p.isEmpty()) {
+            return;
+        }
+        try {
+            Files.deleteIfExists(p.get());
+        } catch (IOException e) {
+            throw new UncheckedIOException("피드 사진 삭제 실패: " + name, e);
+        }
+    }
+
     public void deleteQuietly(String name) {
         resolve(name).ifPresent(p -> {
             try {

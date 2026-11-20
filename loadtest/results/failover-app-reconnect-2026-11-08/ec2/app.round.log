@@ -80,8 +80,8 @@ Created symlink /etc/systemd/system/multi-user.target.wants/shadowfit-app.servic
 ──── App 준비됨 ────
   포트                : 8080(HTTP) · 6565(gRPC) · 9090(actuator, 이 박스 안에서만)
   DB_HOST             : db.failover.internal
-  INTERNAL_API_TOKEN  : nZyEpmhuFFYj2nthx5TMXsrehoGCbl
-  JWT_SECRET          : rVPlTn6fIinkaNu3Z0G4bycsCQPT37SqjQFL6FQ9DY
+  INTERNAL_API_TOKEN  : <REDACTED>
+  JWT_SECRET          : <REDACTED>
   풀 크기(현재)       : 15
 
   🔴 위 INTERNAL_API_TOKEN 을 부하기(ROLE=p6-loader)의 GHZ_TOKEN 에 그대로 넘긴다 — 다르면

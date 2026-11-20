@@ -185,20 +185,6 @@ try {
   await clickText('회원가입', { exact: true });
   await page.waitForSelector('input[placeholder="3자 이상"]', { visible: true });
   await shot('signup');
-  // 비밀번호 재설정 3단계 — 서버 호출 없는 화면 흐름. 마지막 «비밀번호 변경» 은 누르지 않는다
-  await go('/reset-password');
-  await waitText('인증 코드 발송');
-  await fill('input[placeholder="example@email.com"]', USER);
-  await shot('reset-password-1-email');
-  await clickText('인증 코드 발송', { exact: true });
-  await waitText('인증 코드 입력');
-  await fill('input[placeholder="6자리 숫자 입력"]', '482913');
-  await shot('reset-password-2-code');
-  await clickText('확인', { exact: true });
-  await waitText('새 비밀번호 설정');
-  await fill('input[placeholder="6자 이상 입력"]', PASSWORD);
-  await fill('input[placeholder="비밀번호를 다시 입력"]', PASSWORD);
-  await shot('reset-password-3-new');
 
   // 처음 가입한 회원 — 온보딩 5단계. 마지막 «완료» 는 누르지 않아 계정은 그대로다
   await login(NEW_USER);

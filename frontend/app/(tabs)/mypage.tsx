@@ -50,6 +50,7 @@ const PERSONA_MAP: Record<string, { Icon: LucideIcon; label: string; desc: strin
 export default function MyPageScreen() {
   const router = useRouter();
   const logout = useAuthStore((s) => s.logout);
+  const deleteAccount = useAuthStore((s) => s.deleteAccount);
   const user = useAuthStore((s) => s.user);
 
   const [profile, setProfile] = useState<OnboardingResponse | null>(null);
@@ -116,6 +117,33 @@ export default function MyPageScreen() {
         },
       },
     ]);
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      '회원 탈퇴',
+      '탈퇴하면 계정과 운동 기록, 리포트, 목표, 작성한 모임 글이 모두 삭제되고 되돌릴 수 없어요.\n\n'
+        + '모임의 그룹장이라면 다른 멤버에게 그룹장을 넘긴 뒤에 탈퇴할 수 있어요.',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '탈퇴하기',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteAccount();
+              router.replace('/(auth)/login');
+            } catch (e: any) {
+              // 서버 메시지가 그대로 사용자 문구다 — 운동 중이면 «운동을 마친 뒤», 그룹장이면 «양도한 뒤» 안내가 온다.
+              Alert.alert(
+                '탈퇴할 수 없어요',
+                e?.response?.data?.message ?? '잠시 후 다시 시도해주세요',
+              );
+            }
+          },
+        },
+      ],
+    );
   };
 
   return (
@@ -263,6 +291,11 @@ export default function MyPageScreen() {
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.7}>
           <LogOut size={16} color={COLORS.textSecondary} strokeWidth={2} />
           <Text style={styles.logoutText}>로그아웃</Text>
+        </TouchableOpacity>
+
+        {/* 회원 탈퇴 — 로그아웃보다 눈에 덜 띄게, 하지만 앱 안에서 찾을 수 있게 */}
+        <TouchableOpacity style={styles.deleteBtn} onPress={handleDeleteAccount} activeOpacity={0.7}>
+          <Text style={styles.deleteText}>회원 탈퇴</Text>
         </TouchableOpacity>
 
         <View style={{ height: 100 }} />
@@ -435,4 +468,14 @@ const styles = StyleSheet.create({
     borderColor: COLORS.cardBorder,
   },
   logoutText: { fontSize: FONT_SIZE.md, color: COLORS.textSecondary },
+  deleteBtn: {
+    alignItems: 'center',
+    marginTop: SPACING.lg,
+    paddingVertical: SPACING.md,
+  },
+  deleteText: {
+    fontSize: FONT_SIZE.sm,
+    color: COLORS.textMuted,
+    textDecorationLine: 'underline',
+  },
 });

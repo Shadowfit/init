@@ -1,6 +1,6 @@
 # 에러 코드 & 예외 처리 가이드
 
-마지막 업데이트: 2026-08-23 (시도 제한 A007·A008 추가 — 이슈 #394. 같이 밀린 것 둘도 정정: A006 누락·핸들러 부재 메모)
+마지막 업데이트: 2026-09-23 (응답에 `code` 추가 · 401 형식 통일 · 405/415/필수 파라미터 누락 500 수정 · 호출부 없던 코드 15개 결번 처리)
 범위: Spring 백엔드의 에러 코드 enum, 응답 포맷, gRPC 에러 매핑. 사용자가 받게 되는 메시지는 한국어 단일 ([[project_korean_only]]).
 
 ---
@@ -12,13 +12,18 @@
 // global/error/ErrorResponseDto.java
 {
   "status": 400,                          // HTTP 상태 코드
-  "message": "올바르지 않은 입력값입니다.",   // 사용자 표시용 한국어
+  "code": "C001",                         // ErrorCode 의 code — 클라이언트 분기 키 (2026-09-23 추가)
+  "message": "올바르지 않은 입력값입니다.",   // 사용자 표시용 한국어 — 분기에 쓰지 말 것(문구는 바뀐다)
   "timestamp": "2026-05-23T14:30:00"      // 발생 시각
 }
 ```
 
 > ~~**현재 상태 메모**: … **GlobalExceptionHandler 는 아직 코드에 없음** … 본 문서는 도입 후를 가정한 약속.~~
 >
+> **이 모양이 나가는 자리 (2026-09-23)**: `GlobalExceptionHandler`(MVC 안), `CustomAuthenticationEntryPoint`(401), `CustomAccessDeniedHandler`(필터체인 403), `AuthRateLimitFilter`(A008 429). 네 곳 모두 `ErrorResponseDto.of(ErrorCode)` 로만 만든다. 예전엔 401 만 `response.sendError` 라 Spring 기본 `/error` 본문(`error`·`path`)이 나갔다.
+>
+> **401 은 A001 하나다.** 만료·위조·토큰 없음을 나누지 않는다 — 클라는 어떤 401 이든 재발급부터 시도하므로 대처가 같다. 원인은 `JwtAuthFilter` WARN 로그에 남는다. (재발급 요청 자체의 401 은 서비스가 던지므로 `A004`·`A006` 으로 구분돼 나간다.)
+
 > 🔄 **2026-08-23 정정 — 이 메모는 낡았다.** `global/error/GlobalExceptionHandler.java` 가 **있다**(`@RestControllerAdvice`). `BusinessException` 뿐 아니라 `@Valid` 실패·`AccessDeniedException`·타입 변환 실패·`NoResourceFoundException` 까지 같은 포맷으로 통일돼 있다. 즉 이 문서는 더 이상 「약속」이 아니라 **동작 서술**이다. (기능은 붙는데 문서의 「보장·운영」 절이 뒤처지는 [[project_doc_drift_pattern]] 의 그 모양이다 — 시도 제한을 적으러 왔다가 발견했다)
 
 ---
@@ -31,17 +36,20 @@
 | `C001` `INVALID_INPUT_VALUE` | 400 | 올바르지 않은 입력값입니다. |
 | `C002` `METHOD_NOT_ALLOWED` | 405 | 허용되지 않은 HTTP 메서드입니다. |
 | `C003` `INTERNAL_SERVER_ERROR` | 500 | 서버 내부 오류가 발생했습니다. |
-| `C004` `INVALID_TYPE_VALUE` | 400 | 입력값의 타입이 적절하지 않습니다. |
-| `C005` `HANDLE_ACCESS_DENIED` | 403 | 접근이 거부되었습니다. |
+| `C006` `RESOURCE_NOT_FOUND` | 404 | 요청한 경로를 찾을 수 없습니다. |
+| `C007` `FILE_TOO_LARGE` | 413 | 파일 크기가 제한을 초과했습니다. |
+| `C008` `UNSUPPORTED_MEDIA_TYPE` | 415 | 지원하지 않는 Content-Type 입니다. |
+| `C009` `SERVICE_UNAVAILABLE` | **503** | 일시적으로 서비스를 이용할 수 없습니다. 잠시 후 다시 시도해 주세요. (인증 필터가 회원 조회 중 DB 장애를 만났을 때 — `Retry-After` 헤더 포함. 토큰 오류의 401 과 구분된다, #848) |
+
+> **결번 (2026-09-23)**: `C004`·`C005`·`A003`·`U002`·`W002`·`W004`·`V001~V003`·`AI001~AI003`·`I001~I003`. enum 에 정의만 있고 던지는 곳이 main·test 모두 0 이던 15개를 지웠다. code 는 클라 계약이라 **번호를 재사용하지 않는다.** 인프라 원인(DB 락·캐시·타임아웃)을 코드로 나누지 않는 것은 의도다 — 클라가 할 수 있는 대처가 없으므로 500/503 하나로 내고 원인은 로그로 본다.
 
 ### 인증/인가 (A00x)
 | 코드 | HTTP | 메시지 |
 |------|------|--------|
 | `A001` `UNAUTHORIZED` | 401 | 로그인이 필요한 서비스입니다. |
 | `A002` `ACCESS_DENIED` | 403 | 해당 리소스에 대한 접근 권한이 없습니다. |
-| `A003` `TOKEN_EXPIRED` | 401 | 인증 토큰이 만료되었습니다. |
 | `A004` `INVALID_TOKEN` | 401 | 잘못된 인증 토큰입니다. |
-| `A005` `LOGIN_INPUT_INVALID` | 401 | 비밀번호가 틀렸습니다. |
+| `A005` `LOGIN_INPUT_INVALID` | 401 | 이메일 또는 비밀번호가 올바르지 않습니다. (계정 없음과 비밀번호 불일치를 구분하지 않는다) |
 | `A006` `REFRESH_TOKEN_REUSED` | 401 | 만료된 로그인 정보입니다. 보안을 위해 다시 로그인해 주세요. |
 | `A007` `TOO_MANY_LOGIN_ATTEMPTS` | **429** | 로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요. |
 | `A008` `TOO_MANY_AUTH_REQUESTS` | **429** | 요청이 너무 많습니다. 잠시 후 다시 시도해 주세요. |
@@ -69,9 +77,11 @@
 | 코드 | HTTP | 메시지 |
 |------|------|--------|
 | `U001` `USER_NOT_FOUND` | 404 | 존재하지 않는 사용자입니다. |
-| `U002` `INVALID_PERSONA_TYPE` | 400 | 유효하지 않은 페르소나 설정입니다. |
 | `U003` `USERID_DUPLICATION` | 400 | 이미 가입된 사용자입니다. |
 | `U004` `USERNAME_DUPLICATION` | 400 | 이미 사용 중인 닉네임입니다. |
+| `U005` `CONSENT_REQUIRED` | 400 | 필수 약관에 동의해야 이용할 수 있습니다. |
+| `U006` `CONSENT_VERSION_MISMATCH` | 409 | 약관이 개정되었습니다. 최신 버전에 동의해 주세요. (`GET /member/consents` 의 `current` 버전으로 다시 동의) |
+| `U007` `CONSENT_HEALTH_REQUIRED` | 400 | 키·몸무게를 저장하려면 건강정보 수집·이용에 동의해야 합니다. |
 
 > `U003`(email)과 `U004`(username)를 나눈 것은 **문구 때문**이다 (이슈 #195). `ErrorResponseDto` 가
 > `code` 를 싣지 않아 프론트는 `message` 로만 구분한다 — 닉네임만 겹친 신규 사용자에게
@@ -82,15 +92,27 @@
 | 코드 | HTTP | 메시지 |
 |------|------|--------|
 | `W001` `EXERCISE_NOT_FOUND` | 404 | 존재하지 않는 운동 종목입니다. |
-| `W002` `METADATA_NOT_FOUND` | 404 | 운동 메타데이터(JSON/Video)를 찾을 수 없습니다. |
 | `W003` `SESSION_NOT_FOUND` | 404 | 진행 중인 운동 세션을 찾을 수 없습니다. |
-| `W004` `S3_UPLOAD_ERROR` | 500 | 파일 저장소(S3) 연결에 실패했습니다. |
 | `W005` `SESSION_ALREADY_IN_PROGRESS` | **409** | 이미 진행 중인 운동 세션이 있습니다. |
 | `W006` `SESSION_DELETE_NOT_ALLOWED` | **409** | 진행 중인 세션은 삭제할 수 없습니다. |
 | `W007` `EXERCISE_NOT_SUPPORTED` | **400** | 아직 분석을 지원하지 않는 운동입니다. |
 | `W008` `SESSION_REATTACH_EXPIRED` | **410** | 재개할 수 있는 시간이 지난 세션입니다. 새로 시작해 주세요. |
 | `W009` `SESSION_REATTACH_UNAVAILABLE` | **503** | 지금은 이어하기를 할 수 없습니다. 잠시 후 다시 시도해 주세요. |
 | `W010` `WITHDRAWAL_BLOCKED_BY_ACTIVE_SESSION` | **409** | 운동을 종료한 뒤 탈퇴할 수 있습니다. |
+| `W011` `EXERCISE_DELETE_NOT_ALLOWED` | 409 | 운동 이력이 있는 종목은 삭제할 수 없습니다. |
+| `W012` `EXERCISE_ANALYSIS_ENABLE_BLOCKED` | 400 | 기준 좌표가 없어 분석을 활성화할 수 없습니다. |
+| `W013` `CATEGORY_NOT_FOUND` | 404 | 존재하지 않는 카테고리입니다. |
+| `W014` `CATEGORY_NAME_DUPLICATION` | 409 | 이미 존재하는 카테고리 이름입니다. |
+| `W015` `CATEGORY_IN_USE` | 409 | 사용 중인 카테고리는 삭제할 수 없습니다. |
+| `W016` `INVALID_REFERENCE_VIDEO` | 400 | mp4 영상 파일만 등록할 수 있습니다. |
+| `W017` `REFERENCE_EXTRACTION_UNAVAILABLE` | 503 | AI 서버에 연결할 수 없어 기준 영상을 등록할 수 없습니다. 잠시 후 다시 시도해 주세요. |
+| `W018` `EXERCISE_CODE_DUPLICATION` | 409 | 이미 사용 중인 종목 코드입니다. |
+| `W019` `EXERCISE_CODE_LOCKED` | 409 | 분석이 켜진 종목의 코드는 바꿀 수 없습니다. 분석을 끈 뒤 바꿔 주세요. |
+| `W020` `EXERCISE_CODE_REQUIRED` | 400 | 종목 코드가 없어 분석을 활성화할 수 없습니다. |
+| `W021` `INVALID_REFERENCE_POSES` | 400 | 기준 좌표 형식이 올바르지 않습니다 (JSON 배열, 시각은 오름차순). |
+| `W022` `INVALID_SYNC_THRESHOLDS` | 400 | 판정 기준은 0 < 위험 기준 < 정석 기준 ≤ 100 이어야 합니다. |
+
+> 📌 **W011~W022 는 2026-11-19 에 추가한 것이다** — 관리자 종목·카테고리·기준 영상 관리가 들어오면서 코드에 생겼는데 이 문서에 빠져 있었다(`ErrorCode.java`). 전부 관리자 API(`/admin/...`)에서 나온다. 앱(회원)이 보는 것은 아니다.
 
 > 🔴 **W005~W010 은 2026-08-08 에 추가한 것이다** — 코드에는 있었는데 이 문서에만 없었다(`ErrorCode.java:35-60`). 프론트가 이 문서를 계약으로 읽으면 **여섯 가지 응답을 «모르는 에러» 로 처리한다.**
 >
@@ -104,29 +126,13 @@
 ### 필터링 엔진 (V00x)
 | 코드 | HTTP | 메시지 |
 |------|------|--------|
-| `V001` `LOW_SYNC_RATE` | 400 | 운동 싱크로율이 너무 낮아 기록되지 않았습니다. |
-| `V002` `INVALID_WORKOUT_DATA` | 400 | 부정행위 또는 유효하지 않은 움직임이 감지되었습니다. |
-| `V003` `INSUFFICIENT_COUNT` | 400 | 최소 운동 횟수를 채우지 못했습니다. |
 | `V004` `DATA_INTEGRITY_VIOLATION` | 422 | 전달된 좌표 데이터가 손상되었거나 형식이 맞지 않습니다. |
-
-### AI/GPT (AI00x)
-| 코드 | HTTP | 메시지 |
-|------|------|--------|
-| `AI001` `AI_FEEDBACK_FAILED` | 503 | AI 피드백 생성 중 오류가 발생했습니다. |
-| `AI002` `PROMPT_TEMPLATE_ERROR` | 500 | GPT 프롬프트 생성 로직에 오류가 발생했습니다. |
-| `AI003` `AI_QUOTA_EXCEEDED` | 429 | AI 서비스 호출 할당량을 초과했습니다. |
-
-### 인프라/캐시 (I00x)
-| 코드 | HTTP | 메시지 |
-|------|------|--------|
-| `I001` `REDIS_CONNECTION_FAILURE` | 500 | 캐시 서버 연결에 실패했습니다. |
-| `I002` `API_RESPONSE_TIMEOUT` | 504 | API 응답 시간이 초과되었습니다. (Threshold: 500ms) |
-| `I003` `DATABASE_LOCK_FAILURE` | 500 | 데이터베이스 트랜잭션 처리 중 오류가 발생했습니다. |
 
 ### 리포트 (R00x)
 | 코드 | HTTP | 메시지 |
 |------|------|--------|
 | `R001` `REPORT_NOT_FOUND` | 404 | 리포트를 찾을 수 없습니다. |
+| `R002` `WEEKLY_REPORT_WEEK_NOT_COMPLETED` | 400 | 아직 끝나지 않은 주의 리포트는 만들 수 없습니다 |
 
 ---
 
@@ -144,6 +150,9 @@
 | `G009` `GROUP_EVENT_NOT_FOUND` | 404 | 존재하지 않는 피드 글입니다. |
 | `G010` `OWNER_MUST_TRANSFER_FIRST` | 409 | 그룹장은 다른 멤버에게 양도한 뒤 탈퇴할 수 있습니다. |
 | `G011` `GROUP_MEMBER_NOT_FOUND` | 404 | 모임의 멤버가 아닌 회원입니다. |
+| `G012` `SESSION_ALREADY_SHARED` | 409 | 이미 이 모임에 공유한 운동입니다. |
+| `G013` `SHAREABLE_SESSION_NOT_FOUND` | 404 | 공유할 수 있는 운동 기록이 없습니다. |
+| `G014` `INVALID_FEED_PHOTO` | 400 | 사진은 10MB 이하의 jpg · png · webp 만 올릴 수 있습니다. |
 
 ### 알림/재촉/응원 (N00x)
 | 코드 | HTTP | 메시지 |
@@ -153,6 +162,17 @@
 | `N003` `NUDGE_SELF_NOT_ALLOWED` | 400 | 자기 자신은 재촉할 수 없습니다. |
 | `N004` `CHEER_ALREADY_SENT_TODAY` | 409 | 오늘은 이미 응원했습니다. (재촉과 별개로 센다) |
 | `N005` `CHEER_SELF_NOT_ALLOWED` | 400 | 자기 자신에게는 응원을 보낼 수 없습니다. |
+
+### 트레이너 (T00x)
+| 코드 | HTTP | 메시지 |
+|------|------|--------|
+| `T001` `NOT_ASSIGNED_TRAINER` | 403 | 담당 사용자가 아닙니다. |
+
+### 운동 목표 (GL00x)
+| 코드 | HTTP | 메시지 |
+|------|------|--------|
+| `GL001` `GOAL_NOT_FOUND` | 404 | 존재하지 않는 목표입니다. |
+| `GL002` `GOAL_TYPE_DUPLICATION` | 409 | 이미 같은 종류의 목표가 있습니다. |
 
 ---
 
@@ -164,12 +184,17 @@ if (!memberRepository.existsByEmail(email)) {
     throw new BusinessException(ErrorCode.USER_NOT_FOUND);
 }
 
-// 운동 세션 조회 실패
-Session session = sessionRepository.findById(sessionId)
+// 내 세션 조회 — 소유권을 WHERE 에 넣는다. 없는 것·남의 것 둘 다 같은 404
+Session session = sessionRepository.findByIdAndMemberId(sessionId, currentMemberId)
     .orElseThrow(() -> new BusinessException(ErrorCode.SESSION_NOT_FOUND));
 ```
 
 > 외부 API 응답 매핑 시에도 같은 패턴: catch 한 후 적절한 `ErrorCode` 로 다시 throw.
+
+> **남의 리소스는 403 인가 404 인가 (2026-09-23 결정, [decisions/resource-ownership-403-vs-404.md](./decisions/resource-ownership-403-vs-404.md))** — 판정 문장: «요청자가 그 리소스의 존재를 정당하게 알 수 있는가».
+> - **개인 소유**(세션·목표·알림·초대 등 한 사람만의 것) → **404** `*_NOT_FOUND`. `findById` 후 소유자 비교(fetch-then-check)를 쓰지 않는다 — 비교 줄을 빼먹으면 곧 IDOR 이고, 403 은 id 존재를 흘린다.
+> - **공유·멤버십**(그룹) → 없으면 404, 멤버 아니면 **403** 유지.
+> - 404 로 합칠 때 «없음/남의 것» 을 서버 로그에도 **구분해 남기지 않는다**(결정).
 
 ---
 
@@ -194,22 +219,21 @@ Session session = sessionRepository.findById(sessionId)
 
 1. ~~**`GlobalExceptionHandler` 미구현**~~ → ✅ **있다.** `global/error/GlobalExceptionHandler.java` (`@RestControllerAdvice`).
 2. ~~**Validation 에러 매핑**~~ → ✅ **된다.** `MethodArgumentNotValidException` 핸들러가 필드별 메시지를 모아 `C001` 로 낸다. `MethodArgumentTypeMismatchException`·`NoResourceFoundException`·`AccessDeniedException` 도 같이 덮는다.
-3. **`OptimisticLockingFailureException` 매핑** — 현재는 `SessionService.completeSession` 에서 3회 재시도 후 throw. 핸들러에서 `I003 DATABASE_LOCK_FAILURE` 로 매핑 가능.
-4. **AI/gRPC 에러 → REST 매핑** — AI 콜백 실패가 사용자 요청 응답에 즉시 영향을 주는 경로는 없음 (비동기). 향후 동기 경로 추가 시 `AI001 AI_FEEDBACK_FAILED` 활용.
-5. **에러 코드 → ErrorCode 객체 노출** — 응답 DTO 가 `code(String)` 를 포함하지 않음. 클라이언트에서 분기할 때 메시지 문자열 매칭이라 깨지기 쉬움. `code` 필드 추가 권장.
+3. **`OptimisticLockingFailureException` 매핑** — 현재는 `SessionService.completeSession` 에서 3회 재시도 후 throw → `C003`(500). ~~`I003` 으로 매핑 가능~~ — `I003` 은 결번 처리됐다(2026-09-23). 인프라 원인을 별도 코드로 내도 클라가 할 일이 없으므로, 매핑한다면 코드가 아니라 로그로 구분한다.
+4. **AI/gRPC 에러 → REST 매핑** — AI 콜백 실패가 사용자 요청 응답에 즉시 영향을 주는 경로는 없음 (비동기). 동기 경로(재부착 `W009`, 기준 영상 `W017`)는 이미 전용 503 코드가 있다.
+5. ~~**에러 코드 → ErrorCode 객체 노출**~~ → ✅ **됐다(2026-09-23).** 응답에 `code` 가 실린다. 같이 고친 것: 401 본문 형식 통일, 405(`C002`)·415(`C008`)·필수 쿼리 파라미터 누락(`C001`)이 **500 으로 나가던 것** — #129·#180 과 같은 형태로 핸들러가 없어 catch-all 로 떨어지고 있었다(`MvcFrameworkErrorStatusTest` 가 수정 전 셋 다 500 을 재현). 🔶 프론트는 아직 status 로만 분기한다 — `code` 를 쓰도록 바꾸는 건 별개 작업.
 
 ---
 
 ## 6. 클라이언트 처리 권장 (한국어 UX)
 
-- 401(`A001`, `A003`, `A004`, `A006`) → 로그인 화면 강제 이동
+- 401(`A001`, `A004`, `A006`) → 재발급 시도, 실패하면 로그인 화면 강제 이동
 - **429(`A007`, `A008`) → `Retry-After` 초만큼 기다렸다 재시도.** 사용자에게는 남은 시간을 보여주는 것이 맞다 (🔶 프론트 미구현)
-- 403(`A002`, `A005`, `C005`) → "권한이 없습니다" 토스트
+- 403(`A002`) → "권한이 없습니다" 토스트
 - 404(`U001`, `W001`, `W003`, `R001`) → 빈 화면 + 새로고침 안내
-- 422·400 (`V00x`, `INVALID_*`) → 메시지를 그대로 사용자에게 표시 (이미 한국어)
-- 429(`AI003`) → "잠시 후 다시 시도해주세요" 토스트
-- 503·504(`AI001`, `I002`) → 재시도 버튼 + "서버 응답이 느려요" 안내
-- 500 (`C003`, `W004`, `I001`, `I003`) → "잠시 후 다시 시도" + 자동 재전송 X
+- 422·400 (`V004`, `C001` 등) → 메시지를 그대로 사용자에게 표시 (이미 한국어)
+- 503(`W009`, `W017`) → 재시도 버튼 + "잠시 후 다시 시도" 안내
+- 500 (`C003`) → "잠시 후 다시 시도" + 자동 재전송 X
 
 ---
 

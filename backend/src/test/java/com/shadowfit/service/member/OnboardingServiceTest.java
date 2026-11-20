@@ -25,6 +25,7 @@ import static org.mockito.Mockito.when;
 class OnboardingServiceTest {
 
     @Mock private MemberRepository memberRepository;
+    @Mock private ConsentService consentService;
     private OnboardingService service;
 
     private static final String EMAIL = "test@test.com";
@@ -32,7 +33,7 @@ class OnboardingServiceTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        service = new OnboardingService(memberRepository);
+        service = new OnboardingService(memberRepository, consentService);
     }
 
     private Member freshMember() {

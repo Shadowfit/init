@@ -22,6 +22,18 @@ public interface GroupMemberRepository extends JpaRepository<GroupMember, Long> 
 
     Optional<GroupMember> findByGroupIdAndMemberId(Long groupId, Long memberId);
 
+    /** 회원이 (역할·상태)로 속한 모임 id — 탈퇴 때 «내가 ACTIVE OWNER 인 모임» 을 찾는 데 쓴다. */
+    @Query("select gm.group.id from GroupMember gm "
+            + "where gm.member.id = :memberId and gm.role = :role and gm.status = :status")
+    List<Long> findGroupIdsByMemberIdAndRoleAndStatus(@Param("memberId") Long memberId,
+                                                      @Param("role") com.shadowfit.model.group.GroupRole role,
+                                                      @Param("status") GroupMemberStatus status);
+
+    /** 모임의 현재 그룹장 (ACTIVE OWNER). 정상 상태에서는 모임당 하나다. */
+    Optional<GroupMember> findFirstByGroupIdAndRoleAndStatus(Long groupId,
+                                                             com.shadowfit.model.group.GroupRole role,
+                                                             GroupMemberStatus status);
+
     // GET /groups/{groupId} 의 멤버 목록.
     List<GroupMember> findAllByGroupIdAndStatus(Long groupId, GroupMemberStatus status);
 

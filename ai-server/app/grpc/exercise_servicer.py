@@ -285,7 +285,11 @@ class ExerciseServicer(exercise_pb2_grpc.ExerciseServiceServicer):
         # 소유권 비밀값을 세션 상태에 보관한다 (#187 안 (d)). POST /pose 가 동봉한 값과
         # 여기를 대조한다. proto3 라 «없음» 이 빈 문자열로 오므로 None 으로 되돌린다 —
         # 빈 문자열을 그대로 두면 «빈 값을 보낸 요청» 과 «값이 없는 세션» 이 같아진다.
-        get_registry().create(
+        #
+        # create() 가 아니라 create_if_absent() 다 — 같은 session_id 로 StartAnalysis 가 다시 오면(재시도·중복 호출)
+        # create() 는 진행 중이던 rep 과 스무딩 이력을 통째로 덮어써 세션을 처음 상태로 되돌린다. 재부착
+        # (ReattachAnalysis)이 이미 같은 이유로 쓰는 방식이다. 기존 상태가 있으면 그대로 두고 성공으로 답한다.
+        _, already_active = get_registry().create_if_absent(
             session_id=session_id,
             exercise_id=exercise_id,
             reference_angles=reference_angles,
@@ -296,6 +300,11 @@ class ExerciseServicer(exercise_pb2_grpc.ExerciseServiceServicer):
             sync_good_threshold=sync_good,
             sync_warn_threshold=sync_warn,
         )
+        if already_active:
+            logger.warning(
+                "[Spring → AI] StartAnalysis 중복 — 이미 분석 중인 세션이라 기존 상태를 유지한다 (session=%s)",
+                session_id,
+            )
 
         now = Timestamp()
         now.GetCurrentTime()
