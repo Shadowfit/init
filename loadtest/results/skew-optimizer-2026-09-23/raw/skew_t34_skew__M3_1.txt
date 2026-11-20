@@ -1,0 +1,52 @@
+skew_t34_skew.exercise_sessions	analyze	status	OK
+skew_t34_skew.session_reports	analyze	status	OK
+##STATS
+exercise_sessions	PRIMARY	n_diff_pfx01	99818	20	2026-09-24 00:25:24
+exercise_sessions	PRIMARY	n_leaf_pages	418	NULL	2026-09-24 00:25:24
+exercise_sessions	exercise_id	n_diff_pfx01	0	2	2026-09-24 00:25:24
+exercise_sessions	exercise_id	n_diff_pfx02	100282	20	2026-09-24 00:25:24
+exercise_sessions	exercise_id	n_leaf_pages	133	NULL	2026-09-24 00:25:24
+exercise_sessions	idx_session_member_exercise_status_start	n_diff_pfx01	16638	20	2026-09-24 00:25:24
+exercise_sessions	idx_session_member_exercise_status_start	n_diff_pfx02	13397	20	2026-09-24 00:25:24
+exercise_sessions	idx_session_member_exercise_status_start	n_leaf_pages	382	NULL	2026-09-24 00:25:24
+exercise_sessions	idx_session_member_status_start	n_diff_pfx01	12797	20	2026-09-24 00:25:24
+exercise_sessions	idx_session_member_status_start	n_diff_pfx02	33782	20	2026-09-24 00:25:24
+exercise_sessions	idx_session_member_status_start	n_leaf_pages	272	NULL	2026-09-24 00:25:24
+exercise_sessions	idx_session_starttime_member	n_diff_pfx01	90124	20	2026-09-24 00:25:24
+exercise_sessions	idx_session_starttime_member	n_diff_pfx02	99148	20	2026-09-24 00:25:24
+exercise_sessions	idx_session_starttime_member	n_leaf_pages	256	NULL	2026-09-24 00:25:24
+exercise_sessions	idx_session_status_starttime	n_diff_pfx01	3	5	2026-09-24 00:25:24
+exercise_sessions	idx_session_status_starttime	n_diff_pfx02	102880	20	2026-09-24 00:25:24
+exercise_sessions	idx_session_status_starttime	n_leaf_pages	160	NULL	2026-09-24 00:25:24
+session_reports	PRIMARY	n_diff_pfx01	46081	20	2026-09-24 00:25:24
+session_reports	PRIMARY	n_leaf_pages	15621	NULL	2026-09-24 00:25:24
+session_reports	member_id	n_diff_pfx01	14291	20	2026-09-24 00:25:24
+session_reports	member_id	n_diff_pfx02	68640	20	2026-09-24 00:25:24
+session_reports	member_id	n_leaf_pages	128	NULL	2026-09-24 00:25:24
+session_reports	uk_report_session	n_diff_pfx01	68268	20	2026-09-24 00:25:24
+session_reports	uk_report_session	n_leaf_pages	128	NULL	2026-09-24 00:25:24
+##HIST
+##ENDSTATS
+##P|T3.a.day
+-> Aggregate: count(0)  (cost=82.9 rows=1)
+    -> Filter: ((exercise_sessions.start_time >= TIMESTAMP'2025-09-30 00:00:00') and (exercise_sessions.start_time < TIMESTAMP'2025-10-01 00:00:00'))  (cost=55.4 rows=275)
+        -> Covering index range scan on exercise_sessions using idx_session_starttime_member over ('2025-09-30 00:00:00' <= start_time < '2025-10-01 00:00:00')  (cost=55.4 rows=275)
+
+##P|T4.list.COMPLETED.w1
+-> Limit: 20 row(s)  (cost=85.3 rows=20)
+    -> Index range scan on exercise_sessions using idx_session_status_starttime over (status = 'COMPLETED' AND '2025-09-30 00:00:00' <= start_time) (reverse), with index condition: ((exercise_sessions.`status` = 'COMPLETED') and (exercise_sessions.start_time >= <cache>((cast('2025-10-01 00:00:00' as datetime) - interval 1 day))))  (cost=85.3 rows=189)
+
+##P|T4.list.COMPLETED.w7
+-> Limit: 20 row(s)  (cost=637 rows=20)
+    -> Index range scan on exercise_sessions using idx_session_status_starttime over (status = 'COMPLETED' AND '2025-09-24 00:00:00' <= start_time) (reverse), with index condition: ((exercise_sessions.`status` = 'COMPLETED') and (exercise_sessions.start_time >= <cache>((cast('2025-10-01 00:00:00' as datetime) - interval 7 day))))  (cost=637 rows=1414)
+
+##P|T4.list.COMPLETED.w30
+-> Limit: 20 row(s)  (cost=2576 rows=20)
+    -> Index range scan on exercise_sessions using idx_session_status_starttime over (status = 'COMPLETED' AND '2025-09-01 00:00:00' <= start_time) (reverse), with index condition: ((exercise_sessions.`status` = 'COMPLETED') and (exercise_sessions.start_time >= <cache>((cast('2025-10-01 00:00:00' as datetime) - interval 30 day))))  (cost=2576 rows=5723)
+
+##P|T4.list.COMPLETED.w0
+-> Limit: 20 row(s)  (cost=5352 rows=20)
+    -> Filter: (exercise_sessions.`status` = 'COMPLETED')  (cost=5352 rows=49909)
+        -> Index lookup on exercise_sessions using idx_session_status_starttime (status='COMPLETED') (reverse)  (cost=5352 rows=49909)
+
+##END

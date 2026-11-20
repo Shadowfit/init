@@ -45,6 +45,7 @@
 - [resolution-tiers.md](./resolution-tiers.md) — 해상도 티어 다중 그레인 롤업 설계 (미상 — 설계 방향만 tail에 보임, 실행 여부 불명)
 - [row-shape-partition-interaction.md](./row-shape-partition-interaction.md) — pose_data 행 모양×파티션 상호작용 (보류 — 제목에 "미실행" 명시)
 - [schema-migration-tracking.md](./schema-migration-tracking.md) — 스키마 마이그레이션 적용 이력 추적 방법 (진행중 — #115 관측 피해는 해소 확인, 일부 미검증 남음)
+- [skewed-distribution-optimizer-estimates.md](./skewed-distribution-optimizer-estimates.md) — 치우친 분포에서 옵티마이저 추정·계획이 바뀌는가: 대상 쿼리(주간 JSON_TABLE·대시보드 skip scan)·치우칠 축·통계 팔·시드 설계 (분기점 — 결정 전)
 - [session-index-composition.md](./session-index-composition.md) — exercise_sessions 인덱스 구성(떼기 아닌 합치기) (확정 — 2026-08-07 confirm, 마이그레이션 반영)
 
 ## 부하테스트 방법론·실험 설계
