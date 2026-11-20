@@ -1,0 +1,6 @@
+# R1 worst-section — 2026-09-10T13:56:45+00:00
+k	v
+reports 전체	163
+detailed_analysis 채워진 행	0
+pose_data 전체	0
+exercise_sessions	1120

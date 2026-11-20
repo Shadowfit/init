@@ -109,6 +109,9 @@
 - [circuit-breaker-worker-aggregation.md](./circuit-breaker-worker-aggregation.md) — 서킷브레이커 워커 3개 실패율 합산(#556) (진행중 — 워킹트리에 반영, 커밋은 별도 요청 시)
 - [grpc-integration-checklist.md](./grpc-integration-checklist.md) — gRPC 좌표 송수신(AI↔Backend) 설계 체크리스트 (진행중 — 일부 완료, 관련 이슈 열려있음)
 - [grpc-vs-webclient.md](./grpc-vs-webclient.md) — gRPC vs WebClient 통신 방식 (보류 — 결정 로그가 "사용자 confirm 대기"로 비어있음)
+- [grpc-webclient-empirical-comparison.md](./grpc-webclient-empirical-comparison.md) — gRPC vs WebClient 실측 비교 세 라운드(EC2, 2026-09-10): nginx 홉 0.1~0.8ms, 대조군(k6)이 ghz 결론의 부호를 뒤집음 — **채택 미결, 코드는 브랜치에만**
+- [grpc-webclient-production-client-round.md](./grpc-webclient-production-client-round.md) — 2차: 프로덕션 클라이언트로 지연 재측정 설계·결과
+- [grpc-webclient-transport-cost-breakdown.md](./grpc-webclient-transport-cost-breakdown.md) — 3차: 고정비 1.8ms 분해 설계·결과
 - [latency-perception.md](./latency-perception.md) — Latency 단위(ms·s) 의미와 컴포넌트 매핑 (진행중 — 계속 갱신, 분기 7 격상 검토 트리거 남음)
 - [observability-correlation-id.md](./observability-correlation-id.md) — 관측성 1차 — correlation id 전파 + 커스텀 메트릭 (확정 — PR #54 머지 완료)
 - [outbox-retention-cleanup.md](./outbox-retention-cleanup.md) — outbox_events 보존 정리(#793): 보존 모델·DELETE 모양·인덱스·다중 인스턴스·관측, 정리 DELETE ↔ markSent 락 가설 (분기점 — 결정 전)
