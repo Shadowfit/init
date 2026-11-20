@@ -1,0 +1,121 @@
+# gRPC vs WebClient — 전송 계층 A/B
+  대상    : 172.31.2.143 (gRPC 8585 · nginx 8000 · direct 18000)
+  설계    : 5블록(0 버림) x 동시성[1 3] x 크기[S L] x 팔[grpc rest-nginx rest-direct]
+  판당    : n=200 (닫힌 루프)
+  ghz     : v0.120.0
+  k6      : k6 v2.1.0 (commit/83a87a41e2, go1.26.4, linux/amd64)
+
+## [1] 페이로드 생성
+  stop      → /root/out/ab-20260909-1539/payload/stop.json  (24 bytes JSON)
+  reattach  → /root/out/ab-20260909-1539/payload/reattach.json  (84,449 bytes JSON)
+
+## [2] 프리플라이트 (팔당 1건)
+  ✅ grpc
+  ✅ rest-nginx (200)
+  ✅ rest-direct (200)
+
+## [3] 측정
+  ── 블록 0 (버림)
+      grpc        S c=1   ok=200  fail=0   p50=0.304     p95=1.233     p99=1.691
+      rest-nginx  S c=1   ok=200  fail=0   p50=0.931     p95=1.76      p99=2.566
+      rest-direct S c=1   ok=200  fail=0   p50=0.959     p95=1.679     p99=2.237
+      grpc        L c=1   ok=200  fail=0   p50=0.594     p95=1.49      p99=1.988
+      rest-nginx  L c=1   ok=200  fail=0   p50=1.961     p95=2.927     p99=3.351
+      rest-direct L c=1   ok=200  fail=0   p50=1.447     p95=1.911     p99=2.565
+      grpc        S c=3   ok=200  fail=0   p50=0.817     p95=1.234     p99=4.121
+      rest-nginx  S c=3   ok=200  fail=0   p50=2.445     p95=3.876     p99=4.372
+      rest-direct S c=3   ok=200  fail=0   p50=2.058     p95=3.438     p99=4.668
+      grpc        L c=3   ok=200  fail=0   p50=1.031     p95=1.625     p99=4.112
+      rest-nginx  L c=3   ok=200  fail=0   p50=4.815     p95=6.22      p99=6.917
+      rest-direct L c=3   ok=200  fail=0   p50=3.927     p95=5.339     p99=6.404
+  ── 블록 1
+      rest-nginx  S c=1   ok=200  fail=0   p50=1.042     p95=1.632     p99=1.863
+      rest-direct S c=1   ok=200  fail=0   p50=0.739     p95=1.441     p99=2.094
+      grpc        S c=1   ok=200  fail=0   p50=0.382     p95=1.273     p99=1.67
+      rest-nginx  L c=1   ok=200  fail=0   p50=1.995     p95=2.867     p99=3.269
+      rest-direct L c=1   ok=200  fail=0   p50=1.755     p95=2.429     p99=2.654
+      grpc        L c=1   ok=200  fail=0   p50=0.572     p95=1.391     p99=1.868
+      rest-nginx  S c=3   ok=200  fail=0   p50=2.437     p95=3.853     p99=4.124
+      rest-direct S c=3   ok=200  fail=0   p50=2.218     p95=3.836     p99=34.605
+      grpc        S c=3   ok=200  fail=0   p50=0.824     p95=1.245     p99=2.917
+      rest-nginx  L c=3   ok=200  fail=0   p50=4.649     p95=6.163     p99=7.039
+      rest-direct L c=3   ok=200  fail=0   p50=3.918     p95=5.593     p99=6.211
+      grpc        L c=3   ok=200  fail=0   p50=1.031     p95=1.793     p99=3.521
+  ── 블록 2
+      rest-direct S c=1   ok=200  fail=0   p50=0.862     p95=1.6       p99=1.926
+      grpc        S c=1   ok=200  fail=0   p50=0.374     p95=1.016     p99=1.325
+      rest-nginx  S c=1   ok=200  fail=0   p50=0.945     p95=1.265     p99=1.939
+      rest-direct L c=1   ok=200  fail=0   p50=1.587     p95=2.464     p99=2.695
+      grpc        L c=1   ok=200  fail=0   p50=0.667     p95=1.562     p99=2.237
+      rest-nginx  L c=1   ok=200  fail=0   p50=1.951     p95=2.794     p99=3.201
+      rest-direct S c=3   ok=200  fail=0   p50=2.192     p95=3.423     p99=4.036
+      grpc        S c=3   ok=200  fail=0   p50=0.836     p95=1.53      p99=3.358
+      rest-nginx  S c=3   ok=200  fail=0   p50=2.383     p95=3.619     p99=4.44
+      rest-direct L c=3   ok=200  fail=0   p50=3.872     p95=5.614     p99=8.524
+      grpc        L c=3   ok=200  fail=0   p50=0.995     p95=1.934     p99=4.241
+      rest-nginx  L c=3   ok=200  fail=0   p50=4.696     p95=5.972     p99=6.378
+  ── 블록 3
+      grpc        S c=1   ok=200  fail=0   p50=0.422     p95=1.185     p99=1.52
+      rest-nginx  S c=1   ok=200  fail=0   p50=1.075     p95=1.863     p99=2.117
+      rest-direct S c=1   ok=200  fail=0   p50=0.944     p95=1.849     p99=2.555
+      grpc        L c=1   ok=200  fail=0   p50=0.532     p95=1.02      p99=1.48
+      rest-nginx  L c=1   ok=200  fail=0   p50=1.963     p95=2.853     p99=3.133
+      rest-direct L c=1   ok=200  fail=0   p50=1.902     p95=2.589     p99=2.865
+      grpc        S c=3   ok=200  fail=0   p50=0.783     p95=1.259     p99=2.63
+      rest-nginx  S c=3   ok=200  fail=0   p50=2.354     p95=3.677     p99=4.212
+      rest-direct S c=3   ok=200  fail=0   p50=2.086     p95=3.528     p99=4.303
+      grpc        L c=3   ok=200  fail=0   p50=1.003     p95=1.861     p99=4.855
+      rest-nginx  L c=3   ok=200  fail=0   p50=4.7       p95=6.19      p99=6.672
+      rest-direct L c=3   ok=200  fail=0   p50=3.962     p95=5.778     p99=7.986
+  ── 블록 4
+      rest-nginx  S c=1   ok=200  fail=0   p50=1.011     p95=1.655     p99=1.959
+      rest-direct S c=1   ok=200  fail=0   p50=0.807     p95=1.549     p99=2.191
+      grpc        S c=1   ok=200  fail=0   p50=0.398     p95=1.033     p99=1.429
+      rest-nginx  L c=1   ok=200  fail=0   p50=1.987     p95=2.753     p99=3.205
+      rest-direct L c=1   ok=200  fail=0   p50=1.717     p95=2.531     p99=2.771
+      grpc        L c=1   ok=200  fail=0   p50=0.549     p95=1.351     p99=1.622
+      rest-nginx  S c=3   ok=200  fail=0   p50=2.48      p95=3.815     p99=4.508
+      rest-direct S c=3   ok=200  fail=0   p50=1.982     p95=3.162     p99=3.529
+      grpc        S c=3   ok=200  fail=0   p50=0.814     p95=1.28      p99=2.03
+      rest-nginx  L c=3   ok=200  fail=0   p50=4.651     p95=6.571     p99=36.757
+      rest-direct L c=3   ok=200  fail=0   p50=3.87      p95=5.563     p99=6.123
+      grpc        L c=3   ok=200  fail=0   p50=1.021     p95=1.836     p99=4.01
+
+## [4] 라우팅 probe (워커 0·1·2 로 1건씩)
+# X-AI-Worker 헤더별 StopAnalysis 1건 — 대상 박스에서 아래 session_id 로 로그를 대조할 것
+#   docker compose logs shadowfit-ai | grep 'StopAnalysis 수신'
+# 워커 인덱스별로 다른 pid 가 찍혀야 nginx map 이 실제로 갈라 보낸 것이다.
+worker=0 session_id=999000010 http=200
+worker=1 session_id=999000011 http=200
+worker=2 session_id=999000012 http=200
+
+## [5] 집계 — 유효 블록(0 제외)의 중앙값
+# gRPC vs WebClient — 전송 계층 A/B
+
+대상 `172.31.2.143` · 5블록(0 버림) · n=200/판 · 전 팔 워커 0 고정
+
+| 동시성 | 크기 | 팔 | p50(ms) | p95(ms) | p99(ms) | fail |
+|--:|:-:|---|--:|--:|--:|--:|
+| 1 | S | rest-nginx | 1.026 | 1.643 | 1.949 | 0 |
+| 1 | S | rest-direct | 0.835 | 1.575 | 2.143 | 0 |
+| 1 | S | grpc | 0.390 | 1.109 | 1.474 | 0 |
+| 1 | L | rest-nginx | 1.975 | 2.824 | 3.203 | 0 |
+| 1 | L | rest-direct | 1.736 | 2.498 | 2.733 | 0 |
+| 1 | L | grpc | 0.560 | 1.371 | 1.745 | 0 |
+| 3 | S | rest-nginx | 2.410 | 3.746 | 4.326 | 0 |
+| 3 | S | rest-direct | 2.139 | 3.476 | 4.169 | 0 |
+| 3 | S | grpc | 0.819 | 1.269 | 2.773 | 0 |
+| 3 | L | rest-nginx | 4.673 | 6.177 | 6.855 | 0 |
+| 3 | L | rest-direct | 3.895 | 5.604 | 7.098 | 0 |
+| 3 | L | grpc | 1.012 | 1.849 | 4.125 | 0 |
+
+> 🔴 절대값을 인용하지 말 것 — 이 rig 는 닫힌 루프 지연 비교다. 읽는 법은 **팔 사이 델타**다.
+>
+> - `rest-nginx` − `rest-direct` = **nginx 홉 비용** (같은 프로토콜, 홉만 다름)
+> - `rest-direct` − `grpc` = **프로토콜·직렬화 비용** (같은 홉 수, 형식만 다름)
+> - S 와 L 의 차이가 이 둘을 크기 축으로 다시 가른다 — S 는 고정비, L 은 디코드 비용
+
+> 원자료: `raw.tsv` · 로그: `logs/` · 라우팅: `routing_probe.txt`
+
+결과 → /root/out/ab-20260909-1539
+AB_ROUND_DONE rc=0 out=/root/out/ab-20260909-1539

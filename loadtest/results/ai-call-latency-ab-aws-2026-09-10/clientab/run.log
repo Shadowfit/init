@@ -1,0 +1,85 @@
+# Spring→AI 왕복 지연 A/B — 2026-09-10T13:43:57Z
+BASE=http://localhost:8080 N=100 BLOCKS=5 WARMUP=10
+## 계정 준비 100 개 (간격 1.3s)
+  ✅ 계정 100 개
+## 팔 전환 → grpc (13:46:25)
+   AI_CLIENT_TYPE=grpc
+   블록 discard(grpc) 사이클 10 완료 13:46:38
+   배수 완료(discard/grpc) — stop 누적 10
+## 팔 전환 → webclient (13:46:58)
+   AI_CLIENT_TYPE=webclient
+   블록 discard(webclient) 사이클 10 완료 13:47:12
+   배수 완료(discard/webclient) — stop 누적 10
+## 팔 전환 → grpc (13:47:32)
+   AI_CLIENT_TYPE=grpc
+   블록 warmup(grpc) 사이클 10 완료 13:47:46
+   배수 완료(warmup b1/grpc) — stop 누적 10
+   블록 b1(grpc) 사이클 100 완료 13:48:11
+   배수 완료(b1/grpc) — stop 누적 110
+   ✅ 블록 1/5 (grpc) 회수 완료
+## 팔 전환 → webclient (13:48:26)
+   AI_CLIENT_TYPE=webclient
+   블록 warmup(webclient) 사이클 10 완료 13:48:39
+   배수 완료(warmup b1/webclient) — stop 누적 10
+   블록 b1(webclient) 사이클 100 완료 13:49:05
+   배수 완료(b1/webclient) — stop 누적 110
+   ✅ 블록 1/5 (webclient) 회수 완료
+## 팔 전환 → webclient (13:49:20)
+   AI_CLIENT_TYPE=webclient
+   블록 warmup(webclient) 사이클 10 완료 13:49:34
+   배수 완료(warmup b2/webclient) — stop 누적 10
+   블록 b2(webclient) 사이클 100 완료 13:50:00
+   배수 완료(b2/webclient) — stop 누적 110
+   ✅ 블록 2/5 (webclient) 회수 완료
+## 팔 전환 → grpc (13:50:15)
+   AI_CLIENT_TYPE=grpc
+   블록 warmup(grpc) 사이클 10 완료 13:50:29
+   배수 완료(warmup b2/grpc) — stop 누적 10
+   블록 b2(grpc) 사이클 100 완료 13:50:54
+   배수 완료(b2/grpc) — stop 누적 110
+   ✅ 블록 2/5 (grpc) 회수 완료
+## 팔 전환 → grpc (13:51:09)
+   AI_CLIENT_TYPE=grpc
+   블록 warmup(grpc) 사이클 10 완료 13:51:22
+   배수 완료(warmup b3/grpc) — stop 누적 10
+   블록 b3(grpc) 사이클 100 완료 13:51:47
+   배수 완료(b3/grpc) — stop 누적 110
+   ✅ 블록 3/5 (grpc) 회수 완료
+## 팔 전환 → webclient (13:52:02)
+   AI_CLIENT_TYPE=webclient
+   블록 warmup(webclient) 사이클 10 완료 13:52:15
+   배수 완료(warmup b3/webclient) — stop 누적 10
+   블록 b3(webclient) 사이클 100 완료 13:52:40
+   배수 완료(b3/webclient) — stop 누적 110
+   ✅ 블록 3/5 (webclient) 회수 완료
+## 팔 전환 → webclient (13:52:56)
+   AI_CLIENT_TYPE=webclient
+   블록 warmup(webclient) 사이클 10 완료 13:53:10
+   배수 완료(warmup b4/webclient) — stop 누적 10
+   블록 b4(webclient) 사이클 100 완료 13:53:36
+   배수 완료(b4/webclient) — stop 누적 110
+   ✅ 블록 4/5 (webclient) 회수 완료
+## 팔 전환 → grpc (13:53:51)
+   AI_CLIENT_TYPE=grpc
+   블록 warmup(grpc) 사이클 10 완료 13:54:05
+   배수 완료(warmup b4/grpc) — stop 누적 10
+   블록 b4(grpc) 사이클 100 완료 13:54:30
+   배수 완료(b4/grpc) — stop 누적 110
+   ✅ 블록 4/5 (grpc) 회수 완료
+## 팔 전환 → grpc (13:54:55)
+   AI_CLIENT_TYPE=grpc
+   블록 warmup(grpc) 사이클 10 완료 13:55:08
+   배수 완료(warmup b5/grpc) — stop 누적 10
+   블록 b5(grpc) 사이클 100 완료 13:55:33
+   배수 완료(b5/grpc) — stop 누적 110
+   ✅ 블록 5/5 (grpc) 회수 완료
+## 팔 전환 → webclient (13:55:48)
+   AI_CLIENT_TYPE=webclient
+   블록 warmup(webclient) 사이클 10 완료 13:56:01
+   배수 완료(warmup b5/webclient) — stop 누적 10
+   블록 b5(webclient) 사이클 100 완료 13:56:26
+   배수 완료(b5/webclient) — stop 누적 110
+   ✅ 블록 5/5 (webclient) 회수 완료
+## 완료 2026-09-10T13:56:41Z — 스크레이프 20 개
+   집계: python loadtest/analyze_ai_call_latency_ab.py /root/init/loadtest/results/ai-call-latency-ab-aws-2026-09-10/clientab
+   집계: python loadtest/analyze_ai_call_latency_ab.py /root/init/loadtest/results/ai-call-latency-ab-aws-2026-09-10/clientab

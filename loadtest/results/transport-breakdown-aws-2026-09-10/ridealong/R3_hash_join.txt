@@ -1,0 +1,65 @@
+# R3 3-way 조인 알고리즘 — 2026-09-10T15:10:56+00:00
+# 조인: reports ⋈ exercise_sessions ⋈ users
+# 🔴 조건 — 시딩이 단일 템플릿 복제라 값 분포가 균일하다.
+#    플랜 «모양» 만 읽는다. 카디널리티 추정·선택도 결론 금지.
+# 🔴 오독 방지 — ㉡ 의 실행시간이 ㉠ 보다 느린 것은 «hash join 이 느리다» 가 아니다.
+#    ㉡ 는 인덱스를 **일부러** 안 쓴 팔이다. hash join 의 값을 보려면 ㉡-1 ↔ ㉡-2
+#    (같은 인덱스 없는 조건에서 hash join 켬/끔)의 cost 를 비교할 것.
+
+## 무대 (행 수 · 소유자 분산)
+reports	sessions	users	distinct_owners
+93	1680	100	41
+
+## 팔 ㉠ — 자연 선택 (인덱스 그대로)
+#    hash join 이 «안 나오는 것» 도 답이다 — FK 인덱스가 있으면 조건이 안 선다
+EXPLAIN
+-> Nested loop inner join  (cost=31.3 rows=31)
+    -> Nested loop inner join  (cost=20.4 rows=31)
+        -> Filter: (r.report_type = 'SESSION')  (cost=9.55 rows=31)
+            -> Table scan on r  (cost=9.55 rows=93)
+        -> Single-row covering index lookup on u using PRIMARY (id=r.member_id)  (cost=0.253 rows=1)
+    -> Single-row index lookup on s using PRIMARY (id=r.session_id)  (cost=0.253 rows=1)
+
+EXPLAIN
+-> Nested loop inner join  (cost=31.3 rows=31) (actual time=0.066..0.449 rows=93 loops=1)
+    -> Nested loop inner join  (cost=20.4 rows=31) (actual time=0.0557..0.163 rows=93 loops=1)
+        -> Filter: (r.report_type = 'SESSION')  (cost=9.55 rows=31) (actual time=0.0408..0.0626 rows=93 loops=1)
+            -> Table scan on r  (cost=9.55 rows=93) (actual time=0.0377..0.0498 rows=93 loops=1)
+        -> Single-row covering index lookup on u using PRIMARY (id=r.member_id)  (cost=0.253 rows=1) (actual time=908e-6..931e-6 rows=1 loops=93)
+    -> Single-row index lookup on s using PRIMARY (id=r.session_id)  (cost=0.253 rows=1) (actual time=0.00291..0.00293 rows=1 loops=93)
+
+
+## 팔 ㉡-1 — IGNORE INDEX FOR JOIN (쓸 인덱스가 없는 equi-join)
+EXPLAIN
+-> Inner hash join (u.id = r.member_id)  (cost=5533 rows=31.3)
+    -> Index scan on u using idx_users_created_at  (cost=0.0276 rows=100)
+    -> Hash
+        -> Inner hash join (s.id = r.session_id)  (cost=5222 rows=31)
+            -> Index scan on s using idx_session_status_starttime  (cost=0.141 rows=1680)
+            -> Hash
+                -> Filter: (r.report_type = 'SESSION')  (cost=9.55 rows=31)
+                    -> Table scan on r  (cost=9.55 rows=93)
+
+EXPLAIN
+-> Inner hash join (u.id = r.member_id)  (cost=5533 rows=31.3) (actual time=0.419..0.437 rows=93 loops=1)
+    -> Covering index scan on u using idx_users_created_at  (cost=0.0276 rows=100) (actual time=0.00895..0.0149 rows=100 loops=1)
+    -> Hash
+        -> Inner hash join (s.id = r.session_id)  (cost=5222 rows=31) (actual time=0.105..0.396 rows=93 loops=1)
+            -> Covering index scan on s using idx_session_status_starttime  (cost=0.141 rows=1680) (actual time=0.0181..0.21 rows=1680 loops=1)
+            -> Hash
+                -> Filter: (r.report_type = 'SESSION')  (cost=9.55 rows=31) (actual time=0.0376..0.0567 rows=93 loops=1)
+                    -> Table scan on r  (cost=9.55 rows=93) (actual time=0.0345..0.0437 rows=93 loops=1)
+
+
+## 팔 ㉡-2 — 같은 조건 + block_nested_loop=off (hash join 비활성)
+#    ㉡-1 과의 cost 차이가 «옵티마이저가 hash join 을 고르는 이유» 다
+EXPLAIN
+-> Nested loop inner join  (cost=5683 rows=31.3)
+    -> Nested loop inner join  (cost=5349 rows=31)
+        -> Filter: (r.report_type = 'SESSION')  (cost=9.55 rows=31)
+            -> Table scan on r  (cost=9.55 rows=93)
+        -> Filter: (s.id = r.session_id)  (cost=4.25 rows=1)
+            -> Index scan on s using idx_session_status_starttime  (cost=4.25 rows=1680)
+    -> Filter: (u.id = r.member_id)  (cost=0.753 rows=1.01)
+        -> Index scan on u using idx_users_created_at  (cost=0.753 rows=100)
+
