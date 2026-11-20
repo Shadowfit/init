@@ -414,7 +414,8 @@ SessionMetricsRecordingTest {
                     mock(com.shadowfit.repository.exercise.SessionSetRepository.class),
                     mock(com.shadowfit.service.recommendation.RecommendationService.class),
                     mock(com.shadowfit.service.report.DailyLogService.class),
-                    sessionCompletionTx);
+                    sessionCompletionTx,
+                    java.time.Clock.systemDefaultZone());
         }
 
         @Test

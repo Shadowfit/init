@@ -39,6 +39,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.shadowfit.grpc.SessionStatus;
 import com.shadowfit.grpc.SessionCompleteRequest;
 
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -62,6 +63,9 @@ public class SessionService {
     // (이슈 #175). 자기호출은 AOP 프록시를 우회해 @Transactional이 조용히 무시되는데, 다른 빈으로
     // 옮기면 이 클래스가 자기 프록시를 알아야 할 이유 자체가 없어진다.
     private final SessionCompletionTx sessionCompletionTx;
+    // «지금» — 시작 시각·타임아웃 판정·종료 멱등 처리가 이걸 읽는다(#638). 테스트가 Clock.fixed 로 시각을 고정해
+    // 「특정 시각 기준 분기」를 몇 분 기다리거나 mockStatic 없이 돌릴 수 있다. 운영 빈은 systemDefaultZone 이라 동작은 그대로다.
+    private final Clock clock;
 
     // ExerciseAnalysisService 주입은 제거됐다. endSession 이 gRPC 를 직접 부르지 않고 아웃박스 행만
     // 남기게 되면서 유일한 사용처가 사라졌고, 그 결과 SessionService ↔ ExerciseAnalysisService
@@ -145,7 +149,7 @@ public class SessionService {
                 .member(member)
                 .exercise(exercise)
                 .referenceSource(finalUrl)
-                .startTime(LocalDateTime.now().withNano(0))
+                .startTime(LocalDateTime.now(clock).withNano(0))
                 .status(Status.IN_PROGRESS)
                 .sessionNonce(sessionNonceGenerator.generate())
                 .squatDepthMode(appDto.getDepthMode() != null ? appDto.getDepthMode() : SquatDepthMode.FULL)
@@ -249,7 +253,7 @@ public class SessionService {
             throw new BusinessException(ErrorCode.SESSION_NOT_FOUND);
         }
 
-        if (session.isTimedOutAt(LocalDateTime.now(), idleMinutes, defaultBufferMinutes)) {
+        if (session.isTimedOutAt(LocalDateTime.now(clock), idleMinutes, defaultBufferMinutes)) {
             throw new BusinessException(ErrorCode.SESSION_REATTACH_EXPIRED);
         }
     }
@@ -306,7 +310,7 @@ public class SessionService {
                 .orElseThrow(() -> new BusinessException(ErrorCode.SESSION_NOT_FOUND));
 
         // 멱등: 이미 endTime 기록된 세션은 변경 없음 (AI 재호출도 안 함)
-        if (!session.markEnded(LocalDateTime.now())) {
+        if (!session.markEnded(LocalDateTime.now(clock))) {
             return;
         }
         sessionRepository.saveAndFlush(session);
