@@ -39,6 +39,11 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "gradle-wrapper"
         update-types: ["version-update:semver-major"]
+      # - Spring Boot 4.x: 위 둘의 «Boot 3.5 에 머무는 동안» 이라는 전제 그 자체다. Boot 플러그인 메이저는 별도 이전
+      #   작업(docs/decisions/major-version-upgrade-policy.md)이 정해진 뒤에 받는다 — 2026-11-20 에 #883(3.5.16→4.1.2)이
+      #   올라와 닫았다. Gradle 플러그인은 dependency-name 이 플러그인 id 다.
+      - dependency-name: "org.springframework.boot"
+        update-types: ["version-update:semver-major"]
 
   # ══════════════════════════════════════════════════════════════════════════
   # ai-server (Python)
