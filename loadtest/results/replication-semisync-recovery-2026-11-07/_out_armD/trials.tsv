@@ -1,0 +1,5 @@
+trial	kind	arm	pre_status/clients	first_write_ms	down_status	no_tx	rep_enabled_after_restart	rep_plugin_after_restart	io_running_after_restart	on_after_s	post_status/clients	yes_tx_delta	verdict	pre_on_s
+1	버림	D	ON/1	11288	OFF	2	1	ACTIVE	Yes	1	ON/1	2	복귀	1
+2	본판	D	ON/1	10752	OFF	4	1	ACTIVE	Yes	1	ON/1	2	복귀	1
+3	본판	D	ON/1	11195	OFF	6	1	ACTIVE	Yes	1	ON/1	2	복귀	1
+4	본판	D	ON/1	10798	OFF	8	1	ACTIVE	Yes	1	ON/1	2	복귀	1

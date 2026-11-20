@@ -1,3 +1,4 @@
+import { devError } from '@/utils/devLog';
 import { useState } from 'react';
 import {
   View,
@@ -15,6 +16,9 @@ import { COLORS, FONT_SIZE, SPACING, RADIUS } from '@/constants/Colors';
 import TabSwitch from '@/components/ui/TabSwitch';
 import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
+import Checkbox from '@/components/ui/Checkbox';
+import { CONSENT_VERSION } from '@/constants/consent';
+import { openLegalDocument } from '@/utils/legalLinks';
 import { useAuthStore } from '@/stores/authStore';
 import {
   Mail,
@@ -29,7 +33,6 @@ import {
   ClipboardList,
   Megaphone,
   HelpCircle,
-  KeyRound,
   type LucideIcon,
 } from 'lucide-react-native';
 
@@ -42,7 +45,6 @@ const DEV_ROUTES: { label: string; Icon: LucideIcon; path: string }[] = [
   { label: '운동 보고서', Icon: ClipboardList, path: '/report/1' },
   { label: '공지사항', Icon: Megaphone, path: '/board/notice' },
   { label: 'Q&A', Icon: HelpCircle, path: '/board/qna' },
-  { label: 'PW재설정', Icon: KeyRound, path: '/(auth)/reset-password' },
 ];
 
 export default function LoginScreen() {
@@ -167,11 +169,6 @@ function LoginForm() {
         loading={loading}
         style={styles.submitBtn}
       />
-      <TouchableOpacity onPress={() => router.push('/(auth)/reset-password' as any)}>
-        <Text style={styles.forgotText}>
-          비밀번호를 잊으셨나요? <Text style={styles.forgotLink}>재설정</Text>
-        </Text>
-      </TouchableOpacity>
     </>
   );
 }
@@ -196,8 +193,12 @@ function SignupForm() {
     email?: string;
     password?: string;
     passwordConfirm?: string;
+    consent?: string;
   }>({});
   const [loading, setLoading] = useState(false);
+  // 필수 동의 둘 — 이용약관·개인정보. 건강정보(키·몸무게) 동의는 가입이 아니라 온보딩에서 따로 받는다.
+  const [agreeTerms, setAgreeTerms] = useState(false);
+  const [agreePrivacy, setAgreePrivacy] = useState(false);
   const signup = useAuthStore((s) => s.signup);
 
   const validate = () => {
@@ -210,6 +211,8 @@ function SignupForm() {
     else if (password.length < 6) newErrors.password = '6자 이상 입력해주세요';
     if (password !== passwordConfirm)
       newErrors.passwordConfirm = '비밀번호가 일치하지 않습니다';
+    if (!agreeTerms || !agreePrivacy)
+      newErrors.consent = '필수 약관에 모두 동의해야 가입할 수 있어요';
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -223,9 +226,13 @@ function SignupForm() {
         email: email.trim(),
         password,
         sex,
+        consents: [
+          { type: 'TERMS', version: CONSENT_VERSION.TERMS },
+          { type: 'PRIVACY', version: CONSENT_VERSION.PRIVACY },
+        ],
       });
     } catch (e: any) {
-      console.error('[signup] status=', e.response?.status, 'data=', e.response?.data);
+      devError('[signup] status=', e.response?.status, 'data=', e.response?.data);
       const msg =
         e.response?.data?.message ||
         e.response?.data ||
@@ -309,6 +316,37 @@ function SignupForm() {
         ))}
       </View>
 
+      <View style={styles.consentBox}>
+        <Checkbox
+          checked={agreeTerms && agreePrivacy}
+          onToggle={() => {
+            const next = !(agreeTerms && agreePrivacy);
+            setAgreeTerms(next);
+            setAgreePrivacy(next);
+          }}
+          label="전체 동의"
+        />
+        <View style={styles.consentDivider} />
+        <Checkbox
+          checked={agreeTerms}
+          onToggle={() => setAgreeTerms((v) => !v)}
+          label="이용약관에 동의합니다"
+          tag="필수"
+          onView={() => openLegalDocument('terms')}
+          error={!!errors.consent}
+        />
+        <Checkbox
+          checked={agreePrivacy}
+          onToggle={() => setAgreePrivacy((v) => !v)}
+          label="개인정보 수집·이용에 동의합니다"
+          tag="필수"
+          onView={() => openLegalDocument('privacy')}
+          error={!!errors.consent}
+        />
+        {errors.consent ? <Text style={styles.consentError}>{errors.consent}</Text> : null}
+        <Text style={styles.consentHint}>만 14세 이상만 가입할 수 있어요.</Text>
+      </View>
+
       <Button
         title="회원가입  →"
         onPress={handleSignup}
@@ -364,15 +402,30 @@ const styles = StyleSheet.create({
   submitBtn: {
     marginTop: SPACING.lg,
   },
-  forgotText: {
-    textAlign: 'center',
-    fontSize: FONT_SIZE.sm,
-    color: COLORS.textSecondary,
+
+  // 약관 동의
+  consentBox: {
     marginTop: SPACING.xl,
+    padding: SPACING.md,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.cardBorder,
+    backgroundColor: COLORS.surface,
   },
-  forgotLink: {
-    color: COLORS.primary,
-    fontWeight: '600',
+  consentDivider: {
+    height: 1,
+    backgroundColor: COLORS.cardBorder,
+    marginVertical: SPACING.xs,
+  },
+  consentError: {
+    marginTop: SPACING.xs,
+    fontSize: FONT_SIZE.xs,
+    color: COLORS.error,
+  },
+  consentHint: {
+    marginTop: SPACING.xs,
+    fontSize: FONT_SIZE.xs,
+    color: COLORS.textMuted,
   },
 
   // 성별 선택

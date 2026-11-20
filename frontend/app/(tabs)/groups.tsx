@@ -1,3 +1,4 @@
+import { devWarn } from '@/utils/devLog';
 import { useCallback, useState } from 'react';
 import {
   View,
@@ -45,7 +46,7 @@ export default function GroupsScreen() {
         setGroups(g.data);
         setInvitations(inv.data.filter((i) => i.status === 'PENDING'));
       })
-      .catch((e) => console.warn('[groups] status=', e?.response?.status, 'data=', JSON.stringify(e?.response?.data)))
+      .catch((e) => devWarn('[groups] status=', e?.response?.status, 'data=', JSON.stringify(e?.response?.data)))
       .finally(() => setLoading(false));
   }, []);
 

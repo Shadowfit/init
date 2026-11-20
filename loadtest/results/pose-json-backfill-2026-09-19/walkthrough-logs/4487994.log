@@ -1,0 +1,18 @@
+[E1] signup                             200
+[E1] login                              200
+[E1] 온보딩                                200
+[E1] 세션 시작                              202 sessionId=108201 aiWorker=0
+[E1] 영상                                 C:/Users/khjae/Downloads/4487994-hd_1080_1920_25fps.mp4 (25.0fps → 8프레임마다, 333ms 간격으로 전송)
+[E1] rep 완성                             rep_count=1 (프레임 13번째)
+[E1] rep 완성                             rep_count=2 (프레임 28번째)
+[E1] 프레임 유입                             전송 28 · 랜드마크 28 · 판정에 들어감 28 · rep 2회
+[E1] 세션 종료                              200
+[E1] 리포트                                200 (종료 후 2초)
+        totalReps          2
+        avgSyncRate        94
+        workoutMinutes     0
+        caloriesBurned     0
+        worstSection       {'repNumber': 1, 'exerciseName': '스쿼트', 'timeStamp': '00:02', 'reason': '1회차 · 싱크로율 93%', 'poseDataId': 68771, 'jointCoordinates: <생략 — 4KB JSON>}
+        repTrend           2건
+
+[E1] 판정                                 ✅ E1 통과 — 배관과 내용이 함께 돌았다

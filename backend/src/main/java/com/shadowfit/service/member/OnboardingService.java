@@ -15,12 +15,17 @@ import org.springframework.transaction.annotation.Transactional;
 @AllArgsConstructor
 public class OnboardingService {
     private final MemberRepository memberRepository;
+    private final ConsentService consentService;
 
     //온보딩 업데이트
     @Transactional
     public OnboardingDto updateOnboarding(String email, OnboardingRequestDto dto){
         Member member = memberRepository.findByEmail(email)
                 .orElseThrow(()->new BusinessException(ErrorCode.USER_NOT_FOUND));
+        // 키·몸무게는 건강에 관한 정보라 일반 동의와 분리해 받는다(HEALTH_INFO). 강제가 꺼져 있으면 통과한다.
+        if (dto.getHeight() != null || dto.getWeight() != null) {
+            consentService.requireHealthInfo(member.getId());
+        }
         member.updateOnboarding(dto);
 
         if (member.getSelectedPersona() != null &&

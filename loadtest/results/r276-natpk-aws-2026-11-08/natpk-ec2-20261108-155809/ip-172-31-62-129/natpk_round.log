@@ -1,0 +1,26 @@
+[round] start 2026-11-08T15:58:28Z REF=de7311cc8649a574a3e3f224b999ce08e8eaa932 PHASES=2 3 RUN_ID=natpk-ec2-20261108-155809 SEQ=d:N0 r1:N r2:P ONLINE_LOG_BYTES=2147483648 WRITER_SECS=3600
+Created symlink /etc/systemd/system/multi-user.target.wants/docker.service → /usr/lib/systemd/system/docker.service.
+[round] rig de7311cc · 4 vCPU · 15GB
+[phase2 15:59:23] 기동 — 버퍼풀 4096MB
+[phase2 16:00:02] [0] tpl_A 시딩 — 세션 200 × 600 = 120000 행
+{"table": "tpl_A", "sessions": 200, "rows": 120000, "sec": 15.6}
+[phase2 16:00:18] [0] tpl_A 120000 행 · PK=id,created_at
+[phase2 16:00:19] [1] ✅ 서버가 INPLACE·LOCK=NONE 을 받았다 — 팔 N 은 온라인 DDL 이다
+[phase2 16:00:19] [2] 판 d 팔 N0 — tpl_A 복사
+[phase2 16:01:21]   팔 N0 — DDL 43.3초 · writer {"attempts": "NA", "ok": "NA", "errors": "NA", "max_attempt_ms": "NA", "max_gap_ms": "NA"} · binlog +0MB · 디스크 최대 1407MB
+[phase2 16:01:21] [2] 판 r1 팔 N — tpl_A 복사
+[phase2 16:02:16]   팔 N — DDL 37.1초 · writer {"attempts": 168, "ok": 168, "errors": 0, "err_kinds": [], "max_attempt_ms": 331, "p50_attempt_ms": 12.0, "max_gap_ms": 531} · binlog +5MB · 디스크 최대 1225MB
+[phase2 16:02:16] [2] 판 r2 팔 P — tpl_A 복사
+[phase2 16:02:47]   팔 P — DDL 11.0초 · writer {"attempts": 48, "ok": 48, "errors": 0, "err_kinds": [], "max_attempt_ms": 737, "p50_attempt_ms": 12.5, "max_gap_ms": 938} · binlog +205MB · 디스크 최대 1450MB
+[phase2 16:02:47] [3] r_B 남김 — PK=session_id,rep_number,timestamp_sec,created_at
+[phase2 16:02:48] 완료 → /root/init/loadtest/r276-natpk/_out/phase2/raw.tsv
+[phase3 16:02:50] r_Bp 만들기 — r_B 에서 idx_session_timestamp 를 뺀 복사본
+[phase3 16:02:58] 표본 50 개 (세션·id 쌍)
+[phase3 16:03:12]   r0 session tpl_A — 차가움 "p50_ms": 10.602 · 데움 "p50_ms": 5.128
+[phase3 16:03:22]   r0 session r_B — 차가움 "p50_ms": 12.499 · 데움 "p50_ms": 4.839
+[phase3 16:03:32]   r0 session r_Bp — 차가움 "p50_ms": 10.944 · 데움 "p50_ms": 5.154
+[phase3 16:03:41]   r0 id tpl_A — 차가움 "p50_ms": 0.862 · 데움 "p50_ms": 0.141
+[phase3 16:03:49]   r0 id r_B — 차가움 "p50_ms": 1.588 · 데움 "p50_ms": 0.212
+[phase3 16:03:58]   r0 id r_Bp — 차가움 "p50_ms": 1.508 · 데움 "p50_ms": 0.166
+[phase3 16:03:58] 완료 → /root/init/loadtest/r276-natpk/_out/phase3/reads.jsonl
+[round] finish 2026-11-08T16:03:59Z — done

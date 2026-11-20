@@ -44,7 +44,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
-import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -109,8 +109,8 @@ class SocialJourneyIntegrationTest {
         cheolsu = save("철수");
         category = categoryRepository.saveAndFlush(Category.builder().name("LOWER").build());
         squat = exercisesRepository.saveAndFlush(Exercise.builder().name("스쿼트").category(category)
-                .expectedDurationMinutes(15).syncThresholdBeginner(new BigDecimal("60.00"))
-                .syncThresholdAdvanced(new BigDecimal("85.00")).analysisSupported(true).build());
+                .expectedDurationMinutes(15)
+                .analysisSupported(true).build());
     }
 
     @AfterEach
@@ -157,7 +157,7 @@ class SocialJourneyIntegrationTest {
 
         // ── 2. 철수 세션 완료 — AI 콜백 시뮬레이션 → 아웃박스 → 자동 글 (#10) ──────────────
         Session session = sessionRepository.saveAndFlush(Session.builder().member(cheolsu).exercise(squat)
-                .referenceSource("https://youtu.be/dummy").startTime(LocalDateTime.now().minusMinutes(10))
+                .referenceSource("https://youtu.be/dummy").startTime(minutesAgoButStillToday(10))
                 .status(Status.IN_PROGRESS).totalReps(0).difficultyLevel(1).build());
         @SuppressWarnings("unchecked")
         StreamObserver<SessionCompleteResponse> completeObs = mock(StreamObserver.class);
@@ -303,5 +303,16 @@ class SocialJourneyIntegrationTest {
     private String tokenFor(Member member) {
         CustomUserInfoDto info = CustomUserInfoDto.builder().email(member.getEmail()).role(member.getRole()).build();
         return jwtUtil.createAccessToken(info);
+    }
+
+    /**
+     * «N분 전» 인데 <b>오늘을 넘지 않는</b> 시각. 이 테스트는 완료가 곧 «오늘 출석» 이라는 사실(attendedToday·streak)을
+     * 단언하는데, 단순 {@code now().minusMinutes(10)} 은 자정 직후 10분 안에 돌면 «어제» 가 되어 CI 가 그 시간대에
+     * 걸리면 깨진다(2026-11-19 00:04 KST 에 실제로 깨졌다).
+     */
+    private static LocalDateTime minutesAgoButStillToday(long minutes) {
+        LocalDateTime t = LocalDateTime.now().minusMinutes(minutes);
+        LocalDateTime startOfToday = LocalDate.now().atStartOfDay();
+        return t.isBefore(startOfToday) ? startOfToday : t;
     }
 }

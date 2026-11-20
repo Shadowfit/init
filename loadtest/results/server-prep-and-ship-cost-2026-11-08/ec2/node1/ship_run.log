@@ -1,0 +1,17 @@
+[shipcost] ── 세그먼트 1 rate=paced interval=60s 길이=480s
+[shipcost] 세그먼트 1 끝 — 트랜잭션 852 · 행 21300 · binlog 43MB
+[shipcost] ── 세그먼트 2 rate=paced interval=300s 길이=900s
+[shipcost] 세그먼트 2 끝 — 트랜잭션 1598 · 행 39950 · binlog 81MB
+[shipcost] ── 세그먼트 3 rate=paced interval=300s 길이=900s
+[shipcost] 세그먼트 3 끝 — 트랜잭션 1598 · 행 39950 · binlog 81MB
+[shipcost] ── 세그먼트 4 rate=paced interval=60s 길이=480s
+[shipcost] 세그먼트 4 끝 — 트랜잭션 852 · 행 21300 · binlog 43MB
+[shipcost] ── 세그먼트 5 rate=stress interval=60s 길이=240s
+[shipcost] 세그먼트 5 끝 — 트랜잭션 80357 · 행 2008925 · binlog 4122MB
+[shipcost] ── 세그먼트 6 rate=stress interval=300s 길이=600s
+[shipcost] 세그먼트 6 끝 — 트랜잭션 193340 · 행 4833500 · binlog 9919MB
+[shipcost] ── 세그먼트 7 rate=stress interval=300s 길이=600s
+[shipcost] 세그먼트 7 끝 — 트랜잭션 195261 · 행 4881525 · binlog 10018MB
+[shipcost] ── 세그먼트 8 rate=stress interval=60s 길이=240s
+[shipcost] 세그먼트 8 끝 — 트랜잭션 82712 · 행 2067800 · binlog 4243MB
+[shipcost] 완료 → /root/rig_out/ship/ship_cost.tsv

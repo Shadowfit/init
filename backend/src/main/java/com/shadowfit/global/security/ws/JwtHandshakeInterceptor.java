@@ -54,7 +54,8 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
             return false;
         }
 
-        if (!jwtUtil.isValidToken(token)) {
+        // refresh 토큰으로는 연결할 수 없다 — JwtAuthFilter 와 같은 이유(수명 7일짜리가 access 자리에서 통과).
+        if (!jwtUtil.isValidToken(token) || jwtUtil.isRefreshToken(token)) {
             response.setStatusCode(HttpStatus.UNAUTHORIZED);
             return false;
         }

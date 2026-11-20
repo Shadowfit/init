@@ -32,8 +32,17 @@ import java.util.Set;
  * 처음 비는 날에서 멈추므로, 읽는 행수가 회원의 기록 나이가 아니라 <b>답의 크기</b>(streak 길이)에
  * 비례한다 — 3년치 기록이 있어도 3일째면 3일치 근처만 읽는다. 조회는
  * {@code (member_id, status, start_time)} 인덱스를 뒤에서부터 걸으며 LIMIT 에서 멈추는 모양이고,
- * 그 비용이 계정 크기와 무관한 상수임은 {@code recommendation-algorithm.md} §10 이 같은 인덱스로
+ * 그 모양의 비용이 계정 크기와 무관한 상수임은 {@code recommendation-algorithm.md} §10 이 같은 인덱스로
  * 실측했다(1,680세션 계정, 읽은 행 3, 0.4ms).
+ *
+ * <p>단 그 성질은 <b>쿼리 모양</b>에 달렸다(#761). 첫 페이지를 «내일 00:00 이전» 술어로 물으면 범위가
+ * 회원의 모든 행을 덮어 옵티마이저가 역방향 range scan 대신 ref + filesort 를 골랐고, 그러면 읽는 행이
+ * streak 길이가 아니라 <b>그 회원의 COMPLETED 세션 수</b>였다(2,000세션 회원 2,000행). 그래서 첫 페이지는
+ * 상한 술어 없이 §10 과 같은 모양으로 묻고({@code findLatestCompletedStartTimes}) 미래 시각은 여기서
+ * 건너뛴다. 두 번째 페이지부터는 커서가 기록 안쪽이라 술어가 있어도 range scan 이다. 미래 세션이 첫
+ * 페이지를 채운 만큼은 더 읽는다 — 세션 생성 경로는 start_time 을 서버 현재 시각으로 박으므로
+ * ({@code SessionService}) 미래 행은 시드·수동 적재에서나 생긴다.
+ * 다중 회원 배치({@link #currentStreaks}, 실험용 후보 b)의 LATERAL 첫 페이지는 아직 술어를 쓴다.
  *
  * <p>«오늘 안 했으면 어제부터 센다»는 {@code PatternAnalysisService.calculateStreak} 와 같은 관대한
  * 규칙(08-30 confirm) — 아침에 열었다고 streak 이 끊긴 것처럼 보이지 않게. 다만 그쪽은 «최근 4주
@@ -105,18 +114,27 @@ public class AttendanceService {
      */
     public StreakRun currentStreakRun(Long memberId, LocalDate today) {
         // 오늘 이후 시각은 보지 않는다 — 미래 start_time 이 들어와도 오늘 기준 streak 에 안 섞이게.
-        LocalDateTime cursor = today.plusDays(1).atStartOfDay();
+        LocalDateTime horizon = today.plusDays(1).atStartOfDay();
         StreakWalk walk = new StreakWalk(today);
 
+        // 첫 페이지는 상한 술어 없이(#761) — 술어가 전 범위를 덮으면 회원 세션 전부를 filesort 한다.
+        List<LocalDateTime> page = sessionRepository.findLatestCompletedStartTimes(
+                memberId, Status.COMPLETED, PageRequest.of(0, FETCH_BATCH));
         while (true) {
-            List<LocalDateTime> page = sessionRepository.findCompletedStartTimesBefore(
-                    memberId, Status.COMPLETED, cursor, PageRequest.of(0, FETCH_BATCH));
-            if (page.isEmpty() || walk.consume(page) || page.size() < FETCH_BATCH) {
+            // 미래 행은 여기서 건너뛴다. 페이지 크기 판정은 걸러내기 전 크기로 — 미래 행이 LIMIT 칸을
+            // 차지했어도 «꽉 찼다» 면 그 뒤에 볼 행이 남아 있을 수 있다.
+            List<LocalDateTime> past = page.stream().filter(t -> t.isBefore(horizon)).toList();
+            if (page.isEmpty() || walk.consume(past) || page.size() < FETCH_BATCH) {
                 return walk.run(); // 더 읽을 게 없거나(빈 페이지·짧은 페이지) 끊김을 만났다
             }
             // 마지막으로 본 시각보다 앞선 것만 다음 페이지로. 같은 시각의 다른 세션이 건너뛰어져도
-            // 그 날은 이미 센 날이라 결과가 안 바뀐다(날짜 단위 계산).
-            cursor = page.get(page.size() - 1);
+            // 그 날은 이미 센 날이라 결과가 안 바뀐다(날짜 단위 계산). 페이지가 전부 미래였으면 마지막
+            // 시각도 미래라 horizon 으로 당긴다 — 그 사이는 어차피 안 보는 행이다(이 드문 경우만 전 범위
+            // 술어의 옛 계획을 한 번 더 탄다. 답은 같다).
+            LocalDateTime last = page.get(page.size() - 1);
+            LocalDateTime cursor = last.isBefore(horizon) ? last : horizon;
+            page = sessionRepository.findCompletedStartTimesBefore(
+                    memberId, Status.COMPLETED, cursor, PageRequest.of(0, FETCH_BATCH));
         }
     }
 

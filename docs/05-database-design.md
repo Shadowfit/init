@@ -47,12 +47,19 @@ CREATE TABLE exercises (
     description TEXT,
     preferred_url VARCHAR(500),                          -- 기본 레퍼런스 영상 (코드상 컬럼명)
     target_joints JSON,                                  -- 분석 대상 관절 목록
-    sync_threshold_beginner DECIMAL(5,2) DEFAULT 60.00,  -- 헬린이 기준
-    sync_threshold_advanced DECIMAL(5,2) DEFAULT 85.00,  -- 헬창 기준
+    sync_good_threshold DECIMAL(5,2) NOT NULL DEFAULT 80.00,  -- 싱크로율 ≥ 이 값 = 정석 (V34)
+    sync_warn_threshold DECIMAL(5,2) NOT NULL DEFAULT 60.00,  -- ≥ 이 값 = 교정 필요, 미만 = 위험 (V34)
     expected_duration_minutes INT DEFAULT 15,            -- 세션 타임아웃 산정용 (2026-05 추가, 커밋 136f0e6)
+    reference_extraction_status VARCHAR(16) NULL,        -- 기준 좌표 등록 최근 시도: EXTRACTING|READY|FAILED. NULL = 시도 없음 (V34)
+    reference_extraction_error VARCHAR(500) NULL,        -- FAILED 사유 (관리자 화면에 그대로) (V34)
+    reference_extraction_at DATETIME NULL,               -- 위 상태가 바뀐 시각 (V34)
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ```
+
+> **판정 기준 «하나로 통일» (V34, 2026-10-21)** — 예전 페르소나별 4컬럼(`sync_threshold_beginner/advanced/diet/rehab`, V1)은 관리자 API 로 바꿀 수만 있고 읽는 곳이 없어 **삭제**했다. 지금은 종목당 한 쌍(`sync_good_threshold` 80 · `sync_warn_threshold` 60)이고, 페르소나는 트레이너 말투로만 남는다. 이 한 쌍은 `AnalyzeRequest`(11·12)·`ReattachRequest`(12·13)로 AI 에, 세션 시작·재부착·진행 중 세션·세션 리포트 응답으로 앱에 같이 흐른다.
+>
+> **기준 좌표 등록 상태 (V34)** — 영상 업로드(`POST /admin/exercises/{id}/reference-video`)가 `EXTRACTING` 으로 시작하고, AI 역호출(`ExtractReferenceData`, 성공 → `READY` / `error_message` 있음·좌표 0개 → `FAILED`, 이때 기존 `exercise_references` 는 그대로)이나 접수 실패(파일 없음·통신 실패·서킷 OPEN → `FAILED`)가 닫는다. 3D 시범 직접 등록(`PUT …/reference-poses`)은 바로 `READY`. `EXTRACTING` 이 10분 넘게 그대로면 조회(`GET …/reference`)가 `FAILED` 로 보여준다(저장값은 안 바꾼다).
 
 ### exercise_session_sets (세션별 세트 요약) — 2026-09-22 추가 (V26)
 ```sql
@@ -68,6 +75,29 @@ CREATE TABLE exercise_session_sets (
 );
 ```
 세션 완료 시점에 Spring 이 `pose_data` 의 rep 별 집계를 `ceil(rep_number / target_reps_per_set)` 로 묶어 채운다(`SessionSetAssembler`). `pose_data` 에 `set_index` 를 두지 않는 이유 — 세트 경계가 «목표 도달」 하나뿐이라 역산되고, 파티션 표 ALTER 를 피한다. `pose_data` 파티션은 보존 기간 뒤 드롭되므로 리포트가 세트를 계속 보여주려면 이 표가 필요하다. 설계: [`decisions/lunge-and-set-backend.md`](./decisions/lunge-and-set-backend.md) §7.
+
+### exercise_rejected_attempts (세션별 «미인정 시도») — 2026-10-21 추가 (V35)
+```sql
+CREATE TABLE exercise_rejected_attempts (
+    id                BIGINT        AUTO_INCREMENT PRIMARY KEY,
+    session_id        BIGINT        NOT NULL,
+    attempt_no        INT           NOT NULL,   -- 세션 안 미인정 번호(1부터) — 재전송 멱등키
+    reason            VARCHAR(32)   NOT NULL,   -- DEPTH_NOT_CONFIRMED | SPLIT_STANCE (ENUM 아님 — 사유가 늘어도 ALTER 없이)
+    sync_rate         DECIMAL(5,2)  NOT NULL,   -- 인정 반복과 같은 식의 싱크로율 0~100
+    min_knee_angle    DECIMAL(5,2)  NULL,       -- 가장 깊이 앉은 순간의 무릎각. NULL = 미상(AI 가 0 을 보냄)
+    torso_tilt_deg    DOUBLE        NULL,       -- 그 순간의 체간 기울기. 0 도 유효값(완전 직립)
+    timestamp_sec     DECIMAL(10,3) NOT NULL,   -- pose_data.timestamp_sec 과 같은 원점
+    joint_coordinates JSON          NULL,       -- 그 순간의 관절 좌표
+    created_at        DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_rejected_attempt (session_id, attempt_no),
+    FOREIGN KEY (session_id) REFERENCES exercise_sessions(id) ON DELETE CASCADE
+);
+```
+내려갔다 올라왔지만 AI 가 1회로 **인정하지 않은** 시도다(바닥 자세 미확인·런지 자세). AI 가 시도 하나를 «가장 깊이 앉은 순간» 한 장으로 요약해 gRPC `SaveRejectedAttempt` 로 보내고, Spring(`RejectedAttemptService`)이 `ON DUPLICATE KEY UPDATE` 로 멱등 저장한다. **횟수·세트·목표에는 안 들어가고 점수·리포트에만 들어간다** — 세션 완료 때 `exercise_sessions.avg/max/min_sync_rate` 가 인정 반복(rep 하나에 값 하나)과 이 표(시도 하나에 값 하나)를 같이 집계하고(«평균 싱크로율 = 모든 시도»), `total_reps`·`exercise_session_sets` 는 인정 반복만 본다. 리포트(`session_reports.detailed_analysis`)에는 `rejectedReps`·사유별 수와 회차 추이·깊이·체간의 `counted:false` 행으로 박제된다. 재부착 때 이 표의 행 수가 `ReattachRequest.initial_rejected_count` 로 AI 에 간다.
+- `pose_data` 에 플래그를 붙이지 않고 표를 따로 둔 이유 — 구버전 Spring 이 모르는 플래그를 무시하면 미인정 프레임이 정상 반복으로 저장되고, `pose_data` 는 파티션 표라 FK 를 못 걸며 보존 기간 뒤 드롭된다(세트 표와 같은 이유).
+- `session_id` 단독 인덱스는 두지 않는다 — `uk_rejected_attempt` 의 선두 컬럼이라 세션 조회·FK 가 그 키를 탄다(`session_feedback_logs` 의 중복 인덱스를 같은 이유로 지운 전례).
+- 쓰기 순서: 세션 행의 `last_active_at` UPDATE(`status = 'IN_PROGRESS'` 조건)를 INSERT **보다 먼저** 한다 — FK 때문에 INSERT 가 부모 행에 S 잠금을 걸어, 순서가 반대면 같은 시도의 동시 재전송 둘이 데드락난다(실 MySQL 재현). 0행이면 그 사이 세션이 끝난 것이라 버린다.
+- 설계: [`decisions/counted-reps-vs-scored-attempts.md`](./decisions/counted-reps-vs-scored-attempts.md).
 
 ### exercise_references (운동별 기준 좌표) — 2026-04 추가
 ```sql

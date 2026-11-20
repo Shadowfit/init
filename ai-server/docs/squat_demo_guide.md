@@ -81,7 +81,7 @@ init/ai-server/reference_data/squat_20kg_bar_reference.json
 - `frames[].squat_metrics`: 무릎 각도, 골반 각도, 상체 기울기, 골반 높이, 동작 단계, 반복 횟수
 - `squat_analysis.reps_detected`: 감지된 스쿼트 반복 수
 - `squat_analysis.current_phase`: 현재 동작 단계
-- `squat_analysis.quality_score`: 자세 품질 점수
+- `squat_analysis.quality_score`: `null` (검증된 단일 자세 점수 없음)
 - `squat_analysis.feedback`: 교정 피드백 문구
 
 ## 촬영 가이드

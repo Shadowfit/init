@@ -37,7 +37,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -90,8 +89,8 @@ class SessionCompletedFeedOutboxIntegrationTest {
                 .password("dummy").role(UserRole.USER).build());
         category = categoryRepository.saveAndFlush(Category.builder().name("LOWER").build());
         squat = exercisesRepository.saveAndFlush(Exercise.builder().name("스쿼트").category(category)
-                .expectedDurationMinutes(15).syncThresholdBeginner(new BigDecimal("60.00"))
-                .syncThresholdAdvanced(new BigDecimal("85.00")).analysisSupported(true).build());
+                .expectedDurationMinutes(15)
+                .analysisSupported(true).build());
         groupA = group("FEEDA001");
         groupB = group("FEEDB001");
         groupLeft = group("FEEDL001");

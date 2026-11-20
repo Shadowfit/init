@@ -1,13 +1,15 @@
 package com.shadowfit.service.report;
 
+import com.shadowfit.dto.report.PoseFrameGrouping;
 import com.shadowfit.dto.report.PoseFrameProjection;
+import com.shadowfit.dto.report.RejectedAttemptProjection;
 import com.shadowfit.dto.report.detailreport.RepSyncRateDto;
 import com.shadowfit.dto.report.detailreport.WorstSectionDto;
 import com.shadowfit.model.exercise.Session;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
@@ -104,30 +106,66 @@ public class SessionAnalysisCalculator {
      * precompute 시점에 한 번 돌고 결과가 {@code reports.detailed_analysis} 에 저장된다.
      */
     public List<RepSyncRateDto> calculateRepTrend(List<PoseFrameProjection> poseFrames) {
-        if (poseFrames == null || poseFrames.isEmpty()) {
-            return List.of();
-        }
-
-        List<RepSyncRateDto> trend = new ArrayList<>();
-        for (Map.Entry<Integer, List<PoseFrameProjection>> entry : groupByRep(poseFrames).entrySet()) {
-            Double average = averageSyncRate(entry.getValue());
-            if (average == null) {
-                continue; // syncRate 가 전부 null 인 rep — 추이에 구멍으로 남기고 점을 찍지 않는다
-            }
-            PoseFrameProjection representative = pickRepresentative(entry.getValue());
-            trend.add(new RepSyncRateDto(
-                    entry.getKey(),
-                    // 소수 1자리 반올림 — rep 안 값이 상수라 지금은 나눗셈 오차만 정리하는 수준이지만,
-                    // 프레임별 채점이 도입되면 실제 평균이 되므로 자리수를 미리 고정해 둔다.
-                    Math.round(average * 10.0) / 10.0,
-                    formatTimestamp(representative.timestampSec())
-            ));
-        }
-        return trend;
+        return calculateRepTrend(poseFrames, List.of());
     }
 
     /**
-     * rep 번호로 묶는다. 입력이 rep 오름차순이라 LinkedHashMap 의 순회 순서도 rep 오름차순이다.
+     * 회차별 추이 + «미인정 시도» (2026-10-21, V35).
+     *
+     * <p>인정 반복은 위와 같고, 미인정 시도는 시도 하나가 한 점({@code counted=false}, {@code repNumber=null})이다 —
+     * 횟수에 안 들어간 시도도 추이에 보여야 «좋은 자세만 세니 리포트는 무조건 좋다» 가 안 된다. 미인정 시도가 있으면 목록
+     * 전체를 {@code timestampSec} 오름차순으로 다시 정렬한다(안정 정렬이라 같은 시각이면 인정 반복이 먼저). 없으면 예전과
+     * 같은 rep 오름차순이다 — 인정 반복끼리는 rep 순서가 곧 시간 순서다(재부착도 rep·시간 축을 함께 잇는다, #156).
+     *
+     * <p>worst 구간({@link #calculate})은 인정 반복에서만 고른다 — 대표 프레임의 3D 자세가 {@code pose_data} 에만 있다.
+     */
+    public List<RepSyncRateDto> calculateRepTrend(List<PoseFrameProjection> poseFrames,
+                                                  List<RejectedAttemptProjection> rejectedAttempts) {
+        List<RepSyncRateDto> trend = new ArrayList<>();
+        if (poseFrames != null) {
+            for (Map.Entry<Integer, List<PoseFrameProjection>> entry : groupByRep(poseFrames).entrySet()) {
+                Double average = averageSyncRate(entry.getValue());
+                if (average == null) {
+                    continue; // syncRate 가 전부 null 인 rep — 추이에 구멍으로 남기고 점을 찍지 않는다
+                }
+                PoseFrameProjection representative = pickRepresentative(entry.getValue());
+                trend.add(RepSyncRateDto.counted(
+                        entry.getKey(),
+                        // 소수 1자리 반올림 — rep 안 값이 상수라 지금은 나눗셈 오차만 정리하는 수준이지만,
+                        // 프레임별 채점이 도입되면 실제 평균이 되므로 자리수를 미리 고정해 둔다.
+                        round1(average),
+                        formatTimestamp(representative.timestampSec()),
+                        representative.timestampSec()
+                ));
+            }
+        }
+        if (rejectedAttempts == null || rejectedAttempts.isEmpty()) {
+            return trend;
+        }
+        for (RejectedAttemptProjection attempt : rejectedAttempts) {
+            if (attempt.syncRate() == null) {
+                continue; // 컬럼이 NOT NULL 이라 오지 않지만, 인정 반복과 같은 규칙(점수 없으면 점을 안 찍는다)을 지킨다
+            }
+            trend.add(RepSyncRateDto.rejected(
+                    attempt.attemptNo(),
+                    round1(attempt.syncRate()),
+                    formatTimestamp(attempt.timestampSec()),
+                    attempt.timestampSec(),
+                    attempt.reason().name()));
+        }
+        trend.sort(Comparator.comparing(RepSyncRateDto::getTimestampSec,
+                Comparator.nullsLast(Comparator.naturalOrder())));
+        return trend;
+    }
+
+    private static double round1(double value) {
+        return Math.round(value * 10.0) / 10.0;
+    }
+
+    /**
+     * rep 번호로 묶는다. 규칙 자체는 {@link PoseFrameGrouping#byRep}로 뽑혀 있다(2026-09-21,
+     * {@code SquatDepthAnalysisCalculator}와 공유). 입력이 rep 오름차순이라 LinkedHashMap 의 순회 순서도
+     * rep 오름차순이다.
      *
      * <p>{@code repNumber <= 0} 은 <b>"미상"이라 제외한다</b> — 컬럼이 생기기 전에 저장된 행과,
      * rep_number 를 안 보내는 구버전 AI 의 행이 여기 해당한다(마이그레이션
@@ -139,15 +177,7 @@ public class SessionAnalysisCalculator {
      * 하는 편이 낫다는 판단이다. 실사용 데이터에서는 #74 이후 저장분이 모두 rep 을 싣는다.
      */
     private Map<Integer, List<PoseFrameProjection>> groupByRep(List<PoseFrameProjection> poseFrames) {
-        Map<Integer, List<PoseFrameProjection>> framesByRep = new LinkedHashMap<>();
-        for (PoseFrameProjection frame : poseFrames) {
-            Integer repNumber = frame.repNumber();
-            if (repNumber == null || repNumber <= 0) {
-                continue;
-            }
-            framesByRep.computeIfAbsent(repNumber, key -> new ArrayList<>()).add(frame);
-        }
-        return framesByRep;
+        return PoseFrameGrouping.byRep(poseFrames);
     }
 
     /**

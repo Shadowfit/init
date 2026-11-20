@@ -1,0 +1,313 @@
+{
+  "design": "docs/decisions/pose-json-backfill-query.md §5-1",
+  "constants_from_code": {
+    "VISIBILITY_FLOOR": 0.55,
+    "BOTTOM": 100.0,
+    "STANDING": 150.0
+  },
+  "per_session": [
+    {
+      "session_id": 108198,
+      "frames": 83,
+      "stored_reps": 5,
+      "knee_vis_mean": {
+        "L": 0.24,
+        "R": 0.8
+      },
+      "selfcheck_smoothed_vs_stored": {
+        "mean_abs_err": 0.11,
+        "max_abs_err": 4.76,
+        "within_0_5deg": 81
+      },
+      "abs_3d_minus_2d": {
+        "L_occl": {
+          "n": 73,
+          "p50": 14.0,
+          "p90": 72.0,
+          "max": 96.6
+        },
+        "L_vis": {
+          "n": 10,
+          "p50": 35.9,
+          "p90": 100.6,
+          "max": 102.0
+        },
+        "R_vis": {
+          "n": 83,
+          "p50": 12.4,
+          "p90": 48.3,
+          "max": 109.5
+        }
+      },
+      "threshold_flips": {
+        "bottom_100": 18,
+        "standing_150": 23
+      },
+      "asymmetry_L_minus_R_3d": {
+        "both_vis": {
+          "n": 10,
+          "p50": 17.2,
+          "p90": 43.7,
+          "max": 44.1
+        },
+        "one_occl": {
+          "n": 73,
+          "p50": 17.6,
+          "p90": 45.6,
+          "max": 85.8
+        }
+      },
+      "replay_reps": {
+        "3d": 5,
+        "2d": 5
+      }
+    },
+    {
+      "session_id": 108199,
+      "frames": 16,
+      "stored_reps": 1,
+      "knee_vis_mean": {
+        "L": 0.3,
+        "R": 0.83
+      },
+      "selfcheck_smoothed_vs_stored": {
+        "mean_abs_err": 0.0,
+        "max_abs_err": 0.01,
+        "within_0_5deg": 16
+      },
+      "abs_3d_minus_2d": {
+        "L_occl": {
+          "n": 16,
+          "p50": 6.2,
+          "p90": 47.4,
+          "max": 69.9
+        },
+        "R_vis": {
+          "n": 16,
+          "p50": 19.8,
+          "p90": 44.3,
+          "max": 50.7
+        }
+      },
+      "threshold_flips": {
+        "bottom_100": 1,
+        "standing_150": 4
+      },
+      "asymmetry_L_minus_R_3d": {
+        "one_occl": {
+          "n": 16,
+          "p50": 12.9,
+          "p90": 37.1,
+          "max": 45.1
+        }
+      },
+      "replay_reps": {
+        "3d": 1,
+        "2d": 0
+      }
+    },
+    {
+      "session_id": 108200,
+      "frames": 61,
+      "stored_reps": 5,
+      "knee_vis_mean": {
+        "L": 0.33,
+        "R": 0.96
+      },
+      "selfcheck_smoothed_vs_stored": {
+        "mean_abs_err": 0.0,
+        "max_abs_err": 0.01,
+        "within_0_5deg": 61
+      },
+      "abs_3d_minus_2d": {
+        "L_occl": {
+          "n": 61,
+          "p50": 11.9,
+          "p90": 28.6,
+          "max": 40.2
+        },
+        "R_vis": {
+          "n": 61,
+          "p50": 4.6,
+          "p90": 11.2,
+          "max": 14.0
+        }
+      },
+      "threshold_flips": {
+        "bottom_100": 1,
+        "standing_150": 2
+      },
+      "asymmetry_L_minus_R_3d": {
+        "one_occl": {
+          "n": 61,
+          "p50": 11.8,
+          "p90": 28.6,
+          "max": 42.6
+        }
+      },
+      "replay_reps": {
+        "3d": 5,
+        "2d": 5
+      }
+    },
+    {
+      "session_id": 108201,
+      "frames": 28,
+      "stored_reps": 2,
+      "knee_vis_mean": {
+        "L": 0.98,
+        "R": 0.52
+      },
+      "selfcheck_smoothed_vs_stored": {
+        "mean_abs_err": 0.0,
+        "max_abs_err": 0.01,
+        "within_0_5deg": 28
+      },
+      "abs_3d_minus_2d": {
+        "L_vis": {
+          "n": 28,
+          "p50": 8.6,
+          "p90": 35.8,
+          "max": 42.6
+        },
+        "R_occl": {
+          "n": 20,
+          "p50": 32.8,
+          "p90": 90.9,
+          "max": 92.1
+        },
+        "R_vis": {
+          "n": 8,
+          "p50": 16.4,
+          "p90": 70.3,
+          "max": 68.1
+        }
+      },
+      "threshold_flips": {
+        "bottom_100": 3,
+        "standing_150": 0
+      },
+      "asymmetry_L_minus_R_3d": {
+        "both_vis": {
+          "n": 8,
+          "p50": 27.6,
+          "p90": 60.5,
+          "max": 60.2
+        },
+        "one_occl": {
+          "n": 20,
+          "p50": 28.9,
+          "p90": 71.7,
+          "max": 73.6
+        }
+      },
+      "replay_reps": {
+        "3d": 2,
+        "2d": 2
+      }
+    },
+    {
+      "session_id": 108202,
+      "frames": 28,
+      "stored_reps": 3,
+      "knee_vis_mean": {
+        "L": 0.75,
+        "R": 0.99
+      },
+      "selfcheck_smoothed_vs_stored": {
+        "mean_abs_err": 0.0,
+        "max_abs_err": 0.01,
+        "within_0_5deg": 28
+      },
+      "abs_3d_minus_2d": {
+        "L_vis": {
+          "n": 28,
+          "p50": 7.7,
+          "p90": 43.6,
+          "max": 51.5
+        },
+        "R_vis": {
+          "n": 28,
+          "p50": 3.7,
+          "p90": 15.6,
+          "max": 20.6
+        }
+      },
+      "threshold_flips": {
+        "bottom_100": 0,
+        "standing_150": 1
+      },
+      "asymmetry_L_minus_R_3d": {
+        "both_vis": {
+          "n": 28,
+          "p50": 11.4,
+          "p90": 28.3,
+          "max": 36.7
+        }
+      },
+      "replay_reps": {
+        "3d": 3,
+        "2d": 2
+      }
+    },
+    {
+      "session_id": 108203,
+      "frames": 0,
+      "note": "행 없음 — rep 0 세션"
+    },
+    {
+      "session_id": 108204,
+      "frames": 23,
+      "stored_reps": 2,
+      "knee_vis_mean": {
+        "L": 0.96,
+        "R": 0.28
+      },
+      "selfcheck_smoothed_vs_stored": {
+        "mean_abs_err": 0.0,
+        "max_abs_err": 0.01,
+        "within_0_5deg": 23
+      },
+      "abs_3d_minus_2d": {
+        "L_vis": {
+          "n": 23,
+          "p50": 3.8,
+          "p90": 9.2,
+          "max": 11.6
+        },
+        "R_occl": {
+          "n": 23,
+          "p50": 7.9,
+          "p90": 29.9,
+          "max": 36.9
+        }
+      },
+      "threshold_flips": {
+        "bottom_100": 0,
+        "standing_150": 2
+      },
+      "asymmetry_L_minus_R_3d": {
+        "one_occl": {
+          "n": 23,
+          "p50": 11.0,
+          "p90": 32.1,
+          "max": 40.1
+        }
+      },
+      "replay_reps": {
+        "3d": 2,
+        "2d": 3
+      }
+    },
+    {
+      "session_id": 108205,
+      "frames": 0,
+      "note": "행 없음 — rep 0 세션"
+    }
+  ],
+  "pooled_threshold_flips": {
+    "bottom_100": 23,
+    "standing_150": 32
+  },
+  "total_frames": 239
+}

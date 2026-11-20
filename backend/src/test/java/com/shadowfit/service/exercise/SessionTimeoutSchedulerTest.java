@@ -181,4 +181,74 @@ class SessionTimeoutSchedulerTest {
         verify(sessionService, times(1))
                 .markAsFailedIfStillInProgress(eq(1L), any(LocalDateTime.class), eq(true));
     }
+
+    // ── tick 결과 지표 (failure-modes T2) — 스케줄러는 예외를 삼키므로 이 지표가 «죽었다» 를 밖에 알리는 유일한 신호다 ──
+
+    private double tickCount(String outcome) {
+        return meterRegistry.counter("shadowfit.scheduler.tick",
+                "scheduler", SessionTimeoutScheduler.SCHEDULER_NAME, "outcome", outcome).count();
+    }
+
+    private double lastSuccessGauge() {
+        return meterRegistry.get("shadowfit.scheduler.last.success.timestamp")
+                .tag("scheduler", SessionTimeoutScheduler.SCHEDULER_NAME).gauge().value();
+    }
+
+    @Test
+    @DisplayName("[지표] 대상이 없어도 깨끗이 끝난 tick 이다 — success 로 센다")
+    void tick_noCandidates_isSuccess() {
+        when(sessionRepository.findTimeoutCandidatesByStatus(Status.IN_PROGRESS)).thenReturn(List.of());
+
+        scheduler.checkAndTimeoutSessions();
+
+        assertEquals(1.0, tickCount("success"));
+        assertEquals(0.0, tickCount("error"));
+        assertEquals(0.0, tickCount("partial"));
+    }
+
+    @Test
+    @DisplayName("[지표] 후보 조회가 예외면 error — 예외는 삼키고(스케줄러가 죽지 않는다) 마지막 성공 시각은 올리지 않는다")
+    void tick_queryFails_isError_andLastSuccessNotAdvanced() {
+        double gaugeBefore = lastSuccessGauge();
+        when(sessionRepository.findTimeoutCandidatesByStatus(Status.IN_PROGRESS))
+                .thenThrow(new RuntimeException("db down"));
+
+        assertDoesNotThrow(() -> scheduler.checkAndTimeoutSessions());
+
+        assertEquals(1.0, tickCount("error"));
+        assertEquals(0.0, tickCount("success"));
+        assertEquals(gaugeBefore, lastSuccessGauge(), "실패한 tick 이 «마지막 성공» 을 갱신하면 알람이 영영 안 걸린다");
+    }
+
+    @Test
+    @DisplayName("[지표] 건별 처리에서 예상 밖 예외가 나면 partial — 나머지 세션은 계속 처리한다")
+    void tick_itemFails_isPartial_andContinues() {
+        SessionRepository.TimeoutCandidate bad = candidate(1L, LocalDateTime.now().minusMinutes(50), SQUAT_EXPECTED_MINUTES);
+        SessionRepository.TimeoutCandidate good = candidate(2L, LocalDateTime.now().minusMinutes(50), SQUAT_EXPECTED_MINUTES);
+        when(sessionRepository.findTimeoutCandidatesByStatus(Status.IN_PROGRESS)).thenReturn(List.of(bad, good));
+        when(sessionService.markAsFailedIfStillInProgress(eq(1L), any(LocalDateTime.class), eq(true)))
+                .thenThrow(new RuntimeException("boom"));
+        when(sessionService.markAsFailedIfStillInProgress(eq(2L), any(LocalDateTime.class), eq(true)))
+                .thenReturn(true);
+
+        assertDoesNotThrow(() -> scheduler.checkAndTimeoutSessions());
+
+        verify(sessionService).markAsFailedIfStillInProgress(eq(2L), any(LocalDateTime.class), eq(true));
+        assertEquals(1.0, tickCount("partial"));
+        assertEquals(0.0, tickCount("success"));
+    }
+
+    @Test
+    @DisplayName("[지표] 낙관락 양보는 정상 경로다 — partial 이 아니라 success")
+    void tick_optimisticLockYield_isStillSuccess() {
+        SessionRepository.TimeoutCandidate c = candidate(3L, LocalDateTime.now().minusMinutes(50), SQUAT_EXPECTED_MINUTES);
+        when(sessionRepository.findTimeoutCandidatesByStatus(Status.IN_PROGRESS)).thenReturn(List.of(c));
+        when(sessionService.markAsFailedIfStillInProgress(eq(3L), any(LocalDateTime.class), eq(true)))
+                .thenThrow(new ObjectOptimisticLockingFailureException(Session.class, 3L));
+
+        scheduler.checkAndTimeoutSessions();
+
+        assertEquals(1.0, tickCount("success"));
+        assertEquals(0.0, tickCount("partial"));
+    }
 }

@@ -78,7 +78,6 @@ class SessionServiceTest {
         category = categoryRepository.save(Category.builder().name("LOWER").build());
         exercise = exercisesRepository.saveAndFlush(Exercise.builder()
                 .name("스쿼트").category(category).expectedDurationMinutes(15)
-                .syncThresholdBeginner(new BigDecimal("60.00")).syncThresholdAdvanced(new BigDecimal("85.00"))
                 .analysisSupported(true)  // 기본값이 false라 명시 필요 — 없으면 createSession이 W007로 막힘
                 .build());
     }
@@ -188,7 +187,6 @@ class SessionServiceTest {
         void createSession_analysisNotSupported_throws() {
             Exercise unsupported = exercisesRepository.saveAndFlush(Exercise.builder()
                     .name("런지").category(category).expectedDurationMinutes(15)
-                    .syncThresholdBeginner(new BigDecimal("60.00")).syncThresholdAdvanced(new BigDecimal("85.00"))
                     .build());  // analysisSupported 기본값 false
             VideoRequestDto dto = VideoRequestDto.builder().exerciseId(unsupported.getId()).build();
 
@@ -300,14 +298,16 @@ class SessionServiceTest {
         }
 
         @Test
-        @DisplayName("본인 세션이 아니면 ACCESS_DENIED")
+        @DisplayName("본인 세션이 아니면 SESSION_NOT_FOUND — 없는 세션과 같은 답 (존재 여부 비공개)")
         void endSession_notOwner_throws() {
             Session session = inProgressSession();
 
             assertThatThrownBy(() -> sessionService.endSession(session.getId(), 999999L))
                     .isInstanceOf(BusinessException.class)
                     .extracting(e -> ((BusinessException) e).getErrorCode())
-                    .isEqualTo(ErrorCode.ACCESS_DENIED);
+                    .isEqualTo(ErrorCode.SESSION_NOT_FOUND);
+            assertThat(sessionRepository.findById(session.getId()).orElseThrow().getEndTime())
+                    .as("남의 요청으로 종료 시각이 찍히면 안 된다").isNull();
         }
 
         @Test

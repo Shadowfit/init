@@ -8,6 +8,7 @@ import org.mockito.ArgumentCaptor;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.IntStream;
 
@@ -15,6 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -34,17 +36,18 @@ class AttendanceServiceTest {
     @Test
     @DisplayName("오늘·어제·그제 완료, 4일 전 비면 3 — 첫 페이지에서 끝나고 두 번째 페이지는 안 읽는다")
     void streak_stopsAtFirstGapWithinFirstPage() {
-        when(repo.findCompletedStartTimesBefore(eq(MEMBER), eq(Status.COMPLETED), any(), any()))
+        when(repo.findLatestCompletedStartTimes(eq(MEMBER), eq(Status.COMPLETED), any()))
                 .thenReturn(daysAgo(TODAY, 0, 1, 2, 5, 6));
 
         assertThat(service.currentStreak(MEMBER, TODAY)).isEqualTo(3);
-        verify(repo, times(1)).findCompletedStartTimesBefore(any(), any(), any(), any());
+        verify(repo, times(1)).findLatestCompletedStartTimes(any(), any(), any());
+        verify(repo, never()).findCompletedStartTimesBefore(any(), any(), any(), any());
     }
 
     @Test
     @DisplayName("오늘은 아직 안 했고 어제부터 이어지면 어제를 앵커로 센다 (관대한 규칙)")
     void streak_anchorsOnYesterdayWhenTodayMissing() {
-        when(repo.findCompletedStartTimesBefore(eq(MEMBER), eq(Status.COMPLETED), any(), any()))
+        when(repo.findLatestCompletedStartTimes(eq(MEMBER), eq(Status.COMPLETED), any()))
                 .thenReturn(daysAgo(TODAY, 1, 2));
 
         assertThat(service.currentStreak(MEMBER, TODAY)).isEqualTo(2);
@@ -53,7 +56,7 @@ class AttendanceServiceTest {
     @Test
     @DisplayName("최신 출석이 그제면 이어지는 streak 이 없다 → 0")
     void streak_zeroWhenLatestIsTwoDaysAgo() {
-        when(repo.findCompletedStartTimesBefore(eq(MEMBER), eq(Status.COMPLETED), any(), any()))
+        when(repo.findLatestCompletedStartTimes(eq(MEMBER), eq(Status.COMPLETED), any()))
                 .thenReturn(daysAgo(TODAY, 2, 3, 4));
 
         assertThat(service.currentStreak(MEMBER, TODAY)).isZero();
@@ -62,7 +65,7 @@ class AttendanceServiceTest {
     @Test
     @DisplayName("기록이 없으면 0")
     void streak_zeroWhenNoSessions() {
-        when(repo.findCompletedStartTimesBefore(eq(MEMBER), eq(Status.COMPLETED), any(), any()))
+        when(repo.findLatestCompletedStartTimes(eq(MEMBER), eq(Status.COMPLETED), any()))
                 .thenReturn(List.of());
 
         assertThat(service.currentStreak(MEMBER, TODAY)).isZero();
@@ -71,7 +74,7 @@ class AttendanceServiceTest {
     @Test
     @DisplayName("같은 날 세션이 여러 개여도 하루로 센다")
     void streak_countsOneDayOnceDespiteMultipleSessions() {
-        when(repo.findCompletedStartTimesBefore(eq(MEMBER), eq(Status.COMPLETED), any(), any()))
+        when(repo.findLatestCompletedStartTimes(eq(MEMBER), eq(Status.COMPLETED), any()))
                 .thenReturn(List.of(
                         TODAY.atTime(20, 0), TODAY.atTime(9, 0),
                         TODAY.minusDays(1).atTime(18, 0), TODAY.minusDays(1).atTime(7, 0)));
@@ -85,24 +88,26 @@ class AttendanceServiceTest {
         int batch = AttendanceService.FETCH_BATCH;
         List<LocalDateTime> first = daysAgo(TODAY, IntStream.range(0, batch).toArray());
         List<LocalDateTime> second = daysAgo(TODAY, batch, batch + 1, batch + 3); // batch+2 가 빈다
-        when(repo.findCompletedStartTimesBefore(eq(MEMBER), eq(Status.COMPLETED), any(), any()))
-                .thenReturn(first, second);
+        when(repo.findLatestCompletedStartTimes(eq(MEMBER), eq(Status.COMPLETED), any())).thenReturn(first);
+        when(repo.findCompletedStartTimesBefore(eq(MEMBER), eq(Status.COMPLETED), any(), any())).thenReturn(second);
 
         assertThat(service.currentStreak(MEMBER, TODAY)).isEqualTo(batch + 2);
 
+        // 첫 페이지는 상한 없는 쿼리(#761), 두 번째는 첫 페이지의 마지막 시각 이전.
+        verify(repo, times(1)).findLatestCompletedStartTimes(eq(MEMBER), eq(Status.COMPLETED), any());
         ArgumentCaptor<LocalDateTime> cursor = ArgumentCaptor.forClass(LocalDateTime.class);
-        verify(repo, times(2)).findCompletedStartTimesBefore(eq(MEMBER), eq(Status.COMPLETED), cursor.capture(), any());
-        // 첫 호출은 «내일 0시 이전», 두 번째는 첫 페이지의 마지막 시각 이전.
-        assertThat(cursor.getAllValues().get(0)).isEqualTo(TODAY.plusDays(1).atStartOfDay());
-        assertThat(cursor.getAllValues().get(1)).isEqualTo(first.get(first.size() - 1));
+        verify(repo, times(1)).findCompletedStartTimesBefore(eq(MEMBER), eq(Status.COMPLETED), cursor.capture(), any());
+        assertThat(cursor.getValue()).isEqualTo(first.get(first.size() - 1));
     }
 
     @Test
     @DisplayName("페이지가 꽉 찼는데 다음 페이지가 비면 거기까지가 답이다")
     void streak_fullPageThenEmptyPage() {
         int batch = AttendanceService.FETCH_BATCH;
+        when(repo.findLatestCompletedStartTimes(eq(MEMBER), eq(Status.COMPLETED), any()))
+                .thenReturn(daysAgo(TODAY, IntStream.range(0, batch).toArray()));
         when(repo.findCompletedStartTimesBefore(eq(MEMBER), eq(Status.COMPLETED), any(), any()))
-                .thenReturn(daysAgo(TODAY, IntStream.range(0, batch).toArray()), List.of());
+                .thenReturn(List.of());
 
         assertThat(service.currentStreak(MEMBER, TODAY)).isEqualTo(batch);
     }
@@ -110,7 +115,7 @@ class AttendanceServiceTest {
     @Test
     @DisplayName("currentStreakRun — 길이와 함께 시작일·끝(앵커)을 준다, 시작일은 걷기가 멈춘 자리")
     void streakRun_carriesStartAndAnchor() {
-        when(repo.findCompletedStartTimesBefore(eq(MEMBER), eq(Status.COMPLETED), any(), any()))
+        when(repo.findLatestCompletedStartTimes(eq(MEMBER), eq(Status.COMPLETED), any()))
                 .thenReturn(daysAgo(TODAY, 1, 2, 3, 6));
 
         AttendanceService.StreakRun run = service.currentStreakRun(MEMBER, TODAY);
@@ -122,10 +127,74 @@ class AttendanceServiceTest {
     @Test
     @DisplayName("currentStreakRun — 기록이 없으면 NONE(0, null, null)")
     void streakRun_noneWhenEmpty() {
-        when(repo.findCompletedStartTimesBefore(eq(MEMBER), eq(Status.COMPLETED), any(), any()))
+        when(repo.findLatestCompletedStartTimes(eq(MEMBER), eq(Status.COMPLETED), any()))
                 .thenReturn(List.of());
 
         assertThat(service.currentStreakRun(MEMBER, TODAY)).isEqualTo(AttendanceService.StreakRun.NONE);
+    }
+
+    @Test
+    @DisplayName("#761 — 첫 페이지의 미래 시각(내일 0시 이후)은 건너뛴다, 오늘 23:59:59 는 세고 내일 0시 정각은 뺀다")
+    void streak_skipsFutureRowsOnFirstPage() {
+        when(repo.findLatestCompletedStartTimes(eq(MEMBER), eq(Status.COMPLETED), any()))
+                .thenReturn(List.of(
+                        TODAY.plusDays(3).atTime(9, 0),
+                        TODAY.plusDays(1).atStartOfDay(),   // 내일 0시 정각 — 옛 술어 `< 내일 0시` 로도 빠지던 행
+                        TODAY.atTime(23, 59, 59),
+                        TODAY.minusDays(1).atTime(12, 0),
+                        TODAY.minusDays(3).atTime(12, 0)));
+
+        AttendanceService.StreakRun run = service.currentStreakRun(MEMBER, TODAY);
+        assertThat(run.length()).isEqualTo(2);
+        assertThat(run.end()).isEqualTo(TODAY);
+        verify(repo, never()).findCompletedStartTimesBefore(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("#761 — 미래 시각만 있으면 NONE (내일 세션이 앵커가 되지 않는다)")
+    void streak_noneWhenOnlyFutureRows() {
+        when(repo.findLatestCompletedStartTimes(eq(MEMBER), eq(Status.COMPLETED), any()))
+                .thenReturn(List.of(TODAY.plusDays(2).atTime(9, 0), TODAY.plusDays(1).atTime(9, 0)));
+
+        assertThat(service.currentStreakRun(MEMBER, TODAY)).isEqualTo(AttendanceService.StreakRun.NONE);
+    }
+
+    @Test
+    @DisplayName("#761 — 미래 행이 첫 페이지 칸을 차지해 걸러낸 뒤 FETCH_BATCH 보다 적어도, 꽉 찬 페이지면 다음 페이지를 읽는다")
+    void streak_futureRowsTakeSlotsButPagingContinues() {
+        int batch = AttendanceService.FETCH_BATCH;
+        int future = 2;
+        List<LocalDateTime> first = new ArrayList<>();
+        for (int i = future; i >= 1; i--) {
+            first.add(TODAY.plusDays(i).atTime(12, 0));
+        }
+        first.addAll(daysAgo(TODAY, IntStream.range(0, batch - future).toArray())); // 과거 칸은 batch-future 개
+        List<LocalDateTime> second = daysAgo(TODAY, batch - future, batch - future + 2); // 그 사이 하루가 빈다
+        when(repo.findLatestCompletedStartTimes(eq(MEMBER), eq(Status.COMPLETED), any())).thenReturn(first);
+        when(repo.findCompletedStartTimesBefore(eq(MEMBER), eq(Status.COMPLETED), any(), any())).thenReturn(second);
+
+        assertThat(service.currentStreak(MEMBER, TODAY)).isEqualTo(batch - future + 1);
+
+        ArgumentCaptor<LocalDateTime> cursor = ArgumentCaptor.forClass(LocalDateTime.class);
+        verify(repo, times(1)).findCompletedStartTimesBefore(eq(MEMBER), eq(Status.COMPLETED), cursor.capture(), any());
+        assertThat(cursor.getValue()).isEqualTo(first.get(first.size() - 1));
+    }
+
+    @Test
+    @DisplayName("#761 — 첫 페이지가 전부 미래로 꽉 차면 다음 커서는 그 마지막 시각이 아니라 내일 0시")
+    void streak_allFutureFullPageFallsBackToHorizonCursor() {
+        int batch = AttendanceService.FETCH_BATCH;
+        List<LocalDateTime> first = IntStream.range(0, batch)
+                .mapToObj(i -> TODAY.plusDays(batch - i).atTime(12, 0)).toList();
+        when(repo.findLatestCompletedStartTimes(eq(MEMBER), eq(Status.COMPLETED), any())).thenReturn(first);
+        when(repo.findCompletedStartTimesBefore(eq(MEMBER), eq(Status.COMPLETED), any(), any()))
+                .thenReturn(daysAgo(TODAY, 0, 1, 2, 4));
+
+        assertThat(service.currentStreak(MEMBER, TODAY)).isEqualTo(3);
+
+        ArgumentCaptor<LocalDateTime> cursor = ArgumentCaptor.forClass(LocalDateTime.class);
+        verify(repo, times(1)).findCompletedStartTimesBefore(eq(MEMBER), eq(Status.COMPLETED), cursor.capture(), any());
+        assertThat(cursor.getValue()).isEqualTo(TODAY.plusDays(1).atStartOfDay());
     }
 
     @Test

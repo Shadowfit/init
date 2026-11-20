@@ -3,7 +3,7 @@
 > **상태**: ✅ 2026-09-22 사용자 confirm — §7 에 박제. §3 의 후보·트레이드오프는 기록으로 남긴다.
 > **출처**: 캡스톤 디자인 I 1회차 보고(2026-09-22, 팀 HOMINI) «향후 구현 항목»
 > — [백엔드] *운동 종목 선택 / 운동 세트(AI 연동) / 런지 횟수 측정*, [AI] *런지 피드백 / 운동 세트 / TTS*.
-> **관련**: [`../USE-CASES.md`](../USE-CASES.md) B-07·B-08, [`../tasks/22-backend-tasks-detail.md`](../tasks/22-backend-tasks-detail.md) BE-09, [`tts-design.md`](./tts-design.md) §2.A.BT, [`../12-persona-difficulty.md`](../12-persona-difficulty.md), 이슈 [#147](https://github.com/Shadowfit/init/issues/147)·[#92](https://github.com/Shadowfit/init/issues/92)
+> **관련**: [`../usecase/README.md`](../usecase/README.md) B-06(세트)·B-05(런지), [`../tasks/22-backend-tasks-detail.md`](../tasks/22-backend-tasks-detail.md) BE-09, [`tts-design.md`](./tts-design.md) §2.A.BT, [`../12-persona-difficulty.md`](../12-persona-difficulty.md), 이슈 [#147](https://github.com/Shadowfit/init/issues/147)·[#92](https://github.com/Shadowfit/init/issues/92)
 
 ## 0. 한 줄 요약
 
@@ -11,7 +11,7 @@
 
 ## 1. 전제가 바뀌었다 — 09-11 결정과의 관계
 
-[`../USE-CASES.md`](../USE-CASES.md) B-07·B-08 은 **2026-09-11 에 «이번 학기 제외»** 로 닫혔다. 이유는 하나였다 — *AI 쪽 세트 인지·런지 분석기가 이번 학기에 안 오니 백엔드만 하면 죽은 코드*.
+[`../usecase/README.md`](../usecase/README.md) B-06(세트)·B-05(런지) 은 **2026-09-11 에 «이번 학기 제외»** 로 닫혔다. 이유는 하나였다 — *AI 쪽 세트 인지·런지 분석기가 이번 학기에 안 오니 백엔드만 하면 죽은 코드*.
 
 1회차 보고 PDF 는 AI 파트 항목에 **런지 피드백 · 운동 세트** 를 명시했다. 그 전제가 뒤집힌 것이다. 다만 이 문서는 PDF 를 근거로 삼을 뿐 **AI 담당자가 실제로 무엇을·언제 내놓는지는 확인하지 않았다**. §5 의 첫 질문이 그것이다.
 
@@ -142,7 +142,7 @@ PDF 에 없다. 플랭크는 rep 이 아니라 **시간 유지** 종목이라 `t
 
 | 분기 | 채택 | 근거·조건 |
 |---|---|---|
-| §1 전제 | **AI 파트가 런지 피드백·세트를 이번 학기에 낸다** — 사용자 확인 | 09-11 의 B-07·B-08 «제외」 를 연다. `USE-CASES.md` 갱신은 ① 머지 때 |
+| §1 전제 | **AI 파트가 런지 피드백·세트를 이번 학기에 낸다** — 사용자 확인 | 09-11 의 세트·런지 «제외」 를 연다. 유스케이스 갱신은 ① 머지 때 (09-23 카탈로그에 반영 — 번호는 B-06 세트·B-05 런지) |
 | 3-A | **A-1** — AI 가 세고 백엔드는 저장·집계 | 사용자 무응답 → 추천대로. A-3(좌/우 분리) 은 AI 담당자가 판정을 준다고 할 때 재개 |
 | 3-B | **B-1** — `exercises.code` + proto `exercise_code` | — |
 | 3-C | **C-1** — `GET /exercises` | 미지원 종목도 `analysisSupported=false` 로 내림 |

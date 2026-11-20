@@ -1,4 +1,8 @@
-// ShadowFit 유스케이스 카탈로그 — **프론트 관점** (2026-09-21 코드 기준)
+// ShadowFit 유스케이스 카탈로그 — 단일 정본 (2026-09-23 코드 기준)
+//
+// 2026-09-23 에 백엔드 관점 문서(docs/USE-CASES.md 09-20 판)를 여기로 합쳤다. 축은 둘이다:
+//   status  앱 화면 기준 (아래) — 그림 색 · 시연 판정은 이 축
+//   BACKEND 백엔드 API 기준 (파일 아래쪽 BACKEND 표) — README 목록 · 명세의 «백엔드» 줄
 //
 // status 는 «앱 화면 + API 연동» 기준이다(백엔드 API 존재 여부가 아니다):
 //   done     화면이 있고 API 까지 붙어 동작한다
@@ -11,7 +15,7 @@
 // blocker 시연 필수인데 아직 미완 — 없으면 시연이 끊긴다
 // 이 파일만 고치고 `node docs/usecase/build.mjs` 를 돌리면 그림 5장 + README 가 다시 나온다.
 
-export const UPDATED = '2026-09-21';
+export const UPDATED = '2026-09-23';
 
 export const STATUS = {
   done:     { label: '완료',        fill: '#E8F1DC', stroke: '#3D6B12', text: '#2F5410' },
@@ -25,19 +29,21 @@ export const ACTORS = [
   { name: '회원', kind: '사람', desc: '앱으로 운동하고 모임에 참여하는 일반 사용자. 거의 모든 유스케이스의 주 액터.' },
   { name: '모임 친구', kind: '사람', desc: '같은 모임의 다른 회원. 재촉·응원의 수신자이자 피드·리액션의 상대. 역할만 다를 뿐 «회원» 과 같은 앱을 쓴다.' },
   { name: '관리자', kind: '사람', desc: 'ROLE_ADMIN. 종목·기준 영상·임계값을 관리한다. 앱 화면은 없고 Swagger 로 시연한다.' },
+  { name: '트레이너', kind: '사람', desc: 'ROLE_TRAINER. 담당 회원의 운동을 실시간으로 지켜본다(H-01). 앱 화면은 없다.' },
   { name: 'AI 서버', kind: '시스템', desc: 'FastAPI + MediaPipe. 앱이 카메라 프레임을 HTTP 로 직접 보내면(POST /pose) 싱크로율·rep·자세 결함을 돌려준다. Spring 과는 gRPC.' },
   { name: 'LLM (Gemini)', kind: '시스템', desc: '주간 AI 총평 문장을 만든다. 실패하면 서버가 템플릿 문장으로 대체한다.' },
   { name: 'Expo Push', kind: '시스템', desc: '서버가 보낸 재촉·응원을 FCM/APNs 로 중계한다. 앱이 토큰을 등록해야 도달한다(지금은 미등록).' },
-  { name: '스케줄러', kind: '시스템', desc: 'Spring 내부 @Scheduled. 방치 세션 타임아웃(1분), 아웃박스 발행(1초), 주간 리포트 생성(5초).' },
+  { name: '스케줄러', kind: '시스템', desc: 'Spring 내부 @Scheduled 6곳. 방치 세션 타임아웃(1분), 아웃박스 발행(1초), 주간 리포트 생성(5초), pose_data 파티션 관리(매일 04:00), 고아 pose 감시(04:30), 트레이너 스트림 하트비트(30초).' },
 ];
 
 export const GROUPS = [
   { key: 'A', title: '계정', ids: ['A-01', 'A-02', 'A-03', 'A-04', 'A-05', 'A-06', 'A-07'] },
-  { key: 'B', title: '① 교정 · 실시간 운동', ids: ['B-01', 'B-04', 'B-02', 'B-03', 'B-05', 'B-06'] },
+  { key: 'B', title: '① 교정 · 실시간 운동', ids: ['B-07', 'B-08', 'B-01', 'B-09', 'B-04', 'B-02', 'B-03', 'B-05', 'B-06', 'B-10'] },
   { key: 'C', title: '② 기록 · 리포트', ids: ['C-01', 'C-02', 'C-03', 'C-04', 'C-05', 'C-06', 'D-01', 'D-02', 'D-03'] },
   { key: 'E', title: '③ 지속 · 모임과 알림', ids: ['E-01', 'E-02', 'E-03', 'E-04', 'E-05', 'E-06', 'E-10', 'E-07', 'E-08', 'E-09', 'E-11', 'E-12', 'E-13', 'F-01', 'F-02', 'F-03'] },
   { key: 'G', title: '앱 밖 · 운영 (Swagger 증빙)', ids: ['G-01', 'G-03', 'G-04', 'G-05', 'G-06'] },
-  { key: 'S', title: '앱 밖 · 시스템', ids: ['S-01', 'S-02', 'S-04'] },
+  { key: 'H', title: '앱 밖 · 트레이너', ids: ['H-01'] },
+  { key: 'S', title: '앱 밖 · 시스템', ids: ['S-01', 'S-02', 'S-03', 'S-04'] },
 ];
 
 export const UC = [
@@ -92,7 +98,7 @@ export const UC = [
       '따라 할 운동 영상(YouTube URL)을 입력한다.',
       'PATCH 로 저장하면 onboardingCompleted 가 true 가 되어 메인 탭으로 이동한다.',
     ],
-    alt: ['잘못된 YouTube URL → 서버 검증 실패 message 표시.', '온보딩 미완료 상태로 다른 화면 진입 → 가드가 온보딩으로 되돌린다.'],
+    alt: ['온보딩 미완료 상태로 다른 화면 진입 → 가드가 온보딩으로 되돌린다.'],
     post: '수준·키·몸무게·선호 영상이 채워져 운동 세션(B-01)을 시작할 수 있다.',
   },
   {
@@ -162,9 +168,39 @@ export const UC = [
     note: '«부분» 인 이유: exerciseId 가 1(스쿼트)로 고정이고 종목 선택 화면이 없다. 발표 범위(스쿼트 하나)에서는 그대로 시연된다.',
   },
   {
+    id: 'B-07', name: '운동 종목 선택', status: 'noscreen', actors: ['회원'],
+    screen: '(없음 — 운동 탭 시작 전 자리)',
+    api: ['GET /exercises (2026-09-22)'],
+    pre: '로그인',
+    main: ['운동 탭에서 종목 목록을 본다.', '분석 지원(analysisSupported) 종목만 고를 수 있다 — 아닌 종목은 «준비 중».', '고른 exerciseId 로 B-01 을 시작한다.'],
+    alt: ['분석 미지원 종목으로 세션 시작 → 400 W007.'],
+    post: '선택한 종목으로 B-01 진입',
+    note: '3자 회의(09-21) 통합본에서 AI 명세 UC-02 를 옮긴 번호. 회원용 목록 API 는 09-22 에 생겼고(#785), 앱은 아직 exerciseId=1 고정이다.',
+  },
+  {
+    id: 'B-08', name: '촬영 환경 점검', status: 'partial', actors: ['회원', 'AI 서버'],
+    screen: 'app/(tabs)/exercise.tsx — 카메라 권한 · 가이드 문구',
+    api: ['(AI: 선 자세 보정 · 가림 판정)'],
+    pre: '카메라 권한',
+    main: ['전신이 화면에 들어오도록 선다.', '선 자세 2초로 기준 자세를 잡는다.', '관절이 가려지면 촬영 위치를 다시 잡으라고 안내한다.'],
+    alt: ['관절 가림 → 판정 보류.'],
+    post: '프레임이 판정에 쓸 수 있는 상태',
+    note: 'AI 명세 UC-03. 앱은 권한 요청과 가이드 문구까지만 있다. 백엔드가 할 일은 없다.',
+  },
+  {
+    id: 'B-09', name: '스쿼트 횟수 측정', status: 'done', actors: ['회원', 'AI 서버'],
+    screen: 'app/(tabs)/exercise.tsx — rep 카운터',
+    api: ['AI: POST /pose 응답의 rep', 'gRPC SavePoseDataBatch (AI → Spring)'],
+    pre: '세션 진행 중(B-01)',
+    main: ['AI 가 프레임마다 관절 각도를 추적한다.', '완전한 반복 한 번이 끝나면 rep 을 1 올리고 싱크로율을 계산한다.', '앱 카운터가 갱신되고, rep 기록은 Spring 의 pose_data 에 쌓인다.'],
+    alt: ['깊이 미달 → 횟수에서 뺀다.', '관절 가림 → 판정 보류(B-08).'],
+    post: 'pose_data 에 rep 별 기록 — 리포트(C-01) · 세트 집계(B-06)의 입력',
+    note: 'AI 명세 UC-04. 반복 판정은 시간 기반 SquatCounter FSM(#784).',
+  },
+  {
     id: 'B-04', name: 'TTS 피드백', status: 'partial', demo: 5, blocker: true, actors: ['회원', 'AI 서버'],
     screen: 'app/(tabs)/exercise.tsx — 자세 결함 토스트 · 햅틱',
-    api: ['AI: POST /pose 응답의 feedback_type', 'GET /exercises/{id}/feedback-templates', 'GET /sessions/{id}/feedback-summary (리포트용)'],
+    api: ['AI: POST /pose 응답의 feedback_type', 'GET /exercises/{id}/feedback-templates', 'GET /sessions/{id}/feedback-summary (리포트용)', 'GET /sessions/{id}/feedbacks (발화 로그 원본 — 화면 없음)'],
     pre: '세션 진행 중(B-01), TTS 켜짐(A-05)',
     main: [
       'AI 응답에 feedback_type(예: 무릎 모임 · 상체 숙임)이 실려 온다.',
@@ -194,30 +230,39 @@ export const UC = [
     id: 'B-03', name: '세션 타임아웃', status: 'done', actors: ['스케줄러', '회원'],
     screen: 'app/(tabs)/exercise.tsx — «이어하기 시간 초과» 안내',
     api: ['(서버 내부) SessionTimeoutScheduler — 1분 주기'],
-    pre: '시작 + 예상 시간 + 30분 버퍼를 넘긴 IN_PROGRESS 세션',
+    pre: '마지막 rep 뒤 10분이 지난 IN_PROGRESS 세션 (rep 이 하나도 없으면 시작 + 예상 시간 + 30분)',
     main: ['스케줄러가 방치된 세션을 FAILED 로 바꾼다.', '회원이 돌아와 이어하기를 시도하면 앱이 «너무 오래 지나 이어할 수 없습니다. 새로 시작해주세요» 를 보여준다.'],
-    alt: ['타임아웃과 AI 의 정상 완료가 겹치면 낙관락으로 **실제 완료**가 이긴다.'],
+    alt: ['타임아웃과 AI 의 정상 완료가 겹치면 **AI 완료**가 이긴다 — 늦게 온 완료도 FAILED 를 COMPLETED 로 덮는다.'],
     post: '영원히 «진행 중» 인 세션이 남지 않는다.',
   },
   {
     id: 'B-05', name: '런지 분석', status: 'planned', actors: ['회원', 'AI 서버'],
     screen: '(운동 탭 — 종목 선택 화면 필요)',
-    api: ['(AI 런지 분석기 없음)', '켜는 스위치: PATCH /admin/exercises/{id}/analysis-support'],
+    api: ['(AI 런지 분석기 없음)', '종목 코드 exercises.code = LUNGE (V25)', '켜는 스위치: PATCH /admin/exercises/{id}/analysis-support'],
     pre: 'AI 에 런지 분석기, 런지 기준 영상(G-03)',
-    main: ['종목 선택에서 런지를 고른다.', '이후는 B-01 과 같다.'],
+    main: ['종목 선택(B-07)에서 런지를 고른다.', '이후는 B-01 과 같다.'],
     alt: [],
     post: '—',
-    note: 'DB 에 종목 행은 있으나 analysis_supported=FALSE. 2026-09-11 에 이번 학기 범위에서 뺐다 — 프론트만 먼저 만들면 붙일 곳이 없다.',
+    note: 'DB 에 종목 행은 있으나 analysis_supported=FALSE. 백엔드는 종목 코드(#785)·AI 로 종목 코드를 싣는 proto(#787)까지 왔고, 남은 건 AI 분석기다(decisions/lunge-and-set-backend.md §2-4).',
   },
   {
-    id: 'B-06', name: '운동 세트', status: 'planned', actors: ['회원', 'AI 서버'],
+    id: 'B-06', name: '운동 세트', status: 'noscreen', actors: ['회원', 'AI 서버'],
     screen: '(운동 탭 — 루틴 시작 · 중단 확인 · 운동 기록 모달)',
-    api: ['(proto · DB · API 전부 신규 필요)'],
-    pre: 'AI 의 세트 인지, 세트 스키마',
+    api: ['POST /exercises/sessions {targetRepsPerSet?, targetSets?} (V26)', 'GET /reports/session/{id} 의 sets[]'],
+    pre: '세션 시작 때 세트당 횟수 · 세트 수를 정한다(생략하면 추천 공식)',
     main: ['루틴(종목 × 횟수 × 세트)을 확인하고 시작한다.', '세트 경계마다 쉬는 시간과 진행도를 보여준다.', '끝나면 오늘 운동 기록 요약을 보여준다.'],
     alt: ['«중단할게요» → 진행한 데까지만 기록한다.'],
-    post: '—',
-    note: '지금 «1세트 × N회» 는 서버가 고정으로 찍는 문자열이라 화면상으로만 세트처럼 보인다.',
+    post: '세션 완료 때 서버가 pose_data 의 rep 별 집계로 세트 표를 만든다 — «3세트 x 12회 (마지막 7회)».',
+    note: '백엔드는 09-22 에 들어왔다(#786) — 세트 경계는 «rep 이 세트당 목표에 닿는 순간» 이라 AI 세트 인지 없이 저장본에서 역산한다. 앱에 세트 입력 · 표시가 없다.',
+  },
+  {
+    id: 'B-10', name: '개별 세션 삭제', status: 'noscreen', actors: ['회원'],
+    screen: '(없음 — 리포트 화면이 자리)',
+    api: ['DELETE /sessions/{id}'],
+    pre: '내 세션',
+    main: ['리포트에서 삭제를 누르고 확인한다.', '서버가 세션과 딸린 기록(pose_data · 세트 행)을 지운다 → 204.'],
+    alt: ['남의 세션 · 없는 세션 → 둘 다 404(존재를 드러내지 않는다).', '진행 중 세션 → 409, 먼저 종료해야 한다.'],
+    post: '캘린더 · 주간 요약 · 출석에서 빠진다.',
   },
 
   /* ───────────── ② 기록 · 리포트 ───────────── */
@@ -234,7 +279,7 @@ export const UC = [
     ],
     alt: ['피드백 0건 → 그 카드는 숨긴다.'],
     post: '읽기 전용',
-    note: '🔴 시연 필수인데 미완: reportService.getSessionReport 는 이미 있다 — 화면에서 MOCK_REPORT 를 그 응답(worst 구간 · repTrend · 파트별 점수)으로 바꾸면 끝난다. 운동 직후 «방금 한 결과» 를 보여주는 자리라 시연의 클라이맥스다.',
+    note: '🔴 시연 필수인데 미완: reportService.getSessionReport 는 이미 있다 — 화면에서 MOCK_REPORT 를 그 응답(worst 구간 · repTrend · 이전 세션 대비 · 세트)으로 바꾸면 끝난다. 목업의 «파트별 점수» 는 백엔드에 없는 항목이라 빼야 한다. 운동 직후 «방금 한 결과» 를 보여주는 자리라 시연의 클라이맥스다.',
   },
   {
     id: 'C-02', name: '캘린더 · 일별 기록', status: 'done', actors: ['회원'],
@@ -536,6 +581,16 @@ export const UC = [
     note: '관리자 페이지는 로드맵상 «나중에».',
   },
 
+  /* ───────────── 앱 밖 · 트레이너 ───────────── */
+  {
+    id: 'H-01', name: '담당 회원 실시간 모니터링', status: 'backend', actors: ['트레이너'],
+    screen: '(앱 화면 없음 — SSE 클라이언트 필요)', api: ['GET /coaching/trainer/{userId}/stream (SSE)'],
+    pre: 'TRAINER 토큰, 그 회원의 담당 트레이너',
+    main: ['트레이너가 담당 회원의 스트림을 연다.', '회원이 운동하면 rep 결과가 실시간으로 중계된다.', '30초마다 하트비트가 간다.'],
+    alt: ['담당이 아님 → 거부.', '트레이너 쪽이 느리면 프레임을 버린다(백프레셔).'],
+    post: '읽기 전용',
+  },
+
   /* ───────────── 앱 밖 · 시스템 ───────────── */
   {
     id: 'S-01', name: '아웃박스 발행', status: 'backend', demo: 'bg', actors: ['스케줄러', 'AI 서버', 'Expo Push'],
@@ -550,6 +605,14 @@ export const UC = [
     id: 'S-02', name: '주간 리포트 생성', status: 'backend', actors: ['스케줄러', 'LLM (Gemini)'],
     screen: '(서버 내부)', api: ['WeeklyReportOutboxPublisher — 5초 폴링'],
     pre: 'C-04 의 첫 조회가 생성 요청을 만든다', main: ['Gemini 로 총평을 만든다.'], alt: ['LLM 실패 → 템플릿 문장.'], post: '다음 조회에 총평이 실려 온다.',
+  },
+  {
+    id: 'S-03', name: '기록 파티션 관리', status: 'backend', actors: ['스케줄러'],
+    screen: '(서버 내부)', api: ['PoseDataPartitionScheduler — 매일 04:00', 'PoseDataOrphanMonitor — 매일 04:30'],
+    pre: 'pose_data 는 월별 파티션 표',
+    main: ['다음 달 파티션을 미리 만든다.', '보관 기간이 지난 파티션을 DROP 한다.', '세션 없는 pose 행(고아)이 있는지 감시한다.'],
+    alt: [],
+    post: '프레임 기록이 쌓여도 삭제가 행 단위 DELETE 가 아니라 파티션 DROP 으로 끝난다.',
   },
   {
     id: 'S-04', name: '장애 복구 (워커 재부착)', status: 'backend', actors: ['스케줄러', 'AI 서버'],
@@ -571,13 +634,78 @@ export const SCREENS = {
   tabs: [
     { title: '홈', file: '(tabs)/index.tsx', ids: ['C-02', 'E-05', 'E-06', 'E-10', 'C-05', 'C-06', 'D-03'] },
     { title: '활동', file: '(tabs)/activity.tsx', ids: ['C-03', 'C-04', 'D-01', 'D-02'] },
-    { title: '운동', file: '(tabs)/exercise.tsx', ids: ['B-01', 'B-04', 'B-02', 'B-03', 'B-05', 'B-06'] },
+    { title: '운동', file: '(tabs)/exercise.tsx', ids: ['B-07', 'B-08', 'B-01', 'B-09', 'B-04', 'B-02', 'B-03', 'B-05', 'B-06'] },
     { title: '모임', file: '(tabs)/groups.tsx', ids: ['E-01', 'E-02', 'E-03'] },
     { title: '마이', file: '(tabs)/mypage.tsx', ids: ['A-05', 'A-02', 'A-03', 'A-07'] },
   ],
   stack: [
     { title: '알림함', file: 'notifications.tsx', ids: ['F-01', 'A-06', 'F-02'] },
-    { title: '세션 리포트', file: 'report/[id].tsx', ids: ['C-01'] },
+    { title: '세션 리포트', file: 'report/[id].tsx', ids: ['C-01', 'B-10'] },
     { title: '모임 상세', file: 'group/[id].tsx', ids: ['E-04', 'E-09', 'E-05', 'E-06', 'E-10', 'E-07', 'E-08', 'E-11', 'E-12', 'E-13', 'F-03'], wide: true },
   ],
+};
+
+// 백엔드 축 (2026-09-23, docs/USE-CASES.md 09-20 판을 합친 것). [상태, 백엔드 메모]
+//   done 서버 쪽 끝 · partial 일부 · none 서버 쪽 없음 · na 서버가 할 일 없음(앱 · AI 만의 일)
+// 메모는 «앱에서 안 보이는 서버 규칙» 만 적는다 — 흐름은 위 UC 본문이 정본. W-nn 은 design-rationale.md 의 판단 근거,
+// #nnn 은 알려진 결함 이슈다(2026-09-23 PR #792 의 사실 대조를 반영).
+export const BE_STATUS = {
+  done:    { label: '완료' },
+  partial: { label: '부분' },
+  none:    { label: '없음' },
+  na:      { label: '해당 없음' },
+};
+export const BACKEND = {
+  'A-01': ['done', '가입은 토큰을 주지 않는다 — 앱이 곧바로 로그인을 부른다.'],
+  'A-02': ['done', 'access 30분 + refresh(회전). 로그아웃은 refresh · 푸시 토큰 행 삭제뿐이라 로그아웃한 access 는 최대 30분 남는다 — 블랙리스트는 08-10 에 없앴다(W-37).'],
+  'A-03': ['done', '선호 영상 URL 은 형식 검증 없이 저장된다 — YoutubeValidator 는 호출처가 없다(#802).'],
+  'A-04': ['none', '재설정 API 가 없다(메일 발송 인프라 없음).'],
+  'A-05': ['done'],
+  'A-06': ['done', '멱등 200. 로그아웃 · 탈퇴 때 서버가 지운다.'],
+  'A-07': ['done', '회원과 연관 데이터 전체 삭제.'],
+  'B-07': ['done', '#785 (09-22). analysisSupported=false 종목도 내려준다 — 그걸로 시작하면 W007.'],
+  'B-08': ['na'],
+  'B-01': ['done', '시작은 AI 를 기다리지 않고 202 — StartAnalysis 는 커밋 뒤 @Async(W-01). 시작 때 워커 서킷이 OPEN 이면 세션을 바로 FAILED. 종료는 endTime 과 같은 트랜잭션에 아웃박스 STOP_ANALYSIS(W-07), AI 의 CompleteAnalysis 콜백에서 COMPLETED · 리포트 precompute · SESSION_COMPLETED 적재. 겹치면 **AI 완료가 이긴다**(W-10). 결함: StartAnalysis 의 success=false 를 안 읽음(#798), CompleteAnalysis 는 아웃박스가 아니라 AI 3회 재시도뿐(#799).'],
+  'B-09': ['done', 'rep 마다 AI → gRPC SavePoseDataBatch → pose_data(월별 파티션, W-05). rep 수는 AI 값, 싱크 통계 · 세트는 Spring 이 저장본에서 집계한다(W-08, #75).'],
+  'B-04': ['done', '발화 로그는 세트 경계마다 묶어 gRPC 로 저장. 템플릿 API 는 페르소나별 문장을 준다.'],
+  'B-02': ['done', 'reattach 는 AI 에 상태가 있으면 보존 — 멱등 규칙이 Start 와 반대라 RPC 를 따로 뒀다(W-12). 진행 중이던 rep 은 복원되지 않는다.'],
+  'B-03': ['done', '기준은 rep 이 있으면 lastActiveAt + 10분, 없으면 시작 + 예상 시간 + 30분(W-11). FAILED 는 출석으로 안 세지만 종착 상태는 아니다.'],
+  'B-05': ['partial', '종목 코드(V25, #785) · proto 로 종목 코드 전달(#787)까지. 분석 지원 스위치는 꺼져 있다.'],
+  'B-06': ['done', '#786 (09-22). 세트 번호 = ceil(rep_number / 세트당 목표). pose_data 에 set_index 를 더하지 않고 완료 시점에 한 쿼리로 집계, 첫 완료 전이에서만 INSERT(재전송 중복 없음). 도중 변경 API 는 두지 않는다(W-14). AI 의 세트 cue 는 미구현.'],
+  'B-10': ['done'],
+  'C-01': ['done', '싱크 통계 · rep 별 추이 · worst 구간 · 이전 세션 대비를 COMPLETED 전이 때 1회 계산해 저장(W-28). 09-22 부터 sets[]. FAILED 세션은 리포트 행이 없고, «파트별 점수» 는 구현이 없다.'],
+  'C-02': ['done'],
+  'C-03': ['done'],
+  'C-04': ['done', '첫 조회가 PENDING 행 + 아웃박스 적재(S-02, W-29). 출력 검증(JSON · 빈 요약 · 한국어 · **집계에 없는 숫자** · 인용 지표 0건) 실패면 재호출 없이 템플릿(W-31). 회원 · 주당 1행, 재조회는 LLM 재호출 없음. 프롬프트를 바꾸면 VERSION 을 올린다(W-32).'],
+  'C-05': ['done', 'memo · mood upsert.'],
+  'C-06': ['done', '#776 (09-19). 출석 = COMPLETED 세션 1건 이상(E-05 · E-09 와 같은 정의, W-15). 최장 연속은 오늘 이후를 뺀다(#781).'],
+  'D-01': ['done', 'goalType 당 1개, targetValue 만 수정. 진척은 저장하지 않고 조회 때 최근 N일로 계산(W-34) — «이번 주(월~일)» 가 아니라 «최근 7일».'],
+  'D-02': ['done', '주기성 · 강도 추세 · 꾸준함 3지표. 항상 최근 4주 버킷을 채우고 세션 없는 주는 null/0. sufficientData 는 가입 28일 기준(세션 수와 무관).'],
+  'D-03': ['done', '같은 종목 최근 3세션으로 다음 세션 강도 · 볼륨 1건, 규칙 기반(W-35). 세션 시작의 세트당 목표 기본값도 이 공식.'],
+  'E-01': ['done'],
+  'E-02': ['done', '예전에 나간(LEFT) 회원은 행을 되살린다. 모임 행 FOR UPDATE 로 더블탭을 줄 세운다(W-25).'],
+  'E-03': ['done', '보내기 API 는 있다. 회원 검색 API 가 없어 앱이 memberId 를 알 길이 없다.'],
+  'E-04': ['done'],
+  'E-05': ['done', '친구 = 같은 모임에 둘 다 ACTIVE(W-16). 공개 필드는 출석 여부 · 연속일수 둘뿐.'],
+  'E-06': ['done', '(보낸 사람, 받는 사람, 종류, 날짜) UNIQUE → 409 N002(W-17). 받는 쪽에 푸시 토큰이 있으면 알림 행과 푸시 아웃박스를 같은 트랜잭션에 적재(W-18). 알림함 · 소켓 · 푸시는 배타가 아니다(W-19).'],
+  'E-10': ['done', '09-21 추가(V24 message 컬럼). 재촉과 종류가 달라 하루 1회 제한을 따로 센다(409 N004). 응원을 따로 만든 결정 문서는 없다.'],
+  'E-07': ['done', '완료 트랜잭션에 직접 넣지 않고 아웃박스 SESSION_COMPLETED 로 팬아웃(W-21). 한 트랜잭션에서 group_id 오름차순으로 잠근다(W-22). (group_id, event_type, source_id) UNIQUE 로 재발행 중복 없음(W-23). 서버는 payload 만 저장하고 문구는 프론트가 만든다.'],
+  'E-08': ['done', 'PUT · DELETE 둘 다 멱등.'],
+  'E-09': ['done', '날짜별 COUNT(DISTINCT member_id) + 활성 인원, 농도는 프론트(W-24). 1,622행 4.3 ms(09-19 EXPLAIN).'],
+  'E-11': ['done'],
+  'E-12': ['done', '다른 멤버가 있는 그룹장은 위임해야 나간다(409 G010), 혼자면 모임 삭제(W-26).'],
+  'E-13': ['done'],
+  'F-01': ['done'],
+  'F-02': ['done', '아웃박스 PUSH_NOTIFICATION → Expo Push HTTP. DeviceNotRegistered 면 토큰 삭제, 나머지는 재시도(전송 실패 · 5xx · 429)와 종결(자격 증명 등)로 가른다(W-20). 토큰이 없으면 아웃박스 행을 안 만든다.'],
+  'F-03': ['done', '핸드셰이크에서 쿼리 파라미터 JWT · ACTIVE 멤버 검증, 재접속 뒤 모임 내 seq 로 놓친 이벤트 회수(W-27).'],
+  'G-01': ['done', '종목 code 는 중복 409 W018, 분석 켜진 종목의 코드 변경 409 W019(#785).'],
+  'G-03': ['partial', 'mp4 업로드(09-17, 상한 50MB)는 공유 볼륨에 저장하고 202 → gRPC ExtractReferenceData 비동기(경로 전달, W-36). **YouTube URL 경로는 202 를 주지만 AI 가 http(s) 를 거절해 효과가 없다(#800).** 추출 완료 신호가 Spring 에 없다.'],
+  'G-04': ['done', '켤 때 기준 좌표 없음 W012, 종목 코드 없음 W020.'],
+  'G-05': ['partial', 'beginner < advanced 제약. **저장만 되고 판정에 안 쓰인다** — proto 에 필드가 없고 AI 는 하드코딩 값을 쓴다(#801).'],
+  'G-06': ['done'],
+  'H-01': ['done', '담당 여부를 TrainerAuthorizationService 로 별도 검증(아니면 403 T001). rep 저장 커밋 뒤 한 번 더 중계하고 전송이 실패하면 버린다. 타임아웃 무제한 — 앱 쪽 재연결 로직이 없어서(08-30, W-38).'],
+  'S-01': ['done', '1초 폴링, 재시도 10회(첫 송신 포함 11회) 뒤 FAILED(W-41). Spring→AI 방향만 보장한다. 처리된 행을 지우는 정리 스케줄러가 없다(#793).'],
+  'S-02': ['done', '5초 폴링 별도 차선(W-30), 재시도 12회 소진 시 TEMPLATE_FALLBACK 으로 닫는다.'],
+  'S-03': ['done', '04:00 에 +2개월까지 파티션을 만들고 보존 기간 지난 달을 DROP(W-39). 04:30 고아 감시는 세기만 하고 지우지 않는다(W-40).'],
+  'S-04': ['done', 'AI 워커별 Resilience4j 서킷이 OPEN 으로 **전이하는 순간** 그 워커의 진행 중 세션에 REATTACH_ANALYSIS 적재(W-09). 컨테이너 재기동 뒤 발행기가 송신한다.'],
 };

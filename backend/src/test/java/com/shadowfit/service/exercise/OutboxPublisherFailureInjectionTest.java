@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -21,10 +22,15 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -41,7 +47,8 @@ import static org.mockito.Mockito.when;
  * <p>[어떻게 실패를 주입하나] 실패는 {@code stopAnalysis} 가 무엇을 돌려주느냐(또는 던지느냐)로
  * 표현된다. AI 를 실제로 멈출 필요가 없다 — 발행기 입장에서 «AI 가 죽었다» 는 곧
  * {@link DispatchOutcome#RETRY} 이고, «세션을 잃었다» 는 {@link DispatchOutcome#TERMINAL_FAILED}
- * 이며, «발행기가 송신 중 죽었다» 는 예외가 올라와 상태를 못 적고 빠지는 것이다.
+ * 이며, 송신이 던진 예외는 RETRY 와 같이 센다(#759). «발행기가 송신 뒤 상태를 못 적었다» 는
+ * 결과 기록 단계가 예외로 빠지는 것이다.
  *
  * <p>[H2 로 되는 이유] 선점 쿼리의 {@code FOR UPDATE SKIP LOCKED} 를 H2 가 <b>받는다</b>(2026-08-20
  * 확인). 그래서 {@code dispatchPending()} 을 통째로 돌릴 수 있다. 다만 H2 가 <i>문법을 받는 것</i>과
@@ -80,6 +87,12 @@ class OutboxPublisherFailureInjectionTest {
     @Autowired private OutboxPublisher publisher;
     @Autowired private OutboxEventRepository outboxRepository;
     @Autowired private PlatformTransactionManager transactionManager;
+
+    /**
+     * 결과 기록 단계 실패 주입용. 스파이라 평소엔 진짜 저장소 그대로 돈다 — 기록 실패를 심는 테스트만 stub 한다.
+     * 기본 차선 저장소를 이름으로 집는다(주간 리포트 차선 저장소도 같은 타입이다).
+     */
+    @MockitoSpyBean(name = "outboxEventStore") private OutboxEventStore outboxEventStore;
 
     /**
      * 발행기와 <b>같은 프로퍼티를 같은 기본값으로</b> 읽는다. 한도를 테스트에 상수로 박으면
@@ -241,12 +254,16 @@ class OutboxPublisherFailureInjectionTest {
     }
 
     @Nested
-    @DisplayName("발행기가 송신 도중 죽었을 때")
-    class WhenPublisherDies {
+    @DisplayName("송신(dispatch)이 예외를 던졌을 때 — #759")
+    class WhenDispatchThrows {
 
+        /**
+         * 예전 계약은 «예외가 나도 행은 PROCESSING 으로 남아 회수를 기다린다» 였다. 회수(claimStale)는 retryCount 를
+         * 안 올려서 영구 예외가 lease 주기마다 영원히 재처리됐다(#759). 이제 dispatch() 의 예외는 RETRY 와 같은 길이다.
+         */
         @Test
-        @DisplayName("예외가 나도 행은 유실되지 않고 PROCESSING 으로 남아 회수를 기다린다")
-        void exception_leavesRowRecoverable() {
+        @DisplayName("예외는 RETRY 로 센다 — PENDING 으로 되돌리고 retryCount 를 올리며 백오프를 건다")
+        void exception_countsAsRetry() {
             when(analysisService.stopAnalysis(eq(SESSION_ID), anyBoolean()))
                     .thenThrow(new RuntimeException("송신 중 프로세스 이상"));
             OutboxEvent seeded = pending();
@@ -254,12 +271,44 @@ class OutboxPublisherFailureInjectionTest {
             publisher.dispatchPending();
 
             OutboxEvent after = reload(seeded);
-            assertThat(after.getStatus())
-                    .as("PENDING 으로 되돌리면 «송신됐는지 모르는 행» 을 즉시 다시 보내게 된다")
-                    .isEqualTo(OutboxStatus.PROCESSING);
-            assertThat(after.getLockExpiresAt())
-                    .as("만료 시각이 있어야 회수될 수 있다")
-                    .isNotNull();
+            assertThat(after.getStatus()).isEqualTo(OutboxStatus.PENDING);
+            assertThat(after.getRetryCount())
+                    .as("회수 경로와 달리 한 번의 실패로 세어져야 한도에 걸린다")
+                    .isEqualTo(1);
+            assertThat(after.getNextRetryAt())
+                    .as("백오프가 걸려야 다음 tick 이 즉시 다시 집지 않는다")
+                    .isAfter(LocalDateTime.now());
+            assertThat(after.getLockedBy()).isNull();
+            assertThat(after.getLockExpiresAt()).isNull();
+        }
+
+        @Test
+        @DisplayName("영구 예외는 시도마다 retryCount 를 올리다 한도를 넘기면 FAILED 로 닫힌다 — 무한 재처리 없음")
+        void permanentException_endsFailedAfterMaxRetry() {
+            when(analysisService.stopAnalysis(eq(SESSION_ID), anyBoolean()))
+                    .thenThrow(new NullPointerException("잘못된 페이로드 흉내"));
+            OutboxEvent seeded = pending();
+
+            // 시도 1..maxRetry 는 재시도로 세고, maxRetry+1 번째에서 닫힌다.
+            for (int attempt = 1; attempt <= maxRetry; attempt++) {
+                publisher.dispatchPending();
+                OutboxEvent after = reload(seeded);
+                assertThat(after.getStatus()).isEqualTo(OutboxStatus.PENDING);
+                assertThat(after.getRetryCount()).isEqualTo(attempt);
+                // 백오프를 기다리는 대신 당겨 둔다 — 여기서 재는 건 «세는가» 이지 «언제» 가 아니다.
+                after.setNextRetryAt(LocalDateTime.now().minusSeconds(1));
+                outboxRepository.saveAndFlush(after);
+            }
+            publisher.dispatchPending();
+
+            OutboxEvent after = reload(seeded);
+            assertThat(after.getStatus()).isEqualTo(OutboxStatus.FAILED);
+            assertThat(after.getLockedBy()).isNull();
+            verify(analysisService, times(maxRetry + 1)).stopAnalysis(eq(SESSION_ID), anyBoolean());
+
+            // 닫힌 행은 더 안 집힌다
+            publisher.dispatchPending();
+            verify(analysisService, times(maxRetry + 1)).stopAnalysis(eq(SESSION_ID), anyBoolean());
         }
 
         @Test
@@ -279,7 +328,8 @@ class OutboxPublisherFailureInjectionTest {
             assertThat(reload(last).getStatus())
                     .as("터진 행보다 뒤에 있어도 처리돼야 한다")
                     .isEqualTo(OutboxStatus.SENT);
-            assertThat(reload(boom).getStatus()).isEqualTo(OutboxStatus.PROCESSING);
+            assertThat(reload(boom).getStatus()).isEqualTo(OutboxStatus.PENDING);
+            assertThat(reload(boom).getRetryCount()).isEqualTo(1);
         }
 
         @Test
@@ -291,6 +341,48 @@ class OutboxPublisherFailureInjectionTest {
 
             // 예외가 새면 여기서 테스트가 실패한다
             publisher.dispatchPending();
+        }
+    }
+
+    @Nested
+    @DisplayName("결과 기록 단계가 예외를 던졌을 때 — 발행기가 송신 뒤 상태를 못 적은 것과 같다")
+    class WhenRecordingFails {
+
+        /** 결과 기록은 DB 쓰기다 — 여기가 터지면 retryCount 도 못 올린다. 기존 계약(회수 대기)을 그대로 둔다. */
+        @Test
+        @DisplayName("SENT 기록이 터지면 행은 유실되지 않고 PROCESSING 으로 남아 회수를 기다린다")
+        void recordSentThrows_leavesRowRecoverable() {
+            when(analysisService.stopAnalysis(eq(SESSION_ID), anyBoolean())).thenReturn(DispatchOutcome.SENT);
+            doThrow(new RuntimeException("DB 쓰기 실패 흉내"))
+                    .when(outboxEventStore).recordSent(anyLong(), anyString(), any());
+            OutboxEvent seeded = pending();
+
+            publisher.dispatchPending();
+
+            OutboxEvent after = reload(seeded);
+            assertThat(after.getStatus())
+                    .as("PENDING 으로 되돌리면 «송신됐는지 모르는 행» 을 즉시 다시 보내게 된다")
+                    .isEqualTo(OutboxStatus.PROCESSING);
+            assertThat(after.getRetryCount()).isZero();
+            assertThat(after.getLockExpiresAt())
+                    .as("만료 시각이 있어야 회수될 수 있다")
+                    .isNotNull();
+        }
+
+        @Test
+        @DisplayName("dispatch 예외 뒤 재시도 기록마저 터지면 옛 길로 떨어진다 — PROCESSING 으로 남아 회수, 행은 안 잃는다")
+        void exceptionThenRecordRetryThrows_fallsBackToReclaim() {
+            when(analysisService.stopAnalysis(eq(SESSION_ID), anyBoolean()))
+                    .thenThrow(new RuntimeException("송신 예외"));
+            doThrow(new RuntimeException("DB 쓰기 실패 흉내"))
+                    .when(outboxEventStore).recordRetry(anyLong(), anyString(), any());
+            OutboxEvent seeded = pending();
+
+            publisher.dispatchPending();
+
+            OutboxEvent after = reload(seeded);
+            assertThat(after.getStatus()).isEqualTo(OutboxStatus.PROCESSING);
+            assertThat(after.getLockExpiresAt()).isNotNull();
         }
     }
 

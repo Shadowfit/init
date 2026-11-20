@@ -1,0 +1,15 @@
+[replay] 기준 무대 — 20000 행
+[replay] 기준 20000 행 · 재생 시작 파일 binlog.000004
+[replay] 단계 4MB — 실제 8392787 바이트 · 파일 2개 · 23900 행
+[replay] 단계 16MB — 실제 24155791 바이트 · 파일 3개 · 31225 행
+[replay] ── 판 1 (버림) M1 · 4MB
+1	버림	M1	4	8392787	0	33824	OK
+[replay] ── 판 2 (본판) M1 · 4MB
+2	본판	M1	4	8392787	0	26620	OK
+[replay] ── 판 3 (본판) M2 · 4MB
+3	본판	M2	4	8392787	41244	49136	OK
+[replay] ── 판 4 (본판) M1 · 16MB
+4	본판	M1	16	24155791	0	81822	OK
+[replay] ── 판 5 (본판) M2 · 16MB
+5	본판	M2	16	24155791	33021	72874	OK
+[replay] 완료 → /e/init-wt-srec/loadtest/results/binlog-replay-time-2026-11-07/_smoke/trials.tsv

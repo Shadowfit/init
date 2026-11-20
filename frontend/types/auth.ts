@@ -1,4 +1,5 @@
 // 백엔드 DTO 기준 (com.shadowfit.dto.login, com.shadowfit.model.member.UserRole, Sex)
+import type { ConsentItem } from './consent';
 
 export type UserRole = 'ADMIN' | 'USER';
 export type Sex = 'MALE' | 'FEMALE' | 'NONE'; // 백엔드 enum 오타(FEAMALE) 수정에 맞춰 정정 — issue #106 계열
@@ -22,6 +23,8 @@ export interface SignupRequest {
   email: string;
   password: string;
   sex: Sex;
+  // 가입 때 동의한 문서들(이용약관·개인정보). 서버가 동의를 강제하기 전에도 보내면 기록한다.
+  consents?: ConsentItem[];
   // role 은 없다 — 서버가 USER 로 고정한다 (이슈 #138).
   // 보내도 서버가 무시하지만, 타입에 두면 "정할 수 있는 값"으로 읽힌다.
 }

@@ -72,8 +72,25 @@ async def lifespan(app: FastAPI):
             "🔴 GIL_PROBE_INTERVAL 이 켜졌는데 FRAME_PATH_METRICS 가 꺼져 있다 — 프로브 안 뜬다"
         )
 
+    # 방치된 세션 정리. 워커 프로세스마다 자기 레지스트리를 정리한다(세션 상태가 프로세스 안에만 있다).
+    _reaper_stop = None
+    if settings.SESSION_IDLE_TTL_SEC > 0:
+        from app.grpc.session_reaper import run_reaper
+
+        _reaper_stop = threading.Event()
+        threading.Thread(
+            target=run_reaper,
+            args=(_reaper_stop, settings.SESSION_REAP_INTERVAL_SEC, settings.SESSION_IDLE_TTL_SEC),
+            name="session-reaper",
+            daemon=True,
+        ).start()
+    else:
+        logger.warning("방치 세션 정리 OFF (SESSION_IDLE_TTL_SEC=0) — StopAnalysis 가 안 오면 상태·검출기가 재기동까지 남는다")
+
     yield
 
+    if _reaper_stop is not None:
+        _reaper_stop.set()
     if _pool_task is not None:
         _pool_task.cancel()
     if _gil_stop is not None:

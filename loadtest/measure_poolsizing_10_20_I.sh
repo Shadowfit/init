@@ -125,7 +125,7 @@ apply_pool() {  # $1 = pool 크기
         -e DB_HOST=$DB_HOST_REMOTE -e DB_USERNAME=shadowfit -e DB_PASSWORD=1234 \
         -e INTERNAL_API_TOKEN=$GHZ_TOKEN_FOR_APP \
         -e AI_SERVER_HOST=shadowfit-ai -e AI_SERVER_GRPC_PORT=8585 -e AI_CHANNEL_POOL_SIZE=3 \
-        -e JWT_SECRET=shadowfit-prod-secret-key-change-this -e OPENAI_API_KEY= \
+        -e JWT_SECRET="${LOADTEST_JWT_SECRET:-$(openssl rand -hex 32)}" -e OPENAI_API_KEY= \
         -e POSE_INJECT_DELAY_MS=0 -e SHADOWFIT_POSE_DEADLOCK_BACKOFF_JITTER=false \
         -e SHADOWFIT_POSE_DEADLOCK_BACKOFF_MS=0 -e SHADOWFIT_POSE_DEADLOCK_MAX_RETRIES=5 \
         -e SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=$pool \

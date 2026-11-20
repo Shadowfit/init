@@ -87,8 +87,9 @@ class CallsCarryDeadline(unittest.TestCase):
             spring_client.report_pose_data_batch(1, [])
             spring_client.report_complete_analysis(1, 10, 80.0)
             spring_client.send_reference_poses(1, [])
+            spring_client.send_reference_failure(1, "추출 실패")
 
-        assert len(seen) == 3, f"세 경로가 다 불려야 한다: {seen}"
+        assert len(seen) == 4, f"네 경로가 다 불려야 한다: {seen}"
         for t in seen:
             # 🔴 None 이면 무한 대기다 — #206 이 잡은 그 상태로 되돌아간 것이다.
             assert t == settings.BACKEND_GRPC_TIMEOUT_SECONDS, f"timeout 이 안 실렸다: {seen}"

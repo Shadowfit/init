@@ -46,6 +46,15 @@ public class NotificationController {
         return ResponseEntity.ok(notificationService.list(userDetails.getMember().getId(), page, size));
     }
 
+    @Operation(summary = "안 읽은 알림 수",
+            description = "홈 종 아이콘 배지용. 응답 {\"count\": n}.")
+    @GetMapping("/unread-count")
+    public ResponseEntity<java.util.Map<String, Long>> unreadCount(
+            @AuthenticationPrincipal CustomUserDetails userDetails
+    ) {
+        return ResponseEntity.ok(java.util.Map.of("count", notificationService.unreadCount(userDetails.getMember().getId())));
+    }
+
     @Operation(summary = "알림 읽음 처리",
             description = "내 알림이 아니거나 없으면 404. 이미 읽은 알림은 처음 읽은 시각 그대로 200.")
     @PatchMapping("/{notificationId}/read")

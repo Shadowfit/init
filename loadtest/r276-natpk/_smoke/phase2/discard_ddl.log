@@ -1,0 +1,32 @@
+No slaves found.  See --recursion-method if host 2d1042f78d17 has slaves.
+Not checking slave lag because no slaves were found and --check-slave-lag was not specified.
+Operation, tries, wait:
+  analyze_table, 10, 1
+  copy_rows, 10, 0.25
+  create_triggers, 10, 1
+  drop_triggers, 10, 1
+  swap_tables, 10, 1
+  update_foreign_keys, 10, 1
+Altering `natpk`.`t_rb`...
+Creating new table...
+Created new table natpk._t_rb_new OK.
+Altering new table...
+Altered `natpk`.`_t_rb_new` OK.
+2026-11-08T03:35:01 Creating triggers...
+2026-11-08T03:35:02 Created triggers OK.
+2026-11-08T03:35:02 Copying approximately 102475 rows...
+Copying `natpk`.`t_rb`:  30% 01:08 remain
+Copying `natpk`.`t_rb`:  46% 01:09 remain
+Copying `natpk`.`t_rb`:  57% 01:06 remain
+Copying `natpk`.`t_rb`:  70% 00:50 remain
+Copying `natpk`.`t_rb`:  80% 00:35 remain
+Copying `natpk`.`t_rb`:  89% 00:20 remain
+2026-11-08T03:39:27 Copied rows OK.
+2026-11-08T03:39:27 Analyzing new table...
+2026-11-08T03:39:28 Swapping tables...
+2026-11-08T03:39:32 Swapped original and new tables OK.
+2026-11-08T03:39:32 Dropping old table...
+2026-11-08T03:39:34 Dropped old table `natpk`.`_t_rb_old` OK.
+2026-11-08T03:39:34 Dropping triggers...
+2026-11-08T03:39:34 Dropped triggers OK.
+Successfully altered `natpk`.`t_rb`.

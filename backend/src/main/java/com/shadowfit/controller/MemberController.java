@@ -98,6 +98,12 @@ public class MemberController {
 
     // 경로의 email을 신뢰하지 않고 인증된 본인인지 확인 (IDOR 방지)
     private void requireSelf(String pathEmail, CustomUserDetails userDetails) {
+        // 🔴 인증 주체가 없을 수 있다 (#810). whitelist(/member/login·/member/signup)는 HTTP 메서드를 가리지 않고 열려 있어,
+        //    `DELETE /member/login` 이 `@DeleteMapping("/{email}")` 에 email="login" 으로 매칭돼 인증 없이 여기까지 온다.
+        //    예전에는 여기서 NPE → 500 + ERROR 로그라, 인증 없이 외부에서 ERROR 로그를 만들 수 있었다.
+        if (userDetails == null) {
+            throw new BusinessException(ErrorCode.UNAUTHORIZED);
+        }
         if (!userDetails.getMember().getEmail().equals(pathEmail)) {
             throw new BusinessException(ErrorCode.ACCESS_DENIED);
         }

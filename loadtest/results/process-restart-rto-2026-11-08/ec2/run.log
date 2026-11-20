@@ -1,0 +1,25 @@
+[restart] ── 판 1 (버림) 팔=idle
+[restart] 판 1: redo 0MB · 더러운 페이지 0 → 재기동 1322ms · 잃은 트랜잭션 NA
+[restart] ── 판 2 (버림) 팔=paced
+[restart] 판 2: redo 14MB · 더러운 페이지 962 → 재기동 2393ms · 잃은 트랜잭션 0
+[restart] ── 판 3 (버림) 팔=stress
+[restart] 판 3: redo 1354MB · 더러운 페이지 72923 → 재기동 31990ms · 잃은 트랜잭션 0
+[restart] ── 판 4 (본판) 팔=stress
+[restart] 판 4: redo 1334MB · 더러운 페이지 73194 → 재기동 35058ms · 잃은 트랜잭션 -2
+[restart] ── 판 5 (본판) 팔=idle
+[restart] 판 5: redo 0MB · 더러운 페이지 0 → 재기동 1279ms · 잃은 트랜잭션 NA
+[restart] ── 판 6 (본판) 팔=paced
+[restart] 판 6: redo 14MB · 더러운 페이지 961 → 재기동 2446ms · 잃은 트랜잭션 0
+[restart] ── 판 7 (본판) 팔=paced
+[restart] 판 7: redo 14MB · 더러운 페이지 948 → 재기동 1886ms · 잃은 트랜잭션 0
+[restart] ── 판 8 (본판) 팔=stress
+[restart] 판 8: redo 1348MB · 더러운 페이지 73361 → 재기동 34356ms · 잃은 트랜잭션 -2
+[restart] ── 판 9 (본판) 팔=idle
+[restart] 판 9: redo 0MB · 더러운 페이지 0 → 재기동 1349ms · 잃은 트랜잭션 NA
+[restart] ── 판 10 (본판) 팔=idle
+[restart] 판 10: redo 0MB · 더러운 페이지 0 → 재기동 1363ms · 잃은 트랜잭션 NA
+[restart] ── 판 11 (본판) 팔=stress
+[restart] 판 11: redo 1355MB · 더러운 페이지 73626 → 재기동 33577ms · 잃은 트랜잭션 -4
+[restart] ── 판 12 (본판) 팔=paced
+[restart] 판 12: redo 14MB · 더러운 페이지 949 → 재기동 2414ms · 잃은 트랜잭션 0
+[restart] 완료 → /root/rig_out/trials.tsv

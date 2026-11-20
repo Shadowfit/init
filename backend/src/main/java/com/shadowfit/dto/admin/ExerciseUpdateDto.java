@@ -21,7 +21,7 @@ import jakarta.validation.constraints.Size;
  * {@code @NotBlank} 대신 {@code @Size} 만 건 이유가 이것이다 — 안 보내는 것은 허용하고,
  * 보낸 값이 빈 문자열인 것만 서비스에서 막는다.
  *
- * <p>{@code analysisSupported} 와 임계값 4종이 없는 이유는 {@link ExerciseCreateDto} 주석과 같다.
+ * <p>{@code analysisSupported} 와 판정 기준(good/warn)이 없는 이유는 {@link ExerciseCreateDto} 주석과 같다.
  */
 @Schema(description = "운동 종목 수정 요청 (보낸 필드만 갱신)")
 public record ExerciseUpdateDto(
