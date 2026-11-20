@@ -123,6 +123,11 @@ updates:
         versions: [">=1.63"]
       - dependency-name: "opencv-python-headless"
         update-types: ["version-update:semver-major"]
+      # 🔴 메이저만 막아서는 부족했다 — 4.12 부터(4.14.0.94 로 #833 이 실증) 4.x 안에서도 numpy>=2 를 요구한다.
+      #    그래서 그룹 PR 이 «opencv 4.11→4.14» 를 끌고 와 `mediapipe 0.10.21(numpy<2)` 와 pip 해석 충돌로 CI 가 죽었다
+      #    (ResolutionImpossible). 위 «numpy<2 → opencv 4.11» 묶음 때문에 4.12 이상도 받을 수 없다.
+      - dependency-name: "opencv-python-headless"
+        versions: [">=4.12"]
       - dependency-name: "numpy"
         update-types: ["version-update:semver-major"]
 
