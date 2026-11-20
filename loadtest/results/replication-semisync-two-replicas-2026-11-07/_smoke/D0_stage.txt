@@ -1,0 +1,21 @@
+# D0 — 무대
+# 생성: 2026-11-07T12:54:22Z UTC
+source    version                                      8.0.46
+source    server_id                                    1
+source    gtid_mode                                    OFF
+source    binlog_format                                ROW
+source    sync_binlog                                  1
+source    innodb_flush_log_at_trx_commit               1
+source    rpl_semi_sync_source_enabled                 1
+source    rpl_semi_sync_source_timeout                 10000
+source    rpl_semi_sync_source_wait_point              AFTER_SYNC
+source    rpl_semi_sync_source_wait_for_replica_count  1
+replica1  version                                      8.0.46
+replica1  server_id                                    2
+replica1  read_only                                    1
+replica1  rpl_semi_sync_replica_enabled                1
+replica2  version                                      8.0.46
+replica2  server_id                                    3
+replica2  read_only                                    1
+replica2  rpl_semi_sync_replica_enabled                1
+source    status/clients                               ON/2

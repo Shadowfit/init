@@ -1,7 +1,9 @@
 import { create } from 'zustand';
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from '@/services/secureStorage';
 import { authService } from '@/services/authService';
 import { memberService } from '@/services/memberService';
+import { consentService } from '@/services/consentService';
+import type { ConsentType } from '@/types/consent';
 import { bumpSessionVersion } from '@/services/sessionVersion';
 import type {
   AuthUser,
@@ -20,16 +22,25 @@ interface AuthState {
   isAuthenticated: boolean;
   // null = 아직 조회 안 함 (라우팅 가드는 이 동안 대기)
   onboardingCompleted: boolean | null;
+  // 현재 버전에 아직 동의하지 않은 가입 필수 약관. null = 아직 조회 안 함(가드는 이 동안 대기).
+  // 빈 배열 = 동의할 것이 없음 **또는 조회 실패**. 조회가 실패하면 막지 않는다 — 서버가 이 API 를 아직 모르거나
+  // 네트워크가 나빠도 사용자가 화면에 갇히면 안 된다(동의의 강제는 서버가 하고, 여기는 안내다).
+  consentMissing: ConsentType[] | null;
 
   login: (data: LoginRequest) => Promise<void>;
   signup: (data: SignupRequest) => Promise<void>;
   logout: () => Promise<void>;
   // 토큰 만료 등으로 서버 호출 없이 로컬 세션만 정리할 때 사용
   forceLogout: () => Promise<void>;
+  // 회원 탈퇴 — 서버가 성공했을 때만 로컬 세션을 지운다. 서버가 거절하면(운동 중, 그룹장 양도 필요 등)
+  // 예외를 그대로 던지고 로그인 상태는 유지한다.
+  deleteAccount: () => Promise<void>;
   // api.ts 의 401 인터셉터가 재발급에 성공하면 호출한다 (이슈 #135).
   // SecureStore 쓰기는 인터셉터가 이미 했고, 여기서는 메모리 상태만 맞춘다.
   applyReissuedTokens: (accessToken: string, refreshToken: string) => void;
   restoreSession: () => Promise<void>;
+  // 동의 현황을 서버에서 다시 읽어 consentMissing 을 갱신한다(로그인·세션 복원·재동의 직후).
+  refreshConsentStatus: () => Promise<void>;
   // 온보딩 완료 화면에서 PATCH 후 호출
   markOnboardingCompleted: () => void;
   // 마이페이지에서 수동 갱신용 (서버 데이터 다시 가져옴)
@@ -55,6 +66,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isLoading: true,
   isAuthenticated: false,
   onboardingCompleted: null,
+  consentMissing: null,
 
   login: async (data) => {
     const res = await authService.login(data);
@@ -79,6 +91,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       isAuthenticated: true,
       isLoading: false,
       onboardingCompleted: null, // 조회 직전엔 null
+      consentMissing: null,
     });
 
     // 온보딩 상태 조회 (실패해도 로그인 자체는 유지)
@@ -92,6 +105,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // 조회 실패 시 미완료로 간주 (안전한 fallback)
       set({ onboardingCompleted: false });
     }
+
+    // 동의 현황 — 약관이 개정됐거나 동의 화면 이전에 가입한 회원이면 가드가 재동의 화면으로 보낸다. 실패해도 막지 않는다.
+    await get().refreshConsentStatus();
   },
 
   // 백엔드 signup 은 토큰을 주지 않으므로 회원가입 후 자동 login 호출
@@ -126,6 +142,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       role: null,
       isAuthenticated: false,
       onboardingCompleted: null,
+      consentMissing: null,
     });
   },
 
@@ -143,6 +160,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           role: 'USER',
           isAuthenticated: true,
           onboardingCompleted: null,
+          consentMissing: null,
         });
 
         // 온보딩 상태 조회
@@ -156,6 +174,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         } catch {
           set({ onboardingCompleted: false, isLoading: false });
         }
+
+        await get().refreshConsentStatus();
       } else {
         set({ isLoading: false });
       }
@@ -170,9 +190,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         role: null,
         isAuthenticated: false,
         onboardingCompleted: null,
+        consentMissing: null,
         isLoading: false,
       });
     }
+  },
+
+  deleteAccount: async () => {
+    const email = get().user?.email;
+    if (!email) {
+      throw new Error('로그인 정보를 찾을 수 없습니다');
+    }
+    // 서버가 실패하면 여기서 던진다 — 탈퇴가 안 됐는데 로그아웃시키면 사용자는 «됐다» 고 오해한다.
+    await authService.deleteAccount(email);
+    // 성공하면 서버의 refresh 행도 이미 지워졌다. 로컬 세션만 정리한다(logout API 는 부르지 않는다).
+    await get().forceLogout();
   },
 
   // 서버에 logout API 를 호출하지 않고 로컬만 정리 (토큰 만료 케이스용)
@@ -188,6 +220,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       role: null,
       isAuthenticated: false,
       onboardingCompleted: null,
+      consentMissing: null,
       isLoading: false,
     });
   },
@@ -201,6 +234,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ accessToken, refreshToken }),
 
   markOnboardingCompleted: () => set({ onboardingCompleted: true }),
+
+  refreshConsentStatus: async () => {
+    try {
+      const res = await consentService.getStatus();
+      set({ consentMissing: res.data.missing });
+    } catch {
+      // 조회 실패는 «막지 않음» 으로 둔다(필드 주석 참고).
+      set({ consentMissing: [] });
+    }
+  },
 
   refreshOnboardingStatus: async () => {
     const email = get().user?.email;

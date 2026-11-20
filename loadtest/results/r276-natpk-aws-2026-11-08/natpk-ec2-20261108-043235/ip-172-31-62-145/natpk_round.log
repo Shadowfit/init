@@ -1,0 +1,30 @@
+[round] start 2026-11-08T04:32:53Z REF=5e2497bc0d9be1517f91152a93aada60658278b9 PHASES=2 3 RUN_ID=natpk-ec2-20261108-043235
+Created symlink /etc/systemd/system/multi-user.target.wants/docker.service → /usr/lib/systemd/system/docker.service.
+[round] rig 5e2497bc · 4 vCPU · 15GB
+[phase2 04:33:47] 기동 — 버퍼풀 4096MB
+[phase2 04:34:29] [0] tpl_A 시딩 — 세션 16667 × 600 = 10000200 행
+{"table": "tpl_A", "sessions": 16667, "rows": 10000200, "sec": 822.3}
+[phase2 04:48:16] [0] tpl_A 10000200 행 · PK=id,created_at
+[phase2 04:48:18] [1] ✅ 서버가 INPLACE·LOCK=NONE 을 받았다 — 팔 N 은 온라인 DDL 이다
+[phase2 04:48:18] [2] 판 discard 팔 N — tpl_A 복사
+phase2_rebuild.sh: line 108: /root/init/loadtest/r276-natpk/_work/w_discard.tsv: No such file or directory
+[phase2 06:47:54]   ✗ DDL 실패 rc=1 — /root/init/loadtest/r276-natpk/_out/phase2/discard_ddl.log
+[phase2 06:47:54] [2] 판 discard 팔 P — tpl_A 복사
+phase2_rebuild.sh: line 108: /root/init/loadtest/r276-natpk/_work/w_discard.tsv: No such file or directory
+[phase2 07:24:53]   팔 P — DDL 976.1초 · writer {"attempts": 2995, "ok": 2995, "errors": 0, "err_kinds": [], "max_attempt_ms": 1046, "p50_attempt_ms": 35.0, "max_gap_ms": 1247} · binlog +17103MB · 디스크 최대 79464MB
+[phase2 07:24:53] [2] 판 r1 팔 N — tpl_A 복사
+phase2_rebuild.sh: line 108: /root/init/loadtest/r276-natpk/_work/w_r1.tsv: No such file or directory
+[phase2 09:25:01]   ✗ DDL 실패 rc=1 — /root/init/loadtest/r276-natpk/_out/phase2/r1_ddl.log
+[phase2 09:25:01] [2] 판 r2 팔 P — tpl_A 복사
+phase2_rebuild.sh: line 108: /root/init/loadtest/r276-natpk/_work/w_r2.tsv: No such file or directory
+[phase2 10:02:00]   팔 P — DDL 977.5초 · writer {"attempts": 3009, "ok": 3009, "errors": 0, "err_kinds": [], "max_attempt_ms": 1038, "p50_attempt_ms": 34.0, "max_gap_ms": 1239} · binlog +17104MB · 디스크 최대 97428MB
+[phase2 10:02:00] [2] 판 r3 팔 P — tpl_A 복사
+phase2_rebuild.sh: line 108: /root/init/loadtest/r276-natpk/_work/w_r3.tsv: No such file or directory
+[phase2 10:39:00]   팔 P — DDL 976.1초 · writer {"attempts": 3015, "ok": 3015, "errors": 0, "err_kinds": [], "max_attempt_ms": 1035, "p50_attempt_ms": 34.0, "max_gap_ms": 1235} · binlog +17105MB · 디스크 최대 97234MB
+[phase2 10:39:00] [2] 판 r4 팔 N — tpl_A 복사
+phase2_rebuild.sh: line 108: /root/init/loadtest/r276-natpk/_work/w_r4.tsv: No such file or directory
+[phase2 12:39:12]   ✗ DDL 실패 rc=1 — /root/init/loadtest/r276-natpk/_out/phase2/r4_ddl.log
+[phase2 12:39:12] [2] 판 r5 팔 N — tpl_A 복사
+phase2_rebuild.sh: line 108: /root/init/loadtest/r276-natpk/_work/w_r5.tsv: No such file or directory
+[round] 🔴 상한 600분 초과
+[round] finish 2026-11-08T14:32:55Z — deadline

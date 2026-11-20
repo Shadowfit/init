@@ -50,5 +50,13 @@ public enum OutboxEventType {
      * (report-generation-llm.md §5-2 안 A, §14).
      * payload: {@code { "weeklyReportId": 42 }}
      */
-    GENERATE_WEEKLY_REPORT
+    GENERATE_WEEKLY_REPORT,
+
+    /**
+     * 회원 탈퇴 → DB 가 자동으로 못 지우는 것(pose_data 좌표, 피드 사진 파일)을 지운다. <b>다섯 번째 용처</b> — 상대는 같은 DB 의
+     * 파티션 테이블과 디스크다. 탈퇴 트랜잭션 안에서 같은 커밋으로 적재되고 발행기가 지울 때까지 재시도한다(멱등).
+     * payload: {@code { "sessionIds": [..] }} 또는 {@code { "photos": ["이름", ..] }} — 1000자 한도 때문에 여러 건으로 쪼개진다.
+     * aggregate 는 이미 지워진 회원 id 다(FK 없음, 조회용 라벨).
+     */
+    PURGE_MEMBER_DATA
 }

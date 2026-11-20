@@ -1,0 +1,53 @@
+No slaves found.  See --recursion-method if host c12e6afa8f1b has slaves.
+Not checking slave lag because no slaves were found and --check-slave-lag was not specified.
+Operation, tries, wait:
+  analyze_table, 10, 1
+  copy_rows, 10, 0.25
+  create_triggers, 10, 1
+  drop_triggers, 10, 1
+  swap_tables, 10, 1
+  update_foreign_keys, 10, 1
+Altering `natpk`.`t_rb`...
+Creating new table...
+Created new table natpk._t_rb_new OK.
+Altering new table...
+Altered `natpk`.`_t_rb_new` OK.
+2026-11-08T07:08:28 Creating triggers...
+2026-11-08T07:08:29 Created triggers OK.
+2026-11-08T07:08:29 Copying approximately 8381069 rows...
+Copying `natpk`.`t_rb`:   3% 12:14 remain
+Copying `natpk`.`t_rb`:   7% 11:59 remain
+Copying `natpk`.`t_rb`:  11% 11:45 remain
+Copying `natpk`.`t_rb`:  14% 11:21 remain
+Copying `natpk`.`t_rb`:  18% 10:51 remain
+Copying `natpk`.`t_rb`:  22% 10:22 remain
+Copying `natpk`.`t_rb`:  26% 09:54 remain
+Copying `natpk`.`t_rb`:  29% 09:27 remain
+Copying `natpk`.`t_rb`:  33% 08:57 remain
+Copying `natpk`.`t_rb`:  37% 08:28 remain
+Copying `natpk`.`t_rb`:  40% 08:01 remain
+Copying `natpk`.`t_rb`:  44% 07:29 remain
+Copying `natpk`.`t_rb`:  48% 06:59 remain
+Copying `natpk`.`t_rb`:  51% 06:30 remain
+Copying `natpk`.`t_rb`:  55% 06:01 remain
+Copying `natpk`.`t_rb`:  59% 05:31 remain
+Copying `natpk`.`t_rb`:  62% 05:02 remain
+Copying `natpk`.`t_rb`:  66% 04:32 remain
+Copying `natpk`.`t_rb`:  70% 04:02 remain
+Copying `natpk`.`t_rb`:  73% 03:32 remain
+Copying `natpk`.`t_rb`:  77% 03:02 remain
+Copying `natpk`.`t_rb`:  81% 02:32 remain
+Copying `natpk`.`t_rb`:  84% 02:03 remain
+Copying `natpk`.`t_rb`:  88% 01:33 remain
+Copying `natpk`.`t_rb`:  92% 01:03 remain
+Copying `natpk`.`t_rb`:  95% 00:33 remain
+Copying `natpk`.`t_rb`:  99% 00:03 remain
+2026-11-08T07:24:42 Copied rows OK.
+2026-11-08T07:24:42 Analyzing new table...
+2026-11-08T07:24:42 Swapping tables...
+2026-11-08T07:24:42 Swapped original and new tables OK.
+2026-11-08T07:24:42 Dropping old table...
+2026-11-08T07:24:42 Dropped old table `natpk`.`_t_rb_old` OK.
+2026-11-08T07:24:42 Dropping triggers...
+2026-11-08T07:24:42 Dropped triggers OK.
+Successfully altered `natpk`.`t_rb`.

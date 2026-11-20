@@ -19,6 +19,10 @@ public interface GroupRepository extends JpaRepository<Group, Long> {
     @Query("select g from Group g where g.id = :id")
     Optional<Group> findByIdForUpdate(@Param("id") Long id);
 
+    /** 회원이 생성자(created_by)인 모임 — 탈퇴 때 CASCADE 로 같이 지워지는 대상을 미리 찾는다. */
+    @Query("select g.id from Group g where g.createdBy.id = :memberId")
+    java.util.List<Long> findIdsByCreatedById(@Param("memberId") Long memberId);
+
     // 초대 코드 발급 전 존재 확인 — 최종 방어선은 uk_workout_groups_invite_code (GroupService 참고).
     boolean existsByInviteCode(String inviteCode);
 

@@ -1,7 +1,7 @@
 # 관리자 권한을 어떻게 주나 — «가입 시 자기 부여» 를 대체할 경로
 
 작성: 2026-08-09
-상태: **분석/추천 — 미결정** (결정 ✅ 는 사용자 confirm 후 §6)
+상태: **결정됨 — 신청 기능 없이 수동 SQL 로만** (2026-10-09, §6)
 발단: [#138](https://github.com/Shadowfit/init/issues/138) — 공개 회원가입이 `role` 을 본문에서 그대로 받는다
 방향: 사용자 의견(2026-08-09) — *"admin 요청은 들어오면 서버가 심사하고 하면 될 듯함"*
 연관: [`admin-page-scope.md`](./admin-page-scope.md) · [`../tasks/31-production-readiness-plan.md`](../tasks/31-production-readiness-plan.md) §3-1
@@ -113,3 +113,7 @@ POST /member/signup  { ..., "role": "ADMIN" }        ← permitAll (application.
   - ①의 결과: 이 커밋 이후 **관리자를 새로 만드는 유일한 방법은 수동 SQL** 이다(`UPDATE users SET role='ADMIN' WHERE email=?`). 2단계가 붙기 전까지 그렇다. 기존 `role='ADMIN'` 행은 영향받지 않는다
   - ②의 결과: `UserRole` 은 `USER`·`ADMIN` 둘로 유지한다(신청 상태를 enum 에 넣지 않는다). 신청은 별도 테이블의 상태로 표현한다
   - 아직 정하지 않은 것: 신청 테이블의 정확한 스키마, 재신청·강등 정책, 부트스트랩(§3)
+- 2026-10-09: ✅ **변경 (사용자)** — *"관리자권한신청은 필요없어 기능 삭제해줘"*. ②(신청 테이블) 는 **만들지 않는다.**
+  - 관리자 웹 작업 때 ㄱ안(V28 `admin_access_requests` + 신청·승인·거부 API + 화면)을 구현했다가, 커밋 전에 통째로 걷어냈다 — 마이그레이션 V28 도 함께 지웠다(공유된 적 없음)
+  - 그래서 ①의 상태가 최종이다: 가입은 `USER` 고정, **관리자는 수동 SQL 로만** 만든다(`UPDATE users SET role='ADMIN' WHERE email=?`). 관리자 웹은 일반 계정 로그인을 «관리자 계정이 아니에요» 로 돌려보낸다
+  - §5 의 재신청·강등·신청 알림 질문은 이로써 닫힌다

@@ -33,27 +33,43 @@ class BackBentFeedbackCallbackTest(unittest.TestCase):
         return state
 
     def _run_rep(self, session_id: int, torso_tilt: float):
-        frames = iter(_frame(angle, torso_tilt=torso_tilt) for angle in _REP_SEQUENCE)
+        # torso_tilt 는 bottom 프레임에서만 준다 — squat_counter.SquatCounter 는 standing 판정에
+        # hip_angle 도 보므로, 서 있는 프레임까지 기울이면 standing 에 도달하지 못해 rep 자체가
+        # 완성되지 않는다(이 테스트의 관심사는 등 굽음 감지이지 자세 판정이 아니다).
+        frames = iter(_frame(angle, torso_tilt=torso_tilt if angle == _BOTTOM else 5.0)
+                      for angle in _REP_SEQUENCE)
+        # SquatCounter 는 시각 기반 FSM 이라 process_frame 호출 사이의 실제 경과 시간이
+        # standing_confirm_sec/min_active_sec 판정에 들어간다. 테스트 루프의 실제 벽시계 간격은
+        # 마이크로초 단위라 그 문턱을 못 넘기므로, 3fps 를 흉내 낸 가짜 시계로 고정한다.
+        clock = {"now": 0.0}
         req = PoseRequest(image="", session_id=session_id, exercise_type="squat")
         with mock.patch.object(pose_endpoint, "base64_to_image", lambda _: _BLANK_IMAGE), \
             mock.patch.object(
                 pose_endpoint, "lease_detector", _fake_lease(lambda _img: next(frames))
             ), \
             mock.patch.object(pose_endpoint, "accept_frame", lambda _s, _n: True), \
+            mock.patch.object(pose_endpoint.time, "monotonic", lambda: clock["now"]), \
             mock.patch.object(pose_endpoint.spring_client, "report_pose_data_batch"), \
             mock.patch.object(pose_endpoint.spring_client, "report_feedback_batch") as mock_fb:
             # flush_pending_feedback 이 outcome 을 언패킹한다 — 기본 반환을 성공으로 둬서
             # 버퍼가 정상적으로 비워지는 경로를 태운다(그래야 무한루프 없이 한 번에 끝난다).
             mock_fb.return_value = (spring_client.FeedbackBatchOutcome.OK, 1)
-            responses = [pose_endpoint.detect_pose(req) for _ in _REP_SEQUENCE]
+            responses = []
+            for i in range(len(_REP_SEQUENCE)):
+                clock["now"] = i / 3
+                responses.append(pose_endpoint.detect_pose(req))
         return responses, mock_fb
 
     def test_기울기가_35도를_넘고_게이트도_실패하면_BACK_BENT_를_보낸다(self) -> None:
         self._session(9301)
-        responses, mock_fb = self._run_rep(9301, torso_tilt=45.0)
+        responses, mock_fb = self._run_rep(9301, torso_tilt=75.0)
 
         self.assertTrue(
             any(r.rep_completed for r in responses), "테스트 전제: rep 이 완성돼야 한다"
+        )
+        self.assertEqual(
+            [r.message for r in responses if r.message],
+            ["스쿼트 깊이를 확인하고 1회 기록했어요."],
         )
         mock_fb.assert_called_once()
         session_id, set_no, is_final, events = mock_fb.call_args.args
@@ -69,6 +85,73 @@ class BackBentFeedbackCallbackTest(unittest.TestCase):
 
         self.assertTrue(any(r.rep_completed for r in responses))
         mock_fb.assert_not_called()
+
+    def test_얕은_동작은_카운트하지_않고_화면용_안내를_한번_보낸다(self) -> None:
+        self._session(9303)
+        sequence = [172.0] * 4 + [120.0] * 4 + [172.0] * 4
+        frames = iter(_frame(angle) for angle in sequence)
+        clock = {"now": 0.0}
+        req = PoseRequest(image="", session_id=9303, exercise_type="squat")
+        with mock.patch.object(pose_endpoint, "base64_to_image", lambda _: _BLANK_IMAGE), \
+            mock.patch.object(pose_endpoint, "lease_detector", _fake_lease(lambda _img: next(frames))), \
+            mock.patch.object(pose_endpoint, "accept_frame", lambda _s, _n: True), \
+            mock.patch.object(pose_endpoint.time, "monotonic", lambda: clock["now"]), \
+            mock.patch.object(pose_endpoint.spring_client, "report_pose_data_batch") as mock_pose, \
+            mock.patch.object(pose_endpoint.spring_client, "send_rejected_attempt") as mock_rejected:
+            responses = []
+            for i in range(len(sequence)):
+                clock["now"] = i / 3
+                responses.append(pose_endpoint.detect_pose(req))
+        self.assertTrue(all(not r.rep_completed for r in responses))
+        self.assertEqual([r.message for r in responses if r.message],
+                         ["이번 동작에서 충분히 내려간 장면을 확인하지 못했어요."])
+        mock_pose.assert_not_called()
+        # 세지 않은 시도는 «미인정» 1건으로 남는다(2026-10-21) — 자세한 계약은 test_rejected_attempts.py
+        mock_rejected.assert_called_once()
+
+
+class SquatProgressInResponseTest(unittest.TestCase):
+    """앱이 «준비됐는지/지금 뭘 해야 하는지»를 화면에 보여주려면 응답에 스쿼트 단계가 실려야 한다."""
+
+    def test_응답에_스쿼트_단계가_실리고_서면_준비_완료가_된다(self) -> None:
+        state = get_registry().create(session_id=9304, exercise_id=1, reference_angles=[])
+        self.addCleanup(get_registry().remove, 9304)
+        sequence = [172.0] * 4 + [90.0] * 6 + [172.0] * 4
+        frames = iter(_frame(angle) for angle in sequence)
+        clock = {"now": 0.0}
+        req = PoseRequest(image="", session_id=9304, exercise_type="squat")
+        with mock.patch.object(pose_endpoint, "base64_to_image", lambda _: _BLANK_IMAGE), \
+            mock.patch.object(pose_endpoint, "lease_detector", _fake_lease(lambda _img: next(frames))), \
+            mock.patch.object(pose_endpoint, "accept_frame", lambda _s, _n: True), \
+            mock.patch.object(pose_endpoint.time, "monotonic", lambda: clock["now"]), \
+            mock.patch.object(pose_endpoint.spring_client, "report_pose_data_batch"), \
+            mock.patch.object(pose_endpoint.spring_client, "report_feedback_batch") as mock_fb:
+            mock_fb.return_value = (spring_client.FeedbackBatchOutcome.OK, 1)
+            responses = []
+            for i in range(len(sequence)):
+                clock["now"] = i / 3
+                responses.append(pose_endpoint.detect_pose(req))
+        stages = [r.squat.stage for r in responses if r.squat is not None]
+        self.assertTrue(stages, "스쿼트 응답에 squat 진행 상태가 없다")
+        self.assertIn("ready", stages)
+        self.assertTrue(all(r.squat.guidance for r in responses if r.squat is not None))
+
+    def test_응답에_이미지_가로세로_비율이_실린다(self) -> None:
+        # 앱이 좌표(x=너비 기준, y=높이 기준)로 각도를 재려면 서버가 디코딩한 이미지의 비율이 필요하다.
+        get_registry().create(session_id=9305, exercise_id=1, reference_angles=[])
+        self.addCleanup(get_registry().remove, 9305)
+        frames = iter(_frame(172.0) for _ in range(3))
+        clock = {"now": 0.0}
+        req = PoseRequest(image="", session_id=9305, exercise_type="squat")
+        with mock.patch.object(pose_endpoint, "base64_to_image", lambda _: _BLANK_IMAGE),             mock.patch.object(pose_endpoint, "lease_detector", _fake_lease(lambda _img: next(frames))),             mock.patch.object(pose_endpoint, "accept_frame", lambda _s, _n: True),             mock.patch.object(pose_endpoint.time, "monotonic", lambda: clock["now"]),             mock.patch.object(pose_endpoint.spring_client, "report_pose_data_batch"):
+            responses = []
+            for i in range(3):
+                clock["now"] = i / 3
+                responses.append(pose_endpoint.detect_pose(req))
+        expected = _BLANK_IMAGE.shape[1] / _BLANK_IMAGE.shape[0]
+        for r in responses:
+            self.assertIsNotNone(r.landmarks)
+            self.assertAlmostEqual(r.image_aspect_ratio, expected)
 
 
 if __name__ == "__main__":

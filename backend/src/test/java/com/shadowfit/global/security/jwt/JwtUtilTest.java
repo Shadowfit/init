@@ -89,4 +89,34 @@ class JwtUtilTest {
         long expectedMax = System.currentTimeMillis() + 3600L * 1000 + 5000;
         assertThat(expiration).isBetween(expectedMin, expectedMax);
     }
+
+    @Test
+    @DisplayName("access 는 refresh 가 아니고, refresh 는 refresh 다 — 서명 키가 같아도 종류를 구분한다")
+    void tokenType_isDistinguished() {
+        CustomUserInfoDto info = CustomUserInfoDto.builder()
+                .email("type@test.com").role(com.shadowfit.model.member.UserRole.USER).build();
+
+        assertThat(jwtUtil.isRefreshToken(jwtUtil.createAccessToken(info))).isFalse();
+        assertThat(jwtUtil.isRefreshToken(jwtUtil.createRefreshToken(info, 1L))).isTrue();
+    }
+
+    @Test
+    @DisplayName("typ 가 없던 시절의 토큰 — ver 가 있으면 refresh, 없으면 access 로 본다(배포 순간 전원 로그아웃 방지)")
+    void tokenType_legacyTokensWithoutTyp() {
+        javax.crypto.SecretKey key = io.jsonwebtoken.security.Keys.hmacShaKeyFor(
+                SECRET.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        java.util.Date exp = java.util.Date.from(java.time.Instant.now().plusSeconds(600));
+
+        String legacyAccess = io.jsonwebtoken.Jwts.builder().subject("l@test.com").expiration(exp).signWith(key).compact();
+        String legacyRefresh = io.jsonwebtoken.Jwts.builder().subject("l@test.com").claim("ver", 3L).expiration(exp).signWith(key).compact();
+
+        assertThat(jwtUtil.isRefreshToken(legacyAccess)).isFalse();
+        assertThat(jwtUtil.isRefreshToken(legacyRefresh)).isTrue();
+    }
+
+    @Test
+    @DisplayName("깨진 문자열은 예외 없이 false")
+    void tokenType_malformedIsNotRefresh() {
+        assertThat(jwtUtil.isRefreshToken("not-a-jwt")).isFalse();
+    }
 }

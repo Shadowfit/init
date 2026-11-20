@@ -1,6 +1,24 @@
 # Spring ↔ FastAPI 결합 — 커밋별 구체 변경
 
-마지막 업데이트: **2026-08-08** (이전 2026-05-23 — 그룹 9 와 부록 3개를 갱신했다)
+## 2026-09-17 작업분 — 스쿼트 횟수 판정 통일 (아직 미커밋)
+
+- **proto·Spring·DB**: 변경 없음. 기존 완료 이벤트와 점수 저장 계약 유지.
+- **AI**: `SquatCounter`를 실시간·업로드 영상에 공용 적용. 기준 영상도 동일한 완료 횟수로 분할.
+  HTTP는 촬영 시각·화면 비율을 전달하고 추적 소실 시 진행 중인 횟수를 초기화한다.
+- **영상 응답**: 검증되지 않은 `quality_score`는 `null`로 반환. 기존 실시간 DTW 점수는 유지하되 연구 검증 점수로 해석하지 않는다.
+- **근거·한계**: [스쿼트 반복 판정 문서](../decisions/squat-repetition-counting.md).
+
+## 2026-09-17 작업분 — 전방 런지 (아직 미커밋)
+
+- **proto**: 스키마 변경 없음. 런지 점수의 숫자 기본값은 측정값이 아니다.
+- **AI**: 종목 2 등록, 발 이동·양 무릎 단계·원위치 복귀 판정, 시간 기반 필터,
+  기준 좌표 없는 재부착, HTTP 좌우 횟수와 단계 응답.
+- **Spring**: 횟수 전용 종목은 기준 URL 없이 시작. 포즈/세션 점수는 NULL 저장.
+  상세 리포트 `scoreAvailable`, 트레이너 SSE nullable 점수.
+- **DB**: V22에서 런지 활성화·`repetition_only` 열·포즈 점수 NULL 허용.
+- **검증·근거**: [전방 런지 구현 문서](../decisions/lunge-repetition-counting.md).
+
+마지막 업데이트: **2026-09-17** (스쿼트 판정 통일·전방 런지 작업분 추가)
 범위: 각 커밋이 Spring(`backend/`)·FastAPI(`ai-server/`)·`proto`·`docker-compose.yml` 어디를 어떻게 바꿨는지 기능 단위로 정리.
 
 > 🔴 **이 문서의 네 칸 분류에는 함정이 있다** (2026-08-08 추가). *"proto 는 항상 결합 인터페이스의 변경이라 가장 위"* 라는 읽기 규칙이 **proto 가 안 바뀌면 결합 변경이 아니다** 로 오해되기 쉽다. 실제로 이 프로젝트 최대의 결합 변경(아웃박스, `993dfa1`)은 **proto 0줄·AI 0줄**이면서 `StopAnalysis` 의 전달 의미론을 바꿨다. **계약은 시그니처만이 아니다** — 전달 보장, 멱등 요구, proto 밖 메타데이터(`x-request-id`)도 계약이다.
@@ -435,6 +453,30 @@ proto의 `int64`와 Spring DTO 타입 정렬 + REST 시대 잔재 제거.
 | **AI** | 없음 |
 
 **성격**: 7월에 종료 주체가 넷(사용자 중단·AI 콜백·타임아웃·재부착)으로 늘어난 대가를 치른 작업.
+
+---
+
+### 런지·세트 ② — proto 에 exercise_code·target_reps_per_set·target_sets (2026-09-22)
+
+| 축 | 변경 |
+|---|---|
+| **proto** | `AnalyzeRequest` +`exercise_code(7)`·`target_reps_per_set(8)`·`target_sets(9)` · `ReattachRequest` +`exercise_code(8)`·`target_reps_per_set(9)`·`target_sets(10)` · `ExtractRequest` +`exercise_code(4)`. 삭제·의미 변경 없음 |
+| **Spring** | `ExerciseAnalysisService.SessionTargets.of(session)` — NULL→`""`/`0` 변환 한 곳. `startAnalysis` 가 커밋 전에 확정해 `sendAnalysisRequestToFastApi(…, targets)` 로 넘김(nonce 와 같은 이유), `ReattachRequestBuilder`·`extractReferencePoses` 도 같은 값 |
+| **AI** | `exercise_pb2.py` 재생성만(`scripts/gen_proto.sh`). 필드를 읽는 코드 없음 — 핸드오프 §2-1·2-2 가 AI 몫 |
+| **Infra** | 없음 |
+
+선행: #785(V25 `exercises.code`), #786(V26 세션 목표·세트 표). 설계: `docs/decisions/lunge-and-set-backend.md` §4 ②.
+
+### #759 — 아웃박스 `dispatch()` 예외를 RETRY 로 센다 (2026-09-23)
+
+| 축 | 변경 |
+|---|---|
+| **proto** | 없음 |
+| **Spring** | `AbstractOutboxPublisher.dispatchOne` — `dispatch()` 를 `try/catch (RuntimeException)` 로 감싸 RETRY 로 접는다(스택 로그 1회). `dispatchBatch` 의 catch 는 이제 결과 기록·`onGivenUp` 단계 예외만 받는다(행은 `PROCESSING` → 회수). 테스트: `OutboxPublisherFailureInjectionTest`(«예외 → PROCESSING» 계약을 «예외 → RETRY·상한 후 FAILED» 로 교체, 기록 단계 예외 계약은 새 Nested 로 유지), `WeeklyReportLlmOutboxIntegrationTest`(영구 예외 → exhausted 로 닫힘) |
+| **AI** | 없음 |
+| **Infra** | 없음 |
+
+의미 변화: `StopAnalysis`·`ReattachAnalysis` 아웃박스 행의 «상한 10회» 가 예외 경로까지 덮는다. 설계: `docs/decisions/outbox-reliable-messaging.md` §4-3-1.
 
 ---
 

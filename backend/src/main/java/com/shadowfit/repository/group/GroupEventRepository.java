@@ -19,6 +19,29 @@ public interface GroupEventRepository extends JpaRepository<GroupEvent, Long> {
     // 여기서 걸러진다. 최종 방어선은 uk_group_events_type_source(V19).
     boolean existsByGroupIdAndEventTypeAndSourceId(Long groupId, String eventType, Long sourceId);
 
+    /** 모임의 모든 글 payload — 모임이 지워질 때 딸린 사진 파일을 찾는다(탈퇴·관리자 삭제 공통). */
+    @org.springframework.data.jpa.repository.Query("select e.payload from GroupEvent e where e.group.id = :groupId")
+    List<String> findPayloadsByGroupId(@org.springframework.data.repository.query.Param("groupId") Long groupId);
+
+    /** 회원이 쓴 글 payload — 탈퇴 때 사진 파일을 지우려고 행을 지우기 전에 읽는다. */
+    @org.springframework.data.jpa.repository.Query("select e.payload from GroupEvent e where e.sender.id = :memberId")
+    List<String> findPayloadsBySenderId(@org.springframework.data.repository.query.Param("memberId") Long memberId);
+
+    /**
+     * 회원이 쓴 글을 지운다. 이 컬럼은 {@code ON DELETE SET NULL} 이라 그냥 두면 회원이 탈퇴해도 본문이
+     * 익명으로 남는다 — 본문에 재식별 가능한 내용이 있을 수 있어 지운다. 반응·응원은 이벤트 FK CASCADE 로 따라간다.
+     */
+    @org.springframework.data.jpa.repository.Modifying(clearAutomatically = true, flushAutomatically = true)
+    @org.springframework.data.jpa.repository.Query("delete from GroupEvent e where e.sender.id = :memberId")
+    int deleteBySenderId(@org.springframework.data.repository.query.Param("memberId") Long memberId);
+
+    /** 같은 원천(세션)으로 이미 글이 있는 그룹들 — 공유 화면의 «공유됨» 표시용. */
+    @org.springframework.data.jpa.repository.Query(
+            "select e.group.id from GroupEvent e where e.eventType = :eventType and e.sourceId = :sourceId")
+    List<Long> findGroupIdsByEventTypeAndSourceId(
+            @org.springframework.data.repository.query.Param("eventType") String eventType,
+            @org.springframework.data.repository.query.Param("sourceId") Long sourceId);
+
     // 피드 — 최신순 keyset(social-cheer-and-group-feed.md §4-5 ②). beforeSeq 미만을 seq 내림차순으로 size 개.
     // 백필과 같은 uk_group_events_group_seq 를 반대 방향으로 탄다.
     List<GroupEvent> findAllByGroupIdAndSeqLessThanOrderBySeqDesc(Long groupId, Long beforeSeq, Pageable pageable);

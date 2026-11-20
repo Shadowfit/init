@@ -46,12 +46,14 @@ public class OutboxPublisher extends AbstractOutboxPublisher {
     /** 이 차선이 집는 타입. 주간 리포트만 빼고 전부 — 새 타입을 enum 에 더하면 어느 차선인지 여기서 정한다. */
     public static final Set<OutboxEventType> TYPES = Set.of(
             OutboxEventType.STOP_ANALYSIS, OutboxEventType.REATTACH_ANALYSIS,
-            OutboxEventType.PUSH_NOTIFICATION, OutboxEventType.SESSION_COMPLETED);
+            OutboxEventType.PUSH_NOTIFICATION, OutboxEventType.SESSION_COMPLETED,
+            OutboxEventType.PURGE_MEMBER_DATA);
 
     private final OutboxEventRepository outboxRepository;
     private final ExerciseAnalysisService analysisService;
     private final PushDispatchService pushDispatchService;
     private final SessionCompletedFeedService sessionCompletedFeedService;
+    private final com.shadowfit.service.member.MemberPurgeService memberPurgeService;
     private final SessionMetrics sessionMetrics;
 
     public OutboxPublisher(@Qualifier("outboxEventStore") OutboxEventStore outboxEventStore,
@@ -59,6 +61,7 @@ public class OutboxPublisher extends AbstractOutboxPublisher {
                            ExerciseAnalysisService analysisService,
                            PushDispatchService pushDispatchService,
                            SessionCompletedFeedService sessionCompletedFeedService,
+                           com.shadowfit.service.member.MemberPurgeService memberPurgeService,
                            SessionMetrics sessionMetrics,
                            /* 이 횟수를 넘기면 독 메시지로 보고 종료 상태로 보낸다. */
                            @Value("${outbox.publisher.max-retry:10}") int maxRetry,
@@ -69,6 +72,7 @@ public class OutboxPublisher extends AbstractOutboxPublisher {
         this.analysisService = analysisService;
         this.pushDispatchService = pushDispatchService;
         this.sessionCompletedFeedService = sessionCompletedFeedService;
+        this.memberPurgeService = memberPurgeService;
         this.sessionMetrics = sessionMetrics;
     }
 
@@ -101,6 +105,8 @@ public class OutboxPublisher extends AbstractOutboxPublisher {
             // possiblyRedelivered 를 안 쓴다 — 회수분이든 아니든 group_events.source_id 의 exists·UNIQUE 가
             // 같은 글의 재생성을 막는다(social-cheer-and-group-feed.md §4-4 ④ c). aggregateId 는 session id.
             case SESSION_COMPLETED -> sessionCompletedFeedService.dispatch(event.getAggregateId());
+            // possiblyRedelivered 를 안 쓴다 — 삭제는 멱등이라 회수분이든 아니든 결과가 같다. aggregateId 는 이미 지워진 회원 id 다.
+            case PURGE_MEMBER_DATA -> memberPurgeService.dispatch(event);
             // 선점 쿼리가 TYPES 로 거르므로 여기 올 수 없다 — 왔다면 차선 설정이 어긋난 것이라 조용히 넘기지 않는다.
             case GENERATE_WEEKLY_REPORT -> throw new IllegalStateException(
                     "기본 차선이 주간 리포트 이벤트를 집었다 — OutboxEventStore 의 타입 집합 확인 (id=" + event.getId() + ")");

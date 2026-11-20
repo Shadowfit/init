@@ -61,6 +61,8 @@ public class ExerciseAnalysisService {
     private final SessionMetrics sessionMetrics;
     private final OutboxEventRepository outboxEventRepository;
     private final ReattachRequestBuilder reattachRequestBuilder;
+    // 기준 좌표 추출 접수 실패를 종목 행에 남긴다(V34) — gRPC 콜백 스레드에서 부르므로 별도 빈(트랜잭션 프록시)이어야 한다.
+    private final ReferenceExtractionStatusService referenceExtractionStatusService;
 
     // 자기 주입: startAnalysis → sendAnalysisRequestToFastApi 호출이 Spring 프록시를 통과해
     // @Async가 적용되도록 함(:199 주석 참조).
@@ -273,6 +275,8 @@ public class ExerciseAnalysisService {
         com.shadowfit.grpc.ExtractRequest request = com.shadowfit.grpc.ExtractRequest.newBuilder()
                 .setExerciseId(exerciseId)
                 .setYoutubeUrl(videoSource) // 필드 이름만 youtube_url — 의미는 컨테이너 안 파일 경로
+                // 종목 코드(V25) — 기준 영상 분절에 어느 분석기를 쓸지. 코드 없는 종목은 빈 문자열(proto3 «없음»).
+                .setExerciseCode(codeOrEmpty(exercise))
                 .build();
 
         log.info("FastAPI에게 기준 좌표 추출 요청 전송 - 운동 ID: {}", exerciseId);
@@ -280,6 +284,9 @@ public class ExerciseAnalysisService {
         CircuitBreaker cb = aiCircuitBreaker(exerciseId);
         if (!cb.tryAcquirePermission()) {
             log.warn("AI 서버 서킷브레이커 OPEN — 기준 좌표 추출 요청 스킵 (운동 ID: {})", exerciseId);
+            // 업로드는 서킷을 미리 묻지만(isAiReachable) 그 사이에 열릴 수 있다 — «추출 중» 으로 남겨 두면
+            // 관리자는 10분 뒤에야 실패를 안다.
+            recordExtractionFailure(exerciseId, "AI 서버가 응답하지 않아 추출을 요청하지 못했어요. 잠시 후 영상을 다시 올려주세요.");
             return;
         }
         long callStart = System.nanoTime();
@@ -304,18 +311,47 @@ public class ExerciseAnalysisService {
                 } else {
                     log.error("FastAPI 가 기준 좌표 추출을 거부 - 운동 ID: {}, source: {} "
                             + "(공유 볼륨 마운트·REFERENCE_VIDEO_AI_DIR 확인)", value.getExerciseId(), videoSource);
+                    // 접수 거부는 역호출이 안 온다 — 여기서 닫지 않으면 관리자 화면이 «추출 중» 에 머문다(V34).
+                    recordExtractionFailure(exerciseId, "AI 서버가 영상 파일을 찾지 못했어요 (공유 볼륨 확인).");
                 }
             }
             @Override
             public void onError(Throwable t) {
                 cb.onError(System.nanoTime() - callStart, TimeUnit.NANOSECONDS, t);
                 log.error("좌표 추출 gRPC 통신 장애: {}", t.getMessage());
+                recordExtractionFailure(exerciseId, "AI 서버와 통신하지 못했어요: " + shortReason(t));
             }
             @Override
             public void onCompleted() {
                 log.info("좌표 추출 gRPC 요청 완료");
             }
         }));
+    }
+
+    /**
+     * 기준 좌표 추출 접수 실패를 종목 행에 남긴다(V34). gRPC 콜백 스레드에서도 불리므로 <b>예외를 절대 밖으로 내보내지
+     * 않는다</b> — 새면 gRPC 이벤트 루프가 그 예외를 삼키고 로그만 어지럽힌다. 기록에 실패해도 관리자 화면은 10분 뒤
+     * «응답 없음» 으로 FAILED 를 보게 되므로(AdminExerciseService 의 stale 규칙) 경고로 충분하다.
+     */
+    private void recordExtractionFailure(Long exerciseId, String reason) {
+        try {
+            referenceExtractionStatusService.markFailed(exerciseId, reason);
+        } catch (RuntimeException e) {
+            log.warn("기준 좌표 등록 실패 기록 자체가 실패 - 운동 ID: {}, 사유: {} ({}: {})",
+                    exerciseId, reason, e.getClass().getSimpleName(), e.getMessage());
+        }
+    }
+
+    /** 관리자에게 보일 통신 실패 사유 — gRPC 상태 코드(+설명)만, 길면 자른다. */
+    private static String shortReason(Throwable t) {
+        String reason;
+        if (t instanceof StatusRuntimeException e) {
+            String desc = e.getStatus().getDescription();
+            reason = e.getStatus().getCode().name() + (desc == null || desc.isBlank() ? "" : " — " + desc);
+        } else {
+            reason = t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage();
+        }
+        return reason.length() > 200 ? reason.substring(0, 200) : reason;
     }
 
     /**
@@ -334,8 +370,46 @@ public class ExerciseAnalysisService {
      *                  <p>표시용 시각이 아니라서 아프다 — 이 값은 {@code pose_data} 의 멱등
      *                  앵커이자 파티션 키이고(#188 · #392), 리포트·재부착 조회가 <b>등호</b>로
      *                  찾는 바로 그 값이다. 「받은 시각 = 저장된 시각」이 성립해야 한다.
+     * @param targetRepsPerSet 세션에 확정된 세트당 목표(추천 폴백 포함, V26). 앱이 «12회 x 3세트» 를 그리고
+     *                         세트 cue 를 낼 근거다 — 세션 도중 바뀌지 않는다
+     * @param targetSets 목표 세트 수. null = 열린 세트
+     * @param syncGoodThreshold 싱크로율 정석 기준(V34) — AnalyzeRequest 로 AI 에 가는 것과 <b>같은 값</b>이다.
+     *                          앱이 점수를 «정석/교정 필요/위험» 으로 칠하는 근거
+     * @param syncWarnThreshold 싱크로율 위험 기준(V34). 이 점수 미만 = 위험
      */
-    public record StartedSession(Long sessionId, String sessionNonce, LocalDateTime startTime, int aiWorkerIndex) {}
+    public record StartedSession(Long sessionId, String sessionNonce, LocalDateTime startTime, int aiWorkerIndex,
+                                 Integer targetRepsPerSet, Integer targetSets,
+                                 double syncGoodThreshold, double syncWarnThreshold) {}
+
+    /**
+     * AI 로 가는 종목 코드·세트 목표·판정 기준 — proto3 라 null 을 못 실어 «없음» 을 빈 문자열·0 으로 접은 꼴.
+     * {@code AnalyzeRequest}(시작)와 {@code ReattachRequest}(재부착)가 같은 변환을 쓰게 한 곳으로 모은다.
+     *
+     * <p>판정 기준 한 쌍(V34)은 세션의 종목에서 읽는다. 0 은 proto 에서 «안 보냄» 이라 AI 가 기본값(80/60)을 쓴다 —
+     * 컬럼이 NOT NULL 이라 실제로는 항상 값이 있다.
+     */
+    public record SessionTargets(String exerciseCode, int targetRepsPerSet, int targetSets,
+                                 double syncGoodThreshold, double syncWarnThreshold) {
+        public static SessionTargets of(Session session) {
+            Exercise exercise = session.getExercise();
+            return new SessionTargets(
+                    codeOrEmpty(exercise),
+                    session.getTargetRepsPerSet() == null ? 0 : session.getTargetRepsPerSet(),
+                    session.getTargetSets() == null ? 0 : session.getTargetSets(),
+                    thresholdOrZero(exercise.getSyncGoodThreshold()),
+                    thresholdOrZero(exercise.getSyncWarnThreshold()));
+        }
+    }
+
+    /** {@code exercises.code} 는 NULL 허용(분석기 없는 종목) — proto 로는 빈 문자열이 «없음» 이다. */
+    static String codeOrEmpty(Exercise exercise) {
+        return exercise.getCode() == null ? "" : exercise.getCode();
+    }
+
+    /** proto3 double 의 «없음» 은 0 이다 — AI 가 0 을 받으면 기본값(80/60)을 쓴다. */
+    static double thresholdOrZero(java.math.BigDecimal value) {
+        return value == null ? 0.0 : value.doubleValue();
+    }
 
     /**
      * [STEP 2: 운동 분석 시작 - Entry Point]
@@ -346,15 +420,24 @@ public class ExerciseAnalysisService {
         Member member = memberRepository.findById(currentMemberId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.USER_NOT_FOUND));
 
-        String finalUrl = member.getPreferredUrl();
+        boolean countOnly = exercisesRepository.findByIdCached(appDto.getExerciseId())
+                .map(ExerciseAnalysisCapabilities::isCountOnly).orElse(false);
+        String finalUrl = countOnly ? "" : member.getPreferredUrl();
 
-        if (finalUrl == null || finalUrl.isEmpty()) {
+        if (!countOnly && (finalUrl == null || finalUrl.isEmpty())) {
             throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
         }
 
         Session savedSession = sessionService.createSession(appDto, currentMemberId, finalUrl);
         Long sessionId = savedSession.getId();
         String persona = member.getSelectedPersona().name();
+        // 저장된 엔티티에서 읽는다(persona와 동일한 이유) — appDto.getDepthMode()가 null이어도
+        // createSession이 이미 FULL로 기본값을 채워 저장했으므로, 클라가 받는 값과 AI가 받는
+        // 값이 어긋나지 않는다.
+        String squatDepthMode = savedSession.getSquatDepthMode().name();
+        // AI 로 갈 종목 코드·세트 목표는 nonce 와 같은 이유로 **여기서** 확정해 넘긴다 — 클라 응답(StartedSession)과
+        // AnalyzeRequest 가 같은 엔티티의 같은 값을 보게. 비동기 워커에서 세션을 다시 읽으면 두 경로가 갈릴 수 있다.
+        SessionTargets targets = SessionTargets.of(savedSession);
 
         // 비동기로 FastAPI에 분석 요청 — self를 거쳐야 @Async가 Spring 프록시를 타고 실제로
         // 비동기 실행됨. this.로 호출하면 자기호출(self-invocation)이라 AOP 프록시를 우회해서
@@ -370,7 +453,7 @@ public class ExerciseAnalysisService {
                     @Override
                     public void afterCommit() {
                         self.sendAnalysisRequestToFastApi(sessionId, appDto, finalUrl, persona,
-                                savedSession.getSessionNonce());
+                                savedSession.getSessionNonce(), squatDepthMode, targets);
                     }
                 }
         );
@@ -379,7 +462,10 @@ public class ExerciseAnalysisService {
         // 클라가 받는 값이 DB 와 갈린다 — Session 의 @PrePersist 가 초 이하를 자르므로(#446)
         // 이 값은 이미 DB 에 박힌 것과 같은 값이다.
         return new StartedSession(sessionId, savedSession.getSessionNonce(),
-                savedSession.getStartTime(), Math.floorMod(sessionId, aiChannelPoolSize));
+                savedSession.getStartTime(), Math.floorMod(sessionId, aiChannelPoolSize),
+                savedSession.getTargetRepsPerSet(), savedSession.getTargetSets(),
+                // 판정 기준은 AnalyzeRequest 와 같은 targets 에서 꺼낸다 — 앱이 칠하는 기준과 AI 가 판정하는 기준이 한 값.
+                targets.syncGoodThreshold(), targets.syncWarnThreshold());
     }
 
     /**
@@ -389,7 +475,7 @@ public class ExerciseAnalysisService {
     @Async("applicationTaskExecutor")
     @Transactional(readOnly = true)
     public void sendAnalysisRequestToFastApi(Long sessionId, VideoRequestDto appDto, String finalUrl, String persona,
-                                             String sessionNonce) {
+                                             String sessionNonce, String squatDepthMode, SessionTargets targets) {
         // 여기는 이미 @Async 워커 스레드 — cid 는 AsyncConfig 의 TaskDecorator 가 넘겨줬고,
         // 세션 id 는 이 흐름의 시작점인 여기서 얹는다.
         try (CorrelationIds.Scope ignored = CorrelationIds.withSession(sessionId)) {
@@ -409,7 +495,15 @@ public class ExerciseAnalysisService {
                     .setSessionId(sessionId)
                     .setReferenceSource(finalUrl)
                     .setPersona(persona)
-                    .setSessionNonce(sessionNonce == null ? "" : sessionNonce);
+                    .setSessionNonce(sessionNonce == null ? "" : sessionNonce)
+                    .setDepthMode(squatDepthMode == null ? "" : squatDepthMode)
+                    // ② (lunge-and-set-backend.md §4): 종목 코드·세트 목표. AI 가 아직 안 읽어도 proto3 기본값이라 무해.
+                    .setExerciseCode(targets.exerciseCode())
+                    .setTargetRepsPerSet(targets.targetRepsPerSet())
+                    .setTargetSets(targets.targetSets())
+                    // 판정 기준 한 쌍(V34, proto 11·12). 시작 응답(StartedSession)에 나간 것과 같은 값이다.
+                    .setSyncGoodThreshold(targets.syncGoodThreshold())
+                    .setSyncWarnThreshold(targets.syncWarnThreshold());
 
             for (ExerciseReference ref : referencePoses) {
                 requestBuilder.addReferencePoses(PoseDataRequest.newBuilder()
@@ -543,9 +637,13 @@ public class ExerciseAnalysisService {
             // 빈 문자열(배포 전 세션)은 null 로 돌려준다 — «없음» 을 JSON 에서 빈 문자열로 흉내내면
             // 클라가 그걸 동봉해 «틀린 nonce» 가 된다.
             String reattachNonce = request.getSessionNonce().isEmpty() ? null : request.getSessionNonce();
+            // 판정 기준도 같은 이유로 요청에서 꺼낸다 — 이어하기 화면이 칠하는 기준 = AI 가 다시 세운 상태의 기준.
+            // 미인정 시도 수는 AI 응답에 없어 요청에 실은 DB 값을 그대로 돌려준다(V35) — 앱의 «미인정 N회» = AI 가 이어 셀 시작값.
             return ReattachSessionResponseDto.of(
-                    sessionId, response.getRepCount(), response.getAlreadyActive(), reattachNonce,
-                    Math.floorMod(sessionId, aiChannelPoolSize));
+                    sessionId, response.getRepCount(), request.getInitialRejectedCount(),
+                    response.getAlreadyActive(), reattachNonce,
+                    Math.floorMod(sessionId, aiChannelPoolSize),
+                    request.getSyncGoodThreshold(), request.getSyncWarnThreshold());
         }
     }
 
@@ -597,9 +695,9 @@ public class ExerciseAnalysisService {
                 return DispatchOutcome.RETRY;
             } catch (RuntimeException e) {
                 // gRPC 실패는 StatusRuntimeException 으로 오지만, 인터셉터·직렬화 등 그 바깥에서 나는
-                // 예외도 있다. 여기서 안 잡으면 "예외를 던지지 않는다"는 이 메서드의 계약이 깨지고,
-                // 발행기는 결과를 못 받아 행을 PROCESSING 으로 방치한 채 lease 만료까지(60초)
-                // 불필요하게 기다리게 된다. 원인이 무엇이든 "지금은 실패, 나중에 재시도"가 맞다.
+                // 예외도 있다. 여기서 안 잡으면 "예외를 던지지 않는다"는 이 메서드의 계약이 깨진다 —
+                // 발행기가 그 예외를 RETRY 로 세긴 하지만(#759) 서킷브레이커엔 실패가 안 남고
+                // 지표(aiStopResult)도 빠진다. 원인이 무엇이든 "지금은 실패, 나중에 재시도"가 맞다.
                 cb.onError(System.nanoTime() - callStart, TimeUnit.NANOSECONDS, e);
                 sessionMetrics.aiStopResult("error");
                 log.error("AI 서버 중단 요청 중 예기치 못한 오류 - sessionId: {}", sessionId, e);

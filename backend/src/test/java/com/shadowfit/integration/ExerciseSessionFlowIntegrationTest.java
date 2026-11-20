@@ -94,8 +94,6 @@ class ExerciseSessionFlowIntegrationTest {
                 .name("스쿼트")
                 .category(category)
                 .expectedDurationMinutes(15)
-                .syncThresholdBeginner(new BigDecimal("60.00"))
-                .syncThresholdAdvanced(new BigDecimal("85.00"))
                 .build());
     }
 
@@ -516,6 +514,9 @@ class ExerciseSessionFlowIntegrationTest {
             // then: newer가 자기 자신과 비교(diff 0)된 게 아니라 older(70.0) 기준으로 diff 10이어야 함
             assertThat(result.getComparisonWithPrevious()).isNotNull();
             assertThat(result.getComparisonWithPrevious().getSyncRateDiff()).isEqualTo(10);
+            // V34 — 판정 기준 한 쌍이 리포트에 실린다(종목 기본값 80/60)
+            assertThat(result.getSyncGoodThreshold()).isEqualTo(80.0);
+            assertThat(result.getSyncWarnThreshold()).isEqualTo(60.0);
         }
     }
 }

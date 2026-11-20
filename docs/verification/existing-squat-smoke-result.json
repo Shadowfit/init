@@ -1,0 +1,42 @@
+{
+  "passed": true,
+  "sample_fps": 3.0,
+  "clips": [
+    {
+      "name": "front",
+      "video": "samples\\raw\\kkw_45-degree_frontview_squat.mp4",
+      "passed": true,
+      "expected_reps": 2,
+      "actual_reps": 2,
+      "expected_complete_events": 2,
+      "actual_complete_events": 2,
+      "expected_partial_events": 0,
+      "actual_partial_events": 0,
+      "mismatches": []
+    },
+    {
+      "name": "back",
+      "video": "samples\\raw\\kkw_45-degree_backview_squat.mp4",
+      "passed": true,
+      "expected_reps": 2,
+      "actual_reps": 2,
+      "expected_complete_events": 2,
+      "actual_complete_events": 2,
+      "expected_partial_events": 0,
+      "actual_partial_events": 0,
+      "mismatches": []
+    },
+    {
+      "name": "roi-complete-cycles",
+      "video": "samples\\raw\\sqaut_roi_0509.mp4",
+      "passed": true,
+      "expected_reps": 5,
+      "actual_reps": 5,
+      "expected_complete_events": 5,
+      "actual_complete_events": 5,
+      "expected_partial_events": 0,
+      "actual_partial_events": 0,
+      "mismatches": []
+    }
+  ]
+}

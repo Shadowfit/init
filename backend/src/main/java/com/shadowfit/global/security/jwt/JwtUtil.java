@@ -16,6 +16,12 @@ import java.util.Date;
 @Slf4j
 @Component
 public class JwtUtil {
+
+    /** 토큰 종류 claim. access 와 refresh 는 서명 키가 같아서, 이 claim 이 없으면 서로 바꿔 쓸 수 있다. */
+    static final String CLAIM_TYPE = "typ";
+    static final String TYPE_ACCESS = "access";
+    static final String TYPE_REFRESH = "refresh";
+
     private final SecretKey key;
     private final long accessTokenExpTime;
     private final long refreshTokenExpTime;
@@ -76,13 +82,12 @@ public class JwtUtil {
         ZonedDateTime now = ZonedDateTime.now();
         ZonedDateTime tokenValidity = now.plusSeconds(expireTime);
 
-        // 빌드 시점에 로그를 찍어 데이터가 들어오는지 확인
-        log.info("@@@ Generating Token for User: {}", member.getEmail());
-
         JwtBuilder builder = Jwts.builder()
                 .setSubject(member.getEmail()) // 필터에서 getSubject로 꺼낼 값
                 .claim("userId", member.getEmail())
-                .claim("role", member.getRole());
+                .claim("role", member.getRole())
+                // 종류를 서명 안에 싣는다. refresh(7일)가 access 자리에서 통하면 로그아웃·만료 설계가 무의미해진다.
+                .claim(CLAIM_TYPE, tokenVersion != null ? TYPE_REFRESH : TYPE_ACCESS);
 
         // access token 에는 안 붙는다 — 회전 대상이 아니라서 비교할 상대가 없다.
         if (tokenVersion != null) {
@@ -94,6 +99,23 @@ public class JwtUtil {
                 .setExpiration(Date.from(tokenValidity.toInstant()))
                 .signWith(key, SignatureAlgorithm.HS256)
                 .compact();
+    }
+
+    /**
+     * refresh 토큰인가. {@code typ=refresh} 이거나, {@code typ} 가 생기기 전에 발급된 토큰 중 {@code ver}
+     * claim 을 가진 것(refresh 만 {@code ver} 를 갖는다 — {@link #createToken})이면 true.
+     *
+     * <p>{@code typ} 도 {@code ver} 도 없는 토큰은 access 로 본다 — 이 변경이 배포되기 전에 발급된
+     * access 토큰(최대 30분)이 배포 순간 거부되어 전원이 로그아웃되는 것을 막는 전환 규칙이다.
+     * 서명이 유효하지 않으면 호출자가 먼저 {@link #isValidToken} 으로 걸러야 하고, 여기서는 false.
+     */
+    public boolean isRefreshToken(String token) {
+        try {
+            Claims claims = parseClaims(token);
+            return TYPE_REFRESH.equals(claims.get(CLAIM_TYPE)) || claims.containsKey("ver");
+        } catch (JwtException | IllegalArgumentException e) {
+            return false;
+        }
     }
 
     // 문자열 userId를 반환하도록 추출 로직 변경

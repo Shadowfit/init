@@ -3,6 +3,7 @@ package com.shadowfit.global.security.jwt;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shadowfit.global.observability.CorrelationIds;
 import com.shadowfit.global.security.auth.CustomUserDetails;
 import com.shadowfit.model.member.Member;
@@ -15,6 +16,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -45,7 +48,7 @@ class JwtAuthFilterTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        filter = new JwtAuthFilter(customUserDetailsService, jwtUtil);
+        filter = new JwtAuthFilter(customUserDetailsService, jwtUtil, new ObjectMapper().findAndRegisterModules());
     }
 
     @AfterEach
@@ -81,6 +84,24 @@ class JwtAuthFilterTest {
 
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNotNull();
         assertThat(SecurityContextHolder.getContext().getAuthentication().getName()).isEqualTo("test@test.com");
+        verify(chain, times(1)).doFilter(request, response);
+    }
+
+    @Test
+    @DisplayName("서명이 유효해도 refresh 토큰이면 인증하지 않는다 — 7일짜리가 access 자리에서 통하면 안 된다")
+    void refreshToken_isNotAuthenticated() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/sessions/1");
+        request.addHeader("Authorization", "Bearer refresh-token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain chain = mock(FilterChain.class);
+
+        when(jwtUtil.isValidToken("refresh-token")).thenReturn(true);
+        when(jwtUtil.isRefreshToken("refresh-token")).thenReturn(true);
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        verify(customUserDetailsService, never()).loadUserByUsername(org.mockito.ArgumentMatchers.anyString());
         verify(chain, times(1)).doFilter(request, response);
     }
 
@@ -282,5 +303,63 @@ class JwtAuthFilterTest {
         } finally {
             filterLogger.detachAppender(appender);
         }
+    }
+
+    @Test
+    @DisplayName("회원 조회 중 DB 장애면 401 이 아니라 503 — 체인을 이어가지 않고 Retry-After 를 준다 (#848)")
+    void dbOutage_returns503_notUnauthorized() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/sessions/1");
+        request.addHeader("Authorization", "Bearer valid-token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain chain = mock(FilterChain.class);
+
+        when(jwtUtil.isValidToken("valid-token")).thenReturn(true);
+        when(jwtUtil.getUserEmail("valid-token")).thenReturn("test@test.com");
+        when(customUserDetailsService.loadUserByUsername("test@test.com"))
+                .thenThrow(new DataAccessResourceFailureException("Communications link failure"));
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(response.getStatus()).isEqualTo(503);
+        assertThat(response.getHeader("Retry-After")).isNotBlank();
+        assertThat(response.getContentAsString()).contains("\"code\":\"C009\"");
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        verify(chain, never()).doFilter(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    @DisplayName("DB 가 내려가 트랜잭션을 못 열어도(CannotCreateTransactionException) 503 이다")
+    void transactionCannotBeCreated_returns503() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/sessions/1");
+        request.addHeader("Authorization", "Bearer valid-token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain chain = mock(FilterChain.class);
+
+        when(jwtUtil.isValidToken("valid-token")).thenReturn(true);
+        when(jwtUtil.getUserEmail("valid-token")).thenReturn("test@test.com");
+        when(customUserDetailsService.loadUserByUsername("test@test.com"))
+                .thenThrow(new CannotCreateTransactionException("Could not open JPA EntityManager"));
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(response.getStatus()).isEqualTo(503);
+        verify(chain, never()).doFilter(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    @DisplayName("DB 장애가 아닌 예외(토큰 파싱 실패 등)는 그대로 «인증 안 됨» — 503 으로 바뀌지 않는다")
+    void nonDbException_staysUnauthenticated() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/sessions/1");
+        request.addHeader("Authorization", "Bearer broken-token");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        FilterChain chain = mock(FilterChain.class);
+
+        when(jwtUtil.isValidToken("broken-token")).thenThrow(new IllegalStateException("parse"));
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(response.getStatus()).isEqualTo(200);
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        verify(chain, times(1)).doFilter(request, response);
     }
 }

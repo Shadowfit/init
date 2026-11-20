@@ -1,6 +1,105 @@
 # Spring ↔ FastAPI 결합 변경 이력
 
-마지막 업데이트: **2026-08-08** (이전 2026-05-23 — 그 사이 2.5개월치를 §4 로 채웠다)
+## 2026-10-21 (3) — «미인정 시도» 를 세어 보여주고 리포트에 반영 — 새 RPC `SaveRejectedAttempt`
+
+«자세가 나쁘면 안 세져서 리포트가 좋게만 나온다» 는 지적으로, 세지 않은 시도가 리포트·DB 어디에도 남지 않는다는 것을 확인했다.
+횟수 규칙은 그대로(바닥 연속 두 표본·선 자세 고관절 150° — 같은 날 완화했다가 2026-09-21 사람 판정과 어긋나 되돌림)이고,
+내려갔다 올라왔지만 인정되지 않은 시도를 **미인정 시도**로 센다.
+
+- **AI**: `SquatCounter.rejected_event/rejected_count`(사유 `DEPTH_NOT_CONFIRMED`·`SPLIT_STANCE`), 인정 반복과 같은 식으로 채점해
+  가장 깊은 순간 하나로 요약 → `spring_client.send_rejected_attempt` → **새 RPC** `SaveRejectedAttempt(RejectedAttemptRequest)`.
+  앱 응답 `PoseResponse.rejected_count·rejected_reason`. 재부착은 `ReattachRequest.initial_rejected_count`(14)에서 잇는다.
+- **Spring**: V35 `exercise_rejected_attempts`(세션·번호 유일 — 재전송 멱등), 세션 평균·최대·최소 싱크로율은 «모든 시도» 로 집계
+  (`total_reps`·세트는 인정 반복만), 리포트에 `rejectedReps`·사유별 개수, `repTrend`·깊이·체간 회차에 `counted:false` 항목.
+- **왜 플래그가 아니라 별도 RPC**: 구버전 Spring 은 `SavePoseDataBatch` 의 모르는 필드를 무시하므로 플래그 방식이면 미인정 프레임이
+  정상 반복으로 저장된다. 별도 RPC 면 구버전은 `UNIMPLEMENTED` 로 거절할 뿐이고 AI 는 한 번 경고하고 버린다 — **어느 쪽을 먼저 배포해도 안전**.
+- 실촬영: normal 5·5·side 5회·미인정 0, shallow_01 0회·미인정 2. 결정: [`../decisions/counted-reps-vs-scored-attempts.md`](../decisions/counted-reps-vs-scored-attempts.md) §6.
+
+## 2026-10-21 (2) — 싱크로율·깊이 점수를 같은 잣대로, 찍힌 프레임 수에 흔들리지 않게
+
+사용자 리포트에서 같은 깊이(무릎 76°·74°)의 두 반복이 싱크로율 73·90 으로 갈렸고, 싱크로율 63.5 «자세 보정 필요» 인
+반복(무릎 85°)이 깊이 점수는 100 «매우 정확해요» 였다. 원인 셋과 고친 것:
+
+1. **궤적 항이 찍힌 프레임 수에 흔들렸다** — 비대칭 DTW 거리를 사용자 프레임으로 평균해서 3fps·반복당 3~5장일 때
+   전이 프레임 한 장의 비중이 컸다(4장 반복 78~84 vs 5장 86~92). 사용자 각도 열을 **시간축으로 선형 보간**한 뒤 비교한다
+   (`dtw_calculator.densify`, 실시간은 프레임 시각을 넘김). 같은 동작을 3~12장으로 찍었을 때 점수 폭 10~12 → 약 1.
+2. **기준보다 깊게 앉으면 궤적 항에서 감점됐다** — 최저점 항은 한쪽만 감점하는데 궤적은 양방향이었다. 궤적 비교 전에
+   사용자 각도를 채널마다 **기준의 최솟값에서 자른다**.
+3. **깊이 점수의 잣대가 따로 놀았다** — 리포트 깊이 점수는 무릎 100° 이하면 만점이었는데(2D 각도 전환 전 값),
+   AI 는 115° 이하만 반복으로 세므로 세어진 반복은 사실상 늘 100점이었다. 이제 **기준 동작 최저 무릎 + 5°** 이하가 만점이고
+   1° 얕을 때마다 4점 감점(`SquatDepthAnalysisCalculator`, 기준은 `exercise_references` 에서 AI 와 같은 방식으로 잰다).
+
+더불어 사용자 요청(«조금 더 엄격하게»)으로 허용 오차 무릎 8→**5°**·고관절 10→**8°**, `SYNC_RATE_TAU_DEG` 30→**24**.
+실촬영 재현(`scripts/sync_rate_harness.py`, 기준 = 3D 마네킹 최저 무릎 71.2°): 깊고 바른 반복 88.7~94.8, 무릎 76~78° 81~86,
+81° 76, 84° 68.5, 93° 47(예전 58). **무릎 허용 5° 는 세 곳이 같이 움직인다** — AI `_KNEE_TOLERANCE_DEG`, 백엔드 깊이 점수의
+목표(기준 + 5°), 앱 3D 비교 `POSTURE_AXES`. 앱 3D 비교의 궤적 점수도 같은 보간·바닥 자르기를 쓴다(`trajectoryCurve`).
+proto 변경 없음. 리포트 JSON 에 `squatDepthAnalysis.targetKneeDeg` 가 붙는다.
+
+**칼로리.** AI 는 `SessionCompleteRequest.calories_burned` 를 늘 0 으로 보냈다(체중을 모른다 — «칼로리 계산은 추후»).
+이제 Spring 이 그 값을 무시하고 완료 시점에 `CalorieEstimator` 로 계산한다 — kcal = MET 3.0 × 3.5 × 체중 ÷ 200 × 분
+(2024 Adult Compendium 02056 «맨몸 저항 운동(스쿼트·런지 등), 일반»). 체중이 없으면 세션 값은 null(앱 «칼로리 · 체중 필요»),
+일일 합계엔 0. proto 필드는 그대로 두고 읽지만 않는다. 이미 저장된 리포트(`session_reports.detailed_analysis`)는 그때의
+규칙으로 남는다 — 새 규칙은 이후 완료되는 세션부터.
+
+## 2026-10-21 — 판정 기준 종목당 하나로 + 기준 영상 추출 실패를 Spring 이 안다
+
+**판정 기준.** 페르소나별 싱크로율 기준(AI 상수 `SYNC_THRESHOLDS` 60/85/70/50)을 없애고 **종목당 정석·위험 두 값**
+(`exercises.sync_good_threshold`·`sync_warn_threshold`, V34, 기본 80·60)으로 바꿨다. 같은 자세에 페르소나마다 다른 판정을
+주던 것과, DB 의 페르소나 컬럼 4개를 아무도 안 읽던 것(관리자가 고쳐도 무반영)을 함께 정리했다. proto: `AnalyzeRequest`
+11·12, `ReattachRequest` 12·13. 0 이면 AI 는 80·60 — 한쪽만 배포돼도 안 깨진다. 앱도 세션 시작·재부착·리포트 응답의 같은
+두 값으로 싱크로율 색과 진동 경고를 낸다(병합 때 빠졌던 실시간 색·진동 복구 포함). 페르소나는 피드백 말투만 바꾼다.
+
+**기준 영상 추출.** 관리자 mp4 업로드는 «접수» 뒤 결과를 Spring 이 몰랐다(#772 이후 «Spring 쪽에 완료 신호는 없다»).
+이제 실패도 같은 역호출 `ExtractReferenceData` 에 `error_message`(`ExtractRequest` 5번)로 오고, Spring 은
+`reference_extraction_status`(EXTRACTING/READY/FAILED, V34)로 남겨 관리자 화면에 사유를 보여준다 — 실패 때 기존 기준은 그대로.
+AI 는 업로드 영상을 «기준 모드»(화면 중앙 ROI·몸 너비 상한·벌린 다리 거부를 끔)로 읽어, 사용자용 필터 탓에 반복을 0개
+찾던 영상(45° 마네킹: 0 → 2회)도 추출된다. 대신 Spring 이 저장된 좌표로 **최저 무릎각·깊이 판정**(60° 미만 깐깐 / 95° 초과
+후함)을 계산해 보여준다 — 45° 마네킹 영상은 107.6°로 «후함», 3D 관절 기준은 71.3°로 «적정».
+
+**3D 마네킹 기준 투영 수정.** 관절을 시상면에 투영할 때 앞뒤 0.35·높이 0.45 로 배율이 달라 AI 가 최저 무릎 71°를 77°로
+읽었다(기준이 6° 얕아 후함). 두 축 모두 0.45 로 맞췄다(`admin-web/src/mannequinReference.ts`, `make-ref-sql.cjs`). 실촬영
+재현(`ai-server/scripts/sync_rate_harness.py`): 깊은 반복 87~95 그대로, 평행 근처 84~88 → 76~87, 얕은 반복(93°) 75 → 64.
+
+## 2026-10-20 — 싱크로율 채점 기준 변경: 2D 각도·비율 보정·최저점 자세 주축
+
+실촬영 좌표 기록 3개(스쿼트 정상 2·측면 1)로 재현해 보니 기존 싱크로율은 세 영상이 전부 77~90 으로 같았고,
+같은 영상 안에서도 **프레임이 많은 반복이 더 높은 점수**를 받았다(13프레임 87.7 vs 5프레임 79.9). 원인 셋:
+① `extract_angles` 가 MediaPipe 의 단안 추정 z 를 섞어 무릎 최소각이 18° 같은 불가능한 값이 됐다 ② 세로 사진의
+x 축(너비 기준 0~1)을 비율 보정하지 않았다 ③ `dtaidistance.dtw.distance` 는 제곱합의 제곱근이라 프레임 수에 따라
+값이 달라졌고, 프레임 평균이라 최저점 깊이 차이가 묻혔다. 바꾼 것: 각도는 **이미지 평면 2D + 너비/높이 보정**
+(사용자는 요청 이미지, 기준은 좌표 JSON 끝의 `index=-1` 표식 `image_aspect_ratio` — 없으면 1.0 + 경고),
+거리는 **비대칭 DTW 대응 쌍의 평균 |각도 차|**(프레임 수·속도 무관), 싱크로율은
+`100 × exp(−(0.6·최저점 무릎 차 + 0.2·최저점 고관절 차 + 0.2·궤적 평균 차) / 30)` (허용 오차 무릎 8°·고관절 10°, 최저점은
+이웃 3점 포물선 보간). 최저점 항은 **기준보다 나쁜 방향(얕음)만** 감점한다 — 기준은 과녁이 아니라 바닥이다.
+스쿼트 기준 좌표는 **3D 마네킹 시범의 실제 관절(최저 무릎 72°)** 을 시상면에 투영한 가상 랜드마크 43프레임으로
+교체했다(`scripts/mannequin-reference/make-ref-sql.cjs`) — 마네킹 영상을 MediaPipe 로 다시 읽으면 20° 넘게 얕게
+읽혀서다. 관리자 화면에서 기준 영상을 올리면 그것으로 덮어써지며 비율 표식이 자동으로 붙는다.
+proto·Spring 저장 구조는 그대로(표식은 JSON 안). 상세: `ai-server/app/core/dtw_calculator.py`.
+
+## 2026-10-20 — 두 갈래 병합 복구: proto 필드 번호·Flyway 번호 재배정
+
+9월 15일부터 따로 가던 두 갈래(깊이·체간·보폭 채점 + 3D 비교 ↔ 세트·종목 코드·소셜)를 합치면서
+`AnalyzeRequest`·`ReattachRequest` 의 7번 필드가 양쪽에서 다르게 쓰였다(`depth_mode` ↔ `exercise_code`).
+이미 배포된 AI 이미지가 7·8·9 를 종목 코드·세트 목표로 읽고 있어 **`depth_mode` 를 뒤로 옮겼다** —
+AnalyzeRequest 10, ReattachRequest 11. 이름으로 읽는 Python·Java 코드는 영향이 없고, 스텁은 양쪽 모두 재생성했다.
+Flyway 도 V22~V26 이 양쪽에 중복돼 채점 갈래의 다섯 개를 **V28~V32** 로 옮겼고(`enable_forward_lunge`,
+`add_squat_depth_mode`, `add_pose_data_lead_leg`, `add_pose_data_torso_tilt`, `add_pose_data_stagger_ratio`),
+두 갈래의 합류점(횟수만 세는 종목의 세트 평균)을 V33 으로 추가했다. 호진 님 로컬 DB 처럼 옛 번호(V22~V26)로
+이미 적용된 DB 는 `flyway_schema_history` 가 어긋나므로 **DB 를 새로 만들어야** 한다.
+
+## 2026-09-17 — 스쿼트 횟수 판정 통일 (작업 브랜치)
+
+AI의 실시간·영상 분석·기준 영상 분할이 같은 완료 이벤트를 사용한다. 스쿼트 반복은
+각도와 초 단위 상태로 판정하며 기존 gRPC rep 콜백·proto는 유지한다. 업로드 영상의
+검증되지 않은 `quality_score`는 `null`이다. [근거와 한계](../decisions/squat-repetition-counting.md).
+
+## 2026-09-17 — 전방 런지 추가 (작업 브랜치)
+
+종목 2의 횟수 분석·기준 좌표 없는 시작/재부착을 추가했다. 기존 protobuf를 유지하며
+Spring은 V22의 `repetition_only` 플래그로 런지 점수를 NULL 처리한다. HTTP에는 단계·좌우 횟수를
+추가하고, 점수 미측정을 명시한다. [근거와 한계](../decisions/lunge-repetition-counting.md).
+
+마지막 업데이트: **2026-10-20** (두 갈래 병합 복구 — proto 7번 충돌·Flyway 번호 재배정. 그 전: 09-17 스쿼트 판정 통일·전방 런지)
 범위: `ai-server/`(FastAPI)와 `backend/`(Spring Boot) 사이의 결합 방식·통신 프로토콜·인증·데이터 흐름 변경에 직접 영향을 준 커밋들. UI/문서/단순 버그 수정은 제외.
 
 > ⚠️ **범위 주의**: *"결합에 영향을 준"* 은 **파일 위치가 아니라 계약**으로 판정한다. 아웃박스(`cb26e4a`·`993dfa1`)는 **Spring 파일만** 건드렸지만 `StopAnalysis` 의 전달 의미론을 바꿨으므로 §4 에 들어간다 — `proto`·`ai-server` 경로만 훑으면 놓친다. 실제로 이 문서가 2.5개월 밀린 동안 **가장 큰 결합 변경이 그 커밋들이었다.**
@@ -313,13 +412,32 @@
 | 추적성 | 없음 | **correlation id 양방향** |
 | proto 밖 계약 | 토큰 메타데이터 | **+ `x-request-id` 메타데이터** |
 
-### #772 — feat(admin): 관리자 mp4 업로드 → 기준 좌표 추출 (2026-09-17) ⭐ proto 밖 계약 + 응답 의미 변경
+### 9011ec5 — feat(admin): 관리자 mp4 업로드 → 기준 좌표 추출 (2026-09-17) ⭐ proto 밖 계약 + 응답 의미 변경
 
 - **호출자가 생겼다.** `ExtractReferenceData`(Spring → AI) 는 그때까지 `POST /exercises/{id}/reference?youtubeUrl=` 하나가 불렀는데, AI 가 http(s) 를 거부하도록 좁힌 뒤(#192)로는 **사실상 아무도 못 쓰는 경로**였다. `POST /admin/exercises/{id}/reference-video`(multipart) 가 공유 볼륨에 mp4 를 쓰고 그 경로로 이 RPC 를 부른다 — [integration.md §3-3](./ai-backend-integration.md#3-3-extractreferencedata--proto-밖-계약-두-개--2026-09-17-관리자-mp4-업로드)
 - **proto 밖 계약 ①: 파일시스템.** `youtube_url` 필드에 «AI 컨테이너가 열 수 있는 경로» 가 실리고, 그 경로가 같은 파일을 가리키는 건 compose 의 bind mount(`./backend/data/reference-videos` → 양쪽 `/data/reference-videos`)가 보장한다. 필드 이름·타입은 안 바뀌어서 proto 검사가 이 계약을 못 본다 — 갱신 트리거 3번
 - **응답 의미 변경 ②: «추출됨» → «접수됨».** AI 핸들러가 동기 추출을 끝내고 응답하던 것을, 검사(원격 URL·파일 존재)만 하고 즉시 반환 + 백그라운드 1스레드 풀로 바꿨다. Spring 의 5초 데드라인에 매번 걸려 **성공한 추출이 서킷 실패로 집계**되던 것(윈도 10·최소 5 → 업로드 5번이면 그 채널 라이브 세션 거부)을 없앤다. `extracted_poses` 는 항상 빈 값 — 갱신 트리거 1번(의미 변경)·4번(실패 처리)
 - **Spring 쪽 경계.** `exercises.reference_video_path`(V23) 갱신은 tx, 파일 쓰기는 tx 앞, gRPC 는 `afterCommit`, tx 실패 시 파일 삭제(보상). 서킷 OPEN 이면 파일·DB 를 건드리기 전에 503(W017)
 - **AI 코드 변경을 동반한다** — §6 두 번째 관찰의 예외가 아니라 같은 결이다(신뢰성 문제를 AI 쪽에서 닫음). 결정 기록: 이 대화(2026-09-17)에서 사용자 confirm — 전달 ①공유 볼륨, 기록 = 컬럼 1개, 보관·교체, 상한 50MB, 서킷 ㄴ, 데드라인 A
+
+### 런지·세트 ② — proto 에 종목 코드·세트 목표 (2026-09-22) ⭐ 메시지 필드 추가, AI 미착수
+
+- **왜 지금인가.** 캡스톤 1회차 보고(09-22)가 런지·세트를 이번 학기 범위로 되돌렸고, 그 설계([`../decisions/lunge-and-set-backend.md`](../decisions/lunge-and-set-backend.md) §7)가 «종목의 정체를 DB id 에서 `exercises.code` 로」(#785)·«세트 경계 = rep 목표 도달 하나」(#786)를 박제했다. 이 커밋은 그 두 값을 AI 로 나르는 계약 — `AnalyzeRequest(7·8·9)`·`ReattachRequest(8·9·10)`·`ExtractRequest(4)`. [integration.md §3-4](./ai-backend-integration.md)
+- **결합 방향이 이례적이다.** 지금까지 계약 변경은 «AI 가 보내고 Spring 이 받는」 쪽(rep_number·smoothed_knee_angle)이 많았는데, 이번엔 **Spring 이 먼저 보내고 AI 가 나중에 읽는다.** 세트 저장·집계를 Spring 이 `pose_data` 로 하기로 해서(#75 와 같은 원칙) AI 몫이 «cue 와 레지스트리 키」 로 줄었고, 그래서 Spring 쪽을 AI 답 전에 먼저 갈 수 있었다. 필드 이름·번호는 AI 담당자와 합의 전 Spring 제안 — 바꾸자고 하면 AI 가 읽기 전에 바꾼다.
+- **원래 초안에 있던 `SessionCompleteRequest.sets`(AI → Spring 세트 요약)는 취소됐다** — ③ 착수 때 «완료 시점에 Spring 이 rep 집계로 만든다」 로 바뀌어 proto 에 안 들어갔다.
+- **AI 코드 변경 없음**(pb2 재생성만). 갱신 트리거 1번. 판정 기준(5번)은 AI 가 `exercise_code` 로 분석기를 고르기 시작할 때 다시 온다.
+
+### #759 — fix(outbox): `dispatch()` 예외를 RETRY 로 센다 (2026-09-23) ⭐ 실패 처리 변경, Spring 단독
+
+- **무엇이 새고 있었나.** 발행기는 송신이 **던진** 예외를 잡고 로그만 남겼다 — 행은 `PROCESSING` 으로 남아 lease(60초) 만료 뒤 `claimStale` 이 회수했는데, 회수는 `retry_count` 를 안 올린다. 그래서 «상한 10회 후 `FAILED`» 라는 §4 의 서술이 **RETRY 로 분류돼 돌아온 실패에만** 참이었고, 영구 예외는 상한 밖에서 영원히 돌았다(주간 리포트 차선에선 리포트가 영원히 «준비 중»).
+- **바꾼 것.** `AbstractOutboxPublisher.dispatchOne` 이 예외의 출처를 가른다 — `dispatch()` 예외 = RETRY(재시도 기록 + 백오프, 상한 초과 시 `onGivenUp` → `FAILED`), 결과 기록 단계 예외 = 예전대로 회수 대기. 예외 뒤 재시도 기록마저 실패하면 후자로 떨어져 행을 잃지 않는다.
+- **결합면 영향.** `StopAnalysis`·`ReattachAnalysis` 경로는 gRPC 실패를 이미 RETRY 로 분류해 돌려주므로(예외를 안 던지는 계약) 보통 경로는 그대로다. 달라지는 건 그 분류 밖에서 새는 예외(DB 조회 실패·gRPC 밖 런타임 예외)뿐이다 — 이제 재시도 상한을 소진한다. 갱신 트리거 2번(전달 보장)·4번(실패 처리).
+
+### #276 — fix(pose): `savePoseDataBatch` 를 READ COMMITTED 로 (2026-09-24) ⭐ 실패 처리 변경, Spring 단독
+
+- **무엇이 문제였나.** AI 재전송(`spring_client.py`, 실패 시 3회)이 원본과 겹치면 RR 에서 중복 키 한 건이 `pose_data` 의 파티션 끝(`PRIMARY` supremum)에 X 락을 잡아, 서로 다른 세션의 재전송이 동시에 겹칠 때 데드락이 됐다(동시 부하 45.9%). 지금까지는 Spring 쪽 데드락 재시도(상한 5)가 가렸고, 그 소진분은 `INTERNAL` → AI 재전송으로 되돌아가는 **두 겹** 구조였다.
+- **바꾼 것.** 이 트랜잭션만 RC — supremum 락이 안 생긴다(0/960, [`loadtest/results/r276-lock-trace-2026-09-24/`](../../loadtest/results/r276-lock-trace-2026-09-24/README.md)). 데드락 재시도는 그물로 남긴다. 분기: [`../decisions/r276-lock-root-cause-fix.md`](../decisions/r276-lock-root-cause-fix.md)
+- **결합면 영향.** RPC·proto·응답 계약은 그대로다. 달라지는 것은 «재전송이 `INTERNAL` 을 받을 확률» — 측정한 모양(다세션 중복, 워커 8)에서는 데드락이 0 이었다 — 다른 동시성·다른 삽입 모양에서의 0 은 안 쟀다. 갱신 트리거 4번(실패 처리). AI 코드 변경 없음.
 
 ---
 

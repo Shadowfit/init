@@ -8,14 +8,24 @@ import cv2
 from app.config import settings
 from app.core.angle_calculator import extract_angles
 from app.core.mediapipe_detector import get_detector
-from app.core.pose_filter import NormalizedRoi, PoseTargetTracker
+from app.core.pose_filter import NormalizedRoi, PoseTargetTracker, reference_pose_tracker
 from app.core.squat_analyzer import analyze_squat_frames
 from app.models.pose import Landmark
 from app.models.video import FrameResult, VideoAnalysisResult
 
 
-def analyze_video(video_path: str, exercise_type: str) -> VideoAnalysisResult:
-    """Analyze a local video file and extract frame-level pose data."""
+def analyze_video(
+    video_path: str, exercise_type: str, *, reference: bool = False
+) -> VideoAnalysisResult:
+    """Analyze a local video file and extract frame-level pose data.
+
+    reference: True 면 **관리자 기준 영상 추출 모드** (2026-10-21). 사용자 영상과 다른 점은 두 가지뿐이다.
+        1. 사람 판별을 완화한다 — ROI 없음, 하체 폭·비율 범위 확대, 가시성 검사는 유지
+           (`pose_filter.reference_pose_tracker`). 가까이·세로·측면으로 찍은 기준 영상도 읽힌다.
+        2. «런지 자세» 로 보인 반복을 버리지 않는다(`SquatCounter.reject_split_stance=False`).
+           45° 에서 찍은 3D 마네킹 스쿼트가 원근 때문에 런지로 오판돼 반복 0회가 되던 문제.
+        사용자 영상 경로(/video 업로드 등)는 기본값 False 로 지금 동작 그대로다.
+    """
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         raise FileNotFoundError(f"Video could not be opened: {video_path}")
@@ -28,17 +38,21 @@ def analyze_video(video_path: str, exercise_type: str) -> VideoAnalysisResult:
     processed_fps = original_fps / frame_interval if original_fps > 0 else settings.VIDEO_PROCESS_FPS
 
     detector = get_detector()
-    pose_tracker = PoseTargetTracker(
-        roi=NormalizedRoi(
-            min_x=settings.SQUAT_ROI_MIN_X,
-            min_y=settings.SQUAT_ROI_MIN_Y,
-            max_x=settings.SQUAT_ROI_MAX_X,
-            max_y=settings.SQUAT_ROI_MAX_Y,
+    if reference:
+        pose_tracker = reference_pose_tracker()
+    else:
+        pose_tracker = PoseTargetTracker(
+            roi=NormalizedRoi(
+                min_x=settings.SQUAT_ROI_MIN_X,
+                min_y=settings.SQUAT_ROI_MIN_Y,
+                max_x=settings.SQUAT_ROI_MAX_X,
+                max_y=settings.SQUAT_ROI_MAX_Y,
+            )
         )
-    )
     frames: list[FrameResult] = []
     landmark_frames: list[list[Landmark] | None] = []
     frame_idx = 0
+    image_aspect_ratio = 1.0
 
     while True:
         ret, frame = cap.read()
@@ -46,12 +60,13 @@ def analyze_video(video_path: str, exercise_type: str) -> VideoAnalysisResult:
             break
 
         if frame_idx % frame_interval == 0:
+            image_aspect_ratio = frame.shape[1] / frame.shape[0]
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             landmarks = pose_tracker.filter(detector.detect(rgb))
             landmark_frames.append(landmarks)
 
             if landmarks:
-                angles = extract_angles(landmarks, exercise_type)
+                angles = extract_angles(landmarks, exercise_type, image_aspect_ratio)
                 timestamp = frame_idx / original_fps if original_fps > 0 else 0.0
                 frames.append(
                     FrameResult(
@@ -67,10 +82,11 @@ def analyze_video(video_path: str, exercise_type: str) -> VideoAnalysisResult:
 
     squat_summary = None
     if exercise_type == "squat":
-        min_rep_frames = max(4, int(processed_fps * 1.2))
         squat_frame_metrics, squat_summary = analyze_squat_frames(
             landmark_frames,
-            min_rep_frames=min_rep_frames,
+            fps=processed_fps,
+            image_aspect_ratio=image_aspect_ratio,
+            reject_split_stance=not reference,
         )
         valid_metric_index = 0
         for frame in frames:
@@ -91,6 +107,8 @@ def analyze_video(video_path: str, exercise_type: str) -> VideoAnalysisResult:
         duration=round(duration, 2),
         frames=frames,
         squat_analysis=squat_summary,
+        image_aspect_ratio=image_aspect_ratio,
+        sampled_frames=len(landmark_frames),
     )
 
 

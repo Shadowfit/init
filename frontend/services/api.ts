@@ -1,9 +1,10 @@
 import axios from 'axios';
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStore from './secureStorage';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import { currentSessionVersion } from './sessionVersion';
+import { metroProxyOrigin } from './devProxy';
 
 // Expo dev 모드에서는 Metro 가 알려주는 호스트(=PC LAN IP)를 자동으로 사용한다.
 // 안드로이드 에뮬레이터는 호스트 PC 를 10.0.2.2 로 봐야 하므로 별도 처리.
@@ -25,9 +26,39 @@ function resolveDevHost(): string {
   return host || 'localhost';
 }
 
-const BASE_URL = __DEV__
-  ? `http://${resolveDevHost()}:8080`
-  : 'https://api.shadowfit.com'; // 추후 프로덕션 URL
+/** 릴리스에서 백엔드 주소를 못 만든 이유. `null` 이면 정상. 값이 있으면 모든 요청이 이 메시지로 즉시 실패한다. */
+export let apiConfigError: string | null = null;
+
+// 릴리스는 **빌드 때 주입한 https 주소만** 쓴다(EXPO_PUBLIC_API_BASE_URL). 개발 호스트 추론으로 떨어지지 않고,
+// 지어낸 도메인을 코드에 박지도 않는다 — 배포 호스트·도메인이 아직 없다(aiService.ts 와 같은 원칙).
+function resolveBaseUrl(): string {
+  const override = process.env.EXPO_PUBLIC_API_BASE_URL;
+
+  if (!__DEV__) {
+    if (!override) {
+      apiConfigError = '서버 주소가 설정되지 않았습니다 (EXPO_PUBLIC_API_BASE_URL). 빌드 설정을 확인해 주세요.';
+      return '';
+    }
+    // https:// 뒤에 호스트가 실제로 있어야 한다("https://" 만 있는 값도 걸러낸다).
+    if (!/^https:\/\/[^/\s?#]+/.test(override)) {
+      apiConfigError = '서버 주소가 올바른 https 주소가 아닙니다 (EXPO_PUBLIC_API_BASE_URL). 평문 HTTP 는 앱에서 차단됩니다.';
+      return '';
+    }
+    return override.replace(/\/+$/, '');
+  }
+
+  if (override) return override.replace(/\/+$/, '');
+
+  // EXPO_PUBLIC_API_VIA_METRO=1 이면 방화벽에 막히지 않도록 Metro 프록시(/__backend) 경유(devProxy.ts).
+  const proxyOrigin = metroProxyOrigin();
+  return proxyOrigin
+    ? `${proxyOrigin}/__backend`
+    : `http://${resolveDevHost()}:${process.env.EXPO_PUBLIC_BACKEND_PORT || '8080'}`;
+}
+const BASE_URL = resolveBaseUrl();
+
+// 서버가 상대 경로로 주는 자원(피드 사진 "/feed-photos/…")을 <Image> 에 넣을 때 앞에 붙인다.
+export const API_BASE_URL = BASE_URL;
 
 // 백엔드 컨트롤러 prefix가 /api/v1 이 아니라 /member, /exercises, /reports 등이라
 // baseURL 에 prefix 를 붙이지 않는다.
@@ -45,6 +76,8 @@ if (__DEV__) {
 
 // 요청 인터셉터: JWT accessToken 자동 첨부
 api.interceptors.request.use(async (config) => {
+  // 주소 설정이 잘못된 릴리스 빌드 — 네트워크 오류처럼 보이지 않게 이유를 그대로 던진다.
+  if (apiConfigError) throw new Error(apiConfigError);
   const token = await SecureStore.getItemAsync('accessToken');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
@@ -188,9 +221,9 @@ api.interceptors.response.use(
     if (status === 401 && hadAuthHeader && fromLiveSession) {
       // 재발급이 실패했거나 이미 한 번 재시도한 뒤다 — 세션이 끝났다.
       //
-      // ⚠️ 서버가 «폐기된 구본» 으로 판정한 경우(A006)도 여기로 온다. 그 둘을 구분하려면
-      // 응답에 에러 코드가 있어야 하는데 ErrorResponseDto 는 status·message·timestamp 만
-      // 싣는다 — 지금은 둘 다 같은 처리를 받는다.
+      // ⚠️ 서버가 «폐기된 구본» 으로 판정한 경우(A006)도 여기로 온다. 응답 data.code 로
+      // 구분할 수 있지만(2026-09-23 부터 ErrorResponseDto 가 code 를 싣는다) 지금은 둘 다
+      // 같은 처리를 받는다.
       const { useAuthStore } = require('@/stores/authStore');
       await useAuthStore.getState().forceLogout();
       // _layout 가드는 __DEV__ 에서 자동 redirect 를 안 시키므로

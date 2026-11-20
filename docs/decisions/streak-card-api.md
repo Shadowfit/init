@@ -181,7 +181,7 @@ Handler_read_key=1  Handler_read_next=2000  Handler_write=2203  Created_tmp_tabl
 | 520 | 100 | 13 | 0.09 ms | 0.07~0.16 | 0.05 |
 
 - 행수에 **선형** — 대략 행당 0.5~1 µs. 같은 2,000행인데 121 이 577 의 두 배인 건 121 의 `start_time` 이 무작위(rig 생성)라 리프 페이지가 더 퍼진 것으로 보이나 그 원인은 **미검증**.
-- §4 가정 상한(≤ 2,200행)에서 **한 자릿수 ms**. 요청당 다른 두 쿼리(현재 streak 페이지 ≈ 0.4 ms(§10 재인용)·이번 주 range scan 0.07 ms — 같은 판에서 확인)보다 이 쿼리가 지배적이지만, 슬로우 로그 부류가 아니다.
+- §4 가정 상한(≤ 2,200행)에서 **한 자릿수 ms**. 요청당 다른 두 쿼리(현재 streak 페이지 ≈ 0.4 ms(§10 재인용 — 단 이 재인용은 첫 페이지가 §10 모양이 아니었던 #761 을 놓쳤다. 2026-09-23 첫 페이지를 §10 모양으로 고침)·이번 주 range scan 0.07 ms — 같은 판에서 확인)보다 이 쿼리가 지배적이지만, 슬로우 로그 부류가 아니다.
 - **A → C(저장 컬럼) 전환 조건은 여전히 안 밟혔다** — 이 쿼리가 DB 상위 쿼리로 올라오려면 «회원당 수만 행» 또는 «메인 화면 호출이 초당 수백» 이어야 하고 둘 다 가정 밖. 후보 B(윈도우 함수)는 전송량(203행 → 1행)만 줄이고 스캔·임시 테이블은 같아서, 이 크기에선 잴 델타가 없다 — 실험 후보에서 내린다.
 
 **재는 법** (다음에 같은 부류 쿼리를 잴 때): `docker exec shadowfit-mysql mysql -uroot -p… <db>` 로 들어가 ① Hibernate SQL 을 파라미터만 리터럴로 바꿔 `EXPLAIN ANALYZE …\G` ② `FLUSH STATUS` 뒤 실제 실행 → `SHOW SESSION STATUS WHERE Variable_name IN ('Handler_read_key','Handler_read_next','Handler_write','Created_tmp_tables','Created_tmp_disk_tables','Sort_rows')` 로 «몇 행을 어떻게 읽었나»를 계획이 아니라 카운터로 확인 ③ 계정 크기 3~4종 × 10회 반복해 median 과 기울기. 1회 값은 이 박스에서 2~6× 튄다(577 의 1회차 인덱스 스캔 11.4 ms 가 그 예).
@@ -189,5 +189,6 @@ Handler_read_key=1  Handler_read_next=2000  Handler_write=2203  Created_tmp_tabl
 ## 이력
 
 - 2026-09-18: 작성. 범위 «스트릭 카드»(현재·오늘·7칸·최장) 로 좁힘(사용자 선택). 마일스톤·프리즈 제외.
+- 2026-09-19: 머지 후 자체 리뷰에서 결함 — 최장 기록 쿼리에 상한이 없어 미래 start_time 이 들어갔다(현재 streak 은 제외). `findDistinctDatesBefore(today+1)` 로 경계를 맞춤(#780).
 - 2026-09-18: §8 EXPLAIN 실측 — 커버링 인덱스 + 메모리 임시 테이블, 2,000행 계정 1.2~2.3 ms, 행수 선형. B 는 실험 후보에서 내림.
-- 2026-09-18: §2·§3·§4·§5 권고안 그대로 확정(사용자 confirm), 같은 날 구현. `AttendanceService.currentStreak` 은 시그니처 유지하고 `currentStreakRun`(구간) 을 옆에 뒀다 — 호출부 3곳 무변경. 새 쿼리는 `findDistinctDatesByStatus` 하나, 이번 주는 기존 `findDistinctActiveDates` 재사용이라 `attendedToday` 의 별도 exists 쿼리 없음(요청당 3쿼리). 테스트 14개(단위 5 + 통합 9). EXPLAIN 은 같은 날 §8 로 닫음.
+- 2026-09-18: §2·§3·§4·§5 권고안 그대로 확정(사용자 confirm), 같은 날 구현. `AttendanceService.currentStreak` 은 시그니처 유지하고 `currentStreakRun`(구간) 을 옆에 뒀다 — 호출부 3곳 무변경. 새 쿼리는 `findDistinctDatesByStatus` 하나, 이번 주는 기존 `findDistinctActiveDates` 재사용이라 `attendedToday` 의 별도 exists 쿼리 없음(요청당 3쿼리). 테스트 12개(단위 5 + 통합 7 — 처음엔 14개로 잘못 셌다). EXPLAIN 은 같은 날 §8 로 닫음.
