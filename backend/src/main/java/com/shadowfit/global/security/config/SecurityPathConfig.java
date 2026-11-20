@@ -12,9 +12,16 @@ import java.util.List;
 @Getter
 @Setter
 public class SecurityPathConfig {
+    /** 모든 HTTP 메서드에 permitAll 인 경로. */
     private List<String> whitelist;
+    /** POST(와 CORS 사전요청 OPTIONS)에만 permitAll 인 경로 — 로그인·가입·재발급 (#810). */
+    private List<String> whitelistPost = List.of();
 
     public String[] getWhiteListArray(){
         return whitelist.toArray(new String[0]);
+    }
+
+    public String[] getWhitelistPostArray(){
+        return whitelistPost.toArray(new String[0]);
     }
 }

@@ -227,17 +227,7 @@ security:
     - "/swagger-ui/**"
     - "/swagger-ui.html"
     - "/webjars/**"
-    - "/member/login"
-    - "/member/signup"
-    # ⚠️ permitAll 이 이 엔드포인트의 **전제**다 (이슈 #135).
-    #
-    # 재발급은 access token 이 만료된 뒤에 불리는 것이 정상 경로라, 인증을 요구하면 «만료돼서
-    # 부르는 API 가 만료 때문에 막히는» 상태가 된다. 그래서 필터를 안 태운다.
-    #
-    # 그 대신 신원 근거가 요청자(SecurityContext)가 아니라 **refresh token 의 서명**이다 —
-    # 서버가 서명한 것이라 위조가 불가능하고, subject 가 곧 소유자다.
-    # (decisions/token-lifecycle.md §4-2 — «요청자 기준으로 확인한다» 는 처음 안이 틀렸던 자리다)
-    - "/member/reissue"
+    # /member/login · /member/signup · /member/reissue 는 여기 없다 — 아래 whitelist-post 로 옮겼다(#810).
     - "/ws/**"
     # 피드 사진 — <Image> 가 웹에서 Authorization 헤더를 못 싣는다. 파일명이 UUID 라 추측으로는 못 닿는다
     # (링크를 아는 사람만 본다 — 모임 피드 응답에만 실리는 값).
@@ -256,6 +246,23 @@ security:
     # 포트를 호스트에 매핑하지 않는다. 8080 에 같은 경로를 쳐도 핸들러가 없다.
     # 🔴 따라서 9090 을 어딘가에 노출하는 순간 이 whitelist 가 그대로 뚫린다.
     - "/actuator/prometheus"
+
+  # 🔴 메서드를 가려 여는 경로 (#810). 위 whitelist 는 **모든 HTTP 메서드**에 permitAll 인데, 로그인·가입·재발급이
+  #    거기 있을 때 `DELETE /member/login` 이 `@DeleteMapping("/{email}")` 에 email="login" 으로 매칭돼 인증 없이 탈퇴
+  #    핸들러까지 갔다(500 + ERROR 로그 — #880 이 null 검사로 증상만 막았다). 이제 이 셋은 **POST(와 CORS 사전요청
+  #    OPTIONS)만** 연다. 다른 메서드는 인증을 요구하므로 핸들러에 닿기 전에 401 이다.
+  whitelist-post:
+    - "/member/login"
+    - "/member/signup"
+    # ⚠️ permitAll 이 이 엔드포인트의 **전제**다 (이슈 #135).
+    #
+    # 재발급은 access token 이 만료된 뒤에 불리는 것이 정상 경로라, 인증을 요구하면 «만료돼서
+    # 부르는 API 가 만료 때문에 막히는» 상태가 된다. 그래서 필터를 안 태운다.
+    #
+    # 그 대신 신원 근거가 요청자(SecurityContext)가 아니라 **refresh token 의 서명**이다 —
+    # 서버가 서명한 것이라 위조가 불가능하고, subject 가 곧 소유자다.
+    # (decisions/token-lifecycle.md §4-2 — «요청자 기준으로 확인한다» 는 처음 안이 틀렸던 자리다)
+    - "/member/reissue"
 
   # [보안-2] 인증 경로 시도 제한 (이슈 #394)
   #
