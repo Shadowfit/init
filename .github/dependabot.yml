@@ -207,3 +207,34 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "react-dom"
         update-types: ["version-update:semver-major"]
+      # 🔴 Expo SDK 가 «정확한 버전» 으로 묶는 패키지들은 minor 도 막는다(2026-11-20, #853). 그룹 PR 이 react 19.2→19.3,
+      #    react-native 0.86→0.88(0.x 라 이것이 «minor») 을 끌고 왔는데, SDK 57 이 기대하는 조합(react 19.2.3 ·
+      #    react-native 0.86.3 · reanimated 4.5.1 · worklets 0.10.1 …)에서 벗어난다. 게다가 worklets 가 lock 에 없어
+      #    `npm ci` 가 «lock 과 package.json 불일치» 로 죽었다. 이 목록은 SDK 를 올릴 때(`npx expo install --fix`) 함께 오른다.
+      #    patch 는 그대로 받는다. SDK 를 올리는 날 이 항목을 지울 것 — 막는 것과 잊는 것은 다르다.
+      - dependency-name: "react"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "@types/react"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "react-test-renderer"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "react-native"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "react-native-reanimated"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "react-native-worklets"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "react-native-gesture-handler"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "react-native-screens"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "react-native-safe-area-context"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "react-native-svg"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "react-native-webview"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "@react-native-community/slider"
+        update-types: ["version-update:semver-minor"]
