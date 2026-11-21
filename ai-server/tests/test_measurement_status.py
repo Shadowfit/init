@@ -110,3 +110,34 @@ def test_완료_통보가_세션의_판정을_그대로_넘긴다():
     kwargs = client.report_complete_analysis.call_args.kwargs
     assert kwargs["measurement_status"] == "NO_POSE"
     assert kwargs["total_reps"] == 0
+
+
+def test_완료_통보가_state_lock_안에서_상태를_읽는다():
+    """`/pose` 가 락을 쥔 동안에는 종료 처리가 상태를 읽지 않고 기다린다 — 락 없이 읽으면 수락 프레임만 오른 중간 상태를
+    봐서 NOT_FULLY_VISIBLE 이어야 할 것이 NO_REP 으로 나간다 (CodeRabbit 지적, #900)."""
+    import threading
+
+    state = _state(rep_count=0, rejected_count=0, accepted_frame_count=0, visibility_skip_count=0)
+    done = threading.Event()
+    sent = []
+
+    def run():
+        with mock.patch.object(servicer_mod, "spring_client") as client, \
+                mock.patch("app.api.endpoints.pose.flush_pending_feedback"):
+            servicer_mod._send_complete_analysis(state)
+            sent.append(client.report_complete_analysis.call_args.kwargs)
+        done.set()
+
+    with state.state_lock:
+        # «/pose 가 프레임을 수락하는 중» — 수락 카운터만 올랐고 스킵은 아직 기록 전인 중간 상태를 흉내 낸다.
+        state.accepted_frame_count = 12
+        t = threading.Thread(target=run)
+        t.start()
+        # 락을 쥔 동안에는 끝나지 않아야 한다(0.1초 지연보다 충분히 길게 기다려 «락 없이 읽는 구현» 이면 여기서 끝나 버린다).
+        assert not done.wait(0.6), "락을 쥐고 있는데 종료 처리가 상태를 읽어 버렸다 — state_lock 밖에서 읽고 있다"
+        # 이제 /pose 가 스킵 기록까지 끝낸다(전부 가시성 부족).
+        state.visibility_skip_count = 12
+
+    assert done.wait(5.0), "락을 놓았는데 종료 처리가 끝나지 않았다"
+    t.join()
+    assert sent[0]["measurement_status"] == "NOT_FULLY_VISIBLE", sent[0]

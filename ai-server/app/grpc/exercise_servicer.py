@@ -675,13 +675,18 @@ def _send_complete_analysis(state) -> None:
 
     flush_pending_feedback(state)
 
-    reps = state.completed_reps
-
-    # 총 횟수는 len(completed_reps) 가 아니라 rep_count 를 쓴다 (이슈 #59 2단계).
-    # 재부착하면 completed_reps 는 재부착 이후 rep 만 담고 있지만 rep_count 는 Spring 이 주입한
-    # 재부착 이전 rep 수에서 이어서 올라간다. len() 을 쓰면 이어하기 후 총 횟수가 초기화된다.
-    # 재부착이 없었던 세션에서는 rep_count == len(completed_reps) 라 값이 달라지지 않는다.
-    total_reps = state.rep_count
+    # 🔴 «끝난 뒤의 값» 을 한 번에, 락 안에서 읽는다. /pose 는 프레임을 수락한 뒤 가시성 스킵을 기록하기까지 state_lock 을 쥐고
+    # 있는데, 종료 처리가 락 없이 읽으면 accepted_frame_count 만 오른 중간 상태를 볼 수 있다 — 그러면 측정 상태가
+    # NOT_FULLY_VISIBLE 이 아니라 NO_REP 으로 나간다(0.1초 지연은 이 겹침을 막지 못한다). 락은 값을 복사하는 동안만 쥐고,
+    # 아래 계산과 gRPC 호출은 락 밖에서 한다 — Spring 이 느릴 때 /pose 가 막히면 안 된다.
+    with state.state_lock:
+        reps = list(state.completed_reps)
+        # 총 횟수는 len(completed_reps) 가 아니라 rep_count 를 쓴다 (이슈 #59 2단계).
+        # 재부착하면 completed_reps 는 재부착 이후 rep 만 담고 있지만 rep_count 는 Spring 이 주입한
+        # 재부착 이전 rep 수에서 이어서 올라간다. len() 을 쓰면 이어하기 후 총 횟수가 초기화된다.
+        # 재부착이 없었던 세션에서는 rep_count == len(completed_reps) 라 값이 달라지지 않는다.
+        total_reps = state.rep_count
+        measurement_status = state.measurement_status
 
     if not reps:
         avg = max_v = min_v = 0.0
@@ -703,5 +708,5 @@ def _send_complete_analysis(state) -> None:
         min_sync_rate=min_v,
         calories_burned=0.0,  # 칼로리 계산은 추후
         # total_reps 가 0 인 «이유» — 사람이 안 잡혔는지, 하체가 화면 밖이었는지, 동작이 반복으로 인정되지 않았는지.
-        measurement_status=state.measurement_status,
+        measurement_status=measurement_status,
     )

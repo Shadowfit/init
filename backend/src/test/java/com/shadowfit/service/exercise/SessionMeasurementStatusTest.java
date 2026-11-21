@@ -24,7 +24,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -93,7 +92,8 @@ class SessionMeasurementStatusTest {
         Session done = reload(session);
         assertThat(done.getMeasurementStatus()).isEqualTo(com.shadowfit.model.exercise.MeasurementStatus.NO_POSE);
 
-        ExerciseSessionDto listed = activityQueryService.getDailyActivity(member.getId(), LocalDate.now())
+        // 세션의 시작 날짜로 조회한다 — 시작이 «지금 5분 전» 이라 자정~00:05 에 돌리면 LocalDate.now() 는 전날 세션을 못 찾는다.
+        ExerciseSessionDto listed = activityQueryService.getDailyActivity(member.getId(), done.getStartTime().toLocalDate())
                 .getSessions().get(0);
         assertThat(listed.getMeasurementStatus()).isEqualTo("NO_POSE");
         assertThat(listed.isMeasured()).isFalse();
@@ -183,7 +183,7 @@ class SessionMeasurementStatusTest {
         Session session = inProgress();
         complete(session, 0, MeasurementStatus.MEASUREMENT_OK);
 
-        ExerciseSessionDto listed = activityQueryService.getDailyActivity(member.getId(), LocalDate.now())
+        ExerciseSessionDto listed = activityQueryService.getDailyActivity(member.getId(), session.getStartTime().toLocalDate())
                 .getSessions().get(0);
 
         assertThat(listed.getMeasurementStatus()).isNull();
