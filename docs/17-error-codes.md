@@ -111,6 +111,7 @@
 | `W020` `EXERCISE_CODE_REQUIRED` | 400 | 종목 코드가 없어 분석을 활성화할 수 없습니다. |
 | `W021` `INVALID_REFERENCE_POSES` | 400 | 기준 좌표 형식이 올바르지 않습니다 (JSON 배열, 시각은 오름차순). |
 | `W022` `INVALID_SYNC_THRESHOLDS` | 400 | 판정 기준은 0 < 위험 기준 < 정석 기준 ≤ 100 이어야 합니다. |
+| `W023` `REFERENCE_URL_NOT_SUPPORTED` | 400 | URL 로는 기준 영상을 등록할 수 없습니다. mp4 파일을 업로드해 주세요. (`POST /exercises/{id}/reference` 에 http(s) 를 준 경우, #800) |
 
 > 📌 **W011~W022 는 2026-11-19 에 추가한 것이다** — 관리자 종목·카테고리·기준 영상 관리가 들어오면서 코드에 생겼는데 이 문서에 빠져 있었다(`ErrorCode.java`). 전부 관리자 API(`/admin/...`)에서 나온다. 앱(회원)이 보는 것은 아니다.
 

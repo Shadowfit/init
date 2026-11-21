@@ -153,6 +153,8 @@ POST /exercises/1/reference?youtubeUrl=<AI 컨테이너 안 파일 경로>
 "운동 ID [1]에 대한 기준 좌표 추출이 시작되었습니다."
 ```
 > 파라미터 이름만 `youtubeUrl` 이다 — AI 가 http(s) 를 거부한다(유튜브 다운로드 ToS 미결정, `decisions/youtube-coordinate-harvest.md` §4-2). 위 mp4 업로드 API 가 실사용 경로다.
+>
+> **http(s) URL 을 주면 202 가 아니라 400 `W023` 이다**(2026-11-21, #800). 예전에는 202 를 주고 AI 가 로그에만 거절해 «시작되었습니다» 로 보였다.
 ```
 유튜브 URL → AI 가 MediaPipe로 프레임마다 관절 좌표 추출 → Spring 콜백으로 `exercise_references` 테이블 영속화.
 

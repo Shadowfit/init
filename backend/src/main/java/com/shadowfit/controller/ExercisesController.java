@@ -2,6 +2,8 @@ package com.shadowfit.controller;
 
 import com.shadowfit.dto.exercises.session.ExercisesResponseDto;
 import com.shadowfit.dto.exercises.VideoRequestDto;
+import com.shadowfit.global.error.BusinessException;
+import com.shadowfit.global.error.ErrorCode;
 import com.shadowfit.global.security.auth.CustomUserDetails;
 import com.shadowfit.model.exercise.Status;
 import com.shadowfit.dto.exercises.ExerciseCatalogItemDto;
@@ -43,13 +45,23 @@ public class ExercisesController {
     /**
      * ✅ 기준 좌표 추출 (관리자/등록용)
      */
-    @Operation(summary="기준 좌표 추출",description = "기준 좌표 추출 요청을 할 수 있음")
+    @Operation(summary="기준 좌표 추출 (AI 컨테이너 안 파일 경로)",
+            description = "⚠️ 유튜브 등 http(s) URL 은 400(W023)으로 거절한다 — AI 가 URL 을 받지 않는다(다운로드 약관 미결정). "
+                    + "파라미터 이름만 youtubeUrl 이고 값은 AI 컨테이너가 열 수 있는 파일 경로다. "
+                    + "실사용 경로는 mp4 업로드 POST /admin/exercises/{id}/reference-video")
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/{exerciseId}/reference")
     public ResponseEntity<String> extractReference(
             @PathVariable Long exerciseId,
             @RequestParam String youtubeUrl
     ) {
+        // 🔴 URL 이면 바로 거절한다 (#800). 예전에는 202 를 주고 비동기로 AI 에 넘겼는데, AI 가 http(s) 를 거부해(success=false)
+        //    실패가 AI 로그에만 남았다 — 관리자는 «시작되었습니다» 를 받고 아무 일도 안 일어났다.
+        if (isHttpUrl(youtubeUrl)) {
+            log.warn("기준 좌표 추출 거절 — URL 은 지원하지 않는다 (exerciseId: {})", exerciseId);
+            throw new BusinessException(ErrorCode.REFERENCE_URL_NOT_SUPPORTED);
+        }
+
         log.info("기준 좌표 추출 요청 - exerciseId: {}", exerciseId);
 
         analysisService.extractReferencePoses(exerciseId, youtubeUrl);
@@ -58,6 +70,15 @@ public class ExercisesController {
                 .body("운동 ID [" + exerciseId + "]에 대한 기준 좌표 추출이 시작되었습니다.");
     }
 
+
+    /** AI(exercise_servicer.py ExtractReferenceData)가 거부하는 것과 같은 기준 — http:// · https:// 로 시작(대소문자·앞 공백 무시). */
+    private static boolean isHttpUrl(String value) {
+        if (value == null) {
+            return false;
+        }
+        String v = value.stripLeading().toLowerCase(java.util.Locale.ROOT);
+        return v.startsWith("http://") || v.startsWith("https://");
+    }
 
     /**
      * ✅ 운동 세션 시작 (핵심 API)

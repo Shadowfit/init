@@ -106,13 +106,28 @@ class AdminAuthorizationIntegrationTest {
     }
 
     @Test
-    @DisplayName("기준 좌표 추출 — ADMIN 역할이면 통과(202)")
+    @DisplayName("기준 좌표 추출 — ADMIN 역할이면 통과(202). 값은 파일 경로다 (URL 은 아래 400)")
     void extractReference_adminRole_returns202() throws Exception {
         doNothing().when(analysisService).extractReferencePoses(anyLong(), anyString());
 
         mockMvc.perform(post("/exercises/" + exercise.getId() + "/reference")
                         .header("Authorization", "Bearer " + adminToken)
-                        .param("youtubeUrl", "https://youtu.be/dummy"))
+                        .param("youtubeUrl", "/data/reference-videos/1/dummy.mp4"))
                 .andExpect(status().isAccepted());
+    }
+
+    @Test
+    @DisplayName("기준 좌표 추출 — http(s) URL 이면 202 가 아니라 400 W023, AI 호출도 안 한다 (#800)")
+    void extractReference_httpUrl_returns400() throws Exception {
+        for (String url : new String[]{"https://youtu.be/dummy", "http://example.com/a.mp4",
+                "HTTPS://YOUTU.BE/DUMMY", "  https://youtu.be/dummy"}) {
+            mockMvc.perform(post("/exercises/" + exercise.getId() + "/reference")
+                            .header("Authorization", "Bearer " + adminToken)
+                            .param("youtubeUrl", url))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("W023"));
+        }
+        org.mockito.Mockito.verify(analysisService, org.mockito.Mockito.never())
+                .extractReferencePoses(anyLong(), anyString());
     }
 }
