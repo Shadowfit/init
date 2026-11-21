@@ -69,3 +69,7 @@ jobs:
       - name: node tests — 재발급 일시 장애 판별
         working-directory: frontend
         run: node services/transientFailure.test.cjs
+
+      - name: node tests — 릴리스 빌드 설정 점검
+        working-directory: frontend
+        run: node scripts/check-release-env.test.cjs
