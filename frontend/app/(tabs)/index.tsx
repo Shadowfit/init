@@ -387,7 +387,10 @@ export default function HomeScreen() {
             </View>
             <View style={styles.dailyCardRight}>
               {/* 횟수만 재는 종목(scoreAvailable=false)은 싱크로율 대신 «횟수 기록» */}
-              {s.scoreAvailable === false ? (
+              {s.measured === false ? (
+                // 아무것도 측정되지 않은 세션 — «횟수 기록» 이라고 하면 0회를 기록한 것처럼 읽힌다
+                <Text style={styles.dailyCardCountOnly}>측정 안 됨</Text>
+              ) : s.scoreAvailable === false ? (
                 <Text style={styles.dailyCardCountOnly}>횟수 기록</Text>
               ) : (
                 <Text style={[styles.dailyCardSync, { color: getSyncColor(s.syncRate) }]}>

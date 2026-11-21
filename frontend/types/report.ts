@@ -31,6 +31,9 @@ export interface ExerciseSession {
   setSummary: string;              // "1세트 x 12회"
   syncRate: number;
   scoreAvailable?: boolean;
+  // 측정된 것이 하나라도 있는가. false 면 «횟수만 재는 종목» 이 아니라 «아무것도 측정되지 않은 세션»(사람이 안 잡힘 등) —
+  // 서버가 이 필드를 모르던 시절 응답에는 없으므로 항상 `=== false` 로만 본다.
+  measured?: boolean;
 }
 
 export interface WeeklyActivityResponse {

@@ -204,4 +204,75 @@ class SessionActivityQueryServiceTest {
         assertThat(yesterdayResult.getTotalWorkouts()).isZero();
         assertThat(yesterdayResult.getSessions()).isEmpty();
     }
+
+    /** rep·점수 값을 직접 정해 완료 세션을 만든다 — null 은 «측정 안 됨» 이다. */
+    private Session completedWith(LocalDate date, Integer totalReps, Double avgSyncRate) {
+        LocalDateTime start = date.atTime(9, 0);
+        return sessionRepository.saveAndFlush(Session.builder()
+                .member(member).exercise(exercise)
+                .startTime(start).endTime(start.plusMinutes(5))
+                .status(Status.COMPLETED).totalReps(totalReps)
+                .avgSyncRate(avgSyncRate == null ? null : BigDecimal.valueOf(avgSyncRate))
+                .build());
+    }
+
+    @Test
+    @DisplayName("measured — 0회이고 점수도 없는 세션(사람이 안 잡힘)은 false")
+    void measured_zeroRepsNoScore_isFalse() {
+        LocalDate today = LocalDate.now();
+        Session s = completedWith(today, 0, null);
+
+        var dto = sessionActivityQueryService.getDailyActivity(member.getId(), today).getSessions().get(0);
+
+        assertThat(dto.getSessionId()).isEqualTo(s.getId());
+        assertThat(dto.isMeasured()).isFalse();
+        assertThat(dto.isScoreAvailable()).isFalse();
+    }
+
+    @Test
+    @DisplayName("measured — totalReps 가 null 인 구세션도 점수가 없으면 false (NPE 없이)")
+    void measured_nullRepsNoScore_isFalse() {
+        LocalDate today = LocalDate.now();
+        completedWith(today, null, null);
+
+        var dto = sessionActivityQueryService.getDailyActivity(member.getId(), today).getSessions().get(0);
+
+        assertThat(dto.isMeasured()).isFalse();
+    }
+
+    @Test
+    @DisplayName("measured — 횟수만 재는 종목(횟수는 있고 점수 없음)은 true — «측정 안 됨» 으로 오표시하지 않는다")
+    void measured_countOnlyWithReps_isTrue() {
+        LocalDate today = LocalDate.now();
+        completedWith(today, 8, null);
+
+        var dto = sessionActivityQueryService.getDailyActivity(member.getId(), today).getSessions().get(0);
+
+        assertThat(dto.isMeasured()).isTrue();
+        assertThat(dto.isScoreAvailable()).isFalse();
+    }
+
+    @Test
+    @DisplayName("measured — 인정 반복은 0이어도 점수가 있으면(미인정 시도만 있었다) true")
+    void measured_attemptsOnlyWithScore_isTrue() {
+        LocalDate today = LocalDate.now();
+        completedWith(today, 0, 42.5);
+
+        var dto = sessionActivityQueryService.getDailyActivity(member.getId(), today).getSessions().get(0);
+
+        assertThat(dto.isMeasured()).isTrue();
+        assertThat(dto.isScoreAvailable()).isTrue();
+    }
+
+    @Test
+    @DisplayName("measured — 정상 세션은 true, 주간 요약(todayDetails)에도 같은 값이 실린다")
+    void measured_normalSession_isTrue_andAlsoInWeekly() {
+        LocalDate today = LocalDate.now();
+        completedWith(today, 10, 80.0);
+        completedWith(today, 0, null);
+
+        var weekly = sessionActivityQueryService.getWeeklyActivity(member.getId());
+
+        assertThat(weekly.getTodayDetails()).extracting(d -> d.isMeasured()).containsExactlyInAnyOrder(true, false);
+    }
 }
