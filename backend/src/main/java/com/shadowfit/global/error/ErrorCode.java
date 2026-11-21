@@ -131,6 +131,9 @@ public enum ErrorCode {
     // 싱크로율 판정 기준(V34, 정석 good · 위험 warn) — 두 값의 관계(0 < warn < good ≤ 100)가 깨진 것.
     // C001 로 뭉개면 관리자가 «어느 숫자가 틀렸는지» 를 못 본다(W016 과 같은 이유).
     INVALID_SYNC_THRESHOLDS(400, "W022", "판정 기준은 0 < 위험 기준 < 정석 기준 ≤ 100 이어야 합니다."),
+    // POST /exercises/{id}/reference 에 http(s) URL 을 준 경우 (#800). 예전에는 202 를 주고 AI 가 로그에만 거절해서 «됐다» 로 보였다.
+    // C001 로 뭉개면 관리자가 «무엇으로 바꿔야 하는지» 를 못 본다(W016 과 같은 이유).
+    REFERENCE_URL_NOT_SUPPORTED(400, "W023", "URL 로는 기준 영상을 등록할 수 없습니다. mp4 파일을 업로드해 주세요 (POST /admin/exercises/{id}/reference-video)."),
 
     // --- 시도 제한 (이슈 #394) ---
     //
