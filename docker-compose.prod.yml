@@ -107,6 +107,11 @@ services:
       # 폴백 없음 — dev compose 와 의도적으로 다르다 (위 3번)
       JWT_SECRET: ${JWT_SECRET:?운영 배포에는 필수. Base64 32바이트 이상}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      # 주간 리포트 LLM 문장(report-generation-llm.md §14). dev compose 에는 있었는데 **이 파일에는 빠져 있어서** 운영에서는
+      # .env 에 키를 넣어도 백엔드가 못 받고 주간 리포트가 항상 템플릿(TEMPLATE_FALLBACK, reason=disabled)으로 나갔다.
+      # 비어 있으면 지금처럼 LLM 을 안 부르고 서비스는 그대로 선다 — 이 줄은 «켤 수 있게» 할 뿐 켜지 않는다.
+      # 키를 넣기 전에 Gemini 무료 티어가 입력을 학습에 쓸 수 있는지 판단할 것(건강·운동 수치가 프롬프트에 들어간다).
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       EXPO_ACCESS_TOKEN: ${EXPO_ACCESS_TOKEN:-}
       # 관리자 mp4 업로드 저장 루트 — 아래 volumes 의 컨테이너 쪽 경로와 같아야 한다(dev compose 와 동일).
       REFERENCE_VIDEO_DIR: /data/reference-videos

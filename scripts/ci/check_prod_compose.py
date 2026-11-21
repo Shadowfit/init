@@ -47,6 +47,10 @@ MUST_BE_REQUIRED = [
     "BACKEND_MEM_LIMIT", "BACKEND_CPU_LIMIT", "AI_MEM_LIMIT", # 상한 없이 뜨면 호스트가 스래싱한다(#570·#214)
 ]
 
+# 선택값(`:-` 기본 비어 있음)이라 필수 점검에는 안 걸리지만 **백엔드 환경에 전달은 돼야 하는** 변수. 전달이 빠지면 .env 에 값을 넣어도
+# 컨테이너가 못 받아 «조용히 꺼진» 상태가 된다(GEMINI_API_KEY 가 실제로 그랬다 — 주간 리포트가 운영에서 항상 템플릿).
+MUST_REACH_BACKEND = ["GEMINI_API_KEY"]
+
 failures = []
 
 
@@ -186,6 +190,13 @@ def main():
                 fail(f"{svc} 의 cpus 가 걸리지 않는다(={cpus})")
             else:
                 ok(f"{svc}: mem_limit={mem}" + (f" cpus={cpus}" if cpus else ""))
+
+        print("\n6. 선택 값이 백엔드 환경에 전달된다")
+        for name in MUST_REACH_BACKEND:
+            if name in backend_env:
+                ok(f"{name} 전달")
+            else:
+                fail(f"{name} 가 shadowfit-backend 의 environment 에 없다 — .env 에 넣어도 컨테이너가 받지 못해 조용히 꺼진다")
     finally:
         os.unlink(empty_env)
 
