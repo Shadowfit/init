@@ -49,7 +49,7 @@ MUST_BE_REQUIRED = [
 
 # 선택값(`:-` 기본 비어 있음)이라 필수 점검에는 안 걸리지만 **백엔드 환경에 전달은 돼야 하는** 변수. 전달이 빠지면 .env 에 값을 넣어도
 # 컨테이너가 못 받아 «조용히 꺼진» 상태가 된다(GEMINI_API_KEY 가 실제로 그랬다 — 주간 리포트가 운영에서 항상 템플릿).
-MUST_REACH_BACKEND = ["GEMINI_API_KEY"]
+MUST_REACH_BACKEND = ["GEMINI_API_KEY", "JWT_EXPIRATION_TIME", "JWT_REFRESH_EXPIRATION_TIME"]
 
 failures = []
 

@@ -138,6 +138,8 @@ services:
       # 토큰 exp 가 그대로 1800 이었고, 토큰을 디코드해 보고서야 알았다.
       # 기본값은 그대로라 동작은 안 바뀐다.
       JWT_EXPIRATION_TIME: ${JWT_EXPIRATION_TIME:-1800}
+      # refresh 수명(초) — 위와 같은 이유로 여기서 넘겨야 .env 의 JWT_REFRESH_EXPIRATION_TIME 이 컨테이너에 닿는다(.env.example 이 이 변수를 안내한다).
+      JWT_REFRESH_EXPIRATION_TIME: ${JWT_REFRESH_EXPIRATION_TIME:-604800}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       # 주간 리포트 LLM 문장(report-generation-llm.md §14). 없으면 템플릿만 — 기동은 된다
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
