@@ -702,4 +702,6 @@ def _send_complete_analysis(state) -> None:
         max_sync_rate=max_v,
         min_sync_rate=min_v,
         calories_burned=0.0,  # 칼로리 계산은 추후
+        # total_reps 가 0 인 «이유» — 사람이 안 잡혔는지, 하체가 화면 밖이었는지, 동작이 반복으로 인정되지 않았는지.
+        measurement_status=state.measurement_status,
     )

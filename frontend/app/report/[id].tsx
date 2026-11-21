@@ -32,6 +32,7 @@ import type { SessionReportResponse } from '@/types/report';
 import { DEPTH_GRADE_LABEL, isCounted } from '@/types/report';
 import { REJECT_REASON_LABEL, type RejectReason } from '@/types/pose';
 import { syncColor, syncThresholdsFrom } from '@/constants/sync';
+import { unmeasuredMessage } from '@/utils/unmeasuredMessage';
 
 const WEEKDAY = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -272,9 +273,7 @@ export default function ReportScreen() {
         </View>
 
         {report.totalReps === 0 && rejected === 0 && (
-          <Text style={styles.zeroNote}>
-            이번 운동에서는 측정된 반복이 없어요. 전신이 화면에 들어오게 서서 다시 시도해보세요.
-          </Text>
+          <Text style={styles.zeroNote}>{unmeasuredMessage(report.measurementStatus)}</Text>
         )}
         {rejectedText && (
           <Text style={[styles.zeroNote, styles.rejectedNote]}>{rejectedText}</Text>

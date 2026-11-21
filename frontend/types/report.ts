@@ -241,6 +241,9 @@ export interface SessionReportResponse {
   // 평균 싱크로율 — 2026-10-21 부터 인정 회차 + 미인정 시도 «모든 시도» 평균
   avgSyncRate: number;
   scoreAvailable?: boolean;
+  // 측정되지 않은 «이유»(V37) — 측정된 세션이거나 사유를 모르면(구버전 AI·옛 세션) 없음/null.
+  //  NO_POSE 사람을 못 찾음 · NOT_FULLY_VISIBLE 몸 일부가 화면 밖 · NO_REP 판정은 됐으나 반복·시도 0
+  measurementStatus?: 'NO_POSE' | 'NOT_FULLY_VISIBLE' | 'NO_REP' | string | null;
   totalReps: number;               // 인정 횟수(세트·목표의 기준)
   // 미인정 시도 수와 사유별 개수(2026-10-21). 구버전 서버·옛 리포트는 없음 → 0
   rejectedReps?: number | null;

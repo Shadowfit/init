@@ -22,6 +22,11 @@ public class SessionReportResponseDto {
     private int avgSyncRate;
     // 횟수만 측정한 운동의 0 기본값을 점수로 표시하지 않도록 구분한다.
     private boolean scoreAvailable;
+    /**
+     * 측정되지 않은 이유(V37) — {@code NO_POSE} · {@code NOT_FULLY_VISIBLE} · {@code NO_REP}. 측정된 세션이거나 사유를 모르면 {@code null}.
+     * 리포트 화면이 «사람이 안 보였다» / «전신이 안 들어왔다» / «동작이 반복으로 인정되지 않았다» 를 가르는 근거다.
+     */
+    private String measurementStatus;
     private int totalReps;
     /**
      * «미인정 시도» 수 (2026-10-21, V35) — 내려갔다 올라왔지만 {@code totalReps} 에 안 들어간 시도. 횟수·세트에는 안 들어가지만
@@ -125,6 +130,7 @@ public class SessionReportResponseDto {
         dto.setStartTime(session.getStartTime());
         dto.setAvgSyncRate(intOrZero(session.getAvgSyncRate()));
         dto.setScoreAvailable(session.getAvgSyncRate() != null);
+        dto.setMeasurementStatus(session.getMeasurementStatus() == null ? null : session.getMeasurementStatus().name());
         dto.setTotalReps(session.getTotalReps() == null ? 0 : session.getTotalReps());
         dto.setWorkoutMinutes((int) java.time.Duration.between(session.getStartTime(), session.getEndTime()).toMinutes());
         // 칼로리만은 null 을 접지 않는다(2026-10-21) — 체중이 없어 못 잰 세션이 실재하게 됐고, 0 으로 접으면 «소모 칼로리 0»

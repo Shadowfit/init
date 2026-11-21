@@ -15,6 +15,11 @@ public class ExerciseSessionDto {
      * 이 필드를 모르는 코드 경로가 «측정됨» 으로 읽히게 하려는 것이다.
      */
     private boolean measured = true;
+    /**
+     * 측정되지 않은 <b>이유</b> — {@code NO_POSE}(사람을 못 찾음) · {@code NOT_FULLY_VISIBLE}(하체 등이 화면 밖) · {@code NO_REP}
+     * (판정은 됐으나 반복·시도 0). {@code measured=true} 이거나 사유를 모르면(구버전 AI·옛 세션) {@code null}.
+     */
+    private String measurementStatus;
     private Long sessionId;              // 클릭 시 이동을 위한 ID
     private String exerciseName;         // "숄더프레스"
     private String setSummary;           // "4세트 x 10회"

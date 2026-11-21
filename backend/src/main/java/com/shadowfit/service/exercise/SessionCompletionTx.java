@@ -13,6 +13,7 @@ import com.shadowfit.dto.report.detailreport.TrunkLeanAnalysisDto;
 import com.shadowfit.dto.report.detailreport.WorstSectionDto;
 import com.shadowfit.global.observability.CorrelationIds;
 import com.shadowfit.global.observability.SessionMetrics;
+import com.shadowfit.model.exercise.MeasurementStatus;
 import com.shadowfit.model.exercise.Session;
 import com.shadowfit.model.exercise.SessionSet;
 import com.shadowfit.model.exercise.Status;
@@ -102,6 +103,13 @@ public class SessionCompletionTx {
         if (!transitioned) {
             return;
         }
+
+        // «측정 안 된 이유» (V37). AI 의 판정을 그대로 믿지 않고 **우리가 가진 기록과 맞을 때만** 남긴다 — AI 는 0회라고 했는데
+        // pose_data·미인정 시도에 기록이 있으면(재부착·구버전 AI 등) 그 세션은 측정된 것이다. 사유를 남기면 앱이 «측정 안 됨» 으로 칠한다.
+        boolean nothingRecorded = request.getTotalReps() == 0 && reps.isEmpty() && rejectedAttempts.isEmpty();
+        session.recordMeasurementStatus(nothingRecorded
+                ? MeasurementStatus.fromProto(request.getMeasurementStatus())
+                : null);
 
         sessionRepository.saveAndFlush(session);
 
