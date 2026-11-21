@@ -202,6 +202,9 @@ public class SessionActivityQueryService {
         detail.setSetSummary(SetSummaryFormatter.format(sets, s.getTotalReps()));
         detail.setSyncRate(s.getAvgSyncRate() != null ? s.getAvgSyncRate().doubleValue() : 0.0);
         detail.setScoreAvailable(s.getAvgSyncRate() != null);
+        // 측정된 것이 없는 세션(0회 + 점수 없음) — AI 가 사람을 못 찾았거나 rep 이 하나도 안 나온 경우. 점수가 null 인 것은
+        // «횟수만 재는 종목» 도 마찬가지라 총 횟수를 함께 본다. 평균 싱크로율은 미인정 시도를 포함하므로(2026-10-21) 시도만 있어도 측정된 것이다.
+        detail.setMeasured((s.getTotalReps() != null && s.getTotalReps() > 0) || s.getAvgSyncRate() != null);
         return detail;
     }
 

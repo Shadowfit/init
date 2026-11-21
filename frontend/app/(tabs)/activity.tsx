@@ -127,7 +127,9 @@ export default function ActivityScreen() {
                     key={ex.sessionId}
                     style={styles.exerciseCard}
                     activeOpacity={0.7}
-                    onPress={() => ex.scoreAvailable === false
+                    // 측정된 것이 없는 세션은 리포트로 보낸다 — 거기에 «전신이 보이게 다시 시도» 안내가 있다.
+                    // 횟수만 재는 종목(측정은 됐고 점수만 없음)은 기존대로 알림만 띄운다.
+                    onPress={() => ex.measured !== false && ex.scoreAvailable === false
                       ? Alert.alert(ex.exerciseName, `${ex.setSummary}\n자세 점수는 측정하지 않았습니다.`)
                       : router.push(`/report/${ex.sessionId}` as any)}
                   >
@@ -136,7 +138,7 @@ export default function ActivityScreen() {
                       <Text style={styles.exerciseSets}>{ex.setSummary}</Text>
                     </View>
                     <View style={styles.detailBadge}>
-                      <Text style={styles.detailText}>{ex.scoreAvailable === false ? '횟수 기록' : '기록 보기'}</Text>
+                      <Text style={styles.detailText}>{ex.measured === false ? '측정 안 됨' : ex.scoreAvailable === false ? '횟수 기록' : '기록 보기'}</Text>
                       <ChevronRight size={14} color={COLORS.textMuted} strokeWidth={2} />
                     </View>
                   </TouchableOpacity>
