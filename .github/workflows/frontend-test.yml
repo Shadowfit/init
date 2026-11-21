@@ -6,8 +6,13 @@ name: Frontend type check
 # ai-server-test.yml 은 paths 필터가 각자 backend/**·ai-server/** 라 걸리지 않는다.
 # 그래서 프론트만 고친 PR 은 타입 오류가 있어도 체크 자체가 뜨지 않았다 (이슈 #327).
 #
-# 최소선으로 시작한다 — tsc --noEmit 만. ESLint·테스트는 별건(package.json 에 lint 스크립트도
-# 테스트도 아직 없다).
+# 최소선으로 시작했다 — tsc --noEmit 만. ESLint 는 별건(package.json 에 lint 스크립트가 아직 없다).
+#
+# 2026-11-21: node 로 직접 도는 시험 둘을 같은 잡에 붙였다. 테스트 러너(jest 등)는 없지만 이미 있던
+# 시험이 CI 밖에 있어서, 깨져도 아무도 몰랐다. 러너를 새로 들이는 대신 있는 것을 건다.
+#   · lib/motion/run-tests.cjs        3D 운동 비교 라이브러리(DTW·분석·피드백) 34건
+#   · services/transientFailure.test.cjs  재발급 실패가 «서버 일시 장애» 인지 가르는 판별 10건 (#890)
+# 잡 이름(frontend typecheck)은 그대로다 — 이름을 바꾸면 이 이름을 필수 체크로 건 설정이 있을 때 깨진다.
 
 on:
   pull_request:
@@ -54,3 +59,13 @@ jobs:
       - name: tsc --noEmit
         working-directory: frontend
         run: npx tsc --noEmit -p .
+
+      # 아래 둘은 typescript 를 require 훅으로 걸어 .ts 를 직접 읽는다(lib/motion/register.cjs) — 위 npm ci 로 깔린 것을 쓴다.
+      # 실패하면 프로세스가 0 이 아닌 코드로 끝나 이 단계가 빨갛게 된다(두 스크립트 모두 실패 수에 따라 exit 한다).
+      - name: node tests — 3D 운동 비교 라이브러리
+        working-directory: frontend
+        run: node lib/motion/run-tests.cjs
+
+      - name: node tests — 재발급 일시 장애 판별
+        working-directory: frontend
+        run: node services/transientFailure.test.cjs
