@@ -29,7 +29,14 @@ function validateReleaseEnv(env, profile) {
   const warnings = [];
   if (!CHECKED_PROFILES.has(profile)) return { errors, warnings };
 
-  const get = (k) => (env[k] ?? '').trim();
+  // 앞뒤 공백이 있는 값은 «비어 있지 않다» 로 승인하지 않고 따로 거절한다 — 앱 런타임(api.ts·aiService.ts)은 **원본 값**에
+  // 정규식을 적용하므로 ' https://…' 는 여기서 trim 해 통과시키면 릴리스에서 모든 요청이 설정 오류로 실패한다.
+  const padded = new Set();
+  const get = (k) => {
+    const raw = env[k] ?? '';
+    if (raw !== raw.trim() && raw.trim() !== '') padded.add(k);
+    return raw.trim();
+  };
 
   // 서버 주소 둘 — 릴리스는 https 만 받는다(api.ts·aiService.ts 가 같은 규칙으로 거절한다. 거기서 거절하면 앱이 «설정 오류» 로만 뜬다).
   for (const key of ['EXPO_PUBLIC_API_BASE_URL', 'EXPO_PUBLIC_AI_BASE_URL']) {
@@ -56,6 +63,10 @@ function validateReleaseEnv(env, profile) {
 
   for (const [key, why] of Object.entries(FORBIDDEN)) {
     if (get(key)) errors.push(`${key} 가 설정돼 있다 — ${why}. 릴리스에서는 지울 것`);
+  }
+
+  for (const key of padded) {
+    if (!(key in FORBIDDEN)) errors.push(`${key} 의 앞뒤에 공백이 있다 — 런타임은 원본 값을 그대로 쓰므로 주소·토큰이 깨진다. 공백을 지울 것`);
   }
 
   return { errors, warnings };

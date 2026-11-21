@@ -41,6 +41,23 @@ test('토큰이 .env.example 예시 문구 그대로면 거절', () => {
 test('공백만 있는 값은 없는 것과 같다', () => {
   assert.equal(validateReleaseEnv({ ...GOOD, EXPO_PUBLIC_AI_PUBLIC_TOKEN: '   ' }, 'production').errors.length, 1);
 });
+test('앞뒤 공백이 있는 주소는 거절 — 런타임은 원본 값에 정규식을 적용한다', () => {
+  for (const key of ['EXPO_PUBLIC_API_BASE_URL', 'EXPO_PUBLIC_AI_BASE_URL']) {
+    for (const padded of [' https://x.example.com/api/v1', 'https://x.example.com/api/v1 ', '\thttps://x.example.com/api/v1\n']) {
+      const r = validateReleaseEnv({ ...GOOD, [key]: padded }, 'production');
+      assert.equal(r.errors.length, 1, `${key}=${JSON.stringify(padded)}`);
+      assert.match(r.errors[0], /공백/);
+    }
+  }
+});
+test('앞뒤 공백이 있는 토큰도 거절', () => {
+  const r = validateReleaseEnv({ ...GOOD, EXPO_PUBLIC_AI_PUBLIC_TOKEN: ' abc123' }, 'production');
+  assert.equal(r.errors.length, 1);
+  assert.match(r.errors[0], /공백/);
+});
+test('공백 없는 정상 주소는 그대로 통과한다(위 거절이 정상 값을 막지 않는다)', () => {
+  assert.deepEqual(validateReleaseEnv(GOOD, 'production'), { errors: [], warnings: [] });
+});
 test('약관 주소가 없으면 오류', () => {
   const rest = { ...GOOD };
   delete rest.EXPO_PUBLIC_TERMS_URL;
