@@ -44,6 +44,7 @@
 | iOS `bundleIdentifier` · Android `package` | ⬜ **미정**(결정 D-2 — 개인 계정 확정, 문자열 미정). 한 번 정하면 바꾸기 어렵다. 이 값이 없으면 `development` 외 빌드는 EAS 가 입력을 묻는다 |
 | 환경변수 주입 | 🟨 **백엔드 주소는 `EXPO_PUBLIC_API_BASE_URL`(릴리스에서 https 필수, 없으면 모든 요청이 설정 오류로 실패)로 바꿨다** — 코드의 `api.shadowfit.com` 은 제거됐다. 프로파일별 `env` 값은 실제 도메인이 정해질 때까지 일부러 비워 둔다(지어낸 주소가 빌드에 들어가지 않게). AI 쪽은 `EXPO_PUBLIC_AI_BASE_URL` |
 | 약관·처리방침 주소 | ⬜ `EXPO_PUBLIC_TERMS_URL` · `EXPO_PUBLIC_PRIVACY_URL` — 문서를 게시한 뒤 |
+| 릴리스 설정 점검 | ✅ `frontend/scripts/check-release-env.cjs` — `preview`·`production` 빌드에서 `EXPO_PUBLIC_API_BASE_URL`·`EXPO_PUBLIC_AI_BASE_URL`(https)·`EXPO_PUBLIC_AI_PUBLIC_TOKEN`·약관/처리방침 주소가 비어 있거나 예시 문구 그대로거나, 개발용 값(`EXPO_PUBLIC_API_VIA_METRO` 등)이 켜져 있으면 **빌드를 중단**한다. `package.json` 의 `eas-build-post-install` 훅으로 EAS 가 부른다. **EAS 가 이 훅을 실제로 부르는지는 아직 확인하지 못했다**(첫 빌드 로그에서 «릴리스 설정 점검» 줄을 볼 것). 손으로: `EAS_BUILD_PROFILE=production node scripts/check-release-env.cjs` |
 | 계정 | ⬜ Apple Developer · Google Play 가입, `eas init`(프로젝트 id 가 `app.json` 의 `extra.eas` 로 들어간다) |
 | 판단 보류 | `userInterfaceStyle` 은 `automatic` 인데 앱 테마는 다크 고정이다 — 라이트 모드 기기에서 상태바·스플래시가 어긋날 수 있어 `dark` 로 고정할지 **디자인 결정**이 필요하다. iOS `ITSAppUsesNonExemptEncryption`(수출 규정 신고)도 제출 직전에 정한다 |
 
