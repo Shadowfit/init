@@ -73,3 +73,7 @@ jobs:
       - name: node tests — 릴리스 빌드 설정 점검
         working-directory: frontend
         run: node scripts/check-release-env.test.cjs
+
+      - name: node tests — 측정 안 된 세션 안내 문구
+        working-directory: frontend
+        run: node utils/unmeasuredMessage.test.cjs

@@ -67,6 +67,14 @@ public class Session {
     @Column(precision = 7, scale = 2)
     private BigDecimal caloriesBurned;
 
+    /**
+     * 측정된 것이 없는 세션의 사유(V37). {@code null} 이면 «측정됨» 이거나 이 컬럼이 생기기 전·구버전 AI 가 완료시킨 세션이다.
+     * 완료 전이 때 한 번만 채워진다 — {@link #recordMeasurementStatus}.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(length = 30)
+    private MeasurementStatus measurementStatus;
+
     @Builder.Default
     private Integer difficultyLevel = 1;
 
@@ -236,6 +244,14 @@ public class Session {
         this.minSyncRate = sync.min();
         this.caloriesBurned = caloriesBurned;
         return true;
+    }
+
+    /**
+     * 완료 통보가 알려 준 «측정 안 된 이유» 를 남긴다. {@code null} 은 «측정됨» 이다(지우는 것이 아니라 그 값이 정상이다).
+     * {@link #complete} 가 전이시킨 호출에서만 부른다 — 멱등 재전송이 첫 완료의 기록을 덮어쓰지 않게 호출부(SessionCompletionTx)가 지킨다.
+     */
+    public void recordMeasurementStatus(MeasurementStatus status) {
+        this.measurementStatus = status;
     }
 
     /**

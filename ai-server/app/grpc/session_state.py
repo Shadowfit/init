@@ -269,6 +269,29 @@ class SessionState:
         """
         return self.judged_frame_count <= 0 or self.visibility_skip_count > 0
 
+    @property
+    def measurement_status(self) -> str:
+        """이 세션이 «측정됐는가» — 완료 통보에 실어 total_reps 가 0 인 **이유**를 Spring·앱에 알린다.
+
+        proto `MeasurementStatus` 의 값 이름에서 `MEASUREMENT_` 를 뗀 문자열을 돌려준다(OK · NO_POSE · NOT_FULLY_VISIBLE ·
+        NO_REP). 임계값 없이 이미 세는 카운터로만 가른다 — 순서가 의미다:
+
+          1. 인정 반복 또는 미인정 시도가 하나라도 있다                → OK  (측정은 됐다. 점수가 낮은 것과는 별개다)
+          2. 수락된 프레임이 하나도 없다                              → NO_POSE (사람을 못 찾았거나 프레임이 오지 않았다)
+          3. 수락됐지만 판정에 들어간 프레임이 하나도 없다             → NOT_FULLY_VISIBLE (하체 등이 화면 밖 — 위 judged_frame_count)
+          4. 판정된 프레임은 있는데 반복도 시도도 0 이다               → NO_REP
+
+        `rep_count` 는 재부착 이전 반복을 Spring 값에서 이어받으므로 재부착된 세션이 이후에 프레임을 못 받아도 OK 다 —
+        이미 측정된 반복이 있으니 맞는 판정이다.
+        """
+        if self.rep_count > 0 or self.rejected_count > 0:
+            return "OK"
+        if self.accepted_frame_count <= 0:
+            return "NO_POSE"
+        if self.judged_frame_count <= 0:
+            return "NOT_FULLY_VISIBLE"
+        return "NO_REP"
+
 
 def elapsed_sec(state: SessionState, now: float) -> float:
     """이 프레임의 «세션 시작 기준 경과 초» (이슈 #156).

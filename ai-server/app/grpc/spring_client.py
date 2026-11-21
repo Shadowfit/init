@@ -311,8 +311,13 @@ def report_complete_analysis(
     max_sync_rate: float = 0.0,
     min_sync_rate: float = 0.0,
     calories_burned: float = 0.0,
+    measurement_status: str = "OK",
 ) -> None:
-    """최종 분석 결과를 Spring에 콜백. 실패 시 지수 백오프로 재시도."""
+    """최종 분석 결과를 Spring에 콜백. 실패 시 지수 백오프로 재시도.
+
+    `measurement_status` 는 proto `MeasurementStatus` 의 값 이름에서 `MEASUREMENT_` 를 뗀 문자열이다(OK · NO_POSE ·
+    NOT_FULLY_VISIBLE · NO_REP) — total_reps 가 0 인 이유를 Spring 이 사용자에게 안내할 수 있게 한다.
+    """
     request = exercise_pb2.SessionCompleteRequest(
         session_id=session_id,
         total_reps=total_reps,
@@ -320,6 +325,7 @@ def report_complete_analysis(
         max_sync_rate=max_sync_rate,
         min_sync_rate=min_sync_rate,
         calories_burned=calories_burned,
+        measurement_status=exercise_pb2.MeasurementStatus.Value(f"MEASUREMENT_{measurement_status}"),
     )
 
     # 재시도 루프 **밖에서** 한 번만 만든다 — 안에서 만들면 컨텍스트에 id 가 없을 때

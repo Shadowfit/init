@@ -114,6 +114,7 @@
 - [grpc-webclient-transport-cost-breakdown.md](./grpc-webclient-transport-cost-breakdown.md) — 3차: 고정비 1.8ms 분해 설계·결과
 - [latency-perception.md](./latency-perception.md) — Latency 단위(ms·s) 의미와 컴포넌트 매핑 (진행중 — 계속 갱신, 분기 7 격상 검토 트리거 남음)
 - [observability-correlation-id.md](./observability-correlation-id.md) — 관측성 1차 — correlation id 전파 + 커스텀 메트릭 (확정 — PR #54 머지 완료)
+- [measurement-status-contract.md](./measurement-status-contract.md) — 0회 세션의 «왜 0 인가»: 완료 통보에 측정 상태(NO_POSE·NOT_FULLY_VISIBLE·NO_REP)를 싣는 계약. 임계값 없이 AI 카운터로만 판정, 기본값 0=측정됨
 - [outbox-retention-cleanup.md](./outbox-retention-cleanup.md) — outbox_events 보존 정리(#793): 보존 모델·DELETE 모양·인덱스·다중 인스턴스·관측, 정리 DELETE ↔ markSent 락 가설 (분기점 — 결정 전)
 - [outbox-reliable-messaging.md](./outbox-reliable-messaging.md) — 신뢰성 있는 비동기 통보(Outbox, 세션종료 통보 유실 E1) (확정 — 설계·구현·측정·리뷰반영 전부 완료)
 - [performance-tactics-availability-tradeoff.md](./performance-tactics-availability-tradeoff.md) — 아키텍처 품질속성 — 성능 택틱과 가용성 트레이드오프 (진행중 — 택틱 A 착수 확정(2026-09-04), B·C는 보류)

@@ -52,6 +52,26 @@ enum SessionStatus {
   FAILED = 2;
 }
 
+// 세션이 «측정됐는가» — 완료 통보(SessionCompleteRequest)의 total_reps 가 0 일 때 **왜 0 인가** 를 가른다.
+// 0회라는 값만으로는 «사람이 화면에 없었다» 와 «사람은 있었는데 동작이 반복으로 인정되지 않았다» 가 같아 보여, 사용자에게
+// 어떻게 다시 시도하라고 안내할지 알 수 없었다.
+//
+// 판정은 임계값 없이 AI 가 이미 세는 카운터로만 한다(SessionState: 수락 프레임 · 가시성 스킵 · 판정 프레임 · 인정 반복 · 미인정 시도):
+//   인정 반복 또는 미인정 시도가 하나라도 있으면            → MEASUREMENT_OK
+//   수락된 프레임이 하나도 없으면                           → MEASUREMENT_NO_POSE
+//   수락됐지만 판정에 쓸 프레임이 하나도 없으면(가시성 부족)  → MEASUREMENT_NOT_FULLY_VISIBLE
+//   판정된 프레임은 있으나 반복·시도가 0 이면                → MEASUREMENT_NO_REP
+//
+// 기본값(0)이 «측정됨» 인 이유: 이 필드를 모르는 구버전 AI 가 보내는 메시지도 0 으로 읽혀 «측정됨» 이 된다 —
+// 구버전을 «측정 불가» 로 잘못 분류하지 않는다. 배포 순서(AI·Spring 어느 쪽이 먼저든)에 안 깨진다.
+// 값 이름에 접두사(MEASUREMENT_)가 붙은 것은 proto3 enum 값 이름이 패키지 전체에서 유일해야 해서다.
+enum MeasurementStatus {
+  MEASUREMENT_OK = 0;                   // 측정됨(인정 반복 또는 미인정 시도가 있다) — 또는 이 필드를 모르는 구버전 AI
+  MEASUREMENT_NO_POSE = 1;              // 수락된 프레임이 하나도 없다 — 사람을 못 찾았거나 프레임이 오지 않았다
+  MEASUREMENT_NOT_FULLY_VISIBLE = 2;    // 프레임은 받았지만 판정에 쓸 수 있는 것이 없었다(하체 등이 화면 밖)
+  MEASUREMENT_NO_REP = 3;               // 판정된 프레임은 있으나 인정 반복·미인정 시도가 0
+}
+
 // ------------------------------------------------------------
 // 1. 세션 시작 관련 메시지 (ExercisesRequestDto/ResponseDto 대응)
 // ------------------------------------------------------------
@@ -177,6 +197,7 @@ message SessionCompleteRequest {
   double min_sync_rate = 5;   // 최소 일치율
   double calories_burned = 6; // 소모 칼로리
   int32 difficulty_level = 7; // 난이도
+  MeasurementStatus measurement_status = 8; // 측정 상태 — total_reps 가 0 인 이유(위 enum). 모르는 구버전은 0(측정됨)
 }
 
 message SessionCompleteResponse {
