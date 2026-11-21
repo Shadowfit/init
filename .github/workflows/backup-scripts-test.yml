@@ -1,0 +1,37 @@
+name: Backup scripts round-trip
+
+# scripts/backup/ 의 백업·복구 스크립트를 일회용 MySQL 컨테이너로 실제로 돌려 본다.
+# shell-syntax-check.yml 은 bash -n(파싱)만 해서 «덤프가 되살려지는가» 는 못 본다 — 백업은 되살려 보기 전까지 백업이 아니다.
+#
+# 한글·BLOB·파티션 테이블·트리거·함수 왕복, 덮어쓰기 보호, 보관 개수, 잠금, 잘못된 입력을 본다(40건 안팎).
+# 러너(ubuntu-latest)에는 aws CLI 가 기본으로 깔려 있어 «S3 설정이 있는데 aws 가 없는 경우» 시험은 건너뛴다 —
+# 그 경로(S3 전송 자체)는 어떤 환경에서도 시험하지 않는다.
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/backup/**'
+      - '.github/workflows/backup-scripts-test.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/backup/**'
+      - '.github/workflows/backup-scripts-test.yml'
+
+concurrency:
+  group: backup-scripts-test-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  roundtrip:
+    name: backup scripts round-trip
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Round-trip test (docker + mysql:8.0)
+        run: bash scripts/backup/test-backup-restore.sh
