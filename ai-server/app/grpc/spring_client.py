@@ -28,8 +28,9 @@ _stub: exercise_pb2_grpc.ExerciseServiceStub | None = None
 _lock = threading.Lock()
 
 # CompleteAnalysis 콜백이 실패하면 세션 결과가 영구 유실되므로 재시도한다.
-# 3회 시도, 시도 사이 1s → 3s 백오프. 최종 실패 시 ERROR 로그만 남기고 포기 —
-# 장기 장애 복구는 별도 영구 큐가 필요하다.
+# 즉시 재시도: 3회 시도, 시도 사이 1s → 3s 백오프. 그래도 안 되면 «느린 재시도»(#799)로 넘어가 COMPLETE_RETRY_WINDOW_SEC 동안
+# COMPLETE_RETRY_INTERVAL_SEC 간격으로 타이머가 다시 보낸다. 그 창도 다 쓰면 ERROR 로그와 exhausted 지표를 남기고 포기 —
+# AI 프로세스가 죽으면 대기 중인 결과도 사라진다(메모리). 그 한계를 넘으려면 별도 영구 큐가 필요하다.
 #
 # 🔴 2026-08-23 정정: 여기 「총 worst-case 4초」라고 적혀 있었는데 **그건 틀린 계산이었다**
 #    (#206 결함 A). 호출에 timeout 이 없어 grpc-python 기본값이 None(무한 대기)이었으므로,
@@ -313,7 +314,7 @@ def report_complete_analysis(
     calories_burned: float = 0.0,
     measurement_status: str = "OK",
 ) -> None:
-    """최종 분석 결과를 Spring에 콜백. 실패 시 지수 백오프로 재시도.
+    """최종 분석 결과를 Spring에 콜백. 즉시 재시도(3회) 뒤에도 안 되면 «느린 재시도» 로 넘긴다(#799).
 
     `measurement_status` 는 proto `MeasurementStatus` 의 값 이름에서 `MEASUREMENT_` 를 뗀 문자열이다(OK · NO_POSE ·
     NOT_FULLY_VISIBLE · NO_REP) — total_reps 가 0 인 이유를 Spring 이 사용자에게 안내할 수 있게 한다.
@@ -330,9 +331,41 @@ def report_complete_analysis(
 
     # 재시도 루프 **밖에서** 한 번만 만든다 — 안에서 만들면 컨텍스트에 id 가 없을 때
     # 매 attempt 마다 새 id 가 발급돼 같은 CompleteAnalysis 의 시도들이 서로 안 묶인다.
+    # 느린 재시도도 이 같은 metadata 를 써서 한 호출의 시도들로 묶인다.
     metadata = call_metadata()
 
-    for attempt in range(1, _COMPLETE_MAX_ATTEMPTS + 1):
+    if _try_complete(request, metadata, session_id, _COMPLETE_MAX_ATTEMPTS, ok_outcome="ok") != "exhausted":
+        return
+
+    window = settings.COMPLETE_RETRY_WINDOW_SEC
+    if window <= 0:
+        _give_up_complete(session_id, "즉시 재시도 소진, 느린 재시도 꺼짐")
+        return
+    # 즉시 재시도(약 19초)는 다 썼다 — 포기하는 대신 타이머로 이어 간다. 풀 워커를 붙잡고 sleep 하지 않는다: 워커 수가 고정이라
+    # Spring 이 몇 분 내려가 있는 동안 sleep 하는 워커가 늘면 **다른 세션의 콜백까지** 큐에서 기다리게 된다.
+    #
+    # 대기 건수는 **예약하기 전에** 올린다 — 타이머가 바로 울려도 내림이 올림보다 앞서 게이지가 음수로 내려가지 않게. 예약에 실패하면 되돌린다.
+    metrics.late_retry_pending(+1)
+    if not _schedule_late_retry(request, metadata, session_id, time.monotonic() + window):
+        metrics.late_retry_pending(-1)
+        _give_up_complete(session_id, "느린 재시도를 예약하지 못했다(창이 간격보다 짧거나 타이머를 못 만들었다)")
+        return
+    metrics.record_callback("CompleteAnalysis", "deferred")
+    logger.warning(
+        "[AI → Spring] CompleteAnalysis 즉시 재시도 소진 — 최대 %ds 동안 %ds 간격으로 계속 시도한다 (session=%s)",
+        window,
+        settings.COMPLETE_RETRY_INTERVAL_SEC,
+        session_id,
+    )
+
+
+def _try_complete(request, metadata, session_id: int, max_attempts: int, ok_outcome: str) -> str:
+    """CompleteAnalysis 를 최대 `max_attempts` 번 던진다. 결과: "ok" · "rejected"(영구 실패) · "exhausted"(다 실패).
+
+    `exhausted` 는 **여기서 지표로 세지 않는다** — 느린 재시도가 이어질 수 있어서 «유실» 인지는 호출자가 안다.
+    성공은 `ok_outcome` 으로 센다(즉시 재시도는 "ok", 느린 재시도는 "recovered_late").
+    """
+    for attempt in range(1, max_attempts + 1):
         try:
             response = get_stub().CompleteAnalysis(
                 request,
@@ -340,13 +373,14 @@ def report_complete_analysis(
                 timeout=settings.BACKEND_GRPC_TIMEOUT_SECONDS,
             )
             logger.info(
-                "[AI → Spring] CompleteAnalysis 성공 (session=%s, status=%s, attempt=%d)",
+                "[AI → Spring] CompleteAnalysis 성공 (session=%s, status=%s, attempt=%d, outcome=%s)",
                 session_id,
                 response.status,
                 attempt,
+                ok_outcome,
             )
-            metrics.record_callback("CompleteAnalysis", "ok")
-            return
+            metrics.record_callback("CompleteAnalysis", ok_outcome)
+            return "ok"
         except grpc.RpcError as e:
             if not _is_retryable(e):
                 # 영구 실패다 — 더 던져도 결과가 같고, 그동안 이 워커가 붙잡힌다 (#209 · #276 ③).
@@ -357,29 +391,84 @@ def report_complete_analysis(
                     e.details(),
                 )
                 metrics.record_callback("CompleteAnalysis", "rejected")
-                return
-            if attempt >= _COMPLETE_MAX_ATTEMPTS:
-                logger.error(
-                    "[AI → Spring] CompleteAnalysis 최종 실패 (session=%s, attempts=%d): %s",
+                return "rejected"
+            if attempt >= max_attempts:
+                logger.warning(
+                    "[AI → Spring] CompleteAnalysis 실패 (session=%s, attempts=%d): %s",
                     session_id,
                     attempt,
                     e.details(),
                 )
-                # 🔴 세션 결과가 영구 유실되는 자리다 — 이 콜백은 세션당 한 번뿐이라
-                #    한 건이 곧 «리포트 하나가 없다» 다 (#151).
-                metrics.record_callback("CompleteAnalysis", "exhausted")
-                return
+                return "exhausted"
             wait = _COMPLETE_BACKOFF_SECONDS[attempt - 1]
             logger.warning(
                 "[AI → Spring] CompleteAnalysis 실패 — %.1fs 후 재시도 (session=%s, %d/%d): %s",
                 wait,
                 session_id,
                 attempt,
-                _COMPLETE_MAX_ATTEMPTS,
+                max_attempts,
                 e.details(),
             )
             metrics.record_callback("CompleteAnalysis", "retried")
             time.sleep(wait)
+    return "exhausted"  # pragma: no cover - max_attempts >= 1 이면 위 루프가 항상 값을 돌려준다
+
+
+def _give_up_complete(session_id: int, why: str) -> None:
+    logger.error("[AI → Spring] CompleteAnalysis 최종 실패 — 결과가 유실된다 (session=%s): %s", session_id, why)
+    # 🔴 세션 결과가 영구 유실되는 자리다 — 이 콜백은 세션당 한 번뿐이라 한 건이 곧 «리포트 하나가 없다» 다 (#151).
+    metrics.record_callback("CompleteAnalysis", "exhausted")
+
+
+# 타이머 생성을 한 곳에 모은다 — 시험이 즉시 실행·포착으로 바꿔 끼운다(실제 30초를 기다리지 않게).
+_start_timer = lambda delay, fn, args: _spawn_timer(delay, fn, args)  # noqa: E731
+
+
+def _spawn_timer(delay: float, fn, args) -> None:
+    t = threading.Timer(delay, fn, args=args)
+    t.daemon = True  # 프로세스 종료를 막지 않는다 — 어차피 메모리 대기라 종료하면 사라진다
+    t.start()
+
+
+def _schedule_late_retry(request, metadata, session_id: int, deadline: float) -> bool:
+    """다음 느린 시도를 예약한다. 예약했으면 True.
+
+    **다음 시도가 창 안에 들지 않으면 예약하지 않는다**(False) — 첫 예약이든 재예약이든 같은 규칙이다. 창(`COMPLETE_RETRY_WINDOW_SEC`)이
+    간격(`COMPLETE_RETRY_INTERVAL_SEC`)보다 짧게 설정돼도 창이 끝난 뒤에 결과를 쥐고 요청을 보내지 않는다. 타이머를 못 만든 경우도
+    False — 호출자가 «유실» 로 마무리하고 대기 건수를 정리한다.
+    """
+    interval = settings.COMPLETE_RETRY_INTERVAL_SEC
+    if time.monotonic() + interval >= deadline:
+        return False
+    try:
+        _start_timer(interval, _late_retry_tick, (request, metadata, session_id, deadline))
+    except Exception:
+        logger.exception("[AI → Spring] 느린 재시도 타이머를 만들지 못했다 (session=%s)", session_id)
+        return False
+    return True
+
+
+def _late_retry_tick(request, metadata, session_id: int, deadline: float) -> None:
+    """느린 재시도 한 번 — 단일 시도(자체 데드라인 있음, sleep 없음). 실패하면 창이 남은 만큼 다음 타이머를 건다."""
+    still_pending = False
+    try:
+        if time.monotonic() >= deadline:
+            # 타이머가 늦게 울려 창이 이미 끝났다 — 요청을 보내지 않고 마무리한다.
+            _give_up_complete(session_id, "타이머가 울렸을 때 느린 재시도 창이 이미 끝나 있었다")
+        else:
+            outcome = _try_complete(request, metadata, session_id, 1, ok_outcome="recovered_late")
+            if outcome == "exhausted":
+                if _schedule_late_retry(request, metadata, session_id, deadline):
+                    metrics.record_callback("CompleteAnalysis", "retried")
+                    still_pending = True   # 아직 끝나지 않았다 — 대기 건수는 그대로
+                else:
+                    _give_up_complete(session_id, "느린 재시도 창을 다 썼다")
+    except Exception:  # 타이머 스레드에서 터지면 아무도 모른다 — 로그를 남기고 이 건은 끝낸다
+        logger.exception("[AI → Spring] CompleteAnalysis 느린 재시도 중 예외 (session=%s)", session_id)
+        metrics.record_callback("CompleteAnalysis", "exhausted")
+    if not still_pending:
+        metrics.late_retry_pending(-1)  # ok · rejected · 포기 · 예외 — 어느 쪽이든 이 건은 여기서 끝난다
+
 
 class PendingFeedbackEvent(NamedTuple):
     """아직 Spring 에 확인받지 못한 피드백 사건 하나 — 분류기(미구현)가 만들어 버퍼에 쌓는다.

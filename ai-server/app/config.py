@@ -60,6 +60,20 @@ class Settings(BaseSettings):
     # 훑는 주기. TTL 이 분 단위라 초 단위 정밀도는 필요 없다 — 값 자체에 근거는 없다.
     SESSION_REAP_INTERVAL_SEC: int = Field(default=60, ge=1)
 
+    # CompleteAnalysis 콜백의 «느린 재시도» (#799). 즉시 재시도(3회·약 19초)가 다 실패하면 포기하는 대신 이 창 안에서 주기적으로 다시 보낸다.
+    #
+    # 왜 필요한가: 이 콜백은 세션당 한 번뿐이고 실패하면 운동 결과(rep·점수)가 사라진다. Spring 이 배포·재기동 중이면(앱 기동 12~18초 실측)
+    # 19초 안에 못 돌아올 수 있다. Spring 의 completeSession 은 이미 FAILED 로 걷힌 세션도 COMPLETED 로 덮어쓰도록 만들어져 있어(낙관적 락
+    # 충돌 처리 주석: «사용자가 실제로 운동한 데이터는 어떤 경우에도 유실되면 안 됩니다»), 늦은 콜백이 결과를 되살린다.
+    #
+    # 창(600초)은 Spring 의 유휴 타임아웃(exercise.session.timeout.idle-minutes = 10분)의 **복사본**이다 — 그 안에 성공하면 사용자는 FAILED 를
+    # 한 번도 보지 않는다. 넘어서도 되살릴 수는 있지만 그 동안 화면은 FAILED 이고, 결과를 메모리에 쥐고 있는 비용(세션당 작은 객체와 타이머 하나)도
+    # 있어 이 선에서 멈춘다. ⚠️ Spring 설정이 바뀌면 같이 바꿀 것(SESSION_IDLE_TTL_SEC 와 같은 «복사본» 관계). 0 이면 느린 재시도를 끈다 —
+    # 즉시 재시도만 하고 포기하는 예전 동작이다.
+    COMPLETE_RETRY_WINDOW_SEC: int = Field(default=600, ge=0)
+    # 느린 재시도 간격. Spring 기동(12~18초 실측)을 한 번은 넘기는 길이로 잡았다 — 이 값 자체에는 그보다 정밀한 근거가 없다.
+    COMPLETE_RETRY_INTERVAL_SEC: int = Field(default=30, ge=1)
+
     # 프로세스 워커 수 (2026-08-26, GIL 병목 회피로 프로세스 분리 도입).
     #
     # 🔴 memory_ceiling() 이 컨테이너 메모리 한도를 «내가 유일한 프로세스» 라고 가정하고
