@@ -14,7 +14,6 @@ export interface OnboardingData {
   height: number; // cm
   weight: number; // kg
   persona: SelectedPersona | null;
-  preferredUrl: string | null;
 }
 
 // 백엔드 OnboardingDto (GET 응답)
@@ -25,7 +24,7 @@ export interface OnboardingResponse {
   workoutLevel: WorkoutLevel;
   height: number;
   weight: number;
-  preferredUrl: string;
+  preferredUrl?: string | null; // 선택 — 온보딩·세션 시작의 조건이 아니다(#802)
 }
 
 // 백엔드 OnboardingRequestDto (PATCH 요청)
@@ -34,7 +33,7 @@ export interface OnboardingPatchRequest {
   workoutLevel: WorkoutLevel;
   height: number;
   weight: number;
-  preferredUrl: string;
+  preferredUrl?: string; // 옛 클라이언트 호환용 — 보내지 않아도 된다(#802)
 }
 
 // ─── 마이페이지/리포트에서 쓰는 기타 모델 ────────────────────────

@@ -115,17 +115,17 @@ class ExerciseAnalysisServiceTest {
     }
 
     @Test
-    @DisplayName("세션 시작 — preferredUrl이 없으면 INVALID_INPUT_VALUE")
-    void startAnalysis_noPreferredUrl_throws() {
+    @DisplayName("세션 시작 — preferredUrl 이 없어도 시작된다(#802: 더 이상 조건이 아니다). 세션의 reference_source 는 빈 문자열")
+    void startAnalysis_noPreferredUrl_stillStarts() {
         Member noUrlMember = memberRepository.saveAndFlush(Member.builder()
                 .email("nourl@test.com").username("u2").password("dummy")
                 .selectedPersona(SelectedPersona.BEGINNER).role(UserRole.USER).build());
         VideoRequestDto dto = VideoRequestDto.builder().exerciseId(exercise.getId()).build();
 
-        assertThatThrownBy(() -> analysisService.startAnalysis(dto, noUrlMember.getId()))
-                .isInstanceOf(BusinessException.class)
-                .extracting(e -> ((BusinessException) e).getErrorCode())
-                .isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+        var started = analysisService.startAnalysis(dto, noUrlMember.getId());
+
+        assertThat(started.sessionId()).isNotNull();
+        assertThat(sessionRepository.findById(started.sessionId()).orElseThrow().getReferenceSource()).isEmpty();
     }
 
     @Test

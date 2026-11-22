@@ -30,10 +30,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * {@code @Cacheable(key = "#id")} 가 키 생성 단계에서 {@code IllegalArgumentException} 을 던져
  * JPQL 이 실행조차 되지 않기 때문이다 — "매치 0건 → 404" 경로에 도달하지 못한다.
  *
- * <p>⚠️ <b>회원에 {@code preferredUrl} 이 반드시 있어야 한다.</b> {@code ExerciseAnalysisService}
- * 가 {@code preferredUrl} 을 먼저 검사해 없으면 {@code INVALID_INPUT_VALUE}(400)로 끝내므로,
- * 온보딩 안 한 회원으로 치면 <b>검증이 없어도 400 이 나와 테스트가 통과한다</b> — 즉 아무것도 못 잡는다.
- * 이 함정이 이슈 본문에 명시돼 있다.
+ * <p>⚠️ 예전에는 회원에 {@code preferredUrl} 이 반드시 있어야 했다. {@code ExerciseAnalysisService} 가 그것을 먼저 검사해
+ * 없으면 400 으로 끝내서, 온보딩 안 한 회원으로 치면 <b>검증이 없어도 400 이 나와 테스트가 통과했다</b>. 그 검사는 #802 로 없어졌다.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -49,7 +47,7 @@ class SessionStartBodyValidationTest {
 
     @BeforeEach
     void setUp() {
-        // preferredUrl 이 있는 = 온보딩을 마친 회원. 위 주석의 함정 참조.
+        // 온보딩을 마친 회원(preferredUrl 은 더 이상 조건이 아니다).
         Member member = memberRepository.saveAndFlush(Member.builder()
                 .email("session-validation@test.com")
                 .username("검증테스트")

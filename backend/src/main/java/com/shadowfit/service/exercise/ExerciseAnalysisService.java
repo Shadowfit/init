@@ -422,11 +422,10 @@ public class ExerciseAnalysisService {
 
         boolean countOnly = exercisesRepository.findByIdCached(appDto.getExerciseId())
                 .map(ExerciseAnalysisCapabilities::isCountOnly).orElse(false);
-        String finalUrl = countOnly ? "" : member.getPreferredUrl();
-
-        if (!countOnly && (finalUrl == null || finalUrl.isEmpty())) {
-            throw new BusinessException(ErrorCode.INVALID_INPUT_VALUE);
-        }
+        // 선호 영상(preferredUrl)은 더 이상 세션 시작의 조건이 아니다(#802). 예전에는 없으면 400(INVALID_INPUT_VALUE)이었는데, AI 는
+        // AnalyzeRequest.reference_source 를 읽지 않고 기준 좌표는 DB(exercise_references)에서 온다 — 이 URL 은 세션 기록(관리자 목록)에
+        // 남기는 용도뿐이다. 이미 값이 있는 회원은 그대로 기록하고, 없으면 빈 문자열이다(횟수만 재는 종목과 같다).
+        String finalUrl = countOnly || member.getPreferredUrl() == null ? "" : member.getPreferredUrl();
 
         Session savedSession = sessionService.createSession(appDto, currentMemberId, finalUrl);
         Long sessionId = savedSession.getId();

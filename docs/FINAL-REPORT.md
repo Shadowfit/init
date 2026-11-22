@@ -59,7 +59,7 @@
 
 ### 2.2 온보딩 / 사용자 속성 (`Member`)
 - 페르소나(`BEGINNER`/`ADVANCED`/`DIET`/`REHAB`, 기본 BEGINNER), 운동 레벨, 신체 정보(height/weight)
-- 선호 영상(`preferredUrl`, `YoutubeValidator` 검증), 온보딩 완료 플래그
+- 선호 영상(`preferredUrl`, 선택 입력 — 온보딩·세션 시작의 조건이 아니다, #802), 온보딩 완료 플래그
 - TTS 설정(`ttsEnabled` 기본 true, `ttsSpeed` 기본 1.0, 0.5~2.0)
 
 ### 2.3 운동 분석 세션 (`/exercises`)

@@ -28,11 +28,12 @@ public class OnboardingService {
         }
         member.updateOnboarding(dto);
 
+        // 선호 영상(preferredUrl)은 완료 조건이 아니다(#802). 기준 영상은 서버가 DB 의 기준 좌표로 쓰고 AI 는 이 URL 을 읽지 않는다 —
+        // 유튜브 다운로드를 포기한 뒤로 이 필드는 아무 기능도 하지 않으면서 «아무 영상이나 골라야 온보딩이 끝나는» 관문이었다.
         if (member.getSelectedPersona() != null &&
                 member.getWorkoutLevel() != null &&
                 member.getHeight() != null &&
-                member.getWeight() != null &&
-                member.getPreferredUrl() != null) {
+                member.getWeight() != null) {
             member.completeOnboarding();
         }
         return OnboardingDto.fromEntity(member);
