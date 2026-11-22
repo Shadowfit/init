@@ -23,6 +23,7 @@ import { Alert } from '@/utils/alert';
 import Button from '@/components/ui/Button';
 import ShareSessionSheet from '@/components/social/ShareSessionSheet';
 import CoachingSummary from '@/components/report/CoachingSummary';
+import PoseSnapshot from '@/components/report/PoseSnapshot';
 import { exercisesService } from '@/services/exercisesService';
 import { reportService } from '@/services/reportService';
 import { motionRecorder } from '@/lib/motion/recorder';
@@ -443,6 +444,11 @@ export default function ReportScreen() {
                 </Text>
               </View>
               <Text style={styles.worstDesc}>{report.worstSection.reason}</Text>
+              {!!report.worstSection.jointCoordinates && (
+                <View style={{ marginTop: SPACING.md }}>
+                  <PoseSnapshot jointCoordinates={report.worstSection.jointCoordinates} />
+                </View>
+              )}
             </View>
           </View>
         )}
