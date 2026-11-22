@@ -151,6 +151,128 @@ class AttendanceServiceIntegrationTest {
                 .containsExactlyInAnyOrder(today.minusDays(6), today);
     }
 
+    // ─── 측정된 것이 없는 세션은 출석이 아니다 (사용자 결정 2026-11-22) ───────────────────────────────────────
+
+    @Test
+    @DisplayName("attendedOn — 0회·점수 없는 COMPLETED 만 있는 날은 출석이 아니다. 같은 날 측정된 세션이 하나라도 있으면 출석")
+    void attendedOn_unmeasuredIsNotAttendance() {
+        unmeasuredOn(member, today);
+        assertThat(attendanceService.attendedOn(member.getId(), today)).isFalse();
+
+        sessionOn(member, today, Status.COMPLETED); // 같은 날 측정된 세션
+        assertThat(attendanceService.attendedOn(member.getId(), today)).isTrue();
+    }
+
+    @Test
+    @DisplayName("미인정 시도만 있어 점수가 있는 세션(인정 0회)은 측정된 것이라 출석이다 — 카메라 가림과 다르다")
+    void attendedOn_attemptsOnlyCounts() {
+        sessionRepository.saveAndFlush(Session.builder().member(member).exercise(exercise)
+                .startTime(today.atTime(10, 0)).endTime(today.atTime(10, 10))
+                .status(Status.COMPLETED).totalReps(0).avgSyncRate(new java.math.BigDecimal("42.50")).build());
+
+        assertThat(attendanceService.attendedOn(member.getId(), today)).isTrue();
+    }
+
+    @Test
+    @DisplayName("횟수만 재는 종목(횟수는 있고 점수 없음)은 측정된 것이라 출석이다 — 런지가 출석에서 빠지면 안 된다")
+    void attendedOn_countOnlyExerciseCounts() {
+        sessionRepository.saveAndFlush(Session.builder().member(member).exercise(exercise)
+                .startTime(today.atTime(10, 0)).endTime(today.atTime(10, 10))
+                .status(Status.COMPLETED).totalReps(8).avgSyncRate(null).build());
+
+        assertThat(attendanceService.attendedOn(member.getId(), today)).isTrue();
+    }
+
+    @Test
+    @DisplayName("currentStreak — 중간의 «측정 안 됨» 날은 구멍이다 / 오늘이 측정 안 됨이면 어제부터 센다")
+    void currentStreak_unmeasuredBreaksTheRun() {
+        sessionOn(member, today, Status.COMPLETED);
+        unmeasuredOn(member, today.minusDays(1));      // 구멍
+        sessionOn(member, today.minusDays(2), Status.COMPLETED);
+        assertThat(attendanceService.currentStreak(member.getId(), today)).isEqualTo(1);
+
+        // 오늘만 측정 안 됨 — «오늘 안 했으면 어제부터» 규칙이 그대로 적용돼 어제 이어서 센다
+        Member another = memberRepository.saveAndFlush(Member.builder()
+                .email("att2@test.com").username("att2").password("dummy")
+                .selectedPersona(SelectedPersona.BEGINNER).role(UserRole.USER).build());
+        unmeasuredOn(another, today);
+        sessionOn(another, today.minusDays(1), Status.COMPLETED);
+        sessionOn(another, today.minusDays(2), Status.COMPLETED);
+        assertThat(attendanceService.currentStreak(another.getId(), today)).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("currentStreak — 최근 세션이 전부 측정 안 됨(페이지 크기 이상)이어도 그 뒤 기록이 오늘·어제 앵커가 아니면 0")
+    void currentStreak_manyUnmeasuredRowsDoNotPollutePages() {
+        for (int i = 0; i < AttendanceService.FETCH_BATCH + 9; i++) {
+            unmeasuredOn(member, today.minusDays(i));
+        }
+        assertThat(attendanceService.currentStreak(member.getId(), today)).isZero();
+    }
+
+    @Test
+    @DisplayName("longestStreakRun · attendedDays — 측정 안 된 날은 구간을 잇지 않고 출석일 집합에도 없다")
+    void longestAndAttendedDays_excludeUnmeasured() {
+        sessionOn(member, today.minusDays(6), Status.COMPLETED);
+        unmeasuredOn(member, today.minusDays(5));       // 구멍
+        sessionOn(member, today.minusDays(4), Status.COMPLETED);
+        sessionOn(member, today.minusDays(3), Status.COMPLETED);
+
+        AttendanceService.StreakRun run = attendanceService.longestStreakRun(member.getId(), today);
+        assertThat(run.length()).isEqualTo(2);
+        assertThat(run.start()).isEqualTo(today.minusDays(4));
+        assertThat(attendanceService.attendedDays(member.getId(), today.minusDays(6), today))
+                .containsExactlyInAnyOrder(today.minusDays(6), today.minusDays(4), today.minusDays(3));
+    }
+
+    @Test
+    @DisplayName("여러 회원 — attendedOn(집합)·attendeeCountsByDay 도 측정 안 된 세션을 세지 않는다")
+    void groupQueries_excludeUnmeasured() {
+        unmeasuredOn(member, today);                   // 안 됨
+        sessionOn(other, today, Status.COMPLETED);     // 됨
+
+        assertThat(attendanceService.attendedOn(java.util.List.of(member.getId(), other.getId()), today))
+                .containsExactly(other.getId());
+        assertThat(attendanceService.attendeeCountsByDay(java.util.List.of(member.getId(), other.getId()), today, today))
+                .containsEntry(today, 1);
+    }
+
+    /**
+     * 규칙은 한 곳이 아니라 셋(엔티티 {@code isMeasured}·JPQL·목록 DTO)에 있다 — 같은 입력에서 JPQL 쿼리와 자바 메서드가 같은 답을
+     * 내는지 모든 조합으로 본다. 한쪽만 고치면 이 시험이 깨진다.
+     */
+    @Test
+    @DisplayName("Session.isMeasured() 와 출석 JPQL 조건이 모든 입력 조합에서 일치한다")
+    void javaRuleAndJpqlRuleAgree() {
+        Integer[] reps = {null, 0, 5};
+        java.math.BigDecimal[] avgs = {null, new java.math.BigDecimal("42.50")};
+        int n = 0;
+        for (Integer r : reps) {
+            for (java.math.BigDecimal a : avgs) {
+                n++;
+                Member m = memberRepository.saveAndFlush(Member.builder()
+                        .email("rule-" + n + "@test.com").username("rule" + n)
+                        .password("dummy").selectedPersona(SelectedPersona.BEGINNER).role(UserRole.USER).build());
+                Session s = sessionRepository.saveAndFlush(Session.builder().member(m).exercise(exercise)
+                        .startTime(today.atTime(10, 0)).endTime(today.atTime(10, 5))
+                        .status(Status.COMPLETED).totalReps(r).avgSyncRate(a).build());
+                Session saved = sessionRepository.findById(s.getId()).orElseThrow();
+                boolean viaJpql = !sessionRepository.findMemberIdsWithStatusBetween(
+                        java.util.List.of(m.getId()), Status.COMPLETED, today.atStartOfDay(), today.atTime(23, 59, 59)).isEmpty();
+                assertThat(viaJpql).as("reps=%s avg=%s (저장값 reps=%s)", r, a, saved.getTotalReps())
+                        .isEqualTo(saved.isMeasured());
+            }
+        }
+    }
+
+    private void unmeasuredOn(Member m, LocalDate date) {
+        sessionRepository.saveAndFlush(Session.builder()
+                .member(m).exercise(exercise)
+                .startTime(date.atTime(10, 0)).endTime(date.atTime(10, 5))
+                .status(Status.COMPLETED).totalReps(0).avgSyncRate(null)
+                .build());
+    }
+
     private void sessionOn(Member m, LocalDate date, Status status) {
         sessionRepository.saveAndFlush(Session.builder()
                 .member(m).exercise(exercise)

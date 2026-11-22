@@ -23,7 +23,9 @@ import java.util.Set;
  * 출석(«그날 운동했다»)의 단일 정의와 그 파생값 — 오늘 했는지, 며칠째 연속인지.
  *
  * <p><b>정의</b> (docs/decisions/social-cheer-and-group-feed.md §3-B, 2026-09-11 confirm):
- * 출석 = 그날 {@code status = COMPLETED} 인 세션이 1건 이상. 날짜 귀속은 {@code start_time} 의
+ * 출석 = 그날 {@code status = COMPLETED} 이고 <b>측정된 것이 있는</b>({@link com.shadowfit.model.exercise.Session#isMeasured()}:
+ * 인정 반복이 있거나 점수가 있다) 세션이 1건 이상 — 카메라가 가려졌거나 사람이 안 잡혀 0회·점수 없음으로 끝난 세션은 출석이 아니다
+ * (사용자 결정 2026-11-22). 날짜 귀속은 {@code start_time} 의
  * 서버 LocalDate. 원천은 {@code exercise_sessions} 그대로 — 파생 테이블을 두지 않는다
  * ({@code daily_logs} 는 완료 시 더하기만 하고 삭제를 안 따라가서 출석 원천으로 승격하지 않았다, #718).
  * 주간 요약·목표·패턴 분석이 이미 COMPLETED 만 세므로 이 정의는 새 것이 아니라 정렬이다.

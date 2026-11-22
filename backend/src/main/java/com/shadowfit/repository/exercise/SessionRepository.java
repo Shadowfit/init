@@ -60,6 +60,18 @@ public interface SessionRepository extends JpaRepository<Session,Long> {
                                                  @Param("start") LocalDateTime start,
                                                  @Param("end") LocalDateTime end);
 
+    /**
+     * «출석으로 셀 세션» 의 측정 조건 — {@link Session#isMeasured()} 와 같은 규칙의 JPQL 판. 인정 반복이 있거나 점수가 있다.
+     * 측정된 것이 없는 세션(0회 + 점수 없음 — 카메라 가림·사람 안 잡힘 등)은 COMPLETED 여도 출석·연속 기록에서 제외한다
+     * (사용자 결정 2026-11-22). 아래 출석 쿼리 전부가 이 조건을 건다 — 하나라도 빠지면 같은 날이 어느 화면에서는 출석이고 어느
+     * 화면에서는 아니게 된다. 네이티브 쿼리({@link #findCompletedStartTimesBeforeBatch})는 같은 조건을 SQL 로 직접 적었다.
+     *
+     * <p>⚠️ 이 조건은 {@code idx_session_member_status_start} 에 없는 컬럼(total_reps·avg_sync_rate)을 읽는다 — 커버링 스캔이던
+     * 쿼리가 후보 행마다 표 본문을 한 번 읽는다. 연속 출석은 «답의 크기» 만큼만 읽으므로 영향이 작지만, 최장 연속(전 기간)은
+     * 출석일 수만큼 읽는다(소규모 베타 규모에서는 무시할 수준으로 보고 감수했다 — 실측: AttendanceStreakBatchRaceTest 의 계획 점검).
+     */
+    String MEASURED_JPQL = "(s.totalReps > 0 OR s.avgSyncRate IS NOT NULL)";
+
     // 활동한 날짜 목록만 가져옴 — calculateConsecutiveDays 루프 N+1 방지.
     // 반환 타입은 java.sql.Date로 받는다 — List<LocalDate>로 바로 받으면 Spring Data의
     // ConversionService가 java.sql.Date -> LocalDate 컨버터를 못 찾아 ConverterNotFoundException.
@@ -71,7 +83,8 @@ public interface SessionRepository extends JpaRepository<Session,Long> {
     // 1,040행)을 읽은 뒤 걸렀다 — status를 명시하면 MySQL이 상태값별 range scan 4개로 쪼개
     // start_time을 seek해 실제 해당 행(277)만 읽는다(loadtest/results/report-query-explain-r14-2026-08-24).
     @Query("SELECT DISTINCT CAST(s.startTime AS date) FROM Session s " +
-           "WHERE s.member.id = :memberId AND s.status IN :statuses AND s.startTime BETWEEN :start AND :end")
+           "WHERE s.member.id = :memberId AND s.status IN :statuses AND s.startTime BETWEEN :start AND :end " +
+           "AND " + MEASURED_JPQL)
     List<Date> findDistinctActiveDates(@Param("memberId") Long memberId,
                                        @Param("statuses") List<Status> statuses,
                                        @Param("start") LocalDateTime start,
@@ -88,6 +101,7 @@ public interface SessionRepository extends JpaRepository<Session,Long> {
      */
     @Query("SELECT DISTINCT CAST(s.startTime AS date) FROM Session s " +
            "WHERE s.member.id = :memberId AND s.status = :status AND s.startTime < :before " +
+           "AND " + MEASURED_JPQL + " " +
            "ORDER BY CAST(s.startTime AS date)")
     List<Date> findDistinctDatesBefore(@Param("memberId") Long memberId,
                                        @Param("status") Status status,
@@ -358,15 +372,21 @@ public interface SessionRepository extends JpaRepository<Session,Long> {
     // ─── 출석 (AttendanceService, social-cheer-and-group-feed.md §3-B) ──────────────
 
     /** 그날 해당 status 세션이 있나 — «오늘 했나» 판정. (member_id, status, start_time) 등치·등치·범위. */
-    boolean existsByMemberIdAndStatusAndStartTimeBetween(Long memberId, Status status,
-                                                         LocalDateTime start, LocalDateTime end);
+    @Query("SELECT CASE WHEN COUNT(s) > 0 THEN true ELSE false END FROM Session s "
+         + "WHERE s.member.id = :memberId AND s.status = :status AND s.startTime BETWEEN :start AND :end "
+         + "AND " + MEASURED_JPQL)
+    boolean existsByMemberIdAndStatusAndStartTimeBetween(@Param("memberId") Long memberId,
+                                                         @Param("status") Status status,
+                                                         @Param("start") LocalDateTime start,
+                                                         @Param("end") LocalDateTime end);
 
     /**
      * 여러 회원의 «그날 했나»를 한 번에 — 모임 구성원·친구 현황이 멤버 N명을 N번 묻지 않게.
      * IN 의 회원마다 같은 인덱스 구간을 seek 하므로 읽는 행은 «그날의 COMPLETED 세션» 만이다.
      */
     @Query("SELECT DISTINCT s.member.id FROM Session s "
-         + "WHERE s.member.id IN :memberIds AND s.status = :status AND s.startTime BETWEEN :start AND :end")
+         + "WHERE s.member.id IN :memberIds AND s.status = :status AND s.startTime BETWEEN :start AND :end "
+         + "AND " + MEASURED_JPQL)
     Set<Long> findMemberIdsWithStatusBetween(@Param("memberIds") Collection<Long> memberIds,
                                              @Param("status") Status status,
                                              @Param("start") LocalDateTime start,
@@ -380,6 +400,7 @@ public interface SessionRepository extends JpaRepository<Session,Long> {
      */
     @Query("SELECT CAST(s.startTime AS date), COUNT(DISTINCT s.member.id) FROM Session s "
          + "WHERE s.member.id IN :memberIds AND s.status = :status AND s.startTime BETWEEN :start AND :end "
+         + "AND " + MEASURED_JPQL + " "
          + "GROUP BY CAST(s.startTime AS date)")
     List<Object[]> countDistinctMembersByDay(@Param("memberIds") Collection<Long> memberIds,
                                              @Param("status") Status status,
@@ -400,6 +421,7 @@ public interface SessionRepository extends JpaRepository<Session,Long> {
      */
     @Query("SELECT s.startTime FROM Session s "
          + "WHERE s.member.id = :memberId AND s.status = :status AND s.startTime < :before "
+         + "AND " + MEASURED_JPQL + " "
          + "ORDER BY s.startTime DESC")
     List<LocalDateTime> findCompletedStartTimesBefore(@Param("memberId") Long memberId,
                                                       @Param("status") Status status,
@@ -417,6 +439,7 @@ public interface SessionRepository extends JpaRepository<Session,Long> {
      */
     @Query("SELECT s.startTime FROM Session s "
          + "WHERE s.member.id = :memberId AND s.status = :status "
+         + "AND " + MEASURED_JPQL + " "
          + "ORDER BY s.startTime DESC")
     List<LocalDateTime> findLatestCompletedStartTimes(@Param("memberId") Long memberId,
                                                       @Param("status") Status status,
@@ -438,6 +461,7 @@ public interface SessionRepository extends JpaRepository<Session,Long> {
             JOIN LATERAL (
                 SELECT start_time FROM exercise_sessions
                 WHERE member_id = m.member_id AND status = :status AND start_time < :before
+                  AND (total_reps > 0 OR avg_sync_rate IS NOT NULL)
                 ORDER BY start_time DESC
                 LIMIT :limit
             ) s
