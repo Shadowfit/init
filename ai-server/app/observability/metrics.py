@@ -34,7 +34,7 @@ AI → Spring 콜백은 **두 겹의 재시도** 중 바깥 겹이다(안쪽은 
 
 from __future__ import annotations
 
-from prometheus_client import CollectorRegistry, Counter, Gauge, generate_latest
+from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram, generate_latest
 from prometheus_client import REGISTRY as DEFAULT_REGISTRY
 
 # 기본 레지스트리를 쓴다 — 프로세스 지표(CPU·메모리·GC)가 거기 붙어 있고, 그게 이 이슈가
@@ -120,6 +120,47 @@ def bind_complete_callback_pool(pool) -> None:
     """콜백 풀의 큐 깊이·실행 수를 «스크레이프 시점에» 읽도록 붙인다."""
     complete_callback_pending.set_function(pool.pending)
     complete_callback_in_flight.set_function(pool.in_flight)
+
+
+# 프레임 경로 구간 시간 (결함 ④ — «병목이 AI 인데 AI 구간을 못 본다»).
+#
+# `frame_path.py` 도 같은 구간을 재지만 **기본이 꺼져 있고**(요청당 락 4회 — 재려는 대상과 같은
+# 자원인 GIL 을 쓴다) 스냅샷 JSON 으로만 나온다. 이 히스토그램은 **상시 켜 두는 쪽**이다 —
+# 요청당 타임스탬프 4개와 `observe` 3번이 전부이고, 스크레이프가 시계열로 긁는다.
+#
+#   wait   요청 도착 → 워커 진입   이벤트 루프 + 스레드풀 대기. «워커에 못 실린다» 가 여기 쌓인다
+#   lease  워커 진입 → 검출기 획득  디코드 + 검출기 리스. 풀·세션 락 대기가 여기 쌓인다
+#   infer  검출기 획득 → 추론 완료  MediaPipe process()
+#
+# ⚠️ 두 계측은 **같은 시계(perf_counter)지만 같은 값이 아니다.** `lease` 는 여기서 디코드를
+#    포함한다(frame_path 는 디코드와 리스를 가른다) — 대조할 때 구간 정의부터 맞출 것.
+# ⚠️ 버킷은 «해상도 선택» 이지 «판정선» 이 아니다. 몇 ms 부터 나쁜가는 slo-baseline.md 가
+#    미확정으로 두고 있고, 여기서 정하지 않는다.
+FRAME_STAGES = ("wait", "lease", "infer")
+
+frame_stage_seconds = Histogram(
+    "shadowfit_ai_frame_stage_seconds",
+    "POST /pose 한 프레임의 구간별 시간 (wait=워커 대기 · lease=디코드+검출기 획득 · infer=추론)",
+    ["stage"],
+    buckets=(0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 2.0),
+)
+
+
+# 자식 지표를 미리 만들어 둔다 — `labels()` 는 호출마다 라벨 검증·해시·락을 타서 `observe` 자체보다
+# 비쌌다(마이크로벤치: labels()+observe 16µs ↔ 캐시한 자식의 observe 6.7µs, 붐비는 박스 기준).
+# 이 경로는 프레임마다 3번 불리므로 상시 ON 계측의 비용 대부분이 여기였다.
+_stage_children = {s: frame_stage_seconds.labels(stage=s) for s in FRAME_STAGES}
+
+
+def observe_frame_stage(stage: str, seconds: float) -> None:
+    """구간 시간을 기록한다. 지표 때문에 프레임 처리가 죽으면 안 되므로 절대 던지지 않는다.
+
+    `FRAME_STAGES` 밖의 이름은 조용히 버린다 — 라벨 값이 늘어 카디널리티가 새는 것보다 낫다.
+    """
+    try:
+        _stage_children[stage].observe(seconds)
+    except Exception:  # pragma: no cover - 계측이 본 경로를 깨뜨리지 않는다
+        pass
 
 
 def render() -> bytes:

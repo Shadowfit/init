@@ -145,6 +145,12 @@ class Settings(BaseSettings):
     # 구간별로 남기는 표본 수(링). 넘으면 오래된 것부터 덮인다 — p99 는 «최근 N 개» 의 p99 다.
     FRAME_PATH_SAMPLES: int = 4096
 
+    # 느린 프레임 로그 임계(ms). 0 이면 끈다. `observability/frame_stage.py` 의 상시 구간 지표가
+    # 넘긴 프레임만 구간 내역을 WARNING 으로 남기고, cid 는 로그 팩토리가 붙인다.
+    # ⚠️ 기본을 0 으로 둔 이유 — «몇 ms 부터 느린가» 는 slo-baseline.md 가 미확정이다.
+    #    근거 없는 숫자를 기본값으로 박으면 그게 출처 없는 기준값이 된다.
+    FRAME_SLOW_LOG_MS: float = 0.0
+
     # GIL 스위치 간격(초). 0 이면 **안 건드린다**(파이썬 기본 0.005).
     #
     # 후보 1순위(서비스 경로 GIL, §10-1)를 직접 흔드는 노브다 — 이 값을 바꿔 처리량이

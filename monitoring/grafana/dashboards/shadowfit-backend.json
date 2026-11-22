@@ -168,15 +168,58 @@
     },
     {
       "type": "row",
-      "title": "HTTP · JVM — 기본 축",
+      "title": "AI 구간 — 병목이 AI 인데 AI 를 못 보던 자리 (결함 ④)",
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 44 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "AI 프레임 구간 시간 p95 (wait / lease / infer)",
+      "description": "POST /pose 한 프레임의 구간별 p95. wait=요청 도착→워커 진입(루프·스레드풀 대기), lease=워커 진입→검출기 획득(디코드 + 풀·세션 락 대기), infer=MediaPipe 추론. 어느 구간이 늘었는지로 '워커에 못 실린다'와 '추론이 느리다'를 가른다. ⚠️ 몇 ms 부터 나쁜가의 판정선은 slo-baseline.md 가 미확정이라 임계선을 그리지 않았다. ⚠️ frame_path(기본 OFF)의 구간과 정의가 다르다 — lease 가 디코드를 포함한다.",
+      "datasource": { "type": "prometheus", "uid": "shadowfit-prom" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 45 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.95, sum by (le, stage) (rate(shadowfit_ai_frame_stage_seconds_bucket{job=\"shadowfit-ai\"}[1m])))", "legendFormat": "{{stage}} p95" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Spring → AI 호출 왕복 p95 (rpc 별)",
+      "description": "Spring 이 AI 로 보낸 gRPC 호출의 왕복 시간 p95. 서킷이 열리기 전에 AI 가 느려지는 중임을 먼저 보여준다. start 는 응답(접수)까지, stop·reattach 는 블로킹 호출 전체다. outcome 이 ok 인 호출만 본다 — 실패 호출은 데드라인까지 가서 분포를 끌어올리므로 아래 패널로 따로 센다.",
+      "datasource": { "type": "prometheus", "uid": "shadowfit-prom" },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 45 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.95, sum by (le, rpc) (rate(shadowfit_ai_call_latency_seconds_bucket{application=\"shadowfit\", outcome=\"ok\"}[1m])))", "legendFormat": "{{rpc}} p95" },
+        { "refId": "B", "expr": "sum by (rpc, outcome) (rate(shadowfit_ai_call_latency_seconds_count{application=\"shadowfit\", outcome!=\"ok\"}[1m]))", "legendFormat": "{{rpc}} {{outcome}} 건/초 (실패)" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "AI 세션 수 · 콜백 풀 (실행 / 대기)",
+      "description": "active_sessions 는 레지스트리를 스크레이프 시점에 읽는 값이다. 콜백 풀 pending 이 workers 를 계속 넘으면 Spring 쪽이 느린 것이다. ⚠️ 2026-11-23 이전에는 FRAME_PATH_METRICS 가 꺼진 기본 구성에서 이 세 게이지가 바인딩 없이 0 으로 고정돼 있었다 — 그 이전 구간의 0 은 '없음'이 아니라 '안 읽음'이다.",
+      "datasource": { "type": "prometheus", "uid": "shadowfit-prom" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 45 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        { "refId": "A", "expr": "sum by (worker) (shadowfit_ai_active_sessions{job=\"shadowfit-ai\"})", "legendFormat": "세션 worker {{worker}}" },
+        { "refId": "B", "expr": "sum(shadowfit_ai_complete_callback_in_flight{job=\"shadowfit-ai\"})", "legendFormat": "콜백 실행" },
+        { "refId": "C", "expr": "sum(shadowfit_ai_complete_callback_pending{job=\"shadowfit-ai\"})", "legendFormat": "콜백 대기" }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "HTTP · JVM — 기본 축",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 53 },
       "collapsed": true,
       "panels": [
         {
           "type": "timeseries",
           "title": "엔드포인트별 응답시간 (최대)",
           "datasource": { "type": "prometheus", "uid": "shadowfit-prom" },
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 45 },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 54 },
           "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
           "targets": [
             { "refId": "A", "expr": "topk(10, http_server_requests_seconds_max{application=\"shadowfit\"})", "legendFormat": "{{method}} {{uri}}" }
@@ -186,7 +229,7 @@
           "type": "timeseries",
           "title": "상태코드별 요청률",
           "datasource": { "type": "prometheus", "uid": "shadowfit-prom" },
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 45 },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 54 },
           "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
           "targets": [
             { "refId": "A", "expr": "sum by (status) (rate(http_server_requests_seconds_count{application=\"shadowfit\"}[1m]))", "legendFormat": "{{status}}" }
@@ -196,7 +239,7 @@
           "type": "timeseries",
           "title": "JVM 힙",
           "datasource": { "type": "prometheus", "uid": "shadowfit-prom" },
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 53 },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 62 },
           "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
           "targets": [
             { "refId": "A", "expr": "sum(jvm_memory_used_bytes{application=\"shadowfit\", area=\"heap\"})", "legendFormat": "사용" },
@@ -207,7 +250,7 @@
           "type": "timeseries",
           "title": "GC 일시정지",
           "datasource": { "type": "prometheus", "uid": "shadowfit-prom" },
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 53 },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 62 },
           "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
           "targets": [
             { "refId": "A", "expr": "rate(jvm_gc_pause_seconds_sum{application=\"shadowfit\"}[1m])", "legendFormat": "{{action}} / {{cause}}" }

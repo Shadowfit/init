@@ -92,6 +92,13 @@ SessionMetricsRecordingTest {
         return registry.counter(AI_STOP_RESULT, "outcome", outcome).count();
     }
 
+    /** AI 호출 지연 Timer 의 기록 건수. 없으면 0 — {@code registry.timer()} 로 만들지 않는다(없던 것을 만들어 통과시키지 않으려고). */
+    private long aiCallCount(String rpc, String outcome) {
+        io.micrometer.core.instrument.Timer timer = registry.find("shadowfit.ai.call.latency")
+                .tags("rpc", rpc, "outcome", outcome).timer();
+        return timer == null ? 0L : timer.count();
+    }
+
     @Nested
     @DisplayName("ExerciseAnalysisService")
     class AnalysisService {
@@ -211,6 +218,26 @@ SessionMetricsRecordingTest {
 
             assertThat(transitions(Status.FAILED, "grpc-error")).isEqualTo(1.0);
             assertThat(transitions(Status.FAILED, "circuit-open")).isZero();
+            // 실패한 호출의 왕복 시간도 남는다 — 서킷이 열리기 전에 «느려지는 중» 을 보는 자리다.
+            assertThat(aiCallCount("start", "grpc-error")).isEqualTo(1L);
+            assertThat(aiCallCount("start", "ok")).isZero();
+        }
+
+        @Test
+        @DisplayName("StartAnalysis 응답이 오면 왕복 시간이 rpc=start, outcome=ok 로 기록된다")
+        void startAnalysis_success_recordsCallLatency() {
+            doAnswer(invocation -> {
+                StreamObserver<AnalyzeResponse> observer = invocation.getArgument(1);
+                observer.onNext(AnalyzeResponse.newBuilder().setSessionId(2L).build());
+                observer.onCompleted();
+                return null;
+            }).when(stub).startAnalysis(any(AnalyzeRequest.class), any());
+
+            service.sendAnalysisRequestToFastApi(2L, dto(), "https://youtu.be/dummy", "BEGINNER", "test-nonce", "FULL",
+                    new ExerciseAnalysisService.SessionTargets("SQUAT", 10, 0, 80.0, 60.0));
+
+            assertThat(aiCallCount("start", "ok")).isEqualTo(1L);
+            assertThat(aiCallCount("start", "grpc-error")).isZero();
         }
 
         /** ② — 시작 요청에 종목 코드·세트 목표가 실린다. AnalyzeRequest 는 afterCommit 뒤 비동기로 나가
@@ -302,6 +329,7 @@ SessionMetricsRecordingTest {
             assertThat(stopResults("ok")).isEqualTo(1.0);
             assertThat(stopResults("session-missing")).isZero();
             assertThat(transitions(Status.FAILED, "ai-session-missing")).isZero();
+            assertThat(aiCallCount("stop", "ok")).isEqualTo(1L);
         }
 
         @Test
@@ -381,6 +409,7 @@ SessionMetricsRecordingTest {
 
             assertThat(outcome).isEqualTo(DispatchOutcome.RETRY);
             assertThat(stopResults("grpc-error")).isEqualTo(1.0);
+            assertThat(aiCallCount("stop", "grpc-error")).isEqualTo(1L);
             // 전송 실패는 서킷에 실패로 기록돼야 한다(업무 실패인 session-missing 과 다른 축)
             assertThat(circuitBreakerRegistry.circuitBreaker("aiServer-0").getMetrics()
                     .getNumberOfFailedCalls()).isEqualTo(1);

@@ -141,22 +141,27 @@ app.add_middleware(
 # OPTIONS preflight 와 /health 등 공개 경로는 미들웨어 내부에서 우회한다.
 app.add_middleware(InternalAuthMiddleware)
 
+# 상시 게이지 바인딩. 🔴 예전에는 아래 `FRAME_PATH_METRICS` 블록 **안**에 있어서, 계측이 꺼진
+# 기본 구성에서는 `shadowfit_ai_active_sessions` · `..._complete_callback_pending` ·
+# `..._in_flight` 가 바인딩 없이 **0 으로 고정**됐다 — 「세션 0 · 큐 0」 으로 읽히는 거짓 값이다.
+# 이 게이지들은 스크레이프 시점에 읽는 값뿐이라 핫 경로 비용이 없고, 프레임 경로 계측과 무관하다.
+#
+# 살아 있는 세션 수를 «스크레이프 시점에» 읽게 붙인다 (#151). 생성/삭제 자리마다 inc/dec 를
+# 심는 방식은 한 자리만 빠져도 조용히 어긋난다 — 레지스트리가 진실이다.
+from app.grpc.session_state import get_registry as _get_registry
+
+metrics.bind_active_sessions(lambda: _get_registry().active_count())
+
+# CompleteAnalysis 콜백 풀 큐 깊이 (#614) — 스레드 상한의 반대편, «쌓임» 은 여기서만 보인다.
+from app.grpc.exercise_servicer import get_complete_callback_pool as _get_callback_pool
+
+metrics.bind_complete_callback_pool(_get_callback_pool())
+
 # 프레임 경로 계측 (decisions/ai-receive-path-scaling.md §12). 기본은 꺼져 있다.
 #
 # 인증 미들웨어보다 **뒤에** add 한다 = 가장 바깥이다. 재려는 것이 «요청이 도착한 순간부터
 # 워커에 실릴 때까지» 라, 인증·CORS 가 무는 시간도 그 구간 안에 들어와야 한다.
 if settings.FRAME_PATH_METRICS:
-    # 살아 있는 세션 수를 «스크레이프 시점에» 읽게 붙인다 (#151). 생성/삭제 자리마다 inc/dec 를
-    # 심는 방식은 한 자리만 빠져도 조용히 어긋난다 — 레지스트리가 진실이다.
-    from app.grpc.session_state import get_registry as _get_registry
-
-    metrics.bind_active_sessions(lambda: _get_registry().active_count())
-
-    # CompleteAnalysis 콜백 풀 큐 깊이 (#614) — 스레드 상한의 반대편, «쌓임» 은 여기서만 보인다.
-    from app.grpc.exercise_servicer import get_complete_callback_pool as _get_callback_pool
-
-    metrics.bind_complete_callback_pool(_get_callback_pool())
-
     _recorder = frame_path.install(settings.FRAME_PATH_SAMPLES)
     app.add_middleware(
         frame_path.FramePathMiddleware,

@@ -25,6 +25,8 @@ from contextvars import ContextVar
 
 import grpc
 
+from app.observability import frame_stage
+
 # gRPC metadata 키는 규약상 소문자여야 한다 (Spring 의 CorrelationIds.GRPC_HEADER 와 동일 키).
 METADATA_KEY = "x-request-id"
 
@@ -153,6 +155,9 @@ class CorrelationHttpMiddleware:
             await self.app(scope, receive, send)
             return
         _correlation_id.set(new_correlation_id("ai-http"))
+        # 가장 바깥이라 도착 시각을 여기서 찍는다 — 인증·CORS 가 무는 시간도 `wait` 안에 든다
+        # (frame_path.FramePathMiddleware 가 «가장 바깥» 을 고른 것과 같은 이유).
+        frame_stage.stamp_arrival()
         await self.app(scope, receive, send)
 
 

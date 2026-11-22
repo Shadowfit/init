@@ -67,6 +67,20 @@ public class SessionMetrics {
     private static final String AI_STOP_RESULT = "shadowfit.ai.stop.result";
 
     /**
+     * Spring → AI gRPC 호출 1건의 <b>왕복 시간</b> (결함 ④ — «병목이 AI 인데 AI 구간을 못 본다»).
+     *
+     * <p>위 {@code aiStopResult} 류는 «어떻게 끝났나» 만 센다. 이 Timer 는 «얼마나 걸렸나» 다 — AI 가
+     * 큐·GIL 로 밀려 있으면 응답이 늦어지고, 그게 서킷이 열리기 <b>전에</b> 여기서 먼저 보인다.
+     * AI 쪽 구간(wait·lease·infer)은 {@code shadowfit_ai_frame_stage_seconds} 가 맡고, 이 값은 그 위의
+     * Spring 쪽 시각이다 — 둘의 차가 «네트워크 + 직렬화 + AI 진입 대기» 다.
+     *
+     * <p>tags: rpc(start/stop/reattach), outcome(ok/grpc-error/rejected/error).
+     * 버킷 범위(1ms~10s)는 «해상도 선택» 이다 — 10s 는 gRPC 데드라인(5s) 위에 여유를 둔 값이지 판정선이
+     * 아니다. «몇 ms 부터 나쁜가» 는 slo-baseline.md 가 미확정으로 두고 있어 여기서 정하지 않는다.
+     */
+    private static final String AI_CALL_LATENCY = "shadowfit.ai.call.latency";
+
+    /**
      * «미인정 시도»(V35) 수신 결과. tags: outcome(stored/duplicate/dropped/invalid)
      *
      * <p>{@code dropped} 는 세션이 이미 끝났거나(pose 배치의 {@link #POSE_BATCH_REJECTED} 와 같은 창) 점수가 없는
@@ -189,6 +203,29 @@ public class SessionMetrics {
      */
     public void aiStopResult(String outcome) {
         registry.counter(AI_STOP_RESULT, "outcome", outcome).increment();
+    }
+
+    /**
+     * AI gRPC 호출 1건의 왕복 시간을 기록한다. 지표 때문에 호출 경로가 죽으면 안 되므로 예외를 삼킨다.
+     *
+     * @param rpc     start / stop / reattach
+     * @param outcome ok / grpc-error / rejected / error
+     * @param nanos   {@code System.nanoTime()} 차. 음수는 0 으로 본다(시계 이상 방어).
+     */
+    public void aiCallLatency(String rpc, String outcome, long nanos) {
+        try {
+            io.micrometer.core.instrument.Timer.builder(AI_CALL_LATENCY)
+                    .description("Spring → AI gRPC 호출 왕복 시간")
+                    .tag("rpc", rpc)
+                    .tag("outcome", outcome)
+                    .publishPercentileHistogram()
+                    .minimumExpectedValue(java.time.Duration.ofMillis(1))
+                    .maximumExpectedValue(java.time.Duration.ofSeconds(10))
+                    .register(registry)
+                    .record(Math.max(0L, nanos), java.util.concurrent.TimeUnit.NANOSECONDS);
+        } catch (RuntimeException ignored) {
+            // 계측이 본 경로를 깨뜨리지 않는다.
+        }
     }
 
     /**
