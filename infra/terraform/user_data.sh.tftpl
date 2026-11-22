@@ -1,0 +1,60 @@
+#!/bin/bash
+# 호스트 최초 부팅 시 한 번 도는 부트스트랩. 앱 배포는 여기서 하지 않는다 —
+# 배포는 .github/workflows/deploy.yml 이 SSM 으로 infra/host/deploy.sh 를 부른다.
+# 이 스크립트는 "배포가 돌 수 있는 호스트"까지만 만든다: Docker, 데이터 디스크, 설정 파일.
+set -euxo pipefail
+exec > >(tee -a /var/log/shadowfit-bootstrap.log) 2>&1
+
+# ── Docker ─────────────────────────────────────────────────────────────────
+dnf install -y docker jq
+systemctl enable --now docker
+
+# compose v2 플러그인 (AL2023 저장소에 없다). 버전을 고정하고 체크섬을 검증한다.
+COMPOSE_VERSION="v2.29.7"
+mkdir -p /usr/local/lib/docker/cli-plugins
+curl -fsSL "https://github.com/docker/compose/releases/download/$COMPOSE_VERSION/docker-compose-linux-x86_64" \
+  -o /usr/local/lib/docker/cli-plugins/docker-compose
+curl -fsSL "https://github.com/docker/compose/releases/download/$COMPOSE_VERSION/docker-compose-linux-x86_64.sha256" \
+  -o /tmp/compose.sha256
+(cd /usr/local/lib/docker/cli-plugins && echo "$(cut -d' ' -f1 /tmp/compose.sha256)  docker-compose" | sha256sum -c -)
+chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
+# ── 데이터 디스크 ────────────────────────────────────────────────────────────
+# NVMe 인스턴스에서는 /dev/sdf 가 /dev/nvmeXn1 로 보이므로 볼륨 ID 기반 심볼릭 링크로 찾는다.
+VOLID="$(echo "${data_volume}" | tr -d '-')"
+DEV="/dev/disk/by-id/nvme-Amazon_Elastic_Block_Store_$VOLID"
+for i in $(seq 1 30); do [ -e "$DEV" ] && break; sleep 2; done
+[ -e "$DEV" ] || { echo "데이터 볼륨을 찾지 못했다: $DEV"; exit 1; }
+
+# 비어 있을 때만 포맷한다 — 기존 데이터가 있는 볼륨을 다시 붙였을 때 지우지 않기 위해서다.
+# MySQL 은 xfs 기준으로 측정했다 (loadtest/results/backup-restore-aws-2026-08-13).
+if ! blkid "$DEV" >/dev/null 2>&1; then
+  mkfs.xfs "$DEV"
+fi
+
+mkdir -p /mnt/shadowfit
+UUID="$(blkid -s UUID -o value "$DEV")"
+grep -q "$UUID" /etc/fstab || echo "UUID=$UUID /mnt/shadowfit xfs defaults,nofail 0 2" >> /etc/fstab
+mount -a
+mkdir -p /mnt/shadowfit/mysql /mnt/shadowfit/reference-videos
+
+# ── 호스트 설정 (deploy.sh 가 읽는다) ────────────────────────────────────────
+mkdir -p /opt/shadowfit
+cat > /opt/shadowfit/host.env <<'EOF'
+AWS_REGION=${region}
+SSM_PREFIX=${ssm_prefix}
+DEPLOY_BUCKET=${deploy_bucket}
+# docker-compose.prod.yml 의 필수 한도 (infra/terraform/ec2.tf 에서 유도 — 근거는 variables.tf)
+AI_MEM_LIMIT=${ai_mem_mib}m
+AI_CPU_LIMIT=${cpus}
+BACKEND_MEM_LIMIT=${backend_mib}m
+BACKEND_CPU_LIMIT=${cpus}
+INNODB_BUFFER_POOL_SIZE=${buffer_pool}
+REFERENCE_VIDEO_HOST_DIR=/mnt/shadowfit/reference-videos
+# 백업 (scripts/backup/mysql-backup.sh 가 읽는다)
+BACKUP_S3_URI=s3://${backup_bucket}/mysql
+BACKUP_DIR=/var/backups/shadowfit
+EOF
+chmod 600 /opt/shadowfit/host.env
+
+echo "bootstrap done"

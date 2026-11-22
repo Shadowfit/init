@@ -13,3 +13,7 @@ ai-server/**/*.sh text eol=lf
 
 # 백업·복구 스크립트는 운영 호스트(리눅스)에서 돈다 — Windows 체크아웃에서 CRLF 가 붙으면 셰뱅(#!/usr/bin/env bash)이 깨진다.
 scripts/backup/*.sh text eol=lf
+
+# 인프라 파일은 리눅스 호스트·CI 에서 쓰인다 — deploy.sh·systemd 유닛·user_data 가 CRLF 로 풀리면
+# 셰뱅과 유닛 파싱이 깨진다. Terraform 도 LF 로 통일한다.
+infra/** text eol=lf

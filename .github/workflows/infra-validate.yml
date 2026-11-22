@@ -1,0 +1,45 @@
+name: Infra — terraform 점검
+
+# infra/terraform 이 바뀔 때 문법·형식·참조를 PR 에서 잡는다.
+#
+# 🔴 이 잡이 «안» 하는 것을 먼저 적는다. AWS 자격 없이 돌므로 `plan`·`apply` 는 하지 않는다.
+#    그래서 «리소스가 실제로 만들어진다», «IAM 권한이 충분하다», «user_data 가 호스트에서 돈다» 는
+#    여기서 확인되지 않는다. `validate` 가 보는 것은 HCL 문법, 인자 이름·타입, 리소스 간 참조까지다.
+
+on:
+  pull_request:
+    paths:
+      - 'infra/terraform/**'
+      - '.github/workflows/infra-validate.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'infra/terraform/**'
+      - '.github/workflows/infra-validate.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/terraform
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          # 로컬 점검에 쓴 버전과 맞춘다. 올릴 때는 여기와 versions.tf 의 required_version 을 같이 본다.
+          terraform_version: 1.9.8
+          terraform_wrapper: false
+
+      - name: fmt
+        run: terraform fmt -check -recursive -diff
+
+      - name: init (backend 없이)
+        run: terraform init -backend=false -input=false
+
+      - name: validate
+        run: terraform validate

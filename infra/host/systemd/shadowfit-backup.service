@@ -1,0 +1,12 @@
+[Unit]
+Description=ShadowFit MySQL logical backup
+# 앱 스택이 떠 있을 때만 의미가 있다. 컨테이너가 없으면 스크립트가 스스로 실패한다.
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# BACKUP_S3_URI·BACKUP_DIR 등은 host.env 에 있다 (infra/terraform/user_data.sh.tftpl)
+EnvironmentFile=/opt/shadowfit/host.env
+ExecStart=/opt/shadowfit/backup/mysql-backup.sh
+# 종료 코드 3 = 로컬은 성공했으나 S3 전송 실패. 실패로 남겨 두어 `systemctl --failed` 에 보이게 한다.
