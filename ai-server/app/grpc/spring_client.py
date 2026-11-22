@@ -343,15 +343,20 @@ def report_complete_analysis(
         return
     # 즉시 재시도(약 19초)는 다 썼다 — 포기하는 대신 타이머로 이어 간다. 풀 워커를 붙잡고 sleep 하지 않는다: 워커 수가 고정이라
     # Spring 이 몇 분 내려가 있는 동안 sleep 하는 워커가 늘면 **다른 세션의 콜백까지** 큐에서 기다리게 된다.
-    metrics.record_callback("CompleteAnalysis", "deferred")
+    #
+    # 대기 건수는 **예약하기 전에** 올린다 — 타이머가 바로 울려도 내림이 올림보다 앞서 게이지가 음수로 내려가지 않게. 예약에 실패하면 되돌린다.
     metrics.late_retry_pending(+1)
+    if not _schedule_late_retry(request, metadata, session_id, time.monotonic() + window):
+        metrics.late_retry_pending(-1)
+        _give_up_complete(session_id, "느린 재시도를 예약하지 못했다(창이 간격보다 짧거나 타이머를 못 만들었다)")
+        return
+    metrics.record_callback("CompleteAnalysis", "deferred")
     logger.warning(
         "[AI → Spring] CompleteAnalysis 즉시 재시도 소진 — 최대 %ds 동안 %ds 간격으로 계속 시도한다 (session=%s)",
         window,
         settings.COMPLETE_RETRY_INTERVAL_SEC,
         session_id,
     )
-    _schedule_late_retry(request, metadata, session_id, time.monotonic() + window)
 
 
 def _try_complete(request, metadata, session_id: int, max_attempts: int, ok_outcome: str) -> str:
@@ -425,25 +430,44 @@ def _spawn_timer(delay: float, fn, args) -> None:
     t.start()
 
 
-def _schedule_late_retry(request, metadata, session_id: int, deadline: float) -> None:
-    _start_timer(settings.COMPLETE_RETRY_INTERVAL_SEC, _late_retry_tick, (request, metadata, session_id, deadline))
+def _schedule_late_retry(request, metadata, session_id: int, deadline: float) -> bool:
+    """다음 느린 시도를 예약한다. 예약했으면 True.
+
+    **다음 시도가 창 안에 들지 않으면 예약하지 않는다**(False) — 첫 예약이든 재예약이든 같은 규칙이다. 창(`COMPLETE_RETRY_WINDOW_SEC`)이
+    간격(`COMPLETE_RETRY_INTERVAL_SEC`)보다 짧게 설정돼도 창이 끝난 뒤에 결과를 쥐고 요청을 보내지 않는다. 타이머를 못 만든 경우도
+    False — 호출자가 «유실» 로 마무리하고 대기 건수를 정리한다.
+    """
+    interval = settings.COMPLETE_RETRY_INTERVAL_SEC
+    if time.monotonic() + interval >= deadline:
+        return False
+    try:
+        _start_timer(interval, _late_retry_tick, (request, metadata, session_id, deadline))
+    except Exception:
+        logger.exception("[AI → Spring] 느린 재시도 타이머를 만들지 못했다 (session=%s)", session_id)
+        return False
+    return True
 
 
 def _late_retry_tick(request, metadata, session_id: int, deadline: float) -> None:
     """느린 재시도 한 번 — 단일 시도(자체 데드라인 있음, sleep 없음). 실패하면 창이 남은 만큼 다음 타이머를 건다."""
+    still_pending = False
     try:
-        outcome = _try_complete(request, metadata, session_id, 1, ok_outcome="recovered_late")
-        if outcome == "exhausted":
-            interval = settings.COMPLETE_RETRY_INTERVAL_SEC
-            if time.monotonic() + interval < deadline:
-                metrics.record_callback("CompleteAnalysis", "retried")
-                _start_timer(interval, _late_retry_tick, (request, metadata, session_id, deadline))
-                return  # 대기 건수는 그대로 — 아직 끝나지 않았다
-            _give_up_complete(session_id, "느린 재시도 창을 다 썼다")
+        if time.monotonic() >= deadline:
+            # 타이머가 늦게 울려 창이 이미 끝났다 — 요청을 보내지 않고 마무리한다.
+            _give_up_complete(session_id, "타이머가 울렸을 때 느린 재시도 창이 이미 끝나 있었다")
+        else:
+            outcome = _try_complete(request, metadata, session_id, 1, ok_outcome="recovered_late")
+            if outcome == "exhausted":
+                if _schedule_late_retry(request, metadata, session_id, deadline):
+                    metrics.record_callback("CompleteAnalysis", "retried")
+                    still_pending = True   # 아직 끝나지 않았다 — 대기 건수는 그대로
+                else:
+                    _give_up_complete(session_id, "느린 재시도 창을 다 썼다")
     except Exception:  # 타이머 스레드에서 터지면 아무도 모른다 — 로그를 남기고 이 건은 끝낸다
         logger.exception("[AI → Spring] CompleteAnalysis 느린 재시도 중 예외 (session=%s)", session_id)
         metrics.record_callback("CompleteAnalysis", "exhausted")
-    metrics.late_retry_pending(-1)  # ok · rejected · 포기 · 예외 — 어느 쪽이든 이 건은 여기서 끝난다
+    if not still_pending:
+        metrics.late_retry_pending(-1)  # ok · rejected · 포기 · 예외 — 어느 쪽이든 이 건은 여기서 끝난다
 
 
 class PendingFeedbackEvent(NamedTuple):

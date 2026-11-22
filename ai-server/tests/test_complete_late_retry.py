@@ -25,6 +25,11 @@ from app.config import settings
 from app.grpc import spring_client
 
 
+# 공용 time.sleep 은 일부 시험이 monkeypatch 로 무동작으로 바꾼다(즉시 재시도 백오프를 안 기다리려고). 진짜 대기가 필요한 자리용으로
+# 모듈을 불러오는 시점(= 아직 아무도 안 바꿨다)의 값을 보관한다.
+_REAL_SLEEP = time.sleep
+
+
 class _Err(grpc.RpcError):
     def __init__(self, code):
         super().__init__()
@@ -225,7 +230,7 @@ def test_실제_타이머로_Spring_이_돌아오면_결과가_되살아난다(m
     stub = mock.MagicMock()
     stub.CompleteAnalysis.side_effect = answer
     monkeypatch.setattr(spring_client, "get_stub", lambda: stub)
-    rec = _count("recovered_late")
+    rec, pend0 = _count("recovered_late"), _pending()
 
     t0 = time.monotonic()
     _report(9, 3, 70.0)
@@ -234,6 +239,53 @@ def test_실제_타이머로_Spring_이_돌아오면_결과가_되살아난다(m
     # 간격이 1초라, 호출이 느린 재시도를 기다려 막혔다면 최소 1초가 걸린다 — 그보다 한참 짧으면 풀 워커를 바로 놓아 준 것이다.
     assert returned_in < 0.9, "즉시 재시도가 끝나면 호출자(풀 워커)를 바로 놓아준다 — 느린 재시도는 타이머가 한다"
     assert done.wait(10), "느린 재시도가 성공까지 이어지지 않았다"
-    time.sleep(0.2)
+    # `done` 은 스텁이 반환하기 **전에** 켜지므로(그 뒤에 지표가 오른다) 그 신호만 믿으면 단언이 지표보다 앞설 수 있다.
+    # 관측할 결과(지표·대기 건수)가 실제로 바뀔 때까지 기다린다. 공용 time.sleep 은 위에서 무동작으로 바꿨으므로 진짜 sleep 을 쓴다.
+    end = time.monotonic() + 10
+    while (_count("recovered_late") < rec + 1 or _pending() != pend0) and time.monotonic() < end:
+        _REAL_SLEEP(0.02)
     assert _count("recovered_late") == rec + 1
+    assert _pending() == pend0, "성공했으면 대기 건수가 처음 값으로 돌아와야 한다"
     assert len(calls) == 5
+
+
+def test_창이_간격보다_짧으면_느린_재시도를_예약하지_않고_바로_유실로_세고_대기도_안_올린다(monkeypatch):
+    h = _Harness(monkeypatch, [U, U, U])
+    monkeypatch.setattr(settings, "COMPLETE_RETRY_WINDOW_SEC", 10)       # 간격 30초보다 짧다 — 다음 시도가 창 안에 못 든다
+    exh, dfr, pend = _count("exhausted"), _count("deferred"), _pending()
+
+    _report(1, 5, 80.0)
+
+    assert h.timers == [], "창이 끝난 뒤에 결과를 쥐고 요청을 보내면 안 된다"
+    assert _count("exhausted") == exh + 1
+    assert _count("deferred") == dfr
+    assert _pending() == pend
+
+
+def test_타이머를_못_만들면_유실로_마무리하고_대기_건수를_되돌린다(monkeypatch):
+    _Harness(monkeypatch, [U, U, U])
+
+    def boom(_d, _fn, _a):
+        raise RuntimeError("can't start new thread")
+
+    monkeypatch.setattr(spring_client, "_start_timer", boom)
+    exh, dfr, pend = _count("exhausted"), _count("deferred"), _pending()
+
+    _report(1, 5, 80.0)      # 던지지 않아야 한다 — 호출자는 풀 워커다
+
+    assert _count("exhausted") == exh + 1
+    assert _count("deferred") == dfr, "예약하지 못했으니 deferred 로 세지 않는다"
+    assert _pending() == pend, "올렸던 대기 건수를 되돌린다"
+
+
+def test_타이머가_늦게_울려_창이_이미_끝났으면_요청을_보내지_않고_마무리한다(monkeypatch):
+    h = _Harness(monkeypatch, [U, U, U])
+    _report(1, 5, 80.0)
+    pend, exh, calls = _pending(), _count("exhausted"), len(h.calls)
+    delay, fn, (req, meta, sid, _deadline) = h.timers.pop(0)
+
+    fn(req, meta, sid, time.monotonic() - 1)       # 이미 지난 deadline
+
+    assert len(h.calls) == calls, "창이 끝난 뒤에는 요청을 보내지 않는다"
+    assert _count("exhausted") == exh + 1
+    assert _pending() == pend - 1
