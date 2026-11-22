@@ -88,9 +88,11 @@ public interface DailyLogRepository extends JpaRepository<DailyLog,Long> {
     @Query(value = "UPDATE daily_logs SET " +
                    "total_exercise_time = (SELECT COALESCE(SUM(TIMESTAMPDIFF(MINUTE, s.start_time, s.end_time)), 0) " +
                    "    FROM exercise_sessions s WHERE s.member_id = :memberId AND s.status = 'COMPLETED' " +
+                   "    AND (s.total_reps > 0 OR s.avg_sync_rate IS NOT NULL) " + // Session.isMeasured 와 같은 규칙
                    "    AND s.start_time >= :dayStart AND s.start_time < :dayEnd), " +
                    "total_calories = (SELECT COALESCE(SUM(s.calories_burned), 0) " +
                    "    FROM exercise_sessions s WHERE s.member_id = :memberId AND s.status = 'COMPLETED' " +
+                   "    AND (s.total_reps > 0 OR s.avg_sync_rate IS NOT NULL) " +
                    "    AND s.start_time >= :dayStart AND s.start_time < :dayEnd) " +
                    "WHERE member_id = :memberId AND log_date = :logDate",
            nativeQuery = true)
