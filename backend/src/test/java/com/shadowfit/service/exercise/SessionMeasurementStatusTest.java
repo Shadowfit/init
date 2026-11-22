@@ -42,6 +42,7 @@ class SessionMeasurementStatusTest {
     @Autowired private SessionCompletionTx sessionCompletionTx;
     @Autowired private SessionActivityQueryService activityQueryService;
     @Autowired private SessionRepository sessionRepository;
+    @Autowired private com.shadowfit.repository.report.DailyLogRepository dailyLogRepository;
     @Autowired private MemberRepository memberRepository;
     @Autowired private ExercisesRepository exercisesRepository;
     @Autowired private CategoryRepository categoryRepository;
@@ -175,6 +176,29 @@ class SessionMeasurementStatusTest {
 
         assertThat(reload(session).getMeasurementStatus())
                 .isEqualTo(com.shadowfit.model.exercise.MeasurementStatus.NO_POSE);
+    }
+
+    @Test
+    @DisplayName("측정 안 된 세션은 일지의 운동 시간·칼로리에 더하지 않는다 — 출석에서 빠지는 세션과 같은 규칙")
+    void unmeasuredSession_isNotAddedToDailyLog() {
+        Session session = inProgress();
+
+        complete(session, 0, MeasurementStatus.MEASUREMENT_NO_POSE);
+
+        assertThat(dailyLogRepository.findByMemberIdAndLogDate(member.getId(), reload(session).getStartTime().toLocalDate()))
+                .as("더한 것이 없으니 행도 안 생긴다").isEmpty();
+    }
+
+    @Test
+    @DisplayName("측정된 세션(인정 반복 있음)은 일지에 분이 더해진다 — 위 규칙이 모든 세션을 막는 게 아님을 확인")
+    void measuredSession_isAddedToDailyLog() {
+        Session session = inProgress();
+
+        complete(session, 3, MeasurementStatus.MEASUREMENT_OK);
+
+        var log = dailyLogRepository.findByMemberIdAndLogDate(member.getId(), reload(session).getStartTime().toLocalDate());
+        assertThat(log).isPresent();
+        assertThat(log.get().getTotalExerciseTime()).isGreaterThanOrEqualTo(4);
     }
 
     @Test

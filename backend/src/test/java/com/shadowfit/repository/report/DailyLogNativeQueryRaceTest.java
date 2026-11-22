@@ -120,6 +120,8 @@ class DailyLogNativeQueryRaceTest extends MySqlContainerSupport {
         session(member, Status.FAILED, DAY.atTime(12, 0), DAY.atTime(12, 30), "99.00");
         completed(member, DAY.plusDays(1).atStartOfDay(), DAY.plusDays(1).atTime(0, 20), "99.00");
         completed(other, DAY.atTime(10, 0), DAY.atTime(10, 45), "99.00");
+        // 측정 안 된 세션(0회·점수 없음)도 세지 않는다 — 완료 때 더하지 않던 것과 같은 규칙(Session.isMeasured)
+        unmeasuredCompleted(member, DAY.atTime(15, 0), DAY.atTime(15, 40), "99.00");
         // 재계산 전 값은 일부러 틀리게 둔다 — 덮어쓰는지 본다.
         dailyLogService.accumulateStats(member.getId(), DAY, 999, new BigDecimal("999.00"));
 
@@ -150,6 +152,13 @@ class DailyLogNativeQueryRaceTest extends MySqlContainerSupport {
 
     private void completed(Member owner, LocalDateTime start, LocalDateTime end, String calories) {
         session(owner, Status.COMPLETED, start, end, calories);
+    }
+
+    private void unmeasuredCompleted(Member owner, LocalDateTime start, LocalDateTime end, String calories) {
+        sessionRepository.saveAndFlush(Session.builder()
+                .member(owner).exercise(exercise).startTime(start).endTime(end)
+                .status(Status.COMPLETED).totalReps(0).difficultyLevel(1)
+                .caloriesBurned(new BigDecimal(calories)).build());
     }
 
     private void session(Member owner, Status status, LocalDateTime start, LocalDateTime end, String calories) {
