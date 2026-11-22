@@ -88,6 +88,22 @@ def bind_active_sessions(count_fn) -> None:
     active_sessions.set_function(count_fn)
 
 
+# CompleteAnalysis «느린 재시도» 대기 건수 (#799). 0 이 아닌 상태가 오래가면 Spring 이 계속 안 받는 것이다.
+# 이 값이 줄지 않고 outcome="exhausted" 가 오르면 결과가 유실되고 있다.
+complete_callback_late_pending = Gauge(
+    "shadowfit_ai_complete_callback_late_pending",
+    "CompleteAnalysis 즉시 재시도가 끝나 느린 재시도(타이머)를 기다리는 결과 수 (#799)",
+)
+
+
+def late_retry_pending(delta: int) -> None:
+    """느린 재시도 대기 건수를 올리거나(+1) 내린다(-1). 지표 때문에 콜백이 죽으면 안 되므로 절대 던지지 않는다."""
+    try:
+        complete_callback_late_pending.inc(delta)
+    except Exception:  # pragma: no cover - 계측이 본 경로를 깨뜨리지 않는다
+        pass
+
+
 # CompleteAnalysis 콜백 풀 상태 (#614). 스레드 수는 상한이 있고 큐는 없다 — «쌓이고 있다» 는
 # 이 게이지로만 보인다. pending 이 workers 를 계속 넘으면 Spring 쪽이 느린 것이다.
 complete_callback_pending = Gauge(
