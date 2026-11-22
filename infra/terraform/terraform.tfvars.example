@@ -1,0 +1,13 @@
+# 복사해서 terraform.tfvars 로 쓴다 (그 파일은 .gitignore 대상).
+# 값을 안 적으면 variables.tf 의 기본값이 쓰인다.
+
+# region            = "ap-northeast-2"
+# availability_zone = "ap-northeast-2a"
+# instance_type     = "c7i.xlarge"
+# vcpus             = 4
+
+# 접근을 제한하려면 (예: 학교·집 IP). 기본은 전체 공개다.
+# allowed_cidrs = ["203.0.113.10/32"]
+
+# 계정에 GitHub OIDC provider 가 이미 있다면
+# create_github_oidc_provider = false

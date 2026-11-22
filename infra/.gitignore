@@ -1,0 +1,8 @@
+# Terraform 상태·변수 — 계정 ID·IP·리소스 ID 가 들어 있다
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+tfplan

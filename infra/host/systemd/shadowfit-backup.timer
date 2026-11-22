@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily ShadowFit MySQL backup
+
+[Timer]
+# 호스트는 UTC 다. 18:10 UTC = 03:10 KST (docs/21-backup-and-restore.md 의 예시와 같은 시각)
+OnCalendar=*-*-* 18:10:00
+# 호스트가 꺼져 있던 시간대를 놓쳤다면 켜지는 즉시 한 번 돈다
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target
