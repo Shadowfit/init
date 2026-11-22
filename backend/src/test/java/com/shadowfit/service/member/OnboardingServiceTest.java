@@ -41,8 +41,25 @@ class OnboardingServiceTest {
     }
 
     @Test
-    @DisplayName("필수 5개 필드가 모두 채워지면 onboardingCompleted가 true로 바뀜")
+    @DisplayName("필수 4개 필드(페르소나·레벨·키·몸무게)가 채워지면 onboardingCompleted가 true — 선호 영상은 조건이 아니다(#802)")
     void updateOnboarding_allFieldsPresent_completesOnboarding() {
+        Member member = freshMember();
+        when(memberRepository.findByEmail(EMAIL)).thenReturn(Optional.of(member));
+        OnboardingRequestDto dto = OnboardingRequestDto.builder()
+                .selectedPersona(SelectedPersona.ADVANCED)
+                .workoutLevel(WorkoutLevel.BEGINNER)
+                .height(180.0).weight(75.0)
+                .build(); // preferredUrl 없음
+
+        OnboardingDto result = service.updateOnboarding(EMAIL, dto);
+
+        assertThat(member.isOnboardingCompleted()).isTrue();
+        assertThat(result.getHeight()).isEqualTo(180.0);
+    }
+
+    @Test
+    @DisplayName("옛 앱이 preferredUrl 을 같이 보내도 그대로 받아 저장하고 완료된다(하위 호환)")
+    void updateOnboarding_oldClientStillSendingPreferredUrl_isAccepted() {
         Member member = freshMember();
         when(memberRepository.findByEmail(EMAIL)).thenReturn(Optional.of(member));
         OnboardingRequestDto dto = OnboardingRequestDto.builder()
@@ -55,7 +72,7 @@ class OnboardingServiceTest {
         OnboardingDto result = service.updateOnboarding(EMAIL, dto);
 
         assertThat(member.isOnboardingCompleted()).isTrue();
-        assertThat(result.getHeight()).isEqualTo(180.0);
+        assertThat(result.getPreferredUrl()).isEqualTo("https://youtu.be/dummy");
     }
 
     @Test

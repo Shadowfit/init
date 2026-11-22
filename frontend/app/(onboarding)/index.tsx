@@ -6,7 +6,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Image,
   } from 'react-native';
 import { Alert } from '@/utils/alert';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,20 +14,14 @@ import { useRouter } from 'expo-router';
 import {
   ChevronLeft,
   ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
-  ChevronsUp,
-  Check,
   Dumbbell,
   Ruler,
   Target,
   UserCog,
-  Video,
   Sprout,
   Crosshair,
   Apple,
   HeartPulse,
-  Footprints,
   type LucideIcon,
 } from 'lucide-react-native';
 import { COLORS, FONT_SIZE, SPACING, RADIUS } from '@/constants/Colors';
@@ -45,118 +38,7 @@ import type {
 import { memberService } from '@/services/memberService';
 import { useAuthStore } from '@/stores/authStore';
 
-const TOTAL_STEPS = 5;
-
-// ─── 기준 영상 데이터 ────────────────────────────────
-interface ReferenceVideo {
-  id: string;
-  title: string;
-  youtubeId: string;
-  thumbnail: string;
-}
-
-interface ExerciseCategory {
-  key: string;
-  Icon: LucideIcon;
-  label: string;
-  videos: ReferenceVideo[];
-}
-
-const EXERCISE_VIDEOS: ExerciseCategory[] = [
-  {
-    key: 'squat',
-    Icon: Footprints,
-    label: '스쿼트',
-    videos: [
-      {
-        id: 'sq1',
-        title: '기본 바벨 스쿼트',
-        youtubeId: 'ultWZbUMPL8',
-        thumbnail: 'https://img.youtube.com/vi/ultWZbUMPL8/mqdefault.jpg',
-      },
-      {
-        id: 'sq2',
-        title: '프론트 스쿼트 자세',
-        youtubeId: 'tlfahNdNPPI',
-        thumbnail: 'https://img.youtube.com/vi/tlfahNdNPPI/mqdefault.jpg',
-      },
-      {
-        id: 'sq3',
-        title: '고블릿 스쿼트',
-        youtubeId: 'MeIiIdhvXT4',
-        thumbnail: 'https://img.youtube.com/vi/MeIiIdhvXT4/mqdefault.jpg',
-      },
-      {
-        id: 'sq4',
-        title: '불가리안 스플릿 스쿼트',
-        youtubeId: '2C-uNgKwPLE',
-        thumbnail: 'https://img.youtube.com/vi/2C-uNgKwPLE/mqdefault.jpg',
-      },
-    ],
-  },
-  {
-    key: 'deadlift',
-    Icon: Dumbbell,
-    label: '데드리프트',
-    videos: [
-      {
-        id: 'dl1',
-        title: '컨벤셔널 데드리프트',
-        youtubeId: 'op9kVnSso6Q',
-        thumbnail: 'https://img.youtube.com/vi/op9kVnSso6Q/mqdefault.jpg',
-      },
-      {
-        id: 'dl2',
-        title: '루마니안 데드리프트',
-        youtubeId: 'jEy_czb3RKA',
-        thumbnail: 'https://img.youtube.com/vi/jEy_czb3RKA/mqdefault.jpg',
-      },
-      {
-        id: 'dl3',
-        title: '스모 데드리프트',
-        youtubeId: 'widGEAjS_Fs',
-        thumbnail: 'https://img.youtube.com/vi/widGEAjS_Fs/mqdefault.jpg',
-      },
-      {
-        id: 'dl4',
-        title: '트랩바 데드리프트',
-        youtubeId: 'dLhNzjR_kOc',
-        thumbnail: 'https://img.youtube.com/vi/dLhNzjR_kOc/mqdefault.jpg',
-      },
-    ],
-  },
-  {
-    key: 'pullup',
-    Icon: ChevronsUp,
-    label: '턱걸이',
-    videos: [
-      {
-        id: 'pu1',
-        title: '기본 풀업 자세',
-        youtubeId: 'eGo4IYlbE5g',
-        thumbnail: 'https://img.youtube.com/vi/eGo4IYlbE5g/mqdefault.jpg',
-      },
-      {
-        id: 'pu2',
-        title: '친업 (언더그립)',
-        youtubeId: 'brhRXlOhWMg',
-        thumbnail: 'https://img.youtube.com/vi/brhRXlOhWMg/mqdefault.jpg',
-      },
-      {
-        id: 'pu3',
-        title: '네거티브 풀업',
-        youtubeId: 'S3gKOkCBjXk',
-        thumbnail: 'https://img.youtube.com/vi/S3gKOkCBjXk/mqdefault.jpg',
-      },
-      {
-        id: 'pu4',
-        title: '와이드 그립 풀업',
-        youtubeId: 'CnEP2VhSaN0',
-        thumbnail: 'https://img.youtube.com/vi/CnEP2VhSaN0/mqdefault.jpg',
-      },
-    ],
-  },
-];
+const TOTAL_STEPS = 4; // 레벨·키·몸무게·페르소나 (기준 영상 선택은 #802 로 없어졌다)
 
 export default function OnboardingScreen() {
   const router = useRouter();
@@ -173,7 +55,6 @@ export default function OnboardingScreen() {
     height: 170,
     weight: 70,
     persona: null,
-    preferredUrl: null,
   });
 
   // 마이페이지에서 수정 진입한 경우 기존 데이터로 초기값 채움
@@ -188,7 +69,6 @@ export default function OnboardingScreen() {
           height: existing.height ?? 170,
           weight: existing.weight ?? 70,
           persona: existing.selectedPersona ?? null,
-          preferredUrl: existing.preferredUrl ?? null,
         });
       })
       .catch(() => {
@@ -218,7 +98,6 @@ export default function OnboardingScreen() {
       case 1: return healthConsent; // 키 (슬라이더, 항상 값 있음) — 건강정보 동의가 있어야 다음
       case 2: return true; // 몸무게 (슬라이더, 항상 값 있음)
       case 3: return data.persona !== null;
-      case 4: return data.preferredUrl !== null;
       default: return false;
     }
   };
@@ -235,7 +114,7 @@ export default function OnboardingScreen() {
       router.replace('/(auth)/login');
       return;
     }
-    if (!data.workoutLevel || !data.persona || !data.preferredUrl) {
+    if (!data.workoutLevel || !data.persona) {
       Alert.alert('오류', '모든 항목을 선택해주세요.');
       return;
     }
@@ -250,7 +129,6 @@ export default function OnboardingScreen() {
         workoutLevel: data.workoutLevel,
         height: data.height,
         weight: data.weight,
-        preferredUrl: data.preferredUrl,
       });
       markOnboardingCompleted(); // 가드가 (onboarding) 으로 다시 안 빠지게
       router.replace('/(tabs)');
@@ -304,7 +182,6 @@ export default function OnboardingScreen() {
         )}
         {step === 2 && <StepWeight data={data} setData={setData} />}
         {step === 3 && <StepPersona data={data} setData={setData} />}
-        {step === 4 && <StepVideo data={data} setData={setData} />}
       </ScrollView>
 
       {/* 하단 버튼 */}
@@ -531,180 +408,6 @@ function StepPersona({
   );
 }
 
-// ─── Step 4: 기준 영상 선택 ─────────────────────────
-const VIDEOS_PER_PAGE = 4;
-
-function StepVideo({
-  data,
-  setData,
-}: {
-  data: OnboardingData;
-  setData: React.Dispatch<React.SetStateAction<OnboardingData>>;
-}) {
-  const [activeKey, setActiveKey] = useState(EXERCISE_VIDEOS[0].key);
-  const [page, setPage] = useState(0);
-
-  const activeCategory =
-    EXERCISE_VIDEOS.find((c) => c.key === activeKey) ?? EXERCISE_VIDEOS[0];
-  const totalPages = Math.max(
-    1,
-    Math.ceil(activeCategory.videos.length / VIDEOS_PER_PAGE),
-  );
-  const pageVideos = activeCategory.videos.slice(
-    page * VIDEOS_PER_PAGE,
-    (page + 1) * VIDEOS_PER_PAGE,
-  );
-
-  const handleCategoryChange = (key: string) => {
-    setActiveKey(key);
-    setPage(0);
-  };
-
-  return (
-    <View>
-      <View style={styles.stepIconWrap}>
-        <Video size={28} color={COLORS.primary} strokeWidth={2} />
-      </View>
-      <Text style={styles.stepTitle}>기준 영상을 선택해주세요</Text>
-      <Text style={styles.stepDesc}>
-        따라 할 운동 영상을 하나 골라주세요. 나중에 변경할 수 있어요.
-      </Text>
-
-      {/* 카테고리 탭 */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.categoryTabs}
-      >
-        {EXERCISE_VIDEOS.map((category) => {
-          const isActive = category.key === activeKey;
-          const TabIcon = category.Icon;
-          return (
-            <TouchableOpacity
-              key={category.key}
-              style={[styles.categoryTab, isActive && styles.categoryTabActive]}
-              onPress={() => handleCategoryChange(category.key)}
-              activeOpacity={0.7}
-            >
-              <TabIcon
-                size={16}
-                color={isActive ? COLORS.primary : COLORS.textSecondary}
-                strokeWidth={2}
-              />
-              <Text
-                style={[
-                  styles.categoryTabText,
-                  isActive && styles.categoryTabTextActive,
-                ]}
-              >
-                {category.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
-
-      {/* 선택된 카테고리 영상 그리드 */}
-      <View style={styles.videoGrid}>
-        {pageVideos.map((video) => {
-          const videoUrl = `https://www.youtube.com/watch?v=${video.youtubeId}`;
-          const isSelected = data.preferredUrl === videoUrl;
-          return (
-            <TouchableOpacity
-              key={video.id}
-              style={[styles.videoCard, isSelected && styles.videoCardActive]}
-              onPress={() =>
-                setData({ ...data, preferredUrl: videoUrl })
-              }
-              activeOpacity={0.7}
-            >
-              <View style={styles.thumbnailWrap}>
-                <Image
-                  source={{ uri: video.thumbnail }}
-                  style={styles.thumbnail}
-                />
-                {isSelected && (
-                  <View style={styles.checkOverlay}>
-                    <Check size={16} color={COLORS.primaryText} strokeWidth={3} />
-                  </View>
-                )}
-              </View>
-              <Text
-                style={[
-                  styles.videoTitle,
-                  isSelected && styles.videoTitleActive,
-                ]}
-                numberOfLines={1}
-              >
-                {video.title}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      {/* 페이지네이션 */}
-      <View style={styles.pagination}>
-        <TouchableOpacity
-          style={[styles.pageArrow, page === 0 && styles.pageArrowDisabled]}
-          onPress={() => setPage(Math.max(0, page - 10))}
-          disabled={page === 0}
-        >
-          <ChevronsLeft
-            size={16}
-            color={page === 0 ? COLORS.textMuted : COLORS.text}
-            strokeWidth={2}
-          />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.pageArrow, page === 0 && styles.pageArrowDisabled]}
-          onPress={() => page > 0 && setPage(page - 1)}
-          disabled={page === 0}
-        >
-          <ChevronLeft
-            size={14}
-            color={page === 0 ? COLORS.textMuted : COLORS.text}
-            strokeWidth={2}
-          />
-        </TouchableOpacity>
-
-        <Text style={styles.pageIndicator}>
-          {page + 1} / {totalPages}
-        </Text>
-
-        <TouchableOpacity
-          style={[
-            styles.pageArrow,
-            page === totalPages - 1 && styles.pageArrowDisabled,
-          ]}
-          onPress={() => page < totalPages - 1 && setPage(page + 1)}
-          disabled={page === totalPages - 1}
-        >
-          <ChevronRight
-            size={14}
-            color={page === totalPages - 1 ? COLORS.textMuted : COLORS.text}
-            strokeWidth={2}
-          />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.pageArrow,
-            page === totalPages - 1 && styles.pageArrowDisabled,
-          ]}
-          onPress={() => setPage(Math.min(totalPages - 1, page + 10))}
-          disabled={page === totalPages - 1}
-        >
-          <ChevronsRight
-            size={16}
-            color={page === totalPages - 1 ? COLORS.textMuted : COLORS.text}
-            strokeWidth={2}
-          />
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   scrollContent: { flexGrow: 1, paddingHorizontal: SPACING.xxl, paddingBottom: 100 },
@@ -810,111 +513,6 @@ const styles = StyleSheet.create({
     marginTop: SPACING.xs,
     fontSize: FONT_SIZE.xs,
     color: COLORS.textMuted,
-  },
-
-  // Video selection
-  categoryTabs: {
-    flexDirection: 'row',
-    gap: SPACING.sm,
-    paddingBottom: SPACING.lg,
-  },
-  categoryTab: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.sm,
-    borderRadius: RADIUS.full,
-    borderWidth: 1,
-    borderColor: COLORS.cardBorder,
-    backgroundColor: COLORS.surface,
-  },
-  categoryTabActive: {
-    borderColor: COLORS.primary,
-    backgroundColor: COLORS.primaryDim,
-  },
-  categoryTabText: {
-    fontSize: FONT_SIZE.sm,
-    color: COLORS.textSecondary,
-    fontWeight: '600',
-  },
-  categoryTabTextActive: {
-    color: COLORS.primary,
-    fontWeight: '800',
-  },
-  pagination: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: SPACING.lg,
-    marginTop: SPACING.lg,
-  },
-  pageArrow: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.surface,
-    borderWidth: 1,
-    borderColor: COLORS.cardBorder,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  pageArrowDisabled: {
-    opacity: 0.4,
-  },
-  pageIndicator: {
-    fontSize: FONT_SIZE.sm,
-    color: COLORS.text,
-    fontWeight: '700',
-    minWidth: 56,
-    textAlign: 'center',
-  },
-  videoGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: SPACING.md,
-  },
-  videoCard: {
-    width: '47%',
-    borderRadius: RADIUS.md,
-    overflow: 'hidden',
-    backgroundColor: COLORS.surface,
-    borderWidth: 2,
-    borderColor: COLORS.cardBorder,
-  },
-  videoCardActive: {
-    borderColor: COLORS.primary,
-  },
-  thumbnailWrap: {
-    position: 'relative',
-    aspectRatio: 16 / 9,
-    backgroundColor: COLORS.surfaceLight,
-  },
-  thumbnail: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
-  },
-  checkOverlay: {
-    position: 'absolute',
-    top: 8,
-    left: 8,
-    width: 28,
-    height: 28,
-    borderRadius: 6,
-    backgroundColor: COLORS.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  videoTitle: {
-    fontSize: FONT_SIZE.sm,
-    color: COLORS.textSecondary,
-    padding: SPACING.sm,
-    textAlign: 'center',
-  },
-  videoTitleActive: {
-    color: COLORS.primary,
-    fontWeight: '700',
   },
 
   // Footer

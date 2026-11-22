@@ -11,7 +11,6 @@ import {
   Ruler,
   Target,
   UserCog,
-  Video,
   Megaphone,
   HelpCircle,
   LogOut,
@@ -202,11 +201,6 @@ export default function MyPageScreen() {
           label="트레이너 페르소나"
           title={persona ? persona.label : '미설정'}
           desc={persona?.desc}
-        />
-        <InfoCard
-          Icon={Video}
-          label="기준 영상"
-          title={profile?.preferredUrl || '미설정'}
         />
 
         {/* 음성 피드백 (TTS) 설정 */}

@@ -48,13 +48,12 @@ interface AuthState {
 }
 
 // 백엔드 OnboardingService.completeOnboarding 조건과 동일
-// (selectedPersona 는 Member 기본값이 BEGINNER 라 항상 not-null → 제외)
+// (selectedPersona 는 Member 기본값이 BEGINNER 라 항상 not-null → 제외. preferredUrl 은 #802 로 조건에서 빠졌다)
 function isOnboardingCompleted(data: OnboardingResponse): boolean {
   return (
     data.workoutLevel != null &&
     data.height != null &&
-    data.weight != null &&
-    !!data.preferredUrl
+    data.weight != null
   );
 }
 

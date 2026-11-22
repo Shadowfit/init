@@ -658,7 +658,7 @@ export const BE_STATUS = {
 export const BACKEND = {
   'A-01': ['done', '가입은 토큰을 주지 않는다 — 앱이 곧바로 로그인을 부른다.'],
   'A-02': ['done', 'access 30분 + refresh(회전). 로그아웃은 refresh · 푸시 토큰 행 삭제뿐이라 로그아웃한 access 는 최대 30분 남는다 — 블랙리스트는 08-10 에 없앴다(W-37).'],
-  'A-03': ['done', '선호 영상 URL 은 형식 검증 없이 저장된다 — YoutubeValidator 는 호출처가 없다(#802).'],
+  'A-03': ['done', '선호 영상은 선택 입력이다 — 온보딩·세션 시작의 조건에서 빼고 호출처 없던 YoutubeValidator 를 삭제했다(#802).'],
   'A-04': ['none', '재설정 API 가 없다(메일 발송 인프라 없음).'],
   'A-05': ['done'],
   'A-06': ['done', '멱등 200. 로그아웃 · 탈퇴 때 서버가 지운다.'],

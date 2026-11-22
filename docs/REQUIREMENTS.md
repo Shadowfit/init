@@ -36,7 +36,7 @@
 | 페르소나 | `SelectedPersona` (기본 BEGINNER) |
 | 운동 레벨 | `WorkoutLevel` |
 | 신체 정보 | height, weight (DECIMAL 5,1) |
-| 선호 영상 | `preferredUrl` (YouTube, `YoutubeValidator`로 검증) |
+| 선호 영상 | `preferredUrl` (선택 입력, 검증·필수 아님 — #802) |
 | 온보딩 완료 플래그 | `onboardingCompleted` |
 | TTS 설정 | `ttsEnabled`(기본 true), `ttsSpeed`(기본 1.0, 0.5~2.0) |
 

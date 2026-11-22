@@ -177,7 +177,7 @@ shadowfit/
 │   │   │   │   │   │   GrpcCorrelationClientInterceptor.java,
 │   │   │   │   │   │   GrpcCorrelationServerInterceptor.java,
 │   │   │   │   │   │   GrpcObservabilityConfig.java, SessionMetrics.java
-│   │   │   │   │   ├── util/SetSummaryFormatter.java, YoutubeValidator.java
+│   │   │   │   │   ├── util/SetSummaryFormatter.java
 │   │   │   │   │   ├── security/                            # JWT·Security
 │   │   │   │   │   ├── etc/JpaAuditingConfig.java, SwaggerConfig.java
 │   │   │   │   │   └── error/GlobalExceptionHandler.java, ErrorCode.java

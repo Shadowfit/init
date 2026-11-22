@@ -125,9 +125,8 @@ def main() -> int:
     log("login", "200")
 
     # ── ②-0 온보딩 ─────────────────────────────────────────────────────────
-    # 빼먹으면 세션 시작이 400 이다. ExerciseAnalysisService.startAnalysis 가 preferredUrl 을
-    # 먼저 검사하기 때문이다(VideoRequestDto 주석 — 이슈 #178 이 그 순서를 적어뒀다).
-    # 즉 «온보딩을 마친 사용자» 가 E1 의 전제다.
+    # 예전에는 preferredUrl 이 없으면 세션 시작이 400 이었지만 #802 로 조건이 아니게 됐다.
+    # 그래도 «온보딩을 마친 사용자» 를 E1 의 전제로 둔다(옛 서버에도 돌도록 URL 을 같이 보낸다).
     r = http.patch(f"{args.spring}/member/onboarding/{email}",
                    json={"selectedPersona": "BEGINNER", "workoutLevel": "BEGINNER",
                          "height": 175.0, "weight": 70.0,

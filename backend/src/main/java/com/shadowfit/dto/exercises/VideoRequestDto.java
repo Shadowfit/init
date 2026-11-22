@@ -24,9 +24,9 @@ public class VideoRequestDto {
      * Null key returned for cache operation} 을 던지기 때문이다 — {@code WHERE e.id = :id} 쿼리는
      * 실행조차 되지 않아 "매치 0건 → Optional.empty() → 404" 경로에 도달하지 못한다.
      *
-     * <p>🔴 <b>온보딩을 마친 정상 사용자만 맞았다.</b> {@code ExerciseAnalysisService.startAnalysis} 가
-     * {@code preferredUrl} 을 먼저 검사해서, 온보딩 안 한 회원은 다른 이유로 400 을 받고 끝난다.
-     * 정상적으로 쓰는 사용자일수록 5xx 를 받는 구조였다.
+     * <p>🔴 <b>예전에는 온보딩을 마친 정상 사용자만 맞았다.</b> {@code startAnalysis} 가 {@code preferredUrl} 을 먼저 검사해서
+     * 온보딩 안 한 회원은 다른 이유로 400 을 받고 끝났다 — 정상적으로 쓰는 사용자일수록 5xx 를 받는 구조였다. 그 검사는 #802 로
+     * 없어졌으므로 이제는 이 필드가 없으면 누구나 같은 5xx 를 받는다(위 {@code @NotNull} 이 400 으로 막는다).
      */
     @NotNull(message = "운동 ID는 필수입니다.")
     @Schema(description = "운동 ID",
