@@ -247,6 +247,19 @@ public class Session {
     }
 
     /**
+     * 이 세션에서 <b>측정된 것이 하나라도 있는가</b> — 인정 반복이 있거나 점수가 매겨졌다(평균은 미인정 시도를 포함하므로 시도만 있어도 성립).
+     * 카메라가 가려졌거나 사람이 안 잡혀 «0회 + 점수 없음» 으로 끝난 세션은 false 다.
+     *
+     * <p><b>이 규칙은 «출석» 의 정의에 들어간다</b>(사용자 결정 2026-11-22: 측정된 것이 없는 세션은 연속 기록·출석에서 제외).
+     * 같은 규칙이 SessionRepository 의 출석 쿼리 8개에 {@code MEASURED_JPQL}(네이티브 하나는 SQL 로 직접)로 복제돼 있고, 목록 응답의
+     * {@code measured} 도 이것을 쓴다 — 한쪽만 바꾸면 «목록에는 측정 안 됨인데 출석은 됐다» 같은 어긋남이 생기므로
+     * 바꿀 때는 셋을 같이 바꾸고 {@code AttendanceMeasuredRuleTest} 가 JPQL 과 이 메서드의 일치를 본다.
+     */
+    public boolean isMeasured() {
+        return (totalReps != null && totalReps > 0) || avgSyncRate != null;
+    }
+
+    /**
      * 완료 통보가 알려 준 «측정 안 된 이유» 를 남긴다. {@code null} 은 «측정됨» 이다(지우는 것이 아니라 그 값이 정상이다).
      * {@link #complete} 가 전이시킨 호출에서만 부른다 — 멱등 재전송이 첫 완료의 기록을 덮어쓰지 않게 호출부(SessionCompletionTx)가 지킨다.
      */

@@ -205,6 +205,20 @@ class SessionActivityQueryServiceTest {
         assertThat(yesterdayResult.getSessions()).isEmpty();
     }
 
+    @Test
+    @DisplayName("getCalendarMain — 측정 안 된 세션만 있는 날은 운동일수에서 빠지지만 달력의 «기록 있음» 점은 남는다")
+    void getCalendarMain_unmeasuredDayNotCountedAsExerciseDay() {
+        LocalDate day = LocalDate.now().withDayOfMonth(1);
+        completedWith(day, 10, 80.0);                 // 측정됨
+        completedWith(day.plusDays(1), 0, null);      // 측정 안 됨 — 점은 남고 운동일수는 안 센다
+
+        var cal = sessionActivityQueryService.getCalendarMain(member.getId(), day.getYear(), day.getMonthValue());
+
+        assertThat(cal.getMonthlyExerciseDays()).isEqualTo(1);
+        assertThat(cal.getRecords()).extracting(r -> r.getDate())
+                .containsExactlyInAnyOrder(day.toString(), day.plusDays(1).toString());
+    }
+
     /** rep·점수 값을 직접 정해 완료 세션을 만든다 — null 은 «측정 안 됨» 이다. */
     private Session completedWith(LocalDate date, Integer totalReps, Double avgSyncRate) {
         LocalDateTime start = date.atTime(9, 0);

@@ -148,7 +148,10 @@ public class SessionActivityQueryService {
                 .collect(Collectors.toList());
 
         CalendarMainResponseDto response = new CalendarMainResponseDto();
-        response.setMonthlyExerciseDays((int) monthlySessions.stream().map(s -> s.getStartTime().toLocalDate()).distinct().count());
+        // 운동일수는 출석과 같은 뜻이라 측정된 것이 없는 세션만 있던 날은 세지 않는다(사용자 결정 2026-11-22). 달력의 «기록 있음» 점(records)은
+        // 그대로 둔다 — 눌러서 «측정 안 됨» 세션을 볼 수 있어야 하므로 «볼 기록이 있다» 와 «운동했다» 를 구분한다.
+        response.setMonthlyExerciseDays((int) monthlySessions.stream().filter(Session::isMeasured)
+                .map(s -> s.getStartTime().toLocalDate()).distinct().count());
         response.setTotalAvgSyncRate((int) avgSyncRate);
         // 연속일수는 출석 정의(COMPLETED 만, 창 없이 커서)를 한곳에 둔 AttendanceService 가 센다 —
         // 예전엔 여기서 status 전부·100일 창으로 따로 셌다(social-cheer-and-group-feed.md §3-B).
@@ -204,7 +207,7 @@ public class SessionActivityQueryService {
         detail.setScoreAvailable(s.getAvgSyncRate() != null);
         // 측정된 것이 없는 세션(0회 + 점수 없음) — AI 가 사람을 못 찾았거나 rep 이 하나도 안 나온 경우. 점수가 null 인 것은
         // «횟수만 재는 종목» 도 마찬가지라 총 횟수를 함께 본다. 평균 싱크로율은 미인정 시도를 포함하므로(2026-10-21) 시도만 있어도 측정된 것이다.
-        detail.setMeasured((s.getTotalReps() != null && s.getTotalReps() > 0) || s.getAvgSyncRate() != null);
+        detail.setMeasured(s.isMeasured());
         detail.setMeasurementStatus(s.getMeasurementStatus() == null ? null : s.getMeasurementStatus().name());
         return detail;
     }
