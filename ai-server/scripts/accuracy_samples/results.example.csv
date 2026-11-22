@@ -1,0 +1,8 @@
+video_id,ai_total_reps,rep_no,ai_rep_label,ai_sync_rate,ai_feedback_type,measured_status
+ex_001,3,1,good,88.0,,ok
+ex_001,3,2,bad,61.5,,ok
+ex_001,3,3,bad,55.0,,ok
+ex_002,3,1,good,90.0,,ok
+ex_002,3,2,good,84.0,,ok
+ex_002,3,3,good,79.0,,ok
+ex_003,0,,,,,no_person

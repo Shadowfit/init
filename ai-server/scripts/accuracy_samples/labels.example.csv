@@ -1,0 +1,13 @@
+video_id,labeler,exercise,camera_angle,lighting,true_rep_count,rep_no,rep_label,bad_type,note
+ex_001,A,squat,front,bright,3,1,good,,예시 데이터 — 실제 영상이 아니다
+ex_001,A,squat,front,bright,3,2,good,,
+ex_001,A,squat,front,bright,3,3,bad,depth,깊이 부족
+ex_001,B,squat,front,bright,3,1,good,,
+ex_001,B,squat,front,bright,3,2,good,,
+ex_001,B,squat,front,bright,3,3,bad,depth,
+ex_002,A,squat,side,dark,2,1,good,,
+ex_002,A,squat,side,dark,2,2,good,,
+ex_002,B,squat,side,dark,2,1,good,,
+ex_002,B,squat,side,dark,2,2,bad,,기준이 애매한 rep
+ex_003,A,squat,front,bright,0,,,,카메라를 가린 영상(정답 0회)
+ex_003,B,squat,front,bright,0,,,,
