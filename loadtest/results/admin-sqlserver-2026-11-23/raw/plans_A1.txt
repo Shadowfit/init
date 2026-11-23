@@ -1,0 +1,453 @@
+Changed database context to 'sf_idx_bench'.
+StmtText
+--------
+-- CELL A1 list FAILED 1
+SELECT TOP 20 id, member_id, start_time, status FROM dbo.sessions_scale WHERE status = 'FAILED' AND start_time >= '2026-11-22T17:39:06' ORDER BY start_time DESC;
+
+(1 rows affected)
+StmtText
+--------
+  |--Top(TOP EXPRESSION:((20)))
+       |--Nested Loops(Inner Join, OUTER REFERENCES:([sf_idx_bench].[dbo].[sessions_scale].[id], [Expr1005]) WITH ORDERED PREFETCH)
+            |--Nested Loops(Inner Join, OUTER REFERENCES:([Expr1003], [Expr1004], [Expr1002]))
+            |    |--Compute Scalar(DEFINE:(([Expr1003],[Expr1004],[Expr1002])=GetRangeWithMismatchedTypes('2026-11-22 17:39:06.0000000',NULL,(22))))
+            |    |    |--Constant Scan
+            |    |--Index Seek(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[ix_st_m]), SEEK:([sf_idx_bench].[dbo].[sessions_scale].[start_time] > [Expr1003] AND [sf_idx_bench].[dbo].[sessions_scale].[start_time] < [Expr1004]) ORDERED BACKWARD)
+            |--Clustered Index Seek(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[pk_sessions_scale]), SEEK:([sf_idx_bench].[dbo].[sessions_scale].[id]=[sf_idx_bench].[dbo].[sessions_scale].[id]),  WHERE:([sf_idx_bench].[dbo].[sessions_scale].[status]='FAILED') LOOKUP ORDERED FORWARD)
+
+(7 rows affected)
+StmtText
+--------
+-- CELL A1 list FAILED 7
+SELECT TOP 20 id, member_id, start_time, status FROM dbo.sessions_scale WHERE status = 'FAILED' AND start_time >= '2026-11-16T17:39:06' ORDER BY start_time DESC;
+
+(1 rows affected)
+StmtText
+--------
+  |--Top(TOP EXPRESSION:((20)))
+       |--Nested Loops(Inner Join, OUTER REFERENCES:([sf_idx_bench].[dbo].[sessions_scale].[id], [Expr1005]) WITH ORDERED PREFETCH)
+            |--Nested Loops(Inner Join, OUTER REFERENCES:([Expr1003], [Expr1004], [Expr1002]))
+            |    |--Compute Scalar(DEFINE:(([Expr1003],[Expr1004],[Expr1002])=GetRangeWithMismatchedTypes('2026-11-16 17:39:06.0000000',NULL,(22))))
+            |    |    |--Constant Scan
+            |    |--Index Seek(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[ix_st_m]), SEEK:([sf_idx_bench].[dbo].[sessions_scale].[start_time] > [Expr1003] AND [sf_idx_bench].[dbo].[sessions_scale].[start_time] < [Expr1004]) ORDERED BACKWARD)
+            |--Clustered Index Seek(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[pk_sessions_scale]), SEEK:([sf_idx_bench].[dbo].[sessions_scale].[id]=[sf_idx_bench].[dbo].[sessions_scale].[id]),  WHERE:([sf_idx_bench].[dbo].[sessions_scale].[status]='FAILED') LOOKUP ORDERED FORWARD)
+
+(7 rows affected)
+StmtText
+--------
+-- CELL A1 list FAILED 30
+SELECT TOP 20 id, member_id, start_time, status FROM dbo.sessions_scale WHERE status = 'FAILED' AND start_time >= '2026-10-24T17:39:06' ORDER BY start_time DESC;
+
+(1 rows affected)
+StmtText
+--------
+  |--Top(TOP EXPRESSION:((20)))
+       |--Nested Loops(Inner Join, OUTER REFERENCES:([sf_idx_bench].[dbo].[sessions_scale].[id], [Expr1005]) WITH ORDERED PREFETCH)
+            |--Nested Loops(Inner Join, OUTER REFERENCES:([Expr1003], [Expr1004], [Expr1002]))
+            |    |--Compute Scalar(DEFINE:(([Expr1003],[Expr1004],[Expr1002])=GetRangeWithMismatchedTypes('2026-10-24 17:39:06.0000000',NULL,(22))))
+            |    |    |--Constant Scan
+            |    |--Index Seek(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[ix_st_m]), SEEK:([sf_idx_bench].[dbo].[sessions_scale].[start_time] > [Expr1003] AND [sf_idx_bench].[dbo].[sessions_scale].[start_time] < [Expr1004]) ORDERED BACKWARD)
+            |--Clustered Index Seek(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[pk_sessions_scale]), SEEK:([sf_idx_bench].[dbo].[sessions_scale].[id]=[sf_idx_bench].[dbo].[sessions_scale].[id]),  WHERE:([sf_idx_bench].[dbo].[sessions_scale].[status]='FAILED') LOOKUP ORDERED FORWARD)
+
+(7 rows affected)
+StmtText
+--------
+-- CELL A1 list FAILED 0
+SELECT TOP 20 id, member_id, start_time, status FROM dbo.sessions_scale WHERE status = 'FAILED' ORDER BY start_time DESC;
+
+(1 rows affected)
+StmtText
+--------
+  |--Top(TOP EXPRESSION:((20)))
+       |--Nested Loops(Inner Join, OUTER REFERENCES:([sf_idx_bench].[dbo].[sessions_scale].[id], [Expr1002]) WITH ORDERED PREFETCH)
+            |--Index Scan(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[ix_st_m]), ORDERED BACKWARD)
+            |--Clustered Index Seek(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[pk_sessions_scale]), SEEK:([sf_idx_bench].[dbo].[sessions_scale].[id]=[sf_idx_bench].[dbo].[sessions_scale].[id]),  WHERE:([sf_idx_bench].[dbo].[sessions_scale].[status]='FAILED') LOOKUP ORDERED FORWARD)
+
+(4 rows affected)
+StmtText
+--------
+-- CELL A1 list CANCELLED 1
+SELECT TOP 20 id, member_id, start_time, status FROM dbo.sessions_scale WHERE status = 'CANCELLED' AND start_time >= '2026-11-22T17:39:06' ORDER BY start_time DESC;
+
+(1 rows affected)
+StmtText
+--------
+  |--Top(TOP EXPRESSION:((20)))
+       |--Nested Loops(Inner Join, OUTER REFERENCES:([sf_idx_bench].[dbo].[sessions_scale].[id], [Expr1005]) WITH ORDERED PREFETCH)
+            |--Nested Loops(Inner Join, OUTER REFERENCES:([Expr1003], [Expr1004], [Expr1002]))
+            |    |--Compute Scalar(DEFINE:(([Expr1003],[Expr1004],[Expr1002])=GetRangeWithMismatchedTypes('2026-11-22 17:39:06.0000000',NULL,(22))))
+            |    |    |--Constant Scan
+            |    |--Index Seek(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[ix_st_m]), SEEK:([sf_idx_bench].[dbo].[sessions_scale].[start_time] > [Expr1003] AND [sf_idx_bench].[dbo].[sessions_scale].[start_time] < [Expr1004]) ORDERED BACKWARD)
+            |--Clustered Index Seek(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[pk_sessions_scale]), SEEK:([sf_idx_bench].[dbo].[sessions_scale].[id]=[sf_idx_bench].[dbo].[sessions_scale].[id]),  WHERE:([sf_idx_bench].[dbo].[sessions_scale].[status]='CANCELLED') LOOKUP ORDERED FORWARD)
+
+(7 rows affected)
+StmtText
+--------
+-- CELL A1 list CANCELLED 7
+SELECT TOP 20 id, member_id, start_time, status FROM dbo.sessions_scale WHERE status = 'CANCELLED' AND start_time >= '2026-11-16T17:39:06' ORDER BY start_time DESC;
+
+(1 rows affected)
+StmtText
+--------
+  |--Top(TOP EXPRESSION:((20)))
+       |--Nested Loops(Inner Join, OUTER REFERENCES:([sf_idx_bench].[dbo].[sessions_scale].[id], [Expr1005]) WITH ORDERED PREFETCH)
+            |--Nested Loops(Inner Join, OUTER REFERENCES:([Expr1003], [Expr1004], [Expr1002]))
+            |    |--Compute Scalar(DEFINE:(([Expr1003],[Expr1004],[Expr1002])=GetRangeWithMismatchedTypes('2026-11-16 17:39:06.0000000',NULL,(22))))
+            |    |    |--Constant Scan
+            |    |--Index Seek(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[ix_st_m]), SEEK:([sf_idx_bench].[dbo].[sessions_scale].[start_time] > [Expr1003] AND [sf_idx_bench].[dbo].[sessions_scale].[start_time] < [Expr1004]) ORDERED BACKWARD)
+            |--Clustered Index Seek(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[pk_sessions_scale]), SEEK:([sf_idx_bench].[dbo].[sessions_scale].[id]=[sf_idx_bench].[dbo].[sessions_scale].[id]),  WHERE:([sf_idx_bench].[dbo].[sessions_scale].[status]='CANCELLED') LOOKUP ORDERED FORWARD)
+
+(7 rows affected)
+StmtText
+--------
+-- CELL A1 list CANCELLED 30
+SELECT TOP 20 id, member_id, start_time, status FROM dbo.sessions_scale WHERE status = 'CANCELLED' AND start_time >= '2026-10-24T17:39:06' ORDER BY start_time DESC;
+
+(1 rows affected)
+StmtText
+--------
+  |--Top(TOP EXPRESSION:((20)))
+       |--Nested Loops(Inner Join, OUTER REFERENCES:([sf_idx_bench].[dbo].[sessions_scale].[id], [Expr1005]) WITH ORDERED PREFETCH)
+            |--Nested Loops(Inner Join, OUTER REFERENCES:([Expr1003], [Expr1004], [Expr1002]))
+            |    |--Compute Scalar(DEFINE:(([Expr1003],[Expr1004],[Expr1002])=GetRangeWithMismatchedTypes('2026-10-24 17:39:06.0000000',NULL,(22))))
+            |    |    |--Constant Scan
+            |    |--Index Seek(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[ix_st_m]), SEEK:([sf_idx_bench].[dbo].[sessions_scale].[start_time] > [Expr1003] AND [sf_idx_bench].[dbo].[sessions_scale].[start_time] < [Expr1004]) ORDERED BACKWARD)
+            |--Clustered Index Seek(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[pk_sessions_scale]), SEEK:([sf_idx_bench].[dbo].[sessions_scale].[id]=[sf_idx_bench].[dbo].[sessions_scale].[id]),  WHERE:([sf_idx_bench].[dbo].[sessions_scale].[status]='CANCELLED') LOOKUP ORDERED FORWARD)
+
+(7 rows affected)
+StmtText
+--------
+-- CELL A1 list CANCELLED 0
+SELECT TOP 20 id, member_id, start_time, status FROM dbo.sessions_scale WHERE status = 'CANCELLED' ORDER BY start_time DESC;
+
+(1 rows affected)
+StmtText
+--------
+  |--Top(TOP EXPRESSION:((20)))
+       |--Nested Loops(Inner Join, OUTER REFERENCES:([sf_idx_bench].[dbo].[sessions_scale].[id], [Expr1002]) WITH ORDERED PREFETCH)
+            |--Index Scan(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[ix_st_m]), ORDERED BACKWARD)
+            |--Clustered Index Seek(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[pk_sessions_scale]), SEEK:([sf_idx_bench].[dbo].[sessions_scale].[id]=[sf_idx_bench].[dbo].[sessions_scale].[id]),  WHERE:([sf_idx_bench].[dbo].[sessions_scale].[status]='CANCELLED') LOOKUP ORDERED FORWARD)
+
+(4 rows affected)
+StmtText
+--------
+-- CELL A1 list IN_PROGRESS 1
+SELECT TOP 20 id, member_id, start_time, status FROM dbo.sessions_scale WHERE status = 'IN_PROGRESS' AND start_time >= '2026-11-22T17:39:06' ORDER BY start_time DESC;
+
+(1 rows affected)
+StmtText
+--------
+  |--Top(TOP EXPRESSION:((20)))
+       |--Nested Loops(Inner Join, OUTER REFERENCES:([sf_idx_bench].[dbo].[sessions_scale].[id], [Expr1005]) WITH ORDERED PREFETCH)
+            |--Nested Loops(Inner Join, OUTER REFERENCES:([Expr1003], [Expr1004], [Expr1002]))
+            |    |--Compute Scalar(DEFINE:(([Expr1003],[Expr1004],[Expr1002])=GetRangeWithMismatchedTypes('2026-11-22 17:39:06.0000000',NULL,(22))))
+            |    |    |--Constant Scan
+            |    |--Index Seek(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[ix_st_m]), SEEK:([sf_idx_bench].[dbo].[sessions_scale].[start_time] > [Expr1003] AND [sf_idx_bench].[dbo].[sessions_scale].[start_time] < [Expr1004]) ORDERED BACKWARD)
+            |--Clustered Index Seek(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[pk_sessions_scale]), SEEK:([sf_idx_bench].[dbo].[sessions_scale].[id]=[sf_idx_bench].[dbo].[sessions_scale].[id]),  WHERE:([sf_idx_bench].[dbo].[sessions_scale].[status]='IN_PROGRESS') LOOKUP ORDERED FORWARD)
+
+(7 rows affected)
+StmtText
+--------
+-- CELL A1 list IN_PROGRESS 7
+SELECT TOP 20 id, member_id, start_time, status FROM dbo.sessions_scale WHERE status = 'IN_PROGRESS' AND start_time >= '2026-11-16T17:39:06' ORDER BY start_time DESC;
+
+(1 rows affected)
+StmtText
+--------
+  |--Top(TOP EXPRESSION:((20)))
+       |--Nested Loops(Inner Join, OUTER REFERENCES:([sf_idx_bench].[dbo].[sessions_scale].[id], [Expr1005]) WITH ORDERED PREFETCH)
+            |--Nested Loops(Inner Join, OUTER REFERENCES:([Expr1003], [Expr1004], [Expr1002]))
+            |    |--Compute Scalar(DEFINE:(([Expr1003],[Expr1004],[Expr1002])=GetRangeWithMismatchedTypes('2026-11-16 17:39:06.0000000',NULL,(22))))
+            |    |    |--Constant Scan
+            |    |--Index Seek(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[ix_st_m]), SEEK:([sf_idx_bench].[dbo].[sessions_scale].[start_time] > [Expr1003] AND [sf_idx_bench].[dbo].[sessions_scale].[start_time] < [Expr1004]) ORDERED BACKWARD)
+            |--Clustered Index Seek(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[pk_sessions_scale]), SEEK:([sf_idx_bench].[dbo].[sessions_scale].[id]=[sf_idx_bench].[dbo].[sessions_scale].[id]),  WHERE:([sf_idx_bench].[dbo].[sessions_scale].[status]='IN_PROGRESS') LOOKUP ORDERED FORWARD)
+
+(7 rows affected)
+StmtText
+--------
+-- CELL A1 list IN_PROGRESS 30
+SELECT TOP 20 id, member_id, start_time, status FROM dbo.sessions_scale WHERE status = 'IN_PROGRESS' AND start_time >= '2026-10-24T17:39:06' ORDER BY start_time DESC;
+
+(1 rows affected)
+StmtText
+--------
+  |--Top(TOP EXPRESSION:((20)))
+       |--Nested Loops(Inner Join, OUTER REFERENCES:([sf_idx_bench].[dbo].[sessions_scale].[id], [Expr1005]) WITH ORDERED PREFETCH)
+            |--Nested Loops(Inner Join, OUTER REFERENCES:([Expr1003], [Expr1004], [Expr1002]))
+            |    |--Compute Scalar(DEFINE:(([Expr1003],[Expr1004],[Expr1002])=GetRangeWithMismatchedTypes('2026-10-24 17:39:06.0000000',NULL,(22))))
+            |    |    |--Constant Scan
+            |    |--Index Seek(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[ix_st_m]), SEEK:([sf_idx_bench].[dbo].[sessions_scale].[start_time] > [Expr1003] AND [sf_idx_bench].[dbo].[sessions_scale].[start_time] < [Expr1004]) ORDERED BACKWARD)
+            |--Clustered Index Seek(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[pk_sessions_scale]), SEEK:([sf_idx_bench].[dbo].[sessions_scale].[id]=[sf_idx_bench].[dbo].[sessions_scale].[id]),  WHERE:([sf_idx_bench].[dbo].[sessions_scale].[status]='IN_PROGRESS') LOOKUP ORDERED FORWARD)
+
+(7 rows affected)
+StmtText
+--------
+-- CELL A1 list IN_PROGRESS 0
+SELECT TOP 20 id, member_id, start_time, status FROM dbo.sessions_scale WHERE status = 'IN_PROGRESS' ORDER BY start_time DESC;
+
+(1 rows affected)
+StmtText
+--------
+  |--Top(TOP EXPRESSION:((20)))
+       |--Nested Loops(Inner Join, OUTER REFERENCES:([sf_idx_bench].[dbo].[sessions_scale].[id], [Expr1002]) WITH ORDERED PREFETCH)
+            |--Index Scan(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[ix_st_m]), ORDERED BACKWARD)
+            |--Clustered Index Seek(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[pk_sessions_scale]), SEEK:([sf_idx_bench].[dbo].[sessions_scale].[id]=[sf_idx_bench].[dbo].[sessions_scale].[id]),  WHERE:([sf_idx_bench].[dbo].[sessions_scale].[status]='IN_PROGRESS') LOOKUP ORDERED FORWARD)
+
+(4 rows affected)
+StmtText
+--------
+-- CELL A1 list COMPLETED 1
+SELECT TOP 20 id, member_id, start_time, status FROM dbo.sessions_scale WHERE status = 'COMPLETED' AND start_time >= '2026-11-22T17:39:06' ORDER BY start_time DESC;
+
+(1 rows affected)
+StmtText
+--------
+  |--Top(TOP EXPRESSION:((20)))
+       |--Nested Loops(Inner Join, OUTER REFERENCES:([sf_idx_bench].[dbo].[sessions_scale].[id], [Expr1005]) WITH ORDERED PREFETCH)
+            |--Nested Loops(Inner Join, OUTER REFERENCES:([Expr1003], [Expr1004], [Expr1002]))
+            |    |--Compute Scalar(DEFINE:(([Expr1003],[Expr1004],[Expr1002])=GetRangeWithMismatchedTypes('2026-11-22 17:39:06.0000000',NULL,(22))))
+            |    |    |--Constant Scan
+            |    |--Index Seek(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[ix_st_m]), SEEK:([sf_idx_bench].[dbo].[sessions_scale].[start_time] > [Expr1003] AND [sf_idx_bench].[dbo].[sessions_scale].[start_time] < [Expr1004]) ORDERED BACKWARD)
+            |--Clustered Index Seek(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[pk_sessions_scale]), SEEK:([sf_idx_bench].[dbo].[sessions_scale].[id]=[sf_idx_bench].[dbo].[sessions_scale].[id]),  WHERE:([sf_idx_bench].[dbo].[sessions_scale].[status]='COMPLETED') LOOKUP ORDERED FORWARD)
+
+(7 rows affected)
+StmtText
+--------
+-- CELL A1 list COMPLETED 7
+SELECT TOP 20 id, member_id, start_time, status FROM dbo.sessions_scale WHERE status = 'COMPLETED' AND start_time >= '2026-11-16T17:39:06' ORDER BY start_time DESC;
+
+(1 rows affected)
+StmtText
+--------
+  |--Top(TOP EXPRESSION:((20)))
+       |--Nested Loops(Inner Join, OUTER REFERENCES:([sf_idx_bench].[dbo].[sessions_scale].[id], [Expr1005]) WITH ORDERED PREFETCH)
+            |--Nested Loops(Inner Join, OUTER REFERENCES:([Expr1003], [Expr1004], [Expr1002]))
+            |    |--Compute Scalar(DEFINE:(([Expr1003],[Expr1004],[Expr1002])=GetRangeWithMismatchedTypes('2026-11-16 17:39:06.0000000',NULL,(22))))
+            |    |    |--Constant Scan
+            |    |--Index Seek(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[ix_st_m]), SEEK:([sf_idx_bench].[dbo].[sessions_scale].[start_time] > [Expr1003] AND [sf_idx_bench].[dbo].[sessions_scale].[start_time] < [Expr1004]) ORDERED BACKWARD)
+            |--Clustered Index Seek(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[pk_sessions_scale]), SEEK:([sf_idx_bench].[dbo].[sessions_scale].[id]=[sf_idx_bench].[dbo].[sessions_scale].[id]),  WHERE:([sf_idx_bench].[dbo].[sessions_scale].[status]='COMPLETED') LOOKUP ORDERED FORWARD)
+
+(7 rows affected)
+StmtText
+--------
+-- CELL A1 list COMPLETED 30
+SELECT TOP 20 id, member_id, start_time, status FROM dbo.sessions_scale WHERE status = 'COMPLETED' AND start_time >= '2026-10-24T17:39:06' ORDER BY start_time DESC;
+
+(1 rows affected)
+StmtText
+--------
+  |--Top(TOP EXPRESSION:((20)))
+       |--Nested Loops(Inner Join, OUTER REFERENCES:([sf_idx_bench].[dbo].[sessions_scale].[id], [Expr1005]) WITH ORDERED PREFETCH)
+            |--Nested Loops(Inner Join, OUTER REFERENCES:([Expr1003], [Expr1004], [Expr1002]))
+            |    |--Compute Scalar(DEFINE:(([Expr1003],[Expr1004],[Expr1002])=GetRangeWithMismatchedTypes('2026-10-24 17:39:06.0000000',NULL,(22))))
+            |    |    |--Constant Scan
+            |    |--Index Seek(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[ix_st_m]), SEEK:([sf_idx_bench].[dbo].[sessions_scale].[start_time] > [Expr1003] AND [sf_idx_bench].[dbo].[sessions_scale].[start_time] < [Expr1004]) ORDERED BACKWARD)
+            |--Clustered Index Seek(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[pk_sessions_scale]), SEEK:([sf_idx_bench].[dbo].[sessions_scale].[id]=[sf_idx_bench].[dbo].[sessions_scale].[id]),  WHERE:([sf_idx_bench].[dbo].[sessions_scale].[status]='COMPLETED') LOOKUP ORDERED FORWARD)
+
+(7 rows affected)
+StmtText
+--------
+-- CELL A1 list COMPLETED 0
+SELECT TOP 20 id, member_id, start_time, status FROM dbo.sessions_scale WHERE status = 'COMPLETED' ORDER BY start_time DESC;
+
+(1 rows affected)
+StmtText
+--------
+  |--Top(TOP EXPRESSION:((20)))
+       |--Nested Loops(Inner Join, OUTER REFERENCES:([sf_idx_bench].[dbo].[sessions_scale].[id], [Expr1002]) WITH ORDERED PREFETCH)
+            |--Index Scan(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[ix_st_m]), ORDERED BACKWARD)
+            |--Clustered Index Seek(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[pk_sessions_scale]), SEEK:([sf_idx_bench].[dbo].[sessions_scale].[id]=[sf_idx_bench].[dbo].[sessions_scale].[id]),  WHERE:([sf_idx_bench].[dbo].[sessions_scale].[status]='COMPLETED') LOOKUP ORDERED FORWARD)
+
+(4 rows affected)
+StmtText
+--------
+-- CELL A1 count FAILED 1
+SELECT COUNT_BIG(*) FROM dbo.sessions_scale WHERE status = 'FAILED' AND start_time >= '2026-11-22T17:39:06';
+
+(1 rows affected)
+StmtText
+--------
+  |--Stream Aggregate(DEFINE:([Expr1002]=Count(*)))
+       |--Index Scan(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[ix_m_s_st]),  WHERE:([sf_idx_bench].[dbo].[sessions_scale].[start_time]>='2026-11-22 17:39:06.0000000' AND [sf_idx_bench].[dbo].[sessions_scale].[status]='FAILED'))
+
+(2 rows affected)
+StmtText
+--------
+-- CELL A1 count FAILED 7
+SELECT COUNT_BIG(*) FROM dbo.sessions_scale WHERE status = 'FAILED' AND start_time >= '2026-11-16T17:39:06';
+
+(1 rows affected)
+StmtText
+--------
+  |--Stream Aggregate(DEFINE:([Expr1002]=Count(*)))
+       |--Index Scan(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[ix_m_s_st]),  WHERE:([sf_idx_bench].[dbo].[sessions_scale].[start_time]>='2026-11-16 17:39:06.0000000' AND [sf_idx_bench].[dbo].[sessions_scale].[status]='FAILED'))
+
+(2 rows affected)
+StmtText
+--------
+-- CELL A1 count FAILED 30
+SELECT COUNT_BIG(*) FROM dbo.sessions_scale WHERE status = 'FAILED' AND start_time >= '2026-10-24T17:39:06';
+
+(1 rows affected)
+StmtText
+--------
+  |--Stream Aggregate(DEFINE:([Expr1002]=Count(*)))
+       |--Index Scan(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[ix_m_s_st]),  WHERE:([sf_idx_bench].[dbo].[sessions_scale].[start_time]>='2026-10-24 17:39:06.0000000' AND [sf_idx_bench].[dbo].[sessions_scale].[status]='FAILED'))
+
+(2 rows affected)
+StmtText
+--------
+-- CELL A1 count FAILED 0
+SELECT COUNT_BIG(*) FROM dbo.sessions_scale WHERE status = 'FAILED';
+
+(1 rows affected)
+StmtText
+--------
+  |--Stream Aggregate(DEFINE:([Expr1002]=Count(*)))
+       |--Index Scan(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[ix_m_s_st]),  WHERE:([sf_idx_bench].[dbo].[sessions_scale].[status]='FAILED'))
+
+(2 rows affected)
+StmtText
+--------
+-- CELL A1 count CANCELLED 1
+SELECT COUNT_BIG(*) FROM dbo.sessions_scale WHERE status = 'CANCELLED' AND start_time >= '2026-11-22T17:39:06';
+
+(1 rows affected)
+StmtText
+--------
+  |--Stream Aggregate(DEFINE:([Expr1002]=Count(*)))
+       |--Index Scan(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[ix_m_s_st]),  WHERE:([sf_idx_bench].[dbo].[sessions_scale].[start_time]>='2026-11-22 17:39:06.0000000' AND [sf_idx_bench].[dbo].[sessions_scale].[status]='CANCELLED'))
+
+(2 rows affected)
+StmtText
+--------
+-- CELL A1 count CANCELLED 7
+SELECT COUNT_BIG(*) FROM dbo.sessions_scale WHERE status = 'CANCELLED' AND start_time >= '2026-11-16T17:39:06';
+
+(1 rows affected)
+StmtText
+--------
+  |--Stream Aggregate(DEFINE:([Expr1002]=Count(*)))
+       |--Index Scan(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[ix_m_s_st]),  WHERE:([sf_idx_bench].[dbo].[sessions_scale].[start_time]>='2026-11-16 17:39:06.0000000' AND [sf_idx_bench].[dbo].[sessions_scale].[status]='CANCELLED'))
+
+(2 rows affected)
+StmtText
+--------
+-- CELL A1 count CANCELLED 30
+SELECT COUNT_BIG(*) FROM dbo.sessions_scale WHERE status = 'CANCELLED' AND start_time >= '2026-10-24T17:39:06';
+
+(1 rows affected)
+StmtText
+--------
+  |--Stream Aggregate(DEFINE:([Expr1002]=Count(*)))
+       |--Index Scan(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[ix_m_s_st]),  WHERE:([sf_idx_bench].[dbo].[sessions_scale].[start_time]>='2026-10-24 17:39:06.0000000' AND [sf_idx_bench].[dbo].[sessions_scale].[status]='CANCELLED'))
+
+(2 rows affected)
+StmtText
+--------
+-- CELL A1 count CANCELLED 0
+SELECT COUNT_BIG(*) FROM dbo.sessions_scale WHERE status = 'CANCELLED';
+
+(1 rows affected)
+StmtText
+--------
+  |--Stream Aggregate(DEFINE:([Expr1002]=Count(*)))
+       |--Index Scan(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[ix_m_s_st]),  WHERE:([sf_idx_bench].[dbo].[sessions_scale].[status]='CANCELLED'))
+
+(2 rows affected)
+StmtText
+--------
+-- CELL A1 count IN_PROGRESS 1
+SELECT COUNT_BIG(*) FROM dbo.sessions_scale WHERE status = 'IN_PROGRESS' AND start_time >= '2026-11-22T17:39:06';
+
+(1 rows affected)
+StmtText
+--------
+  |--Stream Aggregate(DEFINE:([Expr1002]=Count(*)))
+       |--Index Scan(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[ix_m_s_st]),  WHERE:([sf_idx_bench].[dbo].[sessions_scale].[start_time]>='2026-11-22 17:39:06.0000000' AND [sf_idx_bench].[dbo].[sessions_scale].[status]='IN_PROGRESS'))
+
+(2 rows affected)
+StmtText
+--------
+-- CELL A1 count IN_PROGRESS 7
+SELECT COUNT_BIG(*) FROM dbo.sessions_scale WHERE status = 'IN_PROGRESS' AND start_time >= '2026-11-16T17:39:06';
+
+(1 rows affected)
+StmtText
+--------
+  |--Stream Aggregate(DEFINE:([Expr1002]=Count(*)))
+       |--Index Scan(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[ix_m_s_st]),  WHERE:([sf_idx_bench].[dbo].[sessions_scale].[start_time]>='2026-11-16 17:39:06.0000000' AND [sf_idx_bench].[dbo].[sessions_scale].[status]='IN_PROGRESS'))
+
+(2 rows affected)
+StmtText
+--------
+-- CELL A1 count IN_PROGRESS 30
+SELECT COUNT_BIG(*) FROM dbo.sessions_scale WHERE status = 'IN_PROGRESS' AND start_time >= '2026-10-24T17:39:06';
+
+(1 rows affected)
+StmtText
+--------
+  |--Stream Aggregate(DEFINE:([Expr1002]=Count(*)))
+       |--Index Scan(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[ix_m_s_st]),  WHERE:([sf_idx_bench].[dbo].[sessions_scale].[start_time]>='2026-10-24 17:39:06.0000000' AND [sf_idx_bench].[dbo].[sessions_scale].[status]='IN_PROGRESS'))
+
+(2 rows affected)
+StmtText
+--------
+-- CELL A1 count IN_PROGRESS 0
+SELECT COUNT_BIG(*) FROM dbo.sessions_scale WHERE status = 'IN_PROGRESS';
+
+(1 rows affected)
+StmtText
+--------
+  |--Stream Aggregate(DEFINE:([Expr1002]=Count(*)))
+       |--Index Scan(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[ix_m_s_st]),  WHERE:([sf_idx_bench].[dbo].[sessions_scale].[status]='IN_PROGRESS'))
+
+(2 rows affected)
+StmtText
+--------
+-- CELL A1 count COMPLETED 1
+SELECT COUNT_BIG(*) FROM dbo.sessions_scale WHERE status = 'COMPLETED' AND start_time >= '2026-11-22T17:39:06';
+
+(1 rows affected)
+StmtText
+--------
+  |--Stream Aggregate(DEFINE:([Expr1002]=Count(*)))
+       |--Index Scan(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[ix_m_s_st]),  WHERE:([sf_idx_bench].[dbo].[sessions_scale].[start_time]>='2026-11-22 17:39:06.0000000' AND [sf_idx_bench].[dbo].[sessions_scale].[status]='COMPLETED'))
+
+(2 rows affected)
+StmtText
+--------
+-- CELL A1 count COMPLETED 7
+SELECT COUNT_BIG(*) FROM dbo.sessions_scale WHERE status = 'COMPLETED' AND start_time >= '2026-11-16T17:39:06';
+
+(1 rows affected)
+StmtText
+--------
+  |--Stream Aggregate(DEFINE:([Expr1002]=Count(*)))
+       |--Index Scan(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[ix_m_s_st]),  WHERE:([sf_idx_bench].[dbo].[sessions_scale].[start_time]>='2026-11-16 17:39:06.0000000' AND [sf_idx_bench].[dbo].[sessions_scale].[status]='COMPLETED'))
+
+(2 rows affected)
+StmtText
+--------
+-- CELL A1 count COMPLETED 30
+SELECT COUNT_BIG(*) FROM dbo.sessions_scale WHERE status = 'COMPLETED' AND start_time >= '2026-10-24T17:39:06';
+
+(1 rows affected)
+StmtText
+--------
+  |--Stream Aggregate(DEFINE:([Expr1002]=Count(*)))
+       |--Index Scan(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[ix_m_s_st]),  WHERE:([sf_idx_bench].[dbo].[sessions_scale].[start_time]>='2026-10-24 17:39:06.0000000' AND [sf_idx_bench].[dbo].[sessions_scale].[status]='COMPLETED'))
+
+(2 rows affected)
+StmtText
+--------
+-- CELL A1 count COMPLETED 0
+SELECT COUNT_BIG(*) FROM dbo.sessions_scale WHERE status = 'COMPLETED';
+
+(1 rows affected)
+StmtText
+--------
+  |--Stream Aggregate(DEFINE:([Expr1002]=Count(*)))
+       |--Index Scan(OBJECT:([sf_idx_bench].[dbo].[sessions_scale].[ix_m_s_st]),  WHERE:([sf_idx_bench].[dbo].[sessions_scale].[status]='COMPLETED'))
+
+(2 rows affected)
