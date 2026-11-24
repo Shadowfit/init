@@ -74,6 +74,10 @@ jobs:
         working-directory: frontend
         run: node scripts/check-release-env.test.cjs
 
+      - name: node tests — 다음 세션 추천 카드 표시 문구
+        working-directory: frontend
+        run: node utils/nextSession.test.cjs
+
       - name: node tests — 측정 안 된 세션 안내 문구
         working-directory: frontend
         run: node utils/unmeasuredMessage.test.cjs
