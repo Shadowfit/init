@@ -208,7 +208,7 @@ List<PoseFrameProjection> findFramesBySessionId(@Param("sessionId") Long session
 
 **실측**(이미 [`realmysql-experiments.md`](../portfolio/realmysql-experiments.md) §②b — 2026-06-02, warm, 750행/세션, **로컬 412만 행, 3컬럼 시절 프로젝션**): payload 1,716.8KB→22.4KB(−98.7%), warm 쿼리 12.1ms→1.5ms(8x). 바이트는 −98.7%인데 시간은 −87%인 이유 = 750 row lookup 등 고정비용은 남고 JSON 을 꺼내 보내는 비용만 사라지기 때문(바이트≠시간 선형). ⚠️ 정정(#822): 처음엔 이를 «off-page JSON I/O» 로 적었으나 이 크기는 off-page 가 아니라 행 안에 저장된다([측정](../../loadtest/results/json-offpage-check-2026-10-02/)).
 
-**AWS 1억 행 재검증(2026-07-15)**: payload 1,740.1KB→22.6KB(−98.7%, 동일), warm 쿼리 **40.6ms→1.4ms(29~41x)**. 412만 행 때의 8x보다 배수가 커진 것은 버퍼풀(2GB) 대비 테이블이 25배(~230GB) 커지며 작업셋 비율이 나빠져 페이지 읽기가 캐시에 덜 걸린 탓으로 **추정**한다(off-page 아님 — #822, 따로 재지 않음) — 결론이 강화된 방향이다. ⚠️ 이 쿼리는 precompute가 세션당 1회 도는 비동기 잡이라 **사용자 체감 지연이 아니라 잡의 자원 소모 절감**으로 읽어야 한다.
+**AWS 1억 행 재검증(2026-07-15)**: payload 1,740.1KB→22.6KB(−98.7%, 동일), warm 쿼리 **40.6ms→1.4ms(29~41x)**. 412만 행 때의 8x보다 배수가 커진 것은 버퍼풀(2GB) 대비 테이블이 25배(~230GB) 커지며 작업셋 비율이 나빠졌다. 다만 배수가 왜 커졌는지는 **미규명**이다 — 처음엔 «off-page 랜덤 I/O 가 캐시에 덜 걸린 탓» 으로 적었으나 JSON 이 행 안에 있으면 projection 도 같은 페이지를 읽는다(#822). 결론(−98.7%·배수 증가)은 잰 값 그대로다. ⚠️ 이 쿼리는 precompute가 세션당 1회 도는 비동기 잡이라 **사용자 체감 지연이 아니라 잡의 자원 소모 절감**으로 읽어야 한다.
 
 > 📌 **조건 (2026-08-17)** — 🔴 **정상 리포트 조회는 이 쿼리를 안 부른다.** `ReportService.resolveDetailedAnalysis` 가 저장된 `detailed_analysis` 를 파싱하고 끝내므로, projection 이 도는 곳은 **precompute** 와 **폴백**(그 컬럼이 비었거나 구버전일 때) 둘뿐이다 → 정상 경로 응답시간 기여는 **0**. 단 이건 **코드 판독이고 아직 측정이 아니다**([`./projection-end-to-end-remeasure.md`](./projection-end-to-end-remeasure.md) Q1 이 «0 임을 재는 것» 을 1차 산출물로 세워뒀다). 또한 위 수는 **3컬럼 시절** 값이고 현재 4컬럼 형상으로는 재검증하지 않았다. 조건 전체는 [`realmysql-experiments.md §②b` 조건표](../portfolio/realmysql-experiments.md#projection-98-7).
 

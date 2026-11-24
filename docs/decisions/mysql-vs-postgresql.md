@@ -32,7 +32,7 @@
 |---|---|
 | InnoDB 클러스터드 인덱스가 시계열 append 에 유리 | 절반만 맞음. `pose_data.id` AUTO_INCREMENT(단조 PK)로 InnoDB 특유의 함정을 피한 것뿐. PostgreSQL 힙 테이블은 PK 값과 무관하게 자연 append 라 애초에 이 함정이 없다 → 무승부 |
 | 파티션 `DROP` TTL 패턴이 MySQL 에 맞음 | 자체 실측([`realmysql-experiments.md:116`](../portfolio/realmysql-experiments.md))이 이미 반증 — `session_id=` 조회는 pruning 이득 **0**. 파티셔닝의 값은 보존정책(`DROP PARTITION` O(1))인데 PG 선언적 파티셔닝의 `DETACH`+`DROP` 도 동일하게 O(1) |
-| JSON 오프페이지 회피(projection −98.7%, [조건](../portfolio/realmysql-experiments.md#projection-98-7))가 MySQL 강점 | (정정 #822: 2.3KB JSON 은 off-page 로 안 나가고 행 안에 저장된다 — «off-page 회피» 라는 설명 자체가 틀렸다.) 큰 가변길이 컬럼을 안 읽는 것은 RDBMS 의 일반 원리지 엔진 차별점이 아니다(InnoDB off-page 와 PostgreSQL **TOAST** 도 원리상 동일)<br>(그 −98.7% 도 **precompute·폴백 경로 한정**이고 3컬럼 시절 값이다) |
+| JSON 오프페이지 회피(projection −98.7%, [조건](../portfolio/realmysql-experiments.md#projection-98-7))가 MySQL 강점 | (정정 #822: 2.3KB JSON 은 off-page 로 안 나가고 행 안에 저장된다 — «off-page 회피» 라는 설명 자체가 틀렸다.) JSON 을 결과에서 빼 앱으로 보내지 않는 것은 어떤 RDBMS·ORM 에서나 되는 일반 원리지 엔진 차별점이 아니다(JSON 이 행 안에 있으면 행 페이지를 읽을 때 그 바이트도 함께 읽힌다 — projection 이 줄이는 것은 페이지 읽기가 아니라 결과로 꺼내 전송하는 작업이다)(InnoDB off-page 와 PostgreSQL **TOAST** 도 원리상 동일)<br>(그 −98.7% 도 **precompute·폴백 경로 한정**이고 3컬럼 시절 값이다) |
 
 **면접에서 엔진 자체의 기술적 필연성을 주장하지 말 것.**
 
