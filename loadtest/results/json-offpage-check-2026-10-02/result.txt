@@ -1,0 +1,61 @@
+| v      | page_size | default_row_format |
+| 8.0.46 |     16384 | dynamic            |
+| variant   | row_format | json_text_len | json_storage | pk_leaf_pages | rows_per_leaf | index_pages | lob_pages |
+| real_1809 | Dynamic    |          2072 |         2645 |           401 |           5.0 |         408 |         0 |
+| variant   | PAGE_TYPE         | pages |
+| real_1809 | INDEX             |   408 |
+| real_1809 | FILE_SPACE_HEADER |     1 |
+| real_1809 | IBUF_BITMAP       |     1 |
+| real_1809 | INODE             |     1 |
+| real_1809 | SDI_INDEX         |     1 |
+| variant  | row_format | json_text_len | json_storage | pk_leaf_pages | rows_per_leaf | index_pages | lob_pages |
+| pad_2300 | Dynamic    |          2566 |         3145 |           501 |           4.0 |         508 |         0 |
+| variant  | PAGE_TYPE         | pages |
+| pad_2300 | INDEX             |   508 |
+| pad_2300 | FILE_SPACE_HEADER |     1 |
+| pad_2300 | IBUF_BITMAP       |     1 |
+| pad_2300 | INODE             |     1 |
+| pad_2300 | SDI_INDEX         |     1 |
+| variant  | row_format | json_text_len | json_storage | pk_leaf_pages | rows_per_leaf | index_pages | lob_pages |
+| pad_4000 | Dynamic    |          4266 |         4845 |           668 |           3.0 |         675 |         0 |
+| variant  | PAGE_TYPE         | pages |
+| pad_4000 | INDEX             |   675 |
+| pad_4000 | FILE_SPACE_HEADER |     1 |
+| pad_4000 | IBUF_BITMAP       |     1 |
+| pad_4000 | INODE             |     1 |
+| pad_4000 | SDI_INDEX         |     1 |
+| variant  | row_format | json_text_len | json_storage | pk_leaf_pages | rows_per_leaf | index_pages | lob_pages |
+| pad_7000 | Dynamic    |          7266 |         7845 |          1001 |           2.0 |        1010 |         0 |
+| variant  | PAGE_TYPE         | pages |
+| pad_7000 | INDEX             |  1010 |
+| pad_7000 | FILE_SPACE_HEADER |     1 |
+| pad_7000 | IBUF_BITMAP       |     1 |
+| pad_7000 | INODE             |     1 |
+| pad_7000 | SDI_INDEX         |     1 |
+| variant  | row_format | json_text_len | json_storage | pk_leaf_pages | rows_per_leaf | index_pages | lob_pages |
+| pad_8200 | Dynamic    |          8466 |         9045 |          2011 |           1.0 |          18 |      2000 |
+| variant  | PAGE_TYPE         | pages |
+| pad_8200 | LOB_FIRST         |  2000 |
+| pad_8200 | INDEX             |    18 |
+| pad_8200 | FILE_SPACE_HEADER |     1 |
+| pad_8200 | IBUF_BITMAP       |     1 |
+| pad_8200 | INODE             |     1 |
+| pad_8200 | SDI_INDEX         |     1 |
+| variant  | row_format | json_text_len | json_storage | pk_leaf_pages | rows_per_leaf | index_pages | lob_pages |
+| pad_9000 | Dynamic    |          9266 |         9845 |          2011 |           1.0 |          18 |      2000 |
+| variant  | PAGE_TYPE         | pages |
+| pad_9000 | LOB_FIRST         |  2000 |
+| pad_9000 | INDEX             |    18 |
+| pad_9000 | FILE_SPACE_HEADER |     1 |
+| pad_9000 | IBUF_BITMAP       |     1 |
+| pad_9000 | INODE             |     1 |
+| pad_9000 | SDI_INDEX         |     1 |
+| variant   | row_format | json_text_len | json_storage | pk_leaf_pages | rows_per_leaf | index_pages | lob_pages |
+| pad_12000 | Dynamic    |         12266 |        12845 |          2011 |           1.0 |          18 |      2000 |
+| variant   | PAGE_TYPE         | pages |
+| pad_12000 | LOB_FIRST         |  2000 |
+| pad_12000 | INDEX             |    18 |
+| pad_12000 | FILE_SPACE_HEADER |     1 |
+| pad_12000 | IBUF_BITMAP       |     1 |
+| pad_12000 | INODE             |     1 |
+| pad_12000 | SDI_INDEX         |     1 |
