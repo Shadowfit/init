@@ -137,12 +137,16 @@ export default function ReportScreen() {
   const [deleting, setDeleting] = useState(false);
 
   // 이 운동 기록 삭제 — 서버가 pose_data·세트·리포트·피드백 로그를 함께 지우고 그날 합계를 다시 센다.
+  // 모임 피드 글(group_events)은 payload 에 세션 정보를 «스냅샷» 으로 담고 FK 가 없어, 서버 deleteSession 이 건드리지 않는다 —
+  // 글이 남는다는 것을 확인창에 밝힌다(안 밝히면 «공유한 것도 같이 지워진다» 고 오해한다).
   // 되돌릴 수 없어서 확인을 한 번 받는다. 진행 중 세션은 서버가 409 로 막는다(여기 오는 리포트는 끝난 세션이다).
   const handleDelete = () => {
     if (deleting || !Number.isFinite(sessionId)) return;
     Alert.alert(
       '이 운동 기록을 삭제할까요?',
-      '자세 분석 기록과 리포트가 모두 지워지고 되돌릴 수 없어요. 오늘 운동 합계도 다시 계산돼요.',
+      '자세 분석 기록과 리포트가 모두 지워지고 되돌릴 수 없어요. 오늘 운동 합계도 다시 계산돼요.
+
+모임에 이미 공유한 글은 그대로 남아요.',
       [
         { text: '취소', style: 'cancel' },
         {
