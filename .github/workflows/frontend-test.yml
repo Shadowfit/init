@@ -78,6 +78,10 @@ jobs:
         working-directory: frontend
         run: node scripts/check-release-env.test.cjs
 
+      - name: node tests — 피드 리액션 낙관적 갱신
+        working-directory: frontend
+        run: node utils/reactions.test.cjs
+
       - name: node tests — 다음 세션 추천 카드 표시 문구
         working-directory: frontend
         run: node utils/nextSession.test.cjs
