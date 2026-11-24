@@ -1,0 +1,11 @@
+[Unit]
+Description=Every minute: publish ShadowFit outbox FAILED count
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+# 알람의 «데이터 없음» 판정이 15분이라 1분 단위 정밀도는 필요 없다. 몰려서 도는 것만 피한다.
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target

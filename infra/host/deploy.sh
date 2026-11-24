@@ -141,6 +141,22 @@ else
   log "⚠️ 백업 타이머 설치 실패 — 앱 배포는 계속하지만 백업이 안 돌고 있을 수 있다"
 fi
 
+# ── outbox FAILED 지표 발행 타이머 설치 (알람은 infra/terraform/alarm.tf) ─────────
+# 백업과 같은 방침: 멱등, 실패해도 배포를 막지 않되 크게 알린다.
+install_outbox_metric() {
+  mkdir -p "$ROOT/alarm" /var/lib/shadowfit
+  install -m 0755 "$REL/infra/host/alarm/publish-outbox-failed.sh" "$ROOT/alarm/publish-outbox-failed.sh"
+  install -m 0644 "$REL/infra/host/systemd/shadowfit-outbox-metric.service" /etc/systemd/system/
+  install -m 0644 "$REL/infra/host/systemd/shadowfit-outbox-metric.timer"   /etc/systemd/system/
+  systemctl daemon-reload
+  systemctl enable --now shadowfit-outbox-metric.timer
+}
+if install_outbox_metric; then
+  log "outbox 지표 타이머 설치 완료: $(systemctl list-timers shadowfit-outbox-metric.timer --no-legend | head -1)"
+else
+  log "⚠️ outbox 지표 타이머 설치 실패 — 앱 배포는 계속하지만 FAILED 알람이 «데이터 없음» 으로 울릴 것이다"
+fi
+
 log "배포: backend=$BACKEND_TAG ai=$AI_TAG (이전: backend=${CUR_BACKEND_TAG:-없음} ai=${CUR_AI_TAG:-없음})"
 if rollout "$BACKEND_TAG" "$AI_TAG"; then
   cat > "$STATE" <<EOF
