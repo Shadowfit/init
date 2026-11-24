@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Calendar, type DateData } from 'react-native-calendars';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   CircleUser,
   Flame,
@@ -24,6 +24,7 @@ import LoadError from '@/components/ui/LoadError';
 import { Alert } from '@/utils/alert';
 import { reportService } from '@/services/reportService';
 import { goalService } from '@/services/goalService';
+import { currentRecordsVersion } from '@/utils/recordsVersion';
 import { useAuthStore } from '@/stores/authStore';
 import type { CalendarMainResponse, CalendarDay, DailyActivityResponse } from '@/types/report';
 import type { WorkoutGoal } from '@/types/goal';
@@ -93,6 +94,19 @@ export default function HomeScreen() {
     }, [viewYear, viewMonth]),
   );
 
+  // 리포트에서 기록을 지우고 돌아오면(utils/recordsVersion) 일별 목록을 다시 받는다 — 이 목록은 날짜를 바꿀 때만 받아서,
+  // 안 받으면 지운 세션이 남아 있다가 누르면 «보고서를 찾을 수 없어요» 가 된다. 캘린더는 포커스마다 받으니 따로 안 건드린다.
+  const seenRecordsVersion = useRef(currentRecordsVersion());
+  useFocusEffect(
+    useCallback(() => {
+      const v = currentRecordsVersion();
+      if (v !== seenRecordsVersion.current) {
+        seenRecordsVersion.current = v;
+        setDailyReload((n) => n + 1);
+      }
+    }, []),
+  );
+
   // 내 모임 친구 운동 현황 — 화면 포커스마다 재조회 (재촉·응원 뒤 돌아오면 최신 상태)
   useFocusEffect(
     useCallback(() => {
@@ -145,6 +159,39 @@ export default function HomeScreen() {
     } finally {
       setGoalSaving(false);
     }
+  };
+
+  // 목표 삭제 — 완료한 운동 기록은 그대로 남고 «목표 설정» 만 지워진다(서버 goalRepository.delete 뿐).
+  const [goalDeleting, setGoalDeleting] = useState(false);
+  const deleteGoal = () => {
+    if (!goal || goalDeleting) return;
+    const goalId = goal.id;
+    Alert.alert('목표를 삭제할까요?', '운동 기록은 그대로 남아요. 목표만 지워지고 언제든 다시 정할 수 있어요.', [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '삭제',
+        style: 'destructive',
+        onPress: async () => {
+          setGoalDeleting(true);
+          try {
+            await goalService.deleteGoal(goalId);
+            setGoal(null);
+            setGoalEditing(false);
+            setGoalError(false);
+          } catch (error: any) {
+            if (error?.response?.status === 404) {
+              // 이미 지워졌다(다른 기기에서 등) — 화면도 «목표 없음» 으로 맞춘다.
+              setGoal(null);
+              setGoalEditing(false);
+            } else {
+              Alert.alert('목표를 삭제하지 못했습니다', error?.response?.data?.message ?? '연결을 확인하고 다시 시도해주세요.');
+            }
+          } finally {
+            setGoalDeleting(false);
+          }
+        },
+      },
+    ]);
   };
 
   const retryGoal = async () => {
@@ -300,9 +347,19 @@ export default function HomeScreen() {
               ))}
             </View>
           ) : goal ? (
-            <TouchableOpacity accessibilityRole="button" onPress={() => setGoalEditing(true)} style={styles.goalEditButton}>
-              <Text style={styles.goalEditText}>목표 변경</Text>
-            </TouchableOpacity>
+            <View style={styles.goalActions}>
+              <TouchableOpacity accessibilityRole="button" onPress={() => setGoalEditing(true)} style={styles.goalEditButton}>
+                <Text style={styles.goalEditText}>목표 변경</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                accessibilityRole="button"
+                disabled={goalDeleting}
+                onPress={deleteGoal}
+                style={styles.goalEditButton}
+              >
+                <Text style={styles.goalDeleteText}>{goalDeleting ? '삭제하는 중...' : '목표 삭제'}</Text>
+              </TouchableOpacity>
+            </View>
           ) : (
             <TouchableOpacity accessibilityRole="button" onPress={() => router.push('/(auth)/login')} style={styles.goalEditButton}>
               <Text style={styles.goalEditText}>로그인하고 시작하기</Text>
@@ -517,6 +574,8 @@ const styles = StyleSheet.create({
   goalOptionText: { color: COLORS.text, fontSize: FONT_SIZE.md, fontWeight: '700' },
   goalEditButton: { alignSelf: 'flex-start', marginTop: SPACING.md, paddingVertical: SPACING.sm },
   goalEditText: { color: COLORS.primary, fontSize: FONT_SIZE.sm, fontWeight: '700' },
+  goalActions: { flexDirection: 'row', alignItems: 'center', gap: SPACING.lg },
+  goalDeleteText: { color: COLORS.textMuted, fontSize: FONT_SIZE.sm, fontWeight: '700' },
   goalFootnote: { color: COLORS.textMuted, fontSize: FONT_SIZE.xs, marginTop: SPACING.md, lineHeight: 17 },
 
   // 친구 운동 현황
