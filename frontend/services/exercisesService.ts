@@ -1,5 +1,5 @@
 import api from './api';
-import type { FeedbackTemplate, SessionFeedbackSummary } from '@/types/feedback';
+import type { FeedbackTemplate, SessionFeedbackEvent, SessionFeedbackSummary } from '@/types/feedback';
 import type { SquatDepthMode } from '@/types/report';
 
 interface StartSessionRequest {
@@ -87,4 +87,12 @@ export const exercisesService = {
   // 세션 자세 결함 집계 (GET /sessions/{id}/feedback-summary)
   getSessionFeedbackSummary: (sessionId: number) =>
     api.get<SessionFeedbackSummary>(`/sessions/${sessionId}/feedback-summary`),
+
+  // 세션 자세 결함 «이벤트» 목록 — 발생 시각 오름차순, 본인 세션만, 페이징 없음 (GET /sessions/{id}/feedbacks)
+  getSessionFeedbacks: (sessionId: number) =>
+    api.get<SessionFeedbackEvent[]>(`/sessions/${sessionId}/feedbacks`),
+
+  // 세션 삭제 (DELETE /sessions/{id} → 204). pose_data·세트·리포트·피드백 로그가 같이 지워지고 되돌릴 수 없다.
+  // 본인 세션이 아니거나 없으면 404, 진행 중(IN_PROGRESS)이면 409 — 먼저 종료해야 한다.
+  deleteSession: (sessionId: number) => api.delete<void>(`/sessions/${sessionId}`),
 };
