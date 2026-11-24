@@ -78,6 +78,10 @@ jobs:
         working-directory: frontend
         run: node scripts/check-release-env.test.cjs
 
+      - name: node tests — 세션 자세 교정 이벤트 목록 표시
+        working-directory: frontend
+        run: node utils/feedbackEvents.test.cjs
+
       - name: node tests — 측정 안 된 세션 안내 문구
         working-directory: frontend
         run: node utils/unmeasuredMessage.test.cjs
