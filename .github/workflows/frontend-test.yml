@@ -70,6 +70,10 @@ jobs:
         working-directory: frontend
         run: node services/transientFailure.test.cjs
 
+      - name: node tests — 서버 응답 캐시(신선도·무효화·세션 전환 시 비움)
+        working-directory: frontend
+        run: node lib/queryClient.test.cjs
+
       - name: node tests — 릴리스 빌드 설정 점검
         working-directory: frontend
         run: node scripts/check-release-env.test.cjs
