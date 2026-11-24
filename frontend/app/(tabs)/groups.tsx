@@ -20,6 +20,7 @@ import Button from '@/components/ui/Button';
 import LoadError from '@/components/ui/LoadError';
 import Input from '@/components/ui/Input';
 import { groupService } from '@/services/groupService';
+import { queryClient, queryKeys } from '@/lib/queryClient';
 import type { Group, Invitation } from '@/types/social';
 
 type Sheet = 'create' | 'join' | null;
@@ -92,6 +93,8 @@ export default function GroupsScreen() {
     setSubmitting(true);
     try {
       const res = await groupService.join(code.trim());
+      // 모임 상세는 60초 캐시된다 — 예전에 나갔다 다시 들어온 모임이면 «비멤버» 상태가 남아 있을 수 있다.
+      queryClient.invalidateQueries({ queryKey: queryKeys.groupAll });
       closeSheet();
       router.push(`/group/${res.data.id}` as any);
     } catch (e: any) {
@@ -103,8 +106,12 @@ export default function GroupsScreen() {
 
   const respondInvitation = async (inv: Invitation, accept: boolean) => {
     try {
-      if (accept) await groupService.acceptInvitation(inv.id);
-      else await groupService.declineInvitation(inv.id);
+      if (accept) {
+        await groupService.acceptInvitation(inv.id);
+        queryClient.invalidateQueries({ queryKey: queryKeys.groupAll });
+      } else {
+        await groupService.declineInvitation(inv.id);
+      }
       load();
     } catch (e: any) {
       Alert.alert('처리 실패', errorText(e, '초대를 처리하지 못했어요.'));
