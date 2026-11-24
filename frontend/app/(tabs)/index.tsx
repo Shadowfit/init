@@ -29,6 +29,7 @@ import { useAuthStore } from '@/stores/authStore';
 import type { CalendarMainResponse, CalendarDay, DailyActivityResponse } from '@/types/report';
 import type { WorkoutGoal } from '@/types/goal';
 import FriendStatusList from '@/components/social/FriendStatusList';
+import NextSessionCard from '@/components/home/NextSessionCard';
 import { friendService } from '@/services/friendService';
 import { notificationService } from '@/services/notificationService';
 import type { MemberAttendanceStatus } from '@/types/social';
@@ -345,6 +346,9 @@ export default function HomeScreen() {
           )}
           <Text style={styles.goalFootnote}>완료한 운동 세션만 셉니다. 쉬는 날에도 목표 설정은 유지돼요.</Text>
         </View>
+
+        {/* 다음 스쿼트 추천 — GET /recommendations/next-session (로그인 상태에서만) */}
+        <NextSessionCard enabled={isAuthenticated} />
 
         {/* 내 모임 친구 운동 현황 — GET /friends (오늘 완료 → 진행 중 → 기록 없음 순) */}
         <View style={styles.friendsSection}>
