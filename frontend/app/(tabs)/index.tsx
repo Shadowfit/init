@@ -20,6 +20,7 @@ import {
 } from 'lucide-react-native';
 import { COLORS, FONT_SIZE, SPACING, RADIUS } from '@/constants/Colors';
 import Button from '@/components/ui/Button';
+import LoadError from '@/components/ui/LoadError';
 import { Alert } from '@/utils/alert';
 import { reportService } from '@/services/reportService';
 import { goalService } from '@/services/goalService';
@@ -68,6 +69,9 @@ export default function HomeScreen() {
   // 선택 날짜의 운동 목록 (GET /reports/daily)
   const [daily, setDaily] = useState<DailyActivityResponse | null>(null);
   const [dailyLoading, setDailyLoading] = useState(false);
+  // 일별 기록 조회 실패 — «운동 기록이 없습니다» 로 오해되지 않게 따로 든다. dailyReload 는 «다시 시도» 용 트리거
+  const [dailyError, setDailyError] = useState(false);
+  const [dailyReload, setDailyReload] = useState(0);
   const [friends, setFriends] = useState<MemberAttendanceStatus[]>([]);
 
   // 나의 운동 약속 — 최근 7일 완료 세션 수 목표 (GET/POST/PATCH /goals)
@@ -176,15 +180,17 @@ export default function HomeScreen() {
   useEffect(() => {
     const targetDate = selectedDate || today;
     setDailyLoading(true);
+    setDailyError(false);
     reportService
       .getDaily(targetDate)
       .then((res) => setDaily(res.data))
       .catch((e) => {
+        setDailyError(true);
         devWarn('[daily] 에러 status=', e?.response?.status, 'data=', JSON.stringify(e?.response?.data));
         setDaily(null);
       })
       .finally(() => setDailyLoading(false));
-  }, [selectedDate, today]);
+  }, [selectedDate, today, dailyReload]);
 
   const baseMarked = data ? buildMarkedDates(data.records) : {};
   const markedDates = {
@@ -365,6 +371,8 @@ export default function HomeScreen() {
           </Text>
           {dailyLoading ? (
             <Text style={styles.noRecordText}>불러오는 중...</Text>
+          ) : dailyError ? (
+            <LoadError message="운동 기록을 불러오지 못했어요." onRetry={() => setDailyReload((n) => n + 1)} />
           ) : (daily?.totalWorkouts ?? 0) === 0 ? (
             <Text style={styles.noRecordText}>운동 기록이 없습니다</Text>
           ) : (
