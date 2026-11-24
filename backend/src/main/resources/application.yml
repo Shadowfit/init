@@ -232,6 +232,8 @@ security:
     # 피드 사진 — <Image> 가 웹에서 Authorization 헤더를 못 싣는다. 파일명이 UUID 라 추측으로는 못 닿는다
     # (링크를 아는 사람만 본다 — 모임 피드 응답에만 실리는 값).
     - "/feed-photos/**"
+    # 외부 가동 감시용 — PublicHealthController (포트 8080, DB 한 번만 본다)
+    - "/health"
     - "/actuator/health"
     - "/actuator/health/**"
     # ⚠️ 2026-08-08 — 이 줄이 필요하다는 것은 **실측으로 알았다.**
