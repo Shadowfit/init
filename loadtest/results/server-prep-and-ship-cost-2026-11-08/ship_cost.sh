@@ -63,11 +63,13 @@ ship_one() {  # $1 파일명 $2 키 → stdout "bytes put_ms"
   local f=$1 key=$2 mp path bytes t0 t1
   mp=$(mountpoint_of "$SRC_VOL")
   if [ -n "$mp" ] && [ -r "$mp/$f" ]; then path="$mp/$f"
-  else path="$WORK/_cp_$f"; docker cp "$SRC:/var/lib/mysql/$f" "$path" >/dev/null; fi
+  else path="$WORK/_cp_$f"; docker cp "$SRC:/var/lib/mysql/$f" "$path" >/dev/null || return 1; fi
   bytes=$(stat -c%s "$path")
   t0=$(now_ms)
-  if [[ "$S3_BASE" == s3://* ]]; then aws s3 cp "$path" "$S3_BASE/$key" --only-show-errors
-  else mkdir -p "$WORK/_fake_s3/$(dirname "$key")" && cp "$path" "$WORK/_fake_s3/$key"; fi
+  # 🔴 실패는 `return 1` 로 호출부에 알린다(#855). 이 함수는 명령 치환 `$(ship_one ...)` 안에서 불려 bash 기본값으로는 `set -e` 가
+  #    안 물려지므로, 예전처럼 두면 업로드가 실패해도 아래 `echo` 까지 가서 «성공한 업로드의 소요시간» 으로 기록됐다.
+  if [[ "$S3_BASE" == s3://* ]]; then aws s3 cp "$path" "$S3_BASE/$key" --only-show-errors || return 1
+  else { mkdir -p "$WORK/_fake_s3/$(dirname "$key")" && cp "$path" "$WORK/_fake_s3/$key"; } || return 1; fi
   t1=$(now_ms)
   [[ "$path" == "$WORK"/_cp_* ]] && rm -f "$path"
   echo "$bytes $((t1 - t0))"
@@ -87,7 +89,9 @@ shipper() {  # $1 seg $2 rate $3 interval $4 시작 파일 $5 기록 파일
       [ -n "${shipped[$f]:-}" ] && continue
       shipped[$f]=1
       k=$((k + 1))
-      read -r bytes put <<<"$(ship_one "$f" "shipcost/$seg/$f")" || break 2
+      # 실패한 반출은 `put_ms` 칸에 FAIL 로 남긴다 — 숫자로 둔갑하지 않게. (루프는 계속 돈다: 한 번의 실패가 판 전체를 끝내지 않는다)
+      if out=$(ship_one "$f" "shipcost/$seg/$f"); then read -r bytes put <<<"$out"
+      else bytes=0; put=FAIL; echo "🔴 반출 실패: $f (seg=$seg) — put_ms=FAIL 로 기록한다" >&2; fi
       printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$seg" "$rate" "$iv" "$k" "$f" "$bytes" "$fl" "$put" >> "$rec"
       fl=0   # FLUSH 는 주기마다 한 번 — 한 주기에 파일이 둘 이상 닫혀도 FLUSH 시간은 첫 줄에만
     done
