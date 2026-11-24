@@ -97,3 +97,10 @@ jobs:
       - name: node tests — 측정 안 된 세션 안내 문구
         working-directory: frontend
         run: node utils/unmeasuredMessage.test.cjs
+
+      # 화면·컴포넌트 단위 테스트 (jest-expo + React Native Testing Library). 위 node 테스트는 순수 로직이라
+      # «이 버튼을 누르면 확인창이 뜨는가» 같은 화면 동작은 지금까지 검증이 없었다. 시범으로 운동 화면의
+      # 뒤로가기 확인과 LoadError 가 걸려 있다(__tests__/, components/ui/__tests__/).
+      - name: jest — 화면·컴포넌트
+        working-directory: frontend
+        run: npm test -- --ci

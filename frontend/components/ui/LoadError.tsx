@@ -16,8 +16,10 @@ interface LoadErrorProps {
  */
 export default function LoadError({ message = '불러오지 못했어요. 네트워크를 확인해주세요.', onRetry }: LoadErrorProps) {
   return (
-    <View style={styles.wrap} accessibilityRole="alert">
-      <Text style={styles.text}>{message}</Text>
+    <View style={styles.wrap}>
+      {/* alert 역할은 문구에 둔다. 컨테이너를 accessible 로 만들면 안쪽 «다시 시도» 버튼이 스크린리더에서
+          따로 포커스되지 않는다(자식이 부모에 묶인다) — 테스트가 컨테이너의 역할이 노출되지 않는 것을 잡았다. */}
+      <Text style={styles.text} accessibilityRole="alert">{message}</Text>
       <Button title="다시 시도" onPress={onRetry} variant="outline" size="sm" />
     </View>
   );
