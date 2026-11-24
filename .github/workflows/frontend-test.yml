@@ -70,6 +70,10 @@ jobs:
         working-directory: frontend
         run: node services/transientFailure.test.cjs
 
+      - name: node tests — 서버 응답 캐시(신선도·무효화·세션 전환 시 비움)
+        working-directory: frontend
+        run: node lib/queryClient.test.cjs
+
       - name: node tests — 오프라인 판정
         working-directory: frontend
         run: node utils/offline.test.cjs
@@ -81,6 +85,22 @@ jobs:
       - name: node tests — 릴리스 빌드 설정 점검
         working-directory: frontend
         run: node scripts/check-release-env.test.cjs
+
+      - name: node tests — 세션 자세 교정 이벤트 목록 표시
+        working-directory: frontend
+        run: node utils/feedbackEvents.test.cjs
+
+      - name: node tests — 피드 리액션 낙관적 갱신
+        working-directory: frontend
+        run: node utils/reactions.test.cjs
+
+      - name: node tests — 다음 세션 추천 카드 표시 문구
+        working-directory: frontend
+        run: node utils/nextSession.test.cjs
+
+      - name: node tests — 기록 변경 신호 × 캐시 무효화
+        working-directory: frontend
+        run: node utils/recordsVersion.test.cjs
 
       - name: node tests — 측정 안 된 세션 안내 문구
         working-directory: frontend

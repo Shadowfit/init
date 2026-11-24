@@ -38,6 +38,16 @@ export interface FeedbackTypeBucket {
   maxSyncRate: number;
 }
 
+// GET /sessions/{id}/feedbacks (SessionFeedbackEventDto) — 결함이 «언제» 났는지. 집계(위)와 달리 이벤트 하나하나다.
+export interface SessionFeedbackEvent {
+  id: number;
+  feedbackType: FeedbackType;
+  // 그 순간의 싱크로율. 점수를 못 낸 세션(측정 안 됨)이면 null 일 수 있다
+  syncRateAtTrigger: number | null;
+  // "2026-10-06T11:40:33" — 타임존 없는 로컬 시각
+  occurredAt: string;
+}
+
 export interface SessionFeedbackSummary {
   sessionId: number;
   totalCount: number;

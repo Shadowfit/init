@@ -11,6 +11,13 @@
 // authStore → authService → api 순환이 생긴다(그래서 지금 코드가 `require()` 를 쓴다).
 // 이 모듈은 의존성이 0 이라 양쪽이 그냥 import 할 수 있고, 버전 읽기는 **모든 요청마다**
 // 도는 자리라 더 단순한 쪽을 둔다.
+//
+// 서버 응답 캐시(lib/queryClient.ts)도 **같은 자리에서** 비운다. 「화면에 있는 사람이 바뀐다」 = 「앞 사람의
+// 캐시를 못 쓴다」 라서 두 사건이 같은 시점이고, 세 호출처(로그인·로그아웃·강제 로그아웃)를 따로 고치면
+// 한 곳이 빠졌을 때 앞 사람의 프로필·모임이 다음 사람에게 보인다. 이 모듈은 의존성이 0 이어야 하지만
+// `lib/queryClient` 는 react-query 만 import 하므로 순환이 생기지 않는다.
+import { queryClient } from '../lib/queryClient';
+
 let version = 0;
 
 export function currentSessionVersion(): number {
@@ -19,4 +26,5 @@ export function currentSessionVersion(): number {
 
 export function bumpSessionVersion(): void {
   version += 1;
+  queryClient.clear();
 }

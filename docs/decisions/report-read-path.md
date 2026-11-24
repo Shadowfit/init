@@ -122,7 +122,7 @@ GET /reports/sessions/{id}
 | | 일반 (게시판·쇼핑몰·CRUD) | 너희류 (시계열 적재 + derived 리포트) |
 |---|---|---|
 | 읽기 핫패스 | 목록·검색(다행) | 단건 리포트(부모의 children) |
-| 행 특성 | 작고 균일 | **행마다 fat JSON(off-page)** |
+| 행 특성 | 작고 균일 | **행마다 fat JSON(2.3KB, 행 안 저장)** |
 | 주 문제 | N+1, 인덱스 부재→풀스캔, 깊은 offset | **fat 헛로드·재계산·버퍼풀 오염·raw-in-OLTP** |
 | 인덱스 추가 효과 | 극적(헤드라인) | 이미 최적(조연) |
 | projection 효과 | 작음(행 작음) | **큼(−98.7%)** — 단 precompute·폴백 경로 한정(§7 아래 📌) ([조건](../portfolio/realmysql-experiments.md#projection-98-7)) |
@@ -172,7 +172,7 @@ GET /reports/sessions/{id}
 ```java
 package com.shadowfit.dto.report;
 
-// worst 구간 계산에 필요한 3컬럼만. joint_coordinates(2.3KB) 제외 → off-page I/O 회피.
+// worst 구간 계산에 필요한 3컬럼만. joint_coordinates(2.3KB) 제외 → JSON 을 꺼내 보내지 않는다(#822: off-page 회피가 아니다).
 public record PoseFrameProjection(Double timestampSec, Double syncRate, String feedbackMessage) {}
 ```
 
@@ -198,7 +198,7 @@ public record PoseFrameProjection(
        "ORDER BY p.repNumber ASC, p.timestampSec ASC")
 List<PoseFrameProjection> findFramesBySessionId(@Param("sessionId") Long sessionId);
 ```
-**`joint_coordinates` 를 안 싣는 방침은 그대로다** — 늘어난 두 컬럼은 숫자 하나씩이라 off-page I/O 를 되살리지 않는다. 즉 −98.7% 의 **메커니즘**은 유지되고, 흔들릴 수 있는 것은 **배수의 소수점**이다(미측정, [`projection-end-to-end-remeasure.md`](./projection-end-to-end-remeasure.md) Q5).
+**`joint_coordinates` 를 안 싣는 방침은 그대로다** — 늘어난 두 컬럼은 숫자 하나씩이라 JSON 을 꺼내 보내는 비용을 되살리지 않는다. 즉 −98.7% 의 **메커니즘**(JSON 미전송)은 유지되고, 흔들릴 수 있는 것은 **배수의 소수점**이다(미측정, [`projection-end-to-end-remeasure.md`](./projection-end-to-end-remeasure.md) Q5).
 
 **③ ReportService** — `selectWorstSection`/`buildWorstReason`/`pickDominantFeedback` 시그니처를 `List<PoseFrameProjection>`로, 접근자 `getSyncRate()→syncRate()` 등으로 교체. 호출부(`:51`)를 `findFramesBySessionId`로.
 
@@ -206,9 +206,9 @@ List<PoseFrameProjection> findFramesBySessionId(@Param("sessionId") Long session
 
 > 기존 `findBySessionIdOrderByTimestampSecAsc`는 교체 후 미사용(테스트는 `findAll`/`count`만 씀) → 제거 선택.
 
-**실측**(이미 [`realmysql-experiments.md`](../portfolio/realmysql-experiments.md) §②b — 2026-06-02, warm, 750행/세션, **로컬 412만 행, 3컬럼 시절 프로젝션**): payload 1,716.8KB→22.4KB(−98.7%), warm 쿼리 12.1ms→1.5ms(8x). 바이트는 −98.7%인데 시간은 −87%인 이유 = 750 row lookup 등 고정비용은 남고 off-page JSON I/O만 사라지기 때문(바이트≠시간 선형).
+**실측**(이미 [`realmysql-experiments.md`](../portfolio/realmysql-experiments.md) §②b — 2026-06-02, warm, 750행/세션, **로컬 412만 행, 3컬럼 시절 프로젝션**): payload 1,716.8KB→22.4KB(−98.7%), warm 쿼리 12.1ms→1.5ms(8x). 바이트는 −98.7%인데 시간은 −87%인 이유 = 750 row lookup 등 고정비용은 남고 JSON 을 꺼내 보내는 비용만 사라지기 때문(바이트≠시간 선형). ⚠️ 정정(#822): 처음엔 이를 «off-page JSON I/O» 로 적었으나 이 크기는 off-page 가 아니라 행 안에 저장된다([측정](../../loadtest/results/json-offpage-check-2026-10-02/)).
 
-**AWS 1억 행 재검증(2026-07-15)**: payload 1,740.1KB→22.6KB(−98.7%, 동일), warm 쿼리 **40.6ms→1.4ms(29~41x)**. 412만 행 때의 8x보다 배수가 커진 것은 버퍼풀(2GB) 대비 테이블이 25배(~230GB) 커지며 작업셋 비율이 나빠져 off-page 랜덤 I/O가 캐시에 덜 걸린 탓 — 결론이 강화된 방향이다. ⚠️ 이 쿼리는 precompute가 세션당 1회 도는 비동기 잡이라 **사용자 체감 지연이 아니라 잡의 자원 소모 절감**으로 읽어야 한다.
+**AWS 1억 행 재검증(2026-07-15)**: payload 1,740.1KB→22.6KB(−98.7%, 동일), warm 쿼리 **40.6ms→1.4ms(29~41x)**. 412만 행 때의 8x보다 배수가 커진 것은 버퍼풀(2GB) 대비 테이블이 25배(~230GB) 커지며 작업셋 비율이 나빠졌다. 다만 배수가 왜 커졌는지는 **미규명**이다 — 처음엔 «off-page 랜덤 I/O 가 캐시에 덜 걸린 탓» 으로 적었으나 JSON 이 행 안에 있으면 projection 도 같은 페이지를 읽는다(#822). 결론(−98.7%·배수 증가)은 잰 값 그대로다. ⚠️ 이 쿼리는 precompute가 세션당 1회 도는 비동기 잡이라 **사용자 체감 지연이 아니라 잡의 자원 소모 절감**으로 읽어야 한다.
 
 > 📌 **조건 (2026-08-17)** — 🔴 **정상 리포트 조회는 이 쿼리를 안 부른다.** `ReportService.resolveDetailedAnalysis` 가 저장된 `detailed_analysis` 를 파싱하고 끝내므로, projection 이 도는 곳은 **precompute** 와 **폴백**(그 컬럼이 비었거나 구버전일 때) 둘뿐이다 → 정상 경로 응답시간 기여는 **0**. 단 이건 **코드 판독이고 아직 측정이 아니다**([`./projection-end-to-end-remeasure.md`](./projection-end-to-end-remeasure.md) Q1 이 «0 임을 재는 것» 을 1차 산출물로 세워뒀다). 또한 위 수는 **3컬럼 시절** 값이고 현재 4컬럼 형상으로는 재검증하지 않았다. 조건 전체는 [`realmysql-experiments.md §②b` 조건표](../portfolio/realmysql-experiments.md#projection-98-7).
 

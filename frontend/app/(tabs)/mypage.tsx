@@ -24,6 +24,7 @@ import {
 } from 'lucide-react-native';
 import { COLORS, FONT_SIZE, SPACING, RADIUS } from '@/constants/Colors';
 import { useAuthStore } from '@/stores/authStore';
+import { queryClient, queryKeys, STALE } from '@/lib/queryClient';
 import { memberService } from '@/services/memberService';
 import { preferenceService } from '@/services/preferenceService';
 import type { OnboardingResponse } from '@/types/user';
@@ -55,19 +56,30 @@ export default function MyPageScreen() {
   const [profile, setProfile] = useState<OnboardingResponse | null>(null);
   const [tts, setTts] = useState<TtsPreference | null>(null);
 
-  // 화면 진입 / 재포커스 마다 최신 데이터 조회 (수정 후 돌아올 때도 갱신)
+  // 화면 진입 / 재포커스 마다 조회하되 **5분 안에는 캐시를 쓴다** — 이 두 값은 이 앱 안에서 고칠 때만
+  // 바뀐다. 고치는 곳이 캐시를 갱신·무효화한다(TTS 는 아래 핸들러가 setQueryData, 온보딩 저장은
+  // `(onboarding)/index.tsx` 가 invalidate) 라서 «수정 후 돌아오면 갱신» 은 그대로 지켜진다.
   useFocusEffect(
     useCallback(() => {
       if (!user?.email) return;
-      memberService
-        .getOnboarding(user.email)
-        .then((res) => setProfile(res.data))
+      const email = user.email;
+      queryClient
+        .fetchQuery({
+          queryKey: queryKeys.onboarding(email),
+          queryFn: () => memberService.getOnboarding(email).then((res) => res.data),
+          staleTime: STALE.profile,
+        })
+        .then(setProfile)
         .catch(() => {
           // 조회 실패 시 기존 표시 유지
         });
-      preferenceService
-        .getTts()
-        .then((res) => setTts(res.data))
+      queryClient
+        .fetchQuery({
+          queryKey: queryKeys.tts(email),
+          queryFn: () => preferenceService.getTts().then((res) => res.data),
+          staleTime: STALE.profile,
+        })
+        .then(setTts)
         .catch(() => {
           // 미설정 시 기본값 (백엔드가 ttsEnabled=true, ttsSpeed=1.0 으로 줄 것)
         });
@@ -81,6 +93,7 @@ export default function MyPageScreen() {
     try {
       const res = await preferenceService.updateTts({ ttsEnabled: next });
       setTts(res.data);
+      if (user?.email) queryClient.setQueryData(queryKeys.tts(user.email), res.data);
     } catch (e: any) {
       setTts(prev);
       Alert.alert('TTS 설정 실패', e?.response?.data?.message ?? '잠시 후 다시 시도해주세요');
@@ -95,6 +108,7 @@ export default function MyPageScreen() {
     try {
       const res = await preferenceService.updateTts({ ttsSpeed: rounded });
       setTts(res.data);
+      if (user?.email) queryClient.setQueryData(queryKeys.tts(user.email), res.data);
     } catch (e: any) {
       setTts(prev);
       Alert.alert('TTS 속도 변경 실패', e?.response?.data?.message ?? '잠시 후 다시 시도해주세요');

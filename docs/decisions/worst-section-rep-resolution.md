@@ -307,7 +307,7 @@ precompute-on-write 로 **이미 `reports.detailed_analysis` 에 저장된 worst
 기존 동작(윈도우 중앙)과 가장 가까워 변화가 작다. 검토했으나 배제한 것:
 
 - *rep 시작 프레임* — 되감기 지점으로는 더 자연스럽지만, 지금 바꿀 이유가 약하다
-- *가장 깊었던 지점* — ❌ **무릎각 컬럼이 없다.** `pose_data` 는 `(timestamp_sec, joint_coordinates, sync_rate, is_correct, feedback_message)` 뿐이라 `joint_coordinates`(2.3KB JSON) 를 파싱해야 하는데, 그건 `PoseFrameProjection` 이 애초에 피하려던 off-page I/O 를 되살리는 일이다
+- *가장 깊었던 지점* — ❌ **무릎각 컬럼이 없다.** `pose_data` 는 `(timestamp_sec, joint_coordinates, sync_rate, is_correct, feedback_message)` 뿐이라 `joint_coordinates`(2.3KB JSON) 를 파싱해야 하는데, 그건 `PoseFrameProjection` 이 애초에 피하려던 2.3KB JSON 을 꺼내 보내는 비용을 되살리는 일이다(#822: off-page I/O 가 아니라 행 안 저장)
   > ⚠️ **2026-08-01 보강 — 이 배제 근거는 Spring 관점에서만 맞다.** ai-server 는 프레임별 각도를 이미 계산해 보관하고 rep 안 최소 무릎각까지 구해 두고서 **전송하지 않는다**(§4-ㄹ). 즉 선택지는 *"JSON 파싱이냐 포기냐"* 가 아니라 *"컬럼을 하나 늘려 받을 것이냐"* 였다. 결론(중앙 프레임)은 유지하되 — 크로스 레포 + 파티션 테이블 마이그레이션이 붙어 ㄱ안 범위에 넣을 일은 아니었다 — **근거가 좁았다는 사실은 남긴다**
 
 ### `reason` = **동어반복 제거** ✅ (정확한 문구는 미정)

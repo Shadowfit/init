@@ -176,7 +176,7 @@
 - **조건**: 2026-05-31 로컬(2물리코어에 MySQL·백엔드·부하기 동거), 빌드마다 cold 기동 → warmup 60초 폐기 → ramp 5→100 step 210초. **절대 RPS(23.5 → 46.7)는 머신 부하에 흔들려 인용하지 않고 델타만 쓴다** — [조건 전체](./decisions/load-test-strategy.md#batch-insert-99).
 
 ### 5.2 읽기 — JSON projection
-세션 분석 계산 시 `joint_coordinates`(2.3KB JSON, InnoDB off-page 저장) 전체를 헛로드하던 경로를 DTO projection으로 교체(측정 시점 3컬럼, **현재 4컬럼** — `joint_coordinates` 를 안 싣는 방침은 유지):
+세션 분석 계산 시 `joint_coordinates`(2.3KB JSON) 전체를 헛로드하던 경로를 DTO projection으로 교체(측정 시점 3컬럼, **현재 4컬럼** — `joint_coordinates` 를 안 싣는 방침은 유지):
 
 | 지표 | before | after | 효과 |
 |---|---|---|---|
@@ -187,9 +187,9 @@
 
 → **측정 조건**: warm(같은 쿼리 cold 721ms → warm 12ms), 750행/세션, 측정 시점 3컬럼 프로젝션. **−98.7% 는 DB→앱 payload** 지 앱→클라이언트 응답 바이트가 아니다. 절대 ms 는 하드웨어 종속이라 배수까지만 인용한다 — 조건 전체는 [`realmysql-experiments.md` §②b](./portfolio/realmysql-experiments.md#projection-98-7).
 
-→ 인덱스는 동일. 차이는 JSON이 off-page overflow로 저장돼 SELECT 시 추가 random I/O가 발생하는데, projection이 이를 회피한 것.
+→ 인덱스는 동일. 차이는 JSON(2.3KB)을 꺼내 앱으로 보내는 비용을 projection이 없앤 것. ⚠️ 정정(#822): 처음엔 off-page overflow 의 추가 random I/O 회피로 적었으나 실측하니 이 크기는 off-page 가 아니라 행 안에 저장된다 — 수치는 그대로, «왜» 만 정정.
 
-→ **1억 행 재검증(2026-07-15, AWS EC2 m6i.xlarge)에서 배수가 오히려 커졌다.** 버퍼풀은 2GB로 동일한데 테이블이 25배(~230GB) 커지며 작업셋 대비 버퍼풀 비율이 나빠져, 풀엔티티 로드의 off-page 랜덤 I/O가 캐시에 덜 걸리고 실제 디스크를 더 탄 탓. 결론이 뒤집힌 게 아니라 스케일에 비례해 강화된 것이다. payload 감소율은 두 환경에서 동일(세션당 바이트 비율이라 행수 무관).
+→ **1억 행 재검증(2026-07-15, AWS EC2 m6i.xlarge)에서 배수가 오히려 커졌다.** 버퍼풀은 2GB로 동일한데 테이블이 25배(~230GB) 커지며 작업셋 대비 버퍼풀 비율이 나빠져, 배수가 왜 커졌는지는 **미규명**이다(처음엔 «풀엔티티 로드의 off-page 랜덤 I/O 가 캐시에 덜 걸린 탓» 으로 적었으나 JSON 이 행 안에 있으면 projection 도 같은 페이지를 읽는다 — #822. 갈라 재지 않았다). 결론이 뒤집힌 게 아니라 스케일에 비례해 강화된 것이다. payload 감소율은 두 환경에서 동일(세션당 바이트 비율이라 행수 무관).
 
 > 📌 **조건** — 🔴 **정상적인 리포트 «조회» 는 이 쿼리를 부르지 않는다.** 세션 종료 시 `precomputeReport` 가 결과를 `report.detailed_analysis` 에 미리 넣고, 조회는 그 JSON 을 파싱하고 끝난다. projection 이 도는 곳은 **precompute 잡(세션당 1회, 비동기)** 과 **폴백**(그 컬럼이 비었거나 구버전일 때)뿐이라, 위 수치는 **사용자 체감 지연이 아니라 그 잡의 자원 소모 절감**이다. 이건 코드 판독이고 아직 측정은 아니다([`decisions/projection-end-to-end-remeasure.md`](./decisions/projection-end-to-end-remeasure.md) Q1). 또 위 값은 **3컬럼 시절** 프로젝션의 것이고 현재 4컬럼 형상으로는 재검증하지 않았다. 조건 전체는 [`portfolio/realmysql-experiments.md §②b`](./portfolio/realmysql-experiments.md).
 

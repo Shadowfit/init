@@ -23,6 +23,7 @@ import { Alert } from '@/utils/alert';
 import Button from '@/components/ui/Button';
 import ShareSessionSheet from '@/components/social/ShareSessionSheet';
 import CoachingSummary from '@/components/report/CoachingSummary';
+import FeedbackTimeline from '@/components/report/FeedbackTimeline';
 import LoadError from '@/components/ui/LoadError';
 import { useReloadOnReconnect } from '@/utils/network';
 import { exercisesService } from '@/services/exercisesService';
@@ -35,6 +36,7 @@ import { DEPTH_GRADE_LABEL, isCounted } from '@/types/report';
 import { REJECT_REASON_LABEL, type RejectReason } from '@/types/pose';
 import { syncColor, syncThresholdsFrom } from '@/constants/sync';
 import { unmeasuredMessage } from '@/utils/unmeasuredMessage';
+import { bumpRecordsVersion } from '@/utils/recordsVersion';
 
 const WEEKDAY = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -138,6 +140,48 @@ export default function ReportScreen() {
   const [feedbackSummary, setFeedbackSummary] = useState<SessionFeedbackSummary | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  // 이 운동 기록 삭제 — 서버가 pose_data·세트·리포트·피드백 로그를 함께 지우고 그날 합계를 다시 센다.
+  // 모임 피드 글(group_events)은 payload 에 세션 정보를 «스냅샷» 으로 담고 FK 가 없어, 서버 deleteSession 이 건드리지 않는다 —
+  // 글이 남는다는 것을 확인창에 밝힌다(안 밝히면 «공유한 것도 같이 지워진다» 고 오해한다).
+  // 되돌릴 수 없어서 확인을 한 번 받는다. 진행 중 세션은 서버가 409 로 막는다(여기 오는 리포트는 끝난 세션이다).
+  const handleDelete = () => {
+    if (deleting || !Number.isFinite(sessionId)) return;
+    Alert.alert(
+      '이 운동 기록을 삭제할까요?',
+      '자세 분석 기록과 리포트가 모두 지워지고 되돌릴 수 없어요. 오늘 운동 합계도 다시 계산돼요.\n\n모임에 이미 공유한 글은 그대로 남아요.',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '삭제',
+          style: 'destructive',
+          onPress: async () => {
+            setDeleting(true);
+            try {
+              await exercisesService.deleteSession(sessionId);
+              motionRecorder.clear(sessionId); // 폰에 남은 3D 비교용 좌표도 같이 버린다
+              bumpRecordsVersion(); // 홈이 돌아오면 일별 목록을 다시 받게 알린다
+              handleBack();
+            } catch (e: any) {
+              const status = e?.response?.status;
+              if (status === 404) {
+                // 이미 지워졌거나 내 기록이 아니다 — 남겨 둘 이유가 없으니 목록으로 보낸다.
+                bumpRecordsVersion();
+                Alert.alert('이미 삭제된 기록이에요', '목록을 새로 불러올게요.', [{ text: '확인', onPress: handleBack }]);
+              } else if (status === 409) {
+                Alert.alert('삭제할 수 없어요', '아직 진행 중인 운동이에요. 운동을 끝낸 뒤에 삭제할 수 있어요.');
+              } else {
+                Alert.alert('삭제 실패', e?.response?.data?.message ?? '기록을 삭제하지 못했어요. 잠시 후 다시 시도해주세요.');
+              }
+            } finally {
+              setDeleting(false);
+            }
+          },
+        },
+      ],
+    );
+  };
 
   useEffect(() => {
     if (!Number.isFinite(sessionId)) {
@@ -442,6 +486,11 @@ export default function ReportScreen() {
                 )}
               </View>
             ))}
+            <FeedbackTimeline
+              sessionId={report.sessionId}
+              totalCount={feedbackSummary.totalCount}
+              hasScore={hasScore}
+            />
           </View>
         )}
 
@@ -476,6 +525,17 @@ export default function ReportScreen() {
             </View>
           </View>
         )}
+
+        {/* 기록 삭제 — 눈에 덜 띄게 맨 아래. 되돌릴 수 없는 동작이라 확인창을 거친다 */}
+        <TouchableOpacity
+          style={styles.deleteBtn}
+          onPress={handleDelete}
+          disabled={deleting}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+        >
+          <Text style={styles.deleteText}>{deleting ? '삭제하는 중...' : '이 운동 기록 삭제'}</Text>
+        </TouchableOpacity>
 
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -626,6 +686,8 @@ const styles = StyleSheet.create({
 
   // Section
   section: { paddingHorizontal: SPACING.xxl, marginTop: SPACING.xxl },
+  deleteBtn: { alignSelf: 'center', marginTop: SPACING.xxl, paddingVertical: SPACING.md, paddingHorizontal: SPACING.lg },
+  deleteText: { color: COLORS.error, fontSize: FONT_SIZE.sm, fontWeight: '600' },
   sectionTitle: { fontSize: FONT_SIZE.lg, fontWeight: '700', color: COLORS.text, marginBottom: SPACING.md },
   sectionTitleRow: {
     flexDirection: 'row',

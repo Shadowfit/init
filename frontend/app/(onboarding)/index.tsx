@@ -36,6 +36,7 @@ import type {
   OnboardingData,
 } from '@/types/user';
 import { memberService } from '@/services/memberService';
+import { queryClient, queryKeys } from '@/lib/queryClient';
 import { useAuthStore } from '@/stores/authStore';
 
 const TOTAL_STEPS = 4; // 레벨·키·몸무게·페르소나 (기준 영상 선택은 #802 로 없어졌다)
@@ -130,6 +131,8 @@ export default function OnboardingScreen() {
         height: data.height,
         weight: data.weight,
       });
+      // 마이페이지가 이 값을 5분 캐시한다 — 고쳤으니 낡은 값이 보이지 않게 버린다.
+      queryClient.invalidateQueries({ queryKey: queryKeys.onboardingAll });
       markOnboardingCompleted(); // 가드가 (onboarding) 으로 다시 안 빠지게
       router.replace('/(tabs)');
     } catch (e: any) {
