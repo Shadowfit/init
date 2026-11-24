@@ -16,7 +16,7 @@
 # 🔴 **끝나면 인스턴스를 스스로 끈다** (AUTO_SHUTDOWN 기본 1, 2026-08-24). 단 **업로드가
 #    성공했고(FINAL_OK) 이번 판의 단계가 하나도 FAIL·TIMEOUT 이 아닐 때만**이고(PHASES_OK, #641),
 #    정지까지 SHUTDOWN_DELAY_MIN(기본 5)분의 유예가 있다. 2대 구성이면 리플리카(REPLICA_HOST)·
-#    대상(TARGET_HOST, #688)도 같은 조건으로 같이 끈다. 박스를 남기려면 `AUTO_SHUTDOWN=0` 을 넘길 것.
+#    대상(TARGET_HOST, #688)·DB 박스(DB_HOST, #812)도 같은 조건으로 같이 끈다. 박스를 남기려면 `AUTO_SHUTDOWN=0` 을 넘길 것.
 #    ⚠️ 이것이 도는 것은 **이 스크립트로 돈 판**뿐이다. rig 을 SSH 로 직접 부르면
 #       (예: run_arms.py 를 손으로) 아무것도 안 끈다 — 그때는 사람이 꺼야 한다.
 
@@ -2048,21 +2048,22 @@ if [ -z "$FAILED_PHASES" ]; then PHASES_OK=1; else PHASES_OK=0; fi
 #    어느 한쪽이라도 못 읽으면 **«다른 박스» 로 본다** — 그러면 대상에 정지를 걸어 보는데, 실제로 같은
 #    박스였다면 위의 덮어쓰기일 뿐이고, 다른 박스였다면 그게 맞는 동작이다. 반대로 «같은 박스» 로
 #    잘못 보면 #688 로 되돌아간다(대상이 안 꺼진다). 틀려도 싼 쪽으로 떨어뜨린다.
-target_is_self() {
-  local self tgt
+ssh_is_self() {  # $1 = SSH 명령 문자열(예: TARGET_SSH · DB_SSH) — 그 끝이 이 박스 자신인가
+  local ssh=$1 self tgt
   self=$(imds instance-id)
-  tgt=$($TARGET_SSH "TOK=\$(curl -sf --max-time 3 -X PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 60'); curl -sf --max-time 3 -H \"X-aws-ec2-metadata-token: \$TOK\" http://169.254.169.254/latest/meta-data/instance-id" 2>/dev/null | tr -d '\r')
+  tgt=$($ssh "TOK=\$(curl -sf --max-time 3 -X PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 60'); curl -sf --max-time 3 -H \"X-aws-ec2-metadata-token: \$TOK\" http://169.254.169.254/latest/meta-data/instance-id" 2>/dev/null | tr -d '\r')
   [ -n "$self" ] && [ "$self" = "$tgt" ]
 }
+target_is_self() { ssh_is_self "$TARGET_SSH"; }
 
 # 🔴 업로드가 실패했으면 **절대 안 끈다.** 인스턴스 안에만 있는 결과를 끄는 건
 #    측정을 통째로 버리는 것과 같다. 사람이 와서 회수해야 한다.
 # 🔴 단계가 실패했어도 안 끈다(#641, 위 판정 ①). 결과는 올라갔어도 **원인은 박스 안에** 있다.
 #
-# ⚠️ 이 블록이 끄는 박스는 **이 박스·REPLICA_HOST·TARGET_HOST** 셋뿐이다. 러너가 SSH 로 모는 박스가
-#    더 있는 라운드 — poolsizing 3대 구성의 DB_HOST(#812) — 는 여기서 안 끈다. (R10-b 의
-#    FP_REMOTE_TARGET 은 배선 자체가 없다 — #708 이 지웠고 #813 ㉡ 로 되살리지 않았다)
-#    그 박스는 사람이 끈다(#688 은 TARGET_HOST 만 다뤘다).
+# ⚠️ 이 블록이 끄는 박스는 **이 박스·REPLICA_HOST·TARGET_HOST·DB_HOST**(poolsizing 3대 구성의 DB 박스, #812)다.
+#    (R10-b 의 FP_REMOTE_TARGET 은 배선 자체가 없다 — #708 이 지웠고 #813 ㉡ 로 되살리지 않았다)
+#    DB_HOST 는 TARGET_HOST·REPLICA_HOST 와 **같은 주소**이거나 **이 박스 자신**이면 따로 안 끈다(이미 꺼지는 박스에 정지를 두 번
+#    걸어 «DB 에 정지를 걸었다» 는 note 가 거짓이 되는 것을 막는다 — target_is_self 와 같은 이유).
 if [ "$AUTO_SHUTDOWN" = "1" ] && [ "$FINAL_OK" = "1" ] && [ "$PHASES_OK" = "1" ]; then
   # 🔴 **리플리카·대상을 먼저 끈다.** 2대 라운드에서 이 스크립트는 한쪽 박스(P4 는 소스, P6·http* 는
   #    부하기)에서 돌고, 이 박스를 먼저 끄면 다른 박스를 끌 SSH 가 사라져 **그 박스가 켜진 채로 남는다.**
@@ -2089,6 +2090,18 @@ if [ "$AUTO_SHUTDOWN" = "1" ] && [ "$FINAL_OK" = "1" ] && [ "$PHASES_OK" = "1" ]
       note "🔴 대상($TARGET_HOST)을 못 껐다 — **직접 정지할 것.** 부하기만 꺼지면 그 박스는 켜진 채 요금이 붙는다(#688)"
     fi
   fi
+  # #812 — poolsizing 3대 구성(DB·App 분리)의 DB 박스. 러너가 DB_SSH 로 모는 박스인데 예전엔 아무도 안 꺼서 «DB 박스만 켜진 채» 남았다.
+  if [ -n "$DB_HOST" ]; then
+    if [ "$DB_HOST" = "$TARGET_HOST" ] || [ "$DB_HOST" = "$REPLICA_HOST" ]; then
+      note "DB($DB_HOST)는 위에서 이미 정지를 건 박스와 같은 주소다 — 따로 안 건다"
+    elif ssh_is_self "$DB_SSH"; then
+      note "DB($DB_HOST)는 이 박스 자신이다 — 아래 이 박스의 정지로 같이 꺼진다"
+    elif $DB_SSH "shutdown -h +$SHUTDOWN_DELAY_MIN '측정 종료 — run_all.sh (부하기가 껐다)'" >/dev/null 2>&1; then
+      note "DB($DB_HOST)에 정지를 걸었다 — ${SHUTDOWN_DELAY_MIN}분 후"
+    else
+      note "🔴 DB($DB_HOST)를 못 껐다 — **직접 정지할 것.** 부하기만 꺼지면 그 박스는 켜진 채 요금이 붙는다(#812)"
+    fi
+  fi
   note "${SHUTDOWN_DELAY_MIN}분 후 정지한다 (취소: pkill -f 'shutdown')"
   shutdown -h +"$SHUTDOWN_DELAY_MIN" "측정 종료 — run_all.sh"
 elif [ "$AUTO_SHUTDOWN" = "1" ]; then
@@ -2105,6 +2118,9 @@ elif [ "$AUTO_SHUTDOWN" = "1" ]; then
   if [ -n "$TARGET_HOST" ]; then
     note "   대상($TARGET_HOST)도 안 끈다 — 무대를 들여다볼 수 있어야 한다. 회수한 뒤 **부하기·대상 두 대 다** 직접 정지할 것"
   fi
+  if [ -n "$DB_HOST" ]; then
+    note "   DB($DB_HOST)도 안 끈다 — 무대를 들여다볼 수 있어야 한다. 회수한 뒤 **DB 박스도** 직접 정지할 것(#812)"
+  fi
 else
   note "자동 정지 꺼짐 — 회수 확인 후 직접 정지할 것. AWS-RIDE-ALONG.md §5 체크리스트를 볼 것"
   # 🔴 `&&` 로 쓰지 말 것 — 이 줄이 스크립트의 **마지막 명령**이라, 1대 라운드에서 조건이
@@ -2114,5 +2130,8 @@ else
   fi
   if [ -n "$TARGET_HOST" ]; then
     note "   🔴 **두 대다.** 대상($TARGET_HOST)을 잊지 말 것 — 산출물이 부하기에 모여 있어서 눈에 안 띈다(#688)"
+  fi
+  if [ -n "$DB_HOST" ]; then
+    note "   🔴 DB($DB_HOST) 박스도 잊지 말 것 — 3대 구성이면 러너·대상·DB 셋이다(#812)"
   fi
 fi
