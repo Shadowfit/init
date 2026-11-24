@@ -23,6 +23,7 @@ import Button from '@/components/ui/Button';
 import LoadError from '@/components/ui/LoadError';
 import { Alert } from '@/utils/alert';
 import { reportService } from '@/services/reportService';
+import { queryClient, queryKeys, STALE } from '@/lib/queryClient';
 import { goalService } from '@/services/goalService';
 import { useAuthStore } from '@/stores/authStore';
 import type { CalendarMainResponse, CalendarDay, DailyActivityResponse } from '@/types/report';
@@ -47,6 +48,11 @@ function buildMarkedDates(records: CalendarDay[]): Record<string, any> {
     marked[r.date] = { marked: true, dotColor };
   }
   return marked;
+}
+
+// 지금보다 «이전 달» 인가 — 캐시해도 되는 달인지 가른다. 이번 달·미래 달은 false.
+function isPastMonth(year: number, month: number, now: Date = new Date()): boolean {
+  return year * 12 + month < now.getFullYear() * 12 + (now.getMonth() + 1);
 }
 
 // «오늘» 은 로컬 날짜로 만든다 — toISOString() 은 UTC 라 한국 밤 9시 이후엔 내일로 잡힌다
@@ -81,15 +87,27 @@ export default function HomeScreen() {
   const [goalError, setGoalError] = useState(false);
   const [goalEditing, setGoalEditing] = useState(false);
 
-  // 화면 포커스 / 연·월 변경마다 캘린더 데이터 재조회
+  // 화면 포커스 / 연·월 변경마다 캘린더 데이터 조회. **지난 달은 캐시를 쓴다**(30분) — 한번 생기면
+  // 안 바뀌는데 포커스·◀▶ 때마다 다시 받고 있었다. 이번 달은 운동을 끝내고 돌아오면 바뀌므로
+  // staleTime 0 = 예전처럼 매번 받는다.
   useFocusEffect(
     useCallback(() => {
-      reportService
-        .getCalendar(viewYear, viewMonth)
-        .then((res) => setData(res.data))
+      let cancelled = false;
+      queryClient
+        .fetchQuery({
+          queryKey: queryKeys.calendar(viewYear, viewMonth),
+          queryFn: () => reportService.getCalendar(viewYear, viewMonth).then((res) => res.data),
+          staleTime: isPastMonth(viewYear, viewMonth) ? STALE.immutable : 0,
+        })
+        .then((cal) => {
+          if (!cancelled) setData(cal);
+        })
         .catch((e) => {
           devError('[calendar] status=', e.response?.status, 'data=', e.response?.data);
         });
+      return () => {
+        cancelled = true;
+      };
     }, [viewYear, viewMonth]),
   );
 
@@ -179,17 +197,34 @@ export default function HomeScreen() {
   // 선택 날짜 변경 시 그 날의 운동 목록 조회 (없으면 오늘 자동 조회)
   useEffect(() => {
     const targetDate = selectedDate || today;
+    // 날짜 문자열(YYYY-MM-DD)은 사전순 = 시간순이다. 지난 날짜만 캐시(30분), 오늘은 예전처럼 매번.
+    const isPastDate = targetDate < today;
+    // 날짜를 빠르게 바꾸면 늦게 도착한 앞 날짜 응답이 뒤 날짜 화면을 덮어쓴다 — 캐시가 응답을 빠르게
+    // 만들어 이 순서 뒤바뀜이 더 잘 보이므로 여기서 막는다.
+    let cancelled = false;
     setDailyLoading(true);
     setDailyError(false);
-    reportService
-      .getDaily(targetDate)
-      .then((res) => setDaily(res.data))
+    queryClient
+      .fetchQuery({
+        queryKey: queryKeys.daily(targetDate),
+        queryFn: () => reportService.getDaily(targetDate).then((res) => res.data),
+        staleTime: isPastDate ? STALE.immutable : 0,
+      })
+      .then((res) => {
+        if (!cancelled) setDaily(res);
+      })
       .catch((e) => {
+        if (cancelled) return;
         setDailyError(true);
         devWarn('[daily] 에러 status=', e?.response?.status, 'data=', JSON.stringify(e?.response?.data));
         setDaily(null);
       })
-      .finally(() => setDailyLoading(false));
+      .finally(() => {
+        if (!cancelled) setDailyLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [selectedDate, today, dailyReload]);
 
   const baseMarked = data ? buildMarkedDates(data.records) : {};
