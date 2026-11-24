@@ -4,7 +4,7 @@
 상태: **✅ 4-1 a · 4-2 a · 4-3 a 채택 (2026-09-19 사용자 confirm) → 측정 완료 (같은 날, §7)** — 선행 #714 는 PR #777, R=1 손잡이는 PR #782. 남은 미결은 카드 위치(§8)뿐.
 발단: "운동 좌표 JSON 관련해서 만들 수 있는 쿼리가 있나 — 포폴용으로". 쿼리 자체는 여럿 가능하지만(§3), **포폴 카드**가 되려면 «순진한 방법이 숫자로 깨진 곳 + 고친 before/after» 가 있어야 하고([`db-portfolio-roadmap.md`](./db-portfolio-roadmap.md) 기준선), 이미 있는 JSON 카드([`weekly-json-table-query-tuning.md`](./weekly-json-table-query-tuning.md), «파싱이 아니라 조인 순서»)와 **교훈이 달라야** 한다. 그 조건을 통과하는 후보는 하나(§3 ①)뿐이고, 그 하나가 분기점 3개를 안고 있다.
 대상 코드: [`PoseDataRepository.java`](../../backend/src/main/java/com/shadowfit/repository/exercise/PoseDataRepository.java) · [`angle_calculator.py`](../../ai-server/app/core/angle_calculator.py) · [`squat_analyzer.py`](../../ai-server/app/core/squat_analyzer.py)
-연관: 이슈 [#217](https://github.com/Shadowfit/init/issues/217)(무릎각 3D/2D 70° 갈림 — 실영상 미검증) · [`../tasks/32-deferred-items.md`](../tasks/32-deferred-items.md) P5(«좌표가 write-only 다») · [`pose-ingest-downsampling.md`](./pose-ingest-downsampling.md)(R=5 대표추출, TTL 보류) · [`../portfolio/realmysql-experiments.md`](../portfolio/realmysql-experiments.md) §4 ④(off-page JSON I/O 실측 · generated column 미수행 결정) · [`worst-section-rep-resolution.md`](./worst-section-rep-resolution.md)(`smoothed_knee_angle` 컬럼의 출처)
+연관: 이슈 [#217](https://github.com/Shadowfit/init/issues/217)(무릎각 3D/2D 70° 갈림 — 실영상 미검증) · [`../tasks/32-deferred-items.md`](../tasks/32-deferred-items.md) P5(«좌표가 write-only 다») · [`pose-ingest-downsampling.md`](./pose-ingest-downsampling.md)(R=5 대표추출, TTL 보류) · [`../portfolio/realmysql-experiments.md`](../portfolio/realmysql-experiments.md) §4 ④(JSON I/O 실측 · generated column 미수행 결정) · [`worst-section-rep-resolution.md`](./worst-section-rep-resolution.md)(`smoothed_knee_angle` 컬럼의 출처)
 
 ---
 
@@ -20,7 +20,7 @@
 
 | 항목 | 값 | 근거 |
 |---|---|---|
-| JSON 모양 | `[{index, x, y, z, visibility} × 33]`, 행당 ≈2.3KB(off-page) | [`pose.py:53`](../../ai-server/app/api/endpoints/pose.py) `_landmarks_to_json` · realmysql §4 ④ |
+| JSON 모양 | `[{index, x, y, z, visibility} × 33]`, 행당 ≈2.3KB(행 안 저장 — off-page 아님, #822) | [`pose.py:53`](../../ai-server/app/api/endpoints/pose.py) `_landmarks_to_json` · realmysql §4 ④ |
 | 무릎 3점 | LEFT 23·25·27 / RIGHT 24·26·28 (hip·knee·ankle) | [`constants.py:12-17`](../../ai-server/app/utils/constants.py) |
 | 이미 컬럼으로 빼둔 스칼라 | `sync_rate`(rep 단위 상수) · `smoothed_knee_angle`(좌우 평균 무릎각을 3프레임 평활, **3D**) · `rep_number` | V1 DDL 주석 · [`squat_analyzer.py:148-158`](../../ai-server/app/core/squat_analyzer.py) |
 | 저장 밀도 | R=5 윈도우당 `sync_rate` 최저 프레임 1개만 저장 — **원본 밀도 복구 불가** | pose-ingest-downsampling.md §7 |
@@ -65,9 +65,9 @@
 | 순진한 상태가 «깨진» 곳 | 1억 행 저장 · 읽기 0 · 보존 기간 근거 없음(32 문서 P5 "TTL 을 며칠로 잡을지에 근거가 없다") · 판정 축(3D)이 미검증인데 그 위에 rep 카운트가 서 있음 | 성능이 아니라 **데이터 생애주기·정합성**의 결손 — DBA 축([[user_career_target]] 의 «백업·복제·무중단 DDL» 옆자리) |
 | before/after 로 닫히나 | «raw 를 왜 저장하나» → «판정 기준이 바뀌면 AI 재실행 없이 과거 세션을 DB 안에서 재채점한다» 로 답이 생김. #217 이 수치로 닫힘 | 숫자는 §5 측정에서 |
 | 기존 JSON 카드(#760)와 겹치나 | 아니다. #760 은 «`JSON_TABLE` 비용은 파싱이 아니라 조인 순서» — 읽기 축 튜닝. 이건 **write-only 데이터에 용도를 만든 것** | 같은 함수를 쓰지만 교훈이 다름 |
-| off-page JSON 카드와 겹치나 | 아니다. 그건 «8.6GB 작업셋은 warm 해도 675초» — 교차 세션 불가의 근거. 이 후보는 그 결론을 **전제**로 세션 1개 범위에만 선다 | |
+| 대형 JSON 읽기 카드와 겹치나 | 아니다. 그건 «8.6GB 작업셋은 warm 해도 675초» — 교차 세션 불가의 근거. 이 후보는 그 결론을 **전제**로 세션 1개 범위에만 선다 | |
 
-정직하게: 이 카드는 «쿼리가 몇 배 빨라졌다» 류가 아니다. 헤드라인은 **«저장만 하던 데이터로 AI 판정을 검증했다»** 이고, DB 기술은 그 도구다(JSON 경로 접근·파티션 프루닝·off-page 비용 경계). 면접에서 «DB 성능 카드» 로 팔면 어긋난다.
+정직하게: 이 카드는 «쿼리가 몇 배 빨라졌다» 류가 아니다. 헤드라인은 **«저장만 하던 데이터로 AI 판정을 검증했다»** 이고, DB 기술은 그 도구다(JSON 경로 접근·파티션 프루닝·세션 크기별 읽기 비용). 면접에서 «DB 성능 카드» 로 팔면 어긋난다.
 
 ---
 
@@ -169,7 +169,7 @@ ORDER BY timestamp_sec;
 |---|---|---|
 | 앵커 유무 | `WHERE session_id=?` 만 vs `+ created_at=?` | 프루닝: `EXPLAIN` partitions 컬럼 14 vs 1. 클래스 주석의 주장을 이 쿼리로 재확인 |
 | 접근 방식 | `->'$[23].x'` 6점 vs `JSON_TABLE(... '$[*]')` 33행 펼침 후 3행 필터 | 같은 답을 내는 두 문법의 비용 차. 파싱은 한 번이라 차이가 작을 것으로 **예상**하나 잰 적 없음 |
-| 세션 크기 | 저장 행수 100 / 1,000 / 10,000 (다운샘플 후) | off-page 페치가 선형인지. 675초 카드의 «세션 1개면 0.46초» 를 이 쿼리로 |
+| 세션 크기 | 저장 행수 100 / 1,000 / 10,000 (다운샘플 후) | JSON 페이지 읽기가 세션 크기에 선형인지. 675초 카드의 «세션 1개면 0.46초» 를 이 쿼리로 |
 | cold/warm | 각 셀 버림 1판 + 본 3판, `Innodb_data_read` 바이트 병기 | hit율 공식은 read-ahead 로 거짓(realmysql §5 캐비엇) |
 
 절대 ms 를 인용할 땐 `calib cpu` 를 병기한다([[project_nonrepro_axis_b_closed]] 규칙 ㉠). 로컬 박스는 상대·델타만.

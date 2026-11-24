@@ -72,7 +72,7 @@ class PoseDataOrphanWindowTest extends MySqlContainerSupport {
 
     /**
      * 실제 MediaPipe 33 랜드마크 크기의 페이로드(~2KB). {@code "{}"} 로 재면 INSERT 비용을
-     * 과소평가해 창이 실제보다 좁게 나온다 — 이 컬럼은 InnoDB off-page 저장 대상이라
+     * 과소평가해 창이 실제보다 좁게 나온다 — 이 컬럼은 행 크기를 키우는 주범이라(2.3KB 는 off-page 가 아니라 행 안에 저장 — #822)
      * 크기가 곧 비용이다({@code realmysql-experiments.md} ②).
      */
     private static final String JOINT_COORDINATES = buildLandmarksJson();
