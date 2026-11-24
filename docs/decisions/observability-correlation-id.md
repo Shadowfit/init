@@ -191,8 +191,8 @@ sessionId는 metadata가 아니라 메시지 payload 안에 있어 인터셉터�
 
 | 빈칸 | 상태 | 이번에 한 것 |
 |---|---|---|
-| AI 구간 시간이 **시계열이 아니었다** | `frame_path` 는 기본 OFF(요청당 락 4회 = 재려는 GIL 과 같은 자원)이고 스냅샷 JSON 으로만 나온다. `metrics.py` 엔 Counter·Gauge 뿐이라 Grafana 에서 AI 처리 시간 p95 를 못 본다 | `shadowfit_ai_frame_stage_seconds{stage=wait|lease|infer}` 히스토그램 — **상시 ON**. 요청당 `perf_counter` 4번 + 컨텍스트 변수 1번 + `observe` 3번 (`observability/frame_stage.py`) |
-| Spring → AI 호출 지연을 **재는 Timer 가 없었다** | 결과 카운터(`ai.stop.result` 등)만 있어 «어떻게 끝났나» 는 보여도 «얼마나 걸렸나» 는 안 보였다. 서킷이 열리기 전에 느려지는 중임을 알 수 없다 | `shadowfit.ai.call.latency{rpc=start|stop|reattach, outcome}` — 서킷브레이커 기록(`cb.onSuccess/onError`) 바로 옆에서 같은 `callStart` 로 기록 |
+| AI 구간 시간이 **시계열이 아니었다** | `frame_path` 는 기본 OFF(요청당 락 4회 = 재려는 GIL 과 같은 자원)이고 스냅샷 JSON 으로만 나온다. `metrics.py` 엔 Counter·Gauge 뿐이라 Grafana 에서 AI 처리 시간 p95 를 못 본다 | `shadowfit_ai_frame_stage_seconds{stage=wait\|lease\|infer}` 히스토그램 — **상시 ON**. 요청당 `perf_counter` 4번 + 컨텍스트 변수 1번 + `observe` 3번 (`observability/frame_stage.py`) |
+| Spring → AI 호출 지연을 **재는 Timer 가 없었다** | 결과 카운터(`ai.stop.result` 등)만 있어 «어떻게 끝났나» 는 보여도 «얼마나 걸렸나» 는 안 보였다. 서킷이 열리기 전에 느려지는 중임을 알 수 없다 | `shadowfit.ai.call.latency{rpc=start\|stop\|reattach, outcome}` — 서킷브레이커 기록(`cb.onSuccess/onError`) 바로 옆에서 **그 호출 «전에» 확정한** 경과시간(`elapsedNanos`)을 CB 와 Timer 에 같이 넘긴다 — `cb.onError` 는 상태 전이 리스너(재부착 큐잉)를 동기로 부를 수 있어, 뒤에 다시 읽으면 Spring 의 DB 지연이 AI 호출 지연으로 섞인다 |
 
 ### 8-1. correlation id 는 라벨이 아니라 로그로 붙인다
 Prometheus 라벨에 cid 를 넣으면 카디널리티가 터진다. 그래서 `FRAME_SLOW_LOG_MS`(기본 **0 = 끔**)를 넘긴 프레임만 구간 내역을 WARNING 한 줄로 남기고,
@@ -228,7 +228,7 @@ cid 는 기존 로그 레코드 팩토리가 붙인다. 그 cid 로 Spring 로�
 그 추정은 GIL 점유 구간만의 비중이 아니라 전체 대비라서 «GIL 이 병목인 박스에서 얼마나 먹나» 에는 답하지 않는다.
 `prometheus_client` 의 `observe` 는 지표마다 락 1개를 잡는다 — 같은 지표를 여러 스레드가 치므로 스레드 경합이 비용에 얹힐 수 있다. 4스레드 판도 돌렸지만(요청당 벽시간 ~44µs, 1스레드 ~66µs — 1차 구현 기준) 붐비는 박스라 경합 효과를 분리하지 못했다. **경합 비용은 미측정이다.**
 - 히스토그램 버킷(AI 1ms~2s, Spring 1ms~10s)은 **해상도 선택**이지 판정선이 아니다.
-- Grafana 대시보드 패널은 안 만들었다(`monitoring/grafana/dashboards/`). `SessionMetricsExportNamesTest` 가 이름만 고정한다.
+- Grafana 패널은 `monitoring/grafana/dashboards/shadowfit-backend.json` 의 «AI 구간» 행에 3개 있다(프레임 구간 p95 · Spring→AI 호출 p95 · 세션 수와 콜백 풀). 패널 쿼리의 **실데이터 렌더는 확인하지 못했다** — 스택을 띄우지 않았고, `SessionMetricsExportNamesTest` 가 이름만 고정한다.
 
 ---
 

@@ -527,8 +527,9 @@ public class ExerciseAnalysisService {
             getAuthenticatedStub(sessionId).startAnalysis(requestBuilder.build(), CorrelationIds.preserving(new StreamObserver<AnalyzeResponse>() {
                 @Override
                 public void onNext(AnalyzeResponse value) {
-                    cb.onSuccess(System.nanoTime() - callStart, TimeUnit.NANOSECONDS);
-                    sessionMetrics.aiCallLatency("start", "ok", System.nanoTime() - callStart);
+                    final long elapsedNanos = System.nanoTime() - callStart; // 서킷 리스너가 돌기 전에 확정
+                    cb.onSuccess(elapsedNanos, TimeUnit.NANOSECONDS);
+                    sessionMetrics.aiCallLatency("start", "ok", elapsedNanos);
                     log.info("FastAPI 응답 수신 - 세션: {}", value.getSessionId());
                 }
                 @Override
@@ -538,13 +539,17 @@ public class ExerciseAnalysisService {
                     // 서킷에 실패로 기록하면 관리자가 잘못 켠 종목을 사용자가 몇 번 시도하는
                     // 것만으로 서킷이 열려(sliding=10·min=5·threshold=50%) **정상 스쿼트 세션까지
                     // 10초간 막힌다.** 건강 신호가 아니므로 권한만 반납하고 집계에서 뺀다.
+                    // 경과시간은 서킷브레이커를 건드리기 «전에» 확정한다. cb.onError 는 상태 전이 리스너(재부착 큐잉:
+                    // 세션 조회·아웃박스 저장)를 동기로 부를 수 있어서, 그 뒤에 다시 읽으면 gRPC 왕복 시간에
+                    // Spring 의 DB 지연이 섞여 «AI 가 느리다» 로 기록된다.
+                    final long elapsedNanos = System.nanoTime() - callStart;
                     if (isClientRejection(t)) {
                         cb.releasePermission();
-                        sessionMetrics.aiCallLatency("start", "rejected", System.nanoTime() - callStart);
+                        sessionMetrics.aiCallLatency("start", "rejected", elapsedNanos);
                         log.error("AI 가 요청을 거절했다 (세션 {}): {}", sessionId, t.getMessage());
                     } else {
-                        cb.onError(System.nanoTime() - callStart, TimeUnit.NANOSECONDS, t);
-                        sessionMetrics.aiCallLatency("start", "grpc-error", System.nanoTime() - callStart);
+                        cb.onError(elapsedNanos, TimeUnit.NANOSECONDS, t);
+                        sessionMetrics.aiCallLatency("start", "grpc-error", elapsedNanos);
                         log.error("gRPC 통신 장애: {}", t.getMessage());
                     }
                     // 이 한 번의 호출이 실패한 것(장애가 죽 이어져 서킷이 OPEN 되기 전이라도)도
@@ -616,13 +621,15 @@ public class ExerciseAnalysisService {
             try {
                 response = getAuthenticatedBlockingStub(sessionId).reattachAnalysis(request);
             } catch (StatusRuntimeException e) {
-                cb.onError(System.nanoTime() - callStart, TimeUnit.NANOSECONDS, e);
-                sessionMetrics.aiCallLatency("reattach", "grpc-error", System.nanoTime() - callStart);
+                final long elapsedNanos = System.nanoTime() - callStart; // 서킷 리스너가 돌기 전에 확정
+                cb.onError(elapsedNanos, TimeUnit.NANOSECONDS, e);
+                sessionMetrics.aiCallLatency("reattach", "grpc-error", elapsedNanos);
                 log.error("재부착 gRPC 통신 장애 - 세션 ID: {}, 사유: {}", sessionId, e.getMessage());
                 throw new BusinessException(ErrorCode.SESSION_REATTACH_UNAVAILABLE);
             }
-            cb.onSuccess(System.nanoTime() - callStart, TimeUnit.NANOSECONDS);
-            sessionMetrics.aiCallLatency("reattach", "ok", System.nanoTime() - callStart);
+            final long elapsedNanos = System.nanoTime() - callStart; // 서킷 리스너가 돌기 전에 확정
+            cb.onSuccess(elapsedNanos, TimeUnit.NANOSECONDS);
+            sessionMetrics.aiCallLatency("reattach", "ok", elapsedNanos);
 
             if (!response.getSuccess()) {
                 // AI 가 요청은 받았으나 상태를 못 만든 경우(기준 좌표 파싱 실패 등). 통신은 성공했으므로
@@ -693,8 +700,9 @@ public class ExerciseAnalysisService {
             try {
                 response = getAuthenticatedBlockingStub(sessionId).stopAnalysis(request);
             } catch (StatusRuntimeException e) {
-                cb.onError(System.nanoTime() - callStart, TimeUnit.NANOSECONDS, e);
-                sessionMetrics.aiCallLatency("stop", "grpc-error", System.nanoTime() - callStart);
+                final long elapsedNanos = System.nanoTime() - callStart; // 서킷 리스너가 돌기 전에 확정
+                cb.onError(elapsedNanos, TimeUnit.NANOSECONDS, e);
+                sessionMetrics.aiCallLatency("stop", "grpc-error", elapsedNanos);
                 sessionMetrics.aiStopResult("grpc-error");
                 log.error("AI 서버 중단 실패 - sessionId: {}, status: {}", sessionId, e.getStatus());
                 return DispatchOutcome.RETRY;
@@ -703,8 +711,9 @@ public class ExerciseAnalysisService {
                 // 예외도 있다. 여기서 안 잡으면 "예외를 던지지 않는다"는 이 메서드의 계약이 깨진다 —
                 // 발행기가 그 예외를 RETRY 로 세긴 하지만(#759) 서킷브레이커엔 실패가 안 남고
                 // 지표(aiStopResult)도 빠진다. 원인이 무엇이든 "지금은 실패, 나중에 재시도"가 맞다.
-                cb.onError(System.nanoTime() - callStart, TimeUnit.NANOSECONDS, e);
-                sessionMetrics.aiCallLatency("stop", "error", System.nanoTime() - callStart);
+                final long elapsedNanos = System.nanoTime() - callStart; // 서킷 리스너가 돌기 전에 확정
+                cb.onError(elapsedNanos, TimeUnit.NANOSECONDS, e);
+                sessionMetrics.aiCallLatency("stop", "error", elapsedNanos);
                 sessionMetrics.aiStopResult("error");
                 log.error("AI 서버 중단 요청 중 예기치 못한 오류 - sessionId: {}", sessionId, e);
                 return DispatchOutcome.RETRY;
@@ -713,8 +722,9 @@ public class ExerciseAnalysisService {
             // 서킷브레이커에는 성공으로 기록하는 게 맞다 — 판단 대상은 "AI 서비스가 살아있나"이지
             // "이 세션이 있었나"가 아니다. 세션을 잃은 AI도 새 분석은 정상 처리하므로, 여기서
             // 서킷을 열면 신규 startAnalysis 까지 막혀 더 나빠진다.
-            cb.onSuccess(System.nanoTime() - callStart, TimeUnit.NANOSECONDS);
-            sessionMetrics.aiCallLatency("stop", "ok", System.nanoTime() - callStart);
+            final long elapsedNanos = System.nanoTime() - callStart; // 서킷 리스너가 돌기 전에 확정
+            cb.onSuccess(elapsedNanos, TimeUnit.NANOSECONDS);
+            sessionMetrics.aiCallLatency("stop", "ok", elapsedNanos);
 
             // 전송 층(응답이 왔나)과 업무 층(그 응답이 성공인가)은 별개다. AI는 세션 상태를 못 찾으면
             // gRPC 에러가 아니라 success=false 인 정상 응답을 준다(exercise_servicer.py StopAnalysis).
@@ -825,14 +835,16 @@ public class ExerciseAnalysisService {
             try {
                 response = getAuthenticatedBlockingStub(sessionId).reattachAnalysis(request);
             } catch (StatusRuntimeException e) {
-                cb.onError(System.nanoTime() - callStart, TimeUnit.NANOSECONDS, e);
-                sessionMetrics.aiCallLatency("reattach", "grpc-error", System.nanoTime() - callStart);
+                final long elapsedNanos = System.nanoTime() - callStart; // 서킷 리스너가 돌기 전에 확정
+                cb.onError(elapsedNanos, TimeUnit.NANOSECONDS, e);
+                sessionMetrics.aiCallLatency("reattach", "grpc-error", elapsedNanos);
                 sessionMetrics.aiReattachResult("grpc-error");
                 log.warn("자동 재부착 gRPC 실패 - 세션 ID: {}, 사유: {}", sessionId, e.getMessage());
                 return DispatchOutcome.RETRY;
             }
-            cb.onSuccess(System.nanoTime() - callStart, TimeUnit.NANOSECONDS);
-            sessionMetrics.aiCallLatency("reattach", "ok", System.nanoTime() - callStart);
+            final long elapsedNanos = System.nanoTime() - callStart; // 서킷 리스너가 돌기 전에 확정
+            cb.onSuccess(elapsedNanos, TimeUnit.NANOSECONDS);
+            sessionMetrics.aiCallLatency("reattach", "ok", elapsedNanos);
 
             if (!response.getSuccess()) {
                 // 통신은 성공했는데 AI 가 상태를 못 만든 경우(기준 좌표 파싱 실패 등) — 재시도해도
