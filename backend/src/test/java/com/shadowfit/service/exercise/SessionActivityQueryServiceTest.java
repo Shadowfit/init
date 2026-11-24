@@ -108,6 +108,31 @@ class SessionActivityQueryServiceTest {
     }
 
     @Test
+    @DisplayName("getWeeklyActivity — 측정 안 된 완료 세션은 횟수·시간·칼로리·요일 막대에서 빠지고, 오늘 카드 목록에는 «측정 안 됨» 으로 남는다")
+    void getWeeklyActivity_excludesUnmeasuredFromTotalsButListsIt() {
+        LocalDate today = LocalDate.now();
+        completedSessionOn(today, 80.0, 100.0, 20);
+        // 0회 + 점수 없음 — 카메라가 가려진 채 끝난 세션(칼로리·시간은 체중×시간 추정으로 숫자가 나온다)
+        LocalDateTime start = today.atTime(11, 0);
+        sessionRepository.saveAndFlush(Session.builder()
+                .member(member).exercise(exercise)
+                .startTime(start).endTime(start.plusMinutes(30))
+                .status(Status.COMPLETED).totalReps(0)
+                .caloriesBurned(BigDecimal.valueOf(300.0))
+                .build());
+
+        WeeklyActivityResponseDto result = sessionActivityQueryService.getWeeklyActivity(member.getId());
+
+        assertThat(result.getTotalWorkouts()).isEqualTo(1);
+        assertThat(result.getTotalMinutes()).isEqualTo(20);
+        assertThat(result.getTotalCalories()).isEqualTo(100);
+        assertThat(result.getDailyLogs().stream().filter(d -> d.isToday()).findFirst().orElseThrow().getWorkoutMinutes())
+                .isEqualTo(20);
+        assertThat(result.getTodayDetails()).hasSize(2);
+        assertThat(result.getTodayDetails()).filteredOn(d -> !d.isMeasured()).hasSize(1);
+    }
+
+    @Test
     @DisplayName("getCalendarMain — 이번 달 운동일수·평균 싱크로율 계산")
     void getCalendarMain_aggregatesThisMonth() {
         LocalDate today = LocalDate.now();

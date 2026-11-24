@@ -10,6 +10,7 @@ import com.shadowfit.global.error.BusinessException;
 import com.shadowfit.global.error.ErrorCode;
 import com.shadowfit.global.util.SetSummaryFormatter;
 import com.shadowfit.model.exercise.Session;
+import com.shadowfit.model.exercise.Status;
 import com.shadowfit.repository.exercise.SessionRepository;
 import com.shadowfit.repository.exercise.SessionSetRepository;
 import com.shadowfit.model.exercise.SessionSet;
@@ -49,8 +50,16 @@ public class SessionActivityQueryService {
         LocalDate endOfWeek = today.with(java.time.DayOfWeek.SUNDAY);
 
         // 2. 이번 주 모든 세션 조회 — exercise fetch join으로 N+1 방지
-        List<Session> weeklySessions = sessionRepository.findWeeklySessionsWithExercise(
+        List<Session> allWeekly = sessionRepository.findWeeklySessionsWithExercise(
                 memberId, startOfWeek.atStartOfDay(), endOfWeek.atTime(23, 59, 59));
+
+        // 측정된 것이 없이 끝난 세션(카메라 가림·사람 미검출 등 — Session.isMeasured)은 이번 주 «운동 횟수·시간·칼로리» 합계와 요일 막대에서
+        // 뺀다. 출석(2026-11-22)·일지(#908)에서 이미 빼는 세션이라, 여기만 세면 «운동한 날도 아닌데 이번 주 합계에는 있는» 어긋남이 된다.
+        // 진행 중·실패 세션은 그대로 둔다(아직/원래 판단 대상이 아니다). 오늘 카드의 세션 목록은 아래에서 전부 보여 준다 — «측정 안 됨» 표시가
+        // 붙어 나가므로 사용자가 이유를 본다.
+        List<Session> weeklySessions = allWeekly.stream()
+                .filter(s -> s.getStatus() != Status.COMPLETED || s.isMeasured())
+                .toList();
 
         // 3. 통계 계산 (Duration 계산 시 NPE 방어)
         int totalMinutes = weeklySessions.stream()
@@ -82,7 +91,7 @@ public class SessionActivityQueryService {
             ));
         }
 
-        List<Session> todaySessions = weeklySessions.stream()
+        List<Session> todaySessions = allWeekly.stream()
                 .filter(s -> s.getStartTime() != null && s.getStartTime().toLocalDate().equals(today))
                 .toList();
         List<ExerciseSessionDto> todayDetails = toSessionDtos(todaySessions);
