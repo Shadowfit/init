@@ -82,6 +82,10 @@ jobs:
         working-directory: frontend
         run: node utils/feedbackEvents.test.cjs
 
+      - name: node tests — 기록 변경 신호 × 캐시 무효화
+        working-directory: frontend
+        run: node utils/recordsVersion.test.cjs
+
       - name: node tests — 측정 안 된 세션 안내 문구
         working-directory: frontend
         run: node utils/unmeasuredMessage.test.cjs

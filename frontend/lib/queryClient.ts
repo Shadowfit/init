@@ -38,6 +38,8 @@ export const STALE = {
 export const queryKeys = {
   calendar: (year: number, month: number) => ['report', 'calendar', year, month] as const,
   daily: (date: string) => ['report', 'daily', date] as const,
+  /** 운동 기록에서 파생된 조회 전체(캘린더·일별) 무효화용 접두 — 기록이 바뀌면 이 아래를 전부 낡은 것으로 본다 */
+  reportAll: ['report'] as const,
   groupDetail: (groupId: number) => ['group', groupId, 'detail'] as const,
   /** 모임 전체(상세 포함) 무효화용 접두 */
   groupAll: ['group'] as const,
