@@ -733,6 +733,8 @@ export default function ExerciseScreen() {
               onPress={handleToggleRecord}
               disabled={busy}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={isRecording ? '운동 종료' : '운동 시작'}
             >
               <View
                 style={[styles.recordDot, isRecording && styles.recordDotActive]}
