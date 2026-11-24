@@ -251,35 +251,41 @@ export default function MyPageScreen() {
           )}
         </View>
 
-        {/* 게시판 */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>게시판</Text>
-          <View />
-        </View>
-
-        <TouchableOpacity
-          style={styles.menuItem}
-          activeOpacity={0.7}
-          onPress={() => router.push('/board/notice' as any)}
-        >
-          <View style={styles.menuLeft}>
-            <Megaphone size={18} color={COLORS.primary} strokeWidth={2} />
-            <Text style={styles.menuText}>공지사항</Text>
+        {/* 게시판 — 서버 API 가 없어 화면이 로컬 상태만 쓰는 목업이다(누구나 «공지» 를 써 올릴 수 있고 데이터가 저장되지 않는다).
+            그대로 사용자에게 보이면 가짜 공지·가짜 점검 안내가 노출되므로 개발 빌드에서만 연다. 실서비스로 열려면 공지·Q&A API 가 먼저 필요하다. */}
+        {__DEV__ && (
+          <>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>게시판</Text>
+            <View />
           </View>
-          <ChevronRight size={14} color={COLORS.textMuted} strokeWidth={2} />
-        </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.menuItem}
-          activeOpacity={0.7}
-          onPress={() => router.push('/board/qna' as any)}
-        >
-          <View style={styles.menuLeft}>
-            <HelpCircle size={18} color={COLORS.primary} strokeWidth={2} />
-            <Text style={styles.menuText}>Q&A</Text>
-          </View>
-          <ChevronRight size={14} color={COLORS.textMuted} strokeWidth={2} />
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.menuItem}
+            activeOpacity={0.7}
+            onPress={() => router.push('/board/notice' as any)}
+          >
+            <View style={styles.menuLeft}>
+              <Megaphone size={18} color={COLORS.primary} strokeWidth={2} />
+              <Text style={styles.menuText}>공지사항</Text>
+            </View>
+            <ChevronRight size={14} color={COLORS.textMuted} strokeWidth={2} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.menuItem}
+            activeOpacity={0.7}
+            onPress={() => router.push('/board/qna' as any)}
+          >
+            <View style={styles.menuLeft}>
+              <HelpCircle size={18} color={COLORS.primary} strokeWidth={2} />
+              <Text style={styles.menuText}>Q&A</Text>
+            </View>
+            <ChevronRight size={14} color={COLORS.textMuted} strokeWidth={2} />
+          </TouchableOpacity>
+
+          </>
+        )}
 
         {/* 로그아웃 */}
         <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.7}>

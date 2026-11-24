@@ -1,6 +1,6 @@
 import { devError, devWarn } from '@/utils/devLog';
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, AppState, Platform, Linking, type AppStateStatus } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, AppState, BackHandler, Platform, Linking, type AppStateStatus } from 'react-native';
 import { Alert } from '@/utils/alert';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useLocalSearchParams, useFocusEffect } from 'expo-router';
@@ -18,7 +18,6 @@ import {
   Camera as CameraIcon,
   ChevronLeft,
   Grid3x3,
-  Maximize,
   Zap,
   ChevronUp,
   ChevronDown,
@@ -71,6 +70,8 @@ export default function ExerciseScreen() {
   const [guideOpen, setGuideOpen] = useState(false);
   // 3D 목각인형 시범 패널. 카메라와 같이 돌면 폰이 버벅일 수 있어 운동 중에는 띄우지 않는다.
   const [demoOpen, setDemoOpen] = useState(false);
+  // 자세 맞출 때 쓰는 3x3 격자 안내선 — 카메라 화면에 겹쳐 그리기만 한다(분석 입력에는 영향 없다)
+  const [gridOn, setGridOn] = useState(false);
 
   // 백엔드 세션 (POST /exercises/sessions → PATCH /sessions/{id}/end)
   const [sessionId, setSessionId] = useState<number | null>(null);
@@ -272,6 +273,35 @@ export default function ExerciseScreen() {
       setBusy(false);
     }
   };
+
+  // ── 뒤로가기 ────────────────────────────────────────────────────────────
+  // 운동 중에 그냥 나가면 세션이 서버에 «진행 중» 으로 남는다(이어하기 설계 때문에 일부러 안 끊는다).
+  // 사용자가 «끝낸 줄 알았는데 안 끝난» 상태가 되지 않게, 운동 중이면 먼저 묻는다.
+  const handleBack = useCallback(() => {
+    if (!isRecording) {
+      router.back();
+      return;
+    }
+    Alert.alert(
+      '운동을 끝낼까요?',
+      '지금까지의 기록으로 리포트를 만들어요.',
+      [
+        { text: '계속 운동하기', style: 'cancel' },
+        { text: '종료하고 리포트 보기', onPress: () => { void handleToggleRecord(); } },
+      ],
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRecording, router, sessionId, busy]);
+
+  // 안드로이드 하드웨어 뒤로가기도 같은 확인을 거친다. 운동 중이고 이 화면이 보일 때만 가로챈다.
+  useEffect(() => {
+    if (!isRecording || !isScreenFocused) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      handleBack();
+      return true;
+    });
+    return () => sub.remove();
+  }, [isRecording, isScreenFocused, handleBack]);
 
   // 운동 종료 시 참고 유사도, 알림, 횟수 초기화
   useEffect(() => {
@@ -534,17 +564,33 @@ export default function ExerciseScreen() {
         onCameraReady={handleCameraReady}
         onMountError={(error) => setCameraError(error.message || '카메라 연결에 실패했습니다.')}
       >
+        {gridOn && (
+          <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+            <View style={[styles.gridLine, styles.gridV, { left: '33.333%' }]} />
+            <View style={[styles.gridLine, styles.gridV, { left: '66.666%' }]} />
+            <View style={[styles.gridLine, styles.gridH, { top: '33.333%' }]} />
+            <View style={[styles.gridLine, styles.gridH, { top: '66.666%' }]} />
+          </View>
+        )}
         {/* 상단 UI 오버레이 */}
         <View style={styles.topOverlay}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
+          <TouchableOpacity
+            onPress={handleBack}
+            accessibilityRole="button"
+            accessibilityLabel="뒤로가기"
+            style={styles.iconBtn}
+          >
             <ChevronLeft size={20} color={COLORS.text} strokeWidth={2} />
           </TouchableOpacity>
           <View style={styles.topRight}>
-            <TouchableOpacity style={styles.iconBtn}>
+            <TouchableOpacity
+              onPress={() => setGridOn((v) => !v)}
+              accessibilityRole="button"
+              accessibilityLabel="격자 안내선"
+              accessibilityState={{ selected: gridOn }}
+              style={[styles.iconBtn, gridOn && styles.iconBtnActive]}
+            >
               <Grid3x3 size={18} color={COLORS.text} strokeWidth={2} />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.iconBtn}>
-              <Maximize size={18} color={COLORS.text} strokeWidth={2} />
             </TouchableOpacity>
           </View>
         </View>
@@ -766,6 +812,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
   },
   topRight: { flexDirection: 'row', gap: SPACING.md },
+  iconBtnActive: { backgroundColor: 'rgba(255,255,255,0.35)' },
+  gridLine: { position: 'absolute', backgroundColor: 'rgba(255,255,255,0.45)' },
+  gridV: { top: 0, bottom: 0, width: StyleSheet.hairlineWidth },
+  gridH: { left: 0, right: 0, height: StyleSheet.hairlineWidth },
   iconBtn: {
     width: 40,
     height: 40,
