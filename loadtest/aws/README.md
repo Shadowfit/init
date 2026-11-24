@@ -48,8 +48,8 @@
    > P6·httpwrite·httpread·poolsizing 의 `TARGET_HOST`([#688](https://github.com/Shadowfit/init/issues/688) —
    > 예전엔 대상을 안 꺼서 09-08 P6 라운드의 대상이 2시간 24분 초과 과금됐다). 대상이 이 박스 자신이면
    > (`TARGET_SSH="bash -c"`) 따로 안 건다. ⚠️ 같은 대상을 **다음 라운드가 또 쓰면** 앞 호출에
-   > `AUTO_SHUTDOWN=0` 을 줄 것. ⚠️ poolsizing 3대 구성의 `DB_HOST` 는 여전히 안 끈다 —
-   > 사람이 끈다([#812](https://github.com/Shadowfit/init/issues/812)).
+   > `AUTO_SHUTDOWN=0` 을 줄 것. poolsizing 3대 구성의 `DB_HOST` 도 같은 조건으로
+   > 같이 끈다([#812](https://github.com/Shadowfit/init/issues/812)) — 대상·리플리카와 같은 주소거나 이 박스 자신이면 따로 안 건다.
    >
    > 🔴 **손으로 도는 판은 이 보호가 없다.** rig 을 SSH 로 직접 부르면(`run_arms.py` 등)
    > `run_all.sh` 를 안 거치므로 **아무것도 안 끄고, 아무것도 안 지킨다.** 그때는 사람이 끈다.

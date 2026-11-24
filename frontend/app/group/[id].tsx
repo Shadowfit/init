@@ -23,6 +23,7 @@ import { REACTION_KINDS, hasReacted, normalizeSummary, withToggled } from '@/uti
 import { groupService } from '@/services/groupService';
 import { API_BASE_URL } from '@/services/api';
 import { useAuthStore } from '@/stores/authStore';
+import { queryClient, queryKeys, STALE } from '@/lib/queryClient';
 import {
   parseFeedPayload,
   type GroupAttendanceCalendar,
@@ -99,9 +100,19 @@ export default function GroupDetailScreen() {
 
   const loadAll = useCallback(() => {
     if (!groupId) return;
-    Promise.all([groupService.getDetail(groupId), groupService.getMemberStatuses(groupId)])
+    // 상세(이름·멤버·초대 코드)만 60초 캐시한다. 멤버 현황·출석·피드는 포커스마다 새로 받는다 —
+    // 재촉·응원 뒤 돌아오면 최신이어야 하는 값들이다. 상세를 고치는 곳(코드 재발급·그룹장 넘기기·탈퇴)이
+    // 캐시를 갱신·무효화한다.
+    Promise.all([
+      queryClient.fetchQuery({
+        queryKey: queryKeys.groupDetail(groupId),
+        queryFn: () => groupService.getDetail(groupId).then((res) => res.data),
+        staleTime: STALE.group,
+      }),
+      groupService.getMemberStatuses(groupId),
+    ])
       .then(([d, s]) => {
-        setDetail(d.data);
+        setDetail(d);
         setStatuses(s.data);
       })
       .catch((e) => {
@@ -135,6 +146,10 @@ export default function GroupDetailScreen() {
           try {
             const res = await groupService.regenerateInviteCode(groupId);
             setDetail((d) => (d ? { ...d, inviteCode: res.data.inviteCode } : d));
+            // 캐시의 옛 코드가 다음 진입에 보이지 않게 같이 고친다.
+            queryClient.setQueryData<GroupDetail>(queryKeys.groupDetail(groupId), (d) =>
+              d ? { ...d, inviteCode: res.data.inviteCode } : d,
+            );
           } catch (e: any) {
             Alert.alert('재발급 실패', errorText(e, '초대 코드를 재발급하지 못했어요.'));
           }
@@ -162,6 +177,8 @@ export default function GroupDetailScreen() {
         onPress: async () => {
           try {
             await groupService.leave(groupId);
+            // 나간 모임의 상세가 캐시에 남아 있으면 다시 들어왔을 때 «멤버» 로 보인다.
+            queryClient.removeQueries({ queryKey: [...queryKeys.groupAll, groupId] });
             router.back();
           } catch (e: any) {
             Alert.alert('탈퇴 실패', errorText(e, '탈퇴하지 못했어요.'));
@@ -181,6 +198,8 @@ export default function GroupDetailScreen() {
         onPress: async () => {
           try {
             await groupService.transferOwnership(groupId, memberId);
+            // 역할이 바뀌었다 — 캐시를 버려야 loadAll 이 새로 받는다(안 버리면 60초간 옛 그룹장이 보인다).
+            queryClient.invalidateQueries({ queryKey: queryKeys.groupDetail(groupId) });
             loadAll();
           } catch (e: any) {
             Alert.alert('넘기기 실패', errorText(e, '그룹장을 넘기지 못했어요.'));
