@@ -24,7 +24,28 @@ repositories {
 	mavenCentral()
 }
 
+// Boot 3.5.16 이 관리하는 버전이 Dependabot 알림(2026-11-23 기준)에 걸린 두 BOM 속성을 상향한다.
+// 속성으로 올리면 BOM 이 관리하는 모듈 전부가 같은 버전으로 움직인다 — 모듈 하나만 따로 올리면 버전이 어긋난다
+// (아래 예전 jackson-databind 단독 고정이 그랬다: databind 2.23.0 + core 2.21.4).
+//  - tomcat-embed-core 10.1.55 → 10.1.59 : critical 3건(<10.1.56 · <10.1.58 · 10.1.53~10.1.57) + high·medium 의 수정 버전이 10.1.59 다
+//  - jackson-bom 2.21.4 → 2.23.0 : jackson-core 2.19.0~2.21.6 취약(수정 2.21.7). databind 는 이미 2.23.0 이었다
+// Boot 패치 릴리스가 이 값 이상을 기본으로 가져오면 두 줄을 지운다.
+ext['tomcat.version'] = '10.1.59'
+ext['jackson-bom.version'] = '2.23.0'
+
 dependencies {
+	// guava — gRPC(grpc-netty-shaded·grpc-services)가 끌어온다. 33.6.0-jre 는 ≤33.7.1 취약(수정 33.7.2).
+	// Boot BOM 이 관리하지 않아 제약으로 올린다(직접 의존이 아니라 «하한» 만 건다).
+	constraints {
+		implementation('com.google.guava:guava:33.7.2-jre') {
+			because 'Dependabot: guava ≤33.7.1 취약, 수정 33.7.2 (gRPC 가 transitive 로 끌어옴)'
+		}
+	}
+	// commons-compress — Testcontainers(테스트 전용)가 1.24.0 을 끌어온다. <1.26.0 취약. 운영 이미지에는 안 들어간다.
+	testImplementation('org.apache.commons:commons-compress:1.27.1') {
+		because 'Dependabot: commons-compress <1.26.0 취약 (testcontainers 가 transitive 로 끌어옴, 테스트 전용)'
+	}
+
 	// --- Spring Boot 핵심 ---
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	implementation 'org.springframework.boot:spring-boot-starter-security'
@@ -66,9 +87,8 @@ dependencies {
 	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.13.0'
 	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.13.0'
 
-	// Boot 3.5.16이 관리하는 jackson-databind(2.21.4)가 GHSA-5jmj-h7xm-6q6v(2.19.0~2.21.4
-	// 취약)에 걸려 있어 이 모듈만 명시적으로 상향(jackson-bom의 나머지 모듈은 그대로 둠).
-	implementation 'com.fasterxml.jackson.core:jackson-databind:2.23.0'
+	// jackson-databind 는 위 ext['jackson-bom.version'] 으로 올라간다(GHSA-5jmj-h7xm-6q6v 외 databind·core 알림).
+	// 예전에는 databind 만 2.23.0 으로 따로 고정해 core 가 2.21.4 로 남았다 — 같은 BOM 으로 맞췄다.
 
 	// spring-boot-starter-logging이 끌어오는 log4j-to-slf4j가 log4j-api(2.24.3)를 물고 오는데,
 	// 이게 GHSA(2.13.1~2.25.4 취약, MapMessage.asJson()의 비정상 부동소수점 JSON 직렬화 결함)에
