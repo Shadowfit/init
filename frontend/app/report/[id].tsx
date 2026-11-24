@@ -144,9 +144,7 @@ export default function ReportScreen() {
     if (deleting || !Number.isFinite(sessionId)) return;
     Alert.alert(
       '이 운동 기록을 삭제할까요?',
-      '자세 분석 기록과 리포트가 모두 지워지고 되돌릴 수 없어요. 오늘 운동 합계도 다시 계산돼요.
-
-모임에 이미 공유한 글은 그대로 남아요.',
+      '자세 분석 기록과 리포트가 모두 지워지고 되돌릴 수 없어요. 오늘 운동 합계도 다시 계산돼요.\n\n모임에 이미 공유한 글은 그대로 남아요.',
       [
         { text: '취소', style: 'cancel' },
         {
