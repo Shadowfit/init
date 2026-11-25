@@ -101,10 +101,44 @@ terraform apply        # 다시 올릴 때
 2. 호스트에서 확인 모드: `/opt/shadowfit/backup/mysql-restore.sh <덤프>` (임시 DB 에 부어 테이블·행 수를 보여 주고 지운다)
 3. 선택: 새 호스트를 `terraform apply` 로 띄우고 S3 덤프로 복구해 걸린 시간 측정(RTO)
 
+## 알람 (outbox FAILED)
+
+재시도를 소진해 `FAILED` 가 된 outbox 행(탈퇴 후 개인정보 삭제·AI 통보 등)을 사람이 알아야 한다. 흐름:
+
+```
+호스트 timer(1분) → CloudWatch ShadowFit/OutboxFailedNew → 알람 → SNS → Lambda → Slack/Discord 웹훅
+```
+
+- 호스트의 `shadowfit-outbox-metric.timer` 가 백엔드의 `shadowfit_outbox_failed` 게이지를 읽어 두 지표를 올린다
+  (`infra/host/alarm/publish-outbox-failed.sh`). `OutboxFailed` 는 누적, `OutboxFailedNew` 는 **새로 늘어난 수**다.
+- 알람은 **증가분**에 건다. FAILED 행은 90일 보관이라 누적값은 오래 0 이 안 되고, 그러면 두 번째 실패는 알림이 없다.
+- 알람이 둘이다: `*-outbox-failed-new`(새 실패 발생) · `*-outbox-metric-missing`(지표가 15분째 안 옴 = 위 알람이 눈먼 상태).
+- 비용: 사용자 지정 지표 2개 + 알람 2개 + Lambda 로 월 1달러 안팎(Lambda·SNS 는 이 호출량에서 무료 구간).
+
+**웹훅 URL 은 사람이 넣는다**(Terraform 은 시크릿을 만들지 않는다). 경로가 `/shadowfit/prod/` 가 아닌 점에 주의 — 그 아래는
+`deploy.sh` 가 전부 앱 환경변수로 읽어 들이므로 URL 이 백엔드 컨테이너로 샌다.
+
+```powershell
+aws ssm put-parameter --type SecureString --name /shadowfit/alerts/webhook-url --value "<Slack 또는 Discord 웹훅 URL>"
+```
+
+**첫 적용 후 반드시 한 번 시험한다** — 알람이 «울리는 것»을 본 적이 없으면 울린다고 말할 수 없다:
+
+```powershell
+aws cloudwatch set-alarm-state --alarm-name shadowfit-prod-outbox-failed-new --state-value ALARM --state-reason "알람 시험"
+```
+
+웹훅 채널에 🔴 메시지가 오면 끝이다. 안 오면 `aws logs tail /aws/lambda/shadowfit-prod-alert-forwarder` 로 본다
+(웹훅 URL 미등록이면 `ParameterNotFound`).
+
+- ⚠️ **실제 AWS 에서 돌려 보지 못했다.** 스크립트와 Lambda 는 가짜 `docker`·`aws` 로 시험했고 Terraform 은 `validate` 까지만 했다.
+- ⚠️ 한 분 안에 «정리로 N건 삭제 + 새 실패 N건» 이 겹치면 증가분이 0 으로 보인다. 정리는 1시간마다 돌고 겹치려면 삭제와 새 실패가 같은 분에 일어나야 해서 드물며, `OutboxFailed` 에는 남는다.
+- 위 시험의 `set-alarm-state` 는 상태만 잠시 바꾼다. 다음 평가 때 실제 값으로 되돌아간다.
+
 ## 아직 없는 것 (숨기지 않는다)
 
 - **TLS·도메인.** 지금은 HTTP. `docs/decisions/reverse-proxy-and-tls.md` 가 미결정이라 건드리지 않았다. Caddy 나 ALB 는 다음 단계.
 - **PITR·물리 백업(XtraBackup)·복구 훈련.** 위 논리 백업만 붙어 있다. binlog 보존과 물리 백업은 데이터가 커질 때.
-- **모니터링.** `obs` 프로파일을 이 호스트에 올리는 일.
+- **모니터링.** `obs` 프로파일을 이 호스트에 올리는 일. 알람은 위 outbox FAILED **하나뿐**이다 — 백업 실패·백엔드 다운·pending 적체는 아직 없다.
 - **HA.** 단일 노드다. DB 리플리카·수동 승격 훈련은 이 위에 얹는다.
 - **상태 백엔드.** state 는 로컬. 팀이 같이 쓰기 전에 `versions.tf` 의 S3 backend 로 옮긴다.

@@ -109,6 +109,7 @@ jobs:
             scripts/backup/mysql-backup.sh \
             scripts/backup/mysql-restore.sh \
             infra/host/deploy.sh \
+            infra/host/alarm \
             infra/host/systemd
           aws s3 cp bundle.tgz "s3://$BUCKET/$key" --only-show-errors
           echo "key=$key" >> "$GITHUB_OUTPUT"

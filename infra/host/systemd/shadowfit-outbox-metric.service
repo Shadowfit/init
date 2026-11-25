@@ -1,0 +1,10 @@
+[Unit]
+Description=Publish ShadowFit outbox FAILED count to CloudWatch
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# AWS_REGION 은 host.env 에 있다 (infra/terraform/user_data.sh.tftpl)
+EnvironmentFile=/opt/shadowfit/host.env
+ExecStart=/opt/shadowfit/alarm/publish-outbox-failed.sh
