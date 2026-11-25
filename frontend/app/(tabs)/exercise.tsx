@@ -9,7 +9,14 @@ import { aiService, aiConfigError } from '@/services/aiService';
 import type { FeedbackTemplate } from '@/types/feedback';
 import { FEEDBACK_TYPE_LABEL } from '@/types/feedback';
 import type { AiFeedbackType, LungeProgress, PoseSkipReason, SquatProgress } from '@/types/pose';
-import ReadinessBanner, { deriveReadiness } from '@/components/exercise/ReadinessBanner';
+import ReadinessBanner, { deriveReadiness, type ReadinessTone } from '@/components/exercise/ReadinessBanner';
+import { useAuthStore } from '@/stores/authStore';
+import { queryClient, queryKeys, STALE } from '@/lib/queryClient';
+import { preferenceService } from '@/services/preferenceService';
+import { initBeeps, playBeep, releaseBeeps } from '@/lib/beepPlayer';
+import {
+  beepKindForResponse, createBeepGate, decideBeep, shouldNoticeOnReadiness, type BeepKind,
+} from '@/utils/beep';
 import MannequinDemo from '@/components/exercise/MannequinDemo';
 import { motionRecorder } from '@/lib/motion/recorder';
 import * as Haptics from 'expo-haptics';
@@ -336,6 +343,57 @@ export default function ExerciseScreen() {
   const readiness = deriveReadiness({ isRecording, isLunge, gotResponse, aiError, lastSkip, squat, lunge });
   const liveSyncColor = syncColorOf(syncRate, thresholds);
 
+  // ── 효과음(비프) ───────────────────────────────────────────
+  // 어떤 이벤트에 어떤 소리를 얼마나 자주 낼지는 utils/beep.ts, 실제 재생은 lib/beepPlayer.ts.
+  // 마이페이지의 «효과음 안내»(서버 ttsEnabled)가 꺼져 있으면 울리지 않는다. 진동·화면 문구는 그대로다.
+  const user = useAuthStore((s) => s.user);
+  const beepEnabledRef = useRef(true);
+  const beepGateRef = useRef(createBeepGate());
+  const prevToneRef = useRef<ReadinessTone | null>(null);
+
+  // 플레이어를 미리 만들어 둔다(울릴 때 만들면 첫 소리가 늦다).
+  useEffect(() => {
+    void initBeeps();
+    return () => releaseBeeps();
+  }, []);
+
+  // 설정은 화면이 보일 때마다 확인한다 — 마이페이지에서 방금 바꾼 값이 캐시에 있으므로 서버까지 가지 않는다.
+  // 조회 실패 시 켜진 채로 둔다(백엔드 기본값이 ttsEnabled=true).
+  useFocusEffect(
+    useCallback(() => {
+      const email = user?.email;
+      if (!email) return;
+      queryClient
+        .fetchQuery({
+          queryKey: queryKeys.tts(email),
+          queryFn: () => preferenceService.getTts().then((res) => res.data),
+          staleTime: STALE.profile,
+        })
+        .then((pref) => { beepEnabledRef.current = pref.ttsEnabled; })
+        .catch(() => {});
+    }, [user?.email]),
+  );
+
+  const beep = useCallback((kind: BeepKind) => {
+    const decision = decideBeep(beepGateRef.current, kind, Date.now(), beepEnabledRef.current);
+    beepGateRef.current = decision.gate;
+    if (decision.play) playBeep(kind);
+  }, []);
+
+  // 운동을 시작할 때마다 쿨다운 이력과 «직전 준비 상태» 를 비운다(이전 운동의 이력이 새 운동의 첫 소리를 막지 않게).
+  useEffect(() => {
+    if (isRecording) {
+      beepGateRef.current = createBeepGate();
+      prevToneRef.current = null;
+    }
+  }, [isRecording]);
+
+  // 운동 중 «전신이 안 보여요» 로 막 바뀐 순간에 한 번만(이어지는 동안 반복하지 않는다).
+  useEffect(() => {
+    if (shouldNoticeOnReadiness(prevToneRef.current, readiness.tone, isRecording)) beep('notice');
+    prevToneRef.current = readiness.tone;
+  }, [readiness.tone, isRecording, beep]);
+
   // 싱크로율이 위험 기준(warn) 아래로 떨어지면 진동 — 화면을 보지 않아도 알 수 있게.
   // 싱크로율은 반복 1회가 끝날 때 갱신되므로(AI 가 rep 단위로 채점) 진동도 반복마다 한 번이다.
   // 0 은 «아직 측정 전» 이라 진동하지 않는다. 런지는 횟수만 세는 종목이라 싱크로율이 없다.
@@ -491,6 +549,9 @@ export default function ExerciseScreen() {
             setLastFeedback(r.feedback_type);
             setCoachingNotice(null);
           }
+          // rep 완료 = 성공음, 자세 결함·미인정 = 경고음. 같은 소리가 반복되지 않게 beep() 이 쿨다운을 건다.
+          const beepKind = beepKindForResponse(r);
+          if (beepKind) beep(beepKind);
           if (r.rep_count != null) setRepCount(r.rep_count);
           if (r.rejected_count != null) setRejectedCount(r.rejected_count);
           if (r.rejected_reason && Platform.OS !== 'web') {
@@ -517,7 +578,7 @@ export default function ExerciseScreen() {
       cancelled = true;
       clearInterval(id);
     };
-  }, [busy, isRecording, sessionId, sessionNonce, exerciseId, aiWorkerIndex, isForeground, isScreenFocused]);
+  }, [busy, isRecording, sessionId, sessionNonce, exerciseId, aiWorkerIndex, isForeground, isScreenFocused, beep]);
 
   // 카메라 권한 없을 때
   if (!permission) {

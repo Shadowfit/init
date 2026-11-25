@@ -2,7 +2,6 @@ import { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch } from 'react-native';
 import { Alert } from '@/utils/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Slider from '@react-native-community/slider';
 import { useRouter, useFocusEffect } from 'expo-router';
 import {
   ChevronLeft,
@@ -86,7 +85,7 @@ export default function MyPageScreen() {
     }, [user?.email]),
   );
 
-  // TTS 토글: 즉시 서버 반영, 실패 시 롤백
+  // 효과음 토글: 즉시 서버 반영, 실패 시 롤백. 성공하면 캐시를 갱신해 운동 화면이 바로 이 값을 읽는다.
   const handleTtsToggle = async (next: boolean) => {
     const prev = tts;
     setTts((cur) => (cur ? { ...cur, ttsEnabled: next } : { ttsEnabled: next, ttsSpeed: 1.0 }));
@@ -96,22 +95,7 @@ export default function MyPageScreen() {
       if (user?.email) queryClient.setQueryData(queryKeys.tts(user.email), res.data);
     } catch (e: any) {
       setTts(prev);
-      Alert.alert('TTS 설정 실패', e?.response?.data?.message ?? '잠시 후 다시 시도해주세요');
-    }
-  };
-
-  // TTS 속도: 슬라이드 완료(release) 시점에만 서버 반영
-  const handleTtsSpeedCommit = async (speed: number) => {
-    const rounded = Math.round(speed * 10) / 10; // 0.1 단위
-    const prev = tts;
-    setTts((cur) => (cur ? { ...cur, ttsSpeed: rounded } : { ttsEnabled: true, ttsSpeed: rounded }));
-    try {
-      const res = await preferenceService.updateTts({ ttsSpeed: rounded });
-      setTts(res.data);
-      if (user?.email) queryClient.setQueryData(queryKeys.tts(user.email), res.data);
-    } catch (e: any) {
-      setTts(prev);
-      Alert.alert('TTS 속도 변경 실패', e?.response?.data?.message ?? '잠시 후 다시 시도해주세요');
+      Alert.alert('효과음 설정 실패', e?.response?.data?.message ?? '잠시 후 다시 시도해주세요');
     }
   };
 
@@ -217,9 +201,11 @@ export default function MyPageScreen() {
           desc={persona?.desc}
         />
 
-        {/* 음성 피드백 (TTS) 설정 */}
+        {/* 효과음 설정 — 운동 화면의 비프음(utils/beep.ts)을 켜고 끈다.
+            서버 필드 이름은 ttsEnabled 그대로 쓴다(API·DB 변경 없음). 음성(TTS)은 아직 없어서 «속도» 슬라이더는 뺐다 —
+            아무 효과가 없는 설정을 두면 사용자가 바꿔 보고 안 바뀐다고 느낀다. 음성 안내를 만들 때 ttsSpeed 와 함께 되살린다. */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>음성 피드백</Text>
+          <Text style={styles.sectionTitle}>효과음</Text>
           <View />
         </View>
 
@@ -228,8 +214,8 @@ export default function MyPageScreen() {
             <View style={styles.ttsLabelRow}>
               <Volume2 size={18} color={COLORS.primary} strokeWidth={2} />
               <View>
-                <Text style={styles.ttsTitle}>음성 안내</Text>
-                <Text style={styles.ttsDesc}>운동 중 자세 교정 멘트를 음성으로 안내</Text>
+                <Text style={styles.ttsTitle}>효과음 안내</Text>
+                <Text style={styles.ttsDesc}>운동 중 횟수 완료·자세 경고를 짧은 소리로 알려요</Text>
               </View>
             </View>
             <Switch
@@ -239,30 +225,6 @@ export default function MyPageScreen() {
               thumbColor={COLORS.text}
             />
           </View>
-
-          {(tts?.ttsEnabled ?? true) && (
-            <View style={styles.ttsSpeedRow}>
-              <View style={styles.ttsSpeedLabelRow}>
-                <Text style={styles.ttsSpeedLabel}>속도</Text>
-                <Text style={styles.ttsSpeedValue}>{(tts?.ttsSpeed ?? 1.0).toFixed(1)}x</Text>
-              </View>
-              <Slider
-                style={styles.ttsSlider}
-                minimumValue={0.5}
-                maximumValue={2.0}
-                step={0.1}
-                value={tts?.ttsSpeed ?? 1.0}
-                onSlidingComplete={handleTtsSpeedCommit}
-                minimumTrackTintColor={COLORS.primary}
-                maximumTrackTintColor={COLORS.surfaceLight}
-                thumbTintColor={COLORS.primary}
-              />
-              <View style={styles.ttsSpeedScale}>
-                <Text style={styles.ttsSpeedScaleText}>0.5x</Text>
-                <Text style={styles.ttsSpeedScaleText}>2.0x</Text>
-              </View>
-            </View>
-          )}
         </View>
 
         {/* 게시판 — 서버 API 가 없어 화면이 로컬 상태만 쓰는 목업이다(누구나 «공지» 를 써 올릴 수 있고 데이터가 저장되지 않는다).
