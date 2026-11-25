@@ -6,6 +6,8 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { ChevronLeft, BellRing, Heart } from 'lucide-react-native';
 import { COLORS, FONT_SIZE, SPACING, RADIUS } from '@/constants/Colors';
 import { notificationService } from '@/services/notificationService';
+import LoadError from '@/components/ui/LoadError';
+import { useReloadOnReconnect } from '@/utils/network';
 import type { Notification } from '@/types/social';
 
 const PAGE_SIZE = 20;
@@ -38,10 +40,13 @@ export default function NotificationsScreen() {
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  // 실패를 «알림 없음» 과 구분한다 — 안 그러면 네트워크가 끊긴 사용자가 «아직 받은 알림이 없어요» 를 본다.
+  const [loadError, setLoadError] = useState(false);
 
   const load = useCallback(async (nextPage: number, replace: boolean) => {
     if (loading) return;
     setLoading(true);
+    setLoadError(false);
     try {
       const res = await notificationService.list(nextPage, PAGE_SIZE);
       const { content, totalPages } = res.data;
@@ -50,11 +55,19 @@ export default function NotificationsScreen() {
       setHasMore(nextPage + 1 < totalPages);
     } catch (e: any) {
       devWarn('[notifications] status=', e?.response?.status, 'data=', JSON.stringify(e?.response?.data));
+      setLoadError(true);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   }, [loading]);
+
+  // 첫 페이지가 비어 있으면 처음부터, 이미 보이는 게 있으면 못 가져온 다음 페이지부터 다시.
+  const retry = useCallback(() => {
+    if (items.length === 0) load(0, true);
+    else load(page + 1, false);
+  }, [items.length, page, load]);
+  useReloadOnReconnect(loadError, retry);
 
   useFocusEffect(
     useCallback(() => {
@@ -96,10 +109,13 @@ export default function NotificationsScreen() {
           />
         }
         onEndReachedThreshold={0.4}
-        onEndReached={() => { if (hasMore && !loading) load(page + 1, false); }}
+        // 실패한 뒤에는 자동으로 다음 페이지를 또 부르지 않는다 — 끊긴 채로 스크롤 끝에 닿을 때마다 요청이 쏟아진다.
+        onEndReached={() => { if (hasMore && !loading && !loadError) load(page + 1, false); }}
         ListEmptyComponent={
           loading ? (
             <ActivityIndicator color={COLORS.primary} style={{ marginTop: SPACING.xxxl }} />
+          ) : loadError ? (
+            <LoadError message="알림을 불러오지 못했어요. 네트워크를 확인해주세요." onRetry={retry} />
           ) : (
             <View style={styles.empty}>
               <Text style={styles.emptyText}>아직 받은 알림이 없어요</Text>
@@ -107,7 +123,13 @@ export default function NotificationsScreen() {
             </View>
           )
         }
-        ListFooterComponent={loading && items.length > 0 ? <ActivityIndicator color={COLORS.primary} style={{ marginVertical: SPACING.lg }} /> : null}
+        ListFooterComponent={
+          loading && items.length > 0 ? (
+            <ActivityIndicator color={COLORS.primary} style={{ marginVertical: SPACING.lg }} />
+          ) : loadError && items.length > 0 ? (
+            <LoadError message="알림을 더 불러오지 못했어요." onRetry={retry} />
+          ) : null
+        }
         renderItem={({ item: n }) => {
           const isCheer = n.type === 'CHEER';
           return (

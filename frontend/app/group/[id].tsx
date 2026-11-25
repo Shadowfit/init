@@ -21,6 +21,8 @@ import CheerModal from '@/components/social/CheerModal';
 import ReactionBar from '@/components/social/ReactionBar';
 import { REACTION_KINDS, hasReacted, normalizeSummary, withToggled } from '@/utils/reactions';
 import { groupService } from '@/services/groupService';
+import LoadError from '@/components/ui/LoadError';
+import { useReloadOnReconnect } from '@/utils/network';
 import { API_BASE_URL } from '@/services/api';
 import { useAuthStore } from '@/stores/authStore';
 import { queryClient, queryKeys, STALE } from '@/lib/queryClient';
@@ -73,6 +75,10 @@ export default function GroupDetailScreen() {
   const [nextBeforeSeq, setNextBeforeSeq] = useState<number | null>(null);
   const [feedLoading, setFeedLoading] = useState(false);
   const [loading, setLoading] = useState(true);
+  // 상세 로딩이 접근 오류(403·404)가 아닌 이유로 실패했다 — 이게 없으면 detail 이 null 인 채 스피너가 영원히 돈다.
+  const [detailError, setDetailError] = useState(false);
+  // 피드 로딩 실패 — 없으면 «아직 소식이 없어요» 와 똑같이 보여 모임 기록이 사라진 것처럼 오해한다.
+  const [feedError, setFeedError] = useState(false);
 
   const now = new Date();
   const [viewYear, setViewYear] = useState(now.getFullYear());
@@ -87,12 +93,14 @@ export default function GroupDetailScreen() {
 
   const loadFeed = useCallback(async (beforeSeq: number | null, replace: boolean) => {
     setFeedLoading(true);
+    setFeedError(false);
     try {
       const res = await groupService.getFeed(groupId, beforeSeq, FEED_PAGE);
       setFeed((prev) => (replace ? res.data.items : [...prev, ...res.data.items]));
       setNextBeforeSeq(res.data.nextBeforeSeq);
     } catch (e: any) {
       devWarn('[feed] status=', e?.response?.status, 'data=', JSON.stringify(e?.response?.data));
+      setFeedError(true);
     } finally {
       setFeedLoading(false);
     }
@@ -100,6 +108,7 @@ export default function GroupDetailScreen() {
 
   const loadAll = useCallback(() => {
     if (!groupId) return;
+    setDetailError(false);
     // 상세(이름·멤버·초대 코드)만 60초 캐시한다. 멤버 현황·출석·피드는 포커스마다 새로 받는다 —
     // 재촉·응원 뒤 돌아오면 최신이어야 하는 값들이다. 상세를 고치는 곳(코드 재발급·그룹장 넘기기·탈퇴)이
     // 캐시를 갱신·무효화한다.
@@ -119,6 +128,8 @@ export default function GroupDetailScreen() {
         devWarn('[group] status=', e?.response?.status, 'data=', JSON.stringify(e?.response?.data));
         if (e?.response?.status === 403 || e?.response?.status === 404) {
           Alert.alert('모임', '이 모임에 접근할 수 없어요.', [{ text: '확인', onPress: () => router.back() }]);
+        } else {
+          setDetailError(true);
         }
       })
       .finally(() => setLoading(false));
@@ -127,6 +138,14 @@ export default function GroupDetailScreen() {
   }, [groupId, loadAttendance, loadFeed, viewYear, viewMonth, router]);
 
   useFocusEffect(useCallback(() => { loadAll(); }, [loadAll]));
+
+  // 못 불러온 쪽만 연결이 돌아왔을 때 한 번 다시 부른다. 피드가 이미 보이면 건드리지 않는다.
+  const retryFeed = useCallback(() => {
+    if (feed.length === 0) loadFeed(null, true);
+    else loadFeed(nextBeforeSeq, false);
+  }, [feed.length, nextBeforeSeq, loadFeed]);
+  useReloadOnReconnect(detailError && !detail, loadAll);
+  useReloadOnReconnect(feedError && feed.length === 0, retryFeed);
 
   const activeMembers = detail?.members.filter((m) => m.status === 'ACTIVE') ?? [];
   const myRole = activeMembers.find((m) => m.memberId === me?.memberId)?.role;
@@ -294,7 +313,11 @@ export default function GroupDetailScreen() {
             <ChevronLeft size={24} color={COLORS.text} strokeWidth={2} />
           </TouchableOpacity>
         </View>
-        <ActivityIndicator color={COLORS.primary} style={{ marginTop: SPACING.xxxl }} />
+        {detailError && !detail && !loading ? (
+          <LoadError message="모임을 불러오지 못했어요. 네트워크를 확인해주세요." onRetry={loadAll} />
+        ) : (
+          <ActivityIndicator color={COLORS.primary} style={{ marginTop: SPACING.xxxl }} />
+        )}
       </SafeAreaView>
     );
   }
@@ -418,7 +441,9 @@ export default function GroupDetailScreen() {
         {/* 모임 피드 */}
         <Text style={styles.sectionTitle}>모임 피드</Text>
         <View style={styles.sectionBody}>
-          {feed.length === 0 && !feedLoading ? (
+          {feed.length === 0 && !feedLoading && feedError ? (
+            <LoadError message="모임 피드를 불러오지 못했어요." onRetry={retryFeed} />
+          ) : feed.length === 0 && !feedLoading ? (
             <View style={styles.emptyCard}>
               <Text style={styles.emptyText}>아직 소식이 없어요. 운동을 마치고 보고서에서 «모임 피드에 공유하기» 를 눌러보세요</Text>
             </View>
@@ -517,6 +542,9 @@ export default function GroupDetailScreen() {
             })
           )}
           {feedLoading && <ActivityIndicator color={COLORS.primary} style={{ marginVertical: SPACING.md }} />}
+          {feedError && !feedLoading && feed.length > 0 && (
+            <LoadError message="피드를 더 불러오지 못했어요." onRetry={retryFeed} />
+          )}
           {nextBeforeSeq != null && !feedLoading && (
             <TouchableOpacity style={styles.moreBtn} onPress={() => loadFeed(nextBeforeSeq, false)}>
               <Text style={styles.moreText}>더 보기</Text>

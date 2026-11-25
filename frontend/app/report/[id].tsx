@@ -2,7 +2,7 @@ import { devWarn } from '@/utils/devLog';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import {
@@ -24,6 +24,8 @@ import Button from '@/components/ui/Button';
 import ShareSessionSheet from '@/components/social/ShareSessionSheet';
 import CoachingSummary from '@/components/report/CoachingSummary';
 import FeedbackTimeline from '@/components/report/FeedbackTimeline';
+import LoadError from '@/components/ui/LoadError';
+import { useReloadOnReconnect } from '@/utils/network';
 import { exercisesService } from '@/services/exercisesService';
 import { reportService } from '@/services/reportService';
 import { motionRecorder } from '@/lib/motion/recorder';
@@ -128,6 +130,10 @@ export default function ReportScreen() {
   const [report, setReport] = useState<SessionReportResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // 다시 시도해 볼 만한 실패인가 — 네트워크·서버 오류는 true, «찾을 수 없음»(404 를 끝까지 받음)·잘못된 주소는 false.
+  const [errorRetryable, setErrorRetryable] = useState(false);
+  // 값이 바뀌면 아래 불러오기 효과가 처음부터 다시 돈다(다시 시도 버튼·연결 복귀).
+  const [reloadKey, setReloadKey] = useState(0);
   // 리포트가 아직 만들어지는 중(404 를 받아 다시 묻는 중)
   const [pending, setPending] = useState(false);
   // 자세 교정 이벤트 집계 (backend SessionFeedbackController)
@@ -208,7 +214,8 @@ export default function ReportScreen() {
         }
         devWarn('[session-report] status=', status);
         setPending(false);
-        setError(status === 404 ? '보고서를 찾을 수 없어요. 잠시 후 홈에서 다시 열어주세요.' : '보고서를 불러오지 못했어요.');
+        setErrorRetryable(status !== 404);
+        setError(status === 404 ? '보고서를 찾을 수 없어요. 잠시 후 홈에서 다시 열어주세요.' : '보고서를 불러오지 못했어요. 네트워크를 확인해주세요.');
         setLoading(false);
       }
     };
@@ -222,7 +229,15 @@ export default function ReportScreen() {
     return () => {
       cancelled = true;
     };
-  }, [sessionId]);
+  }, [sessionId, reloadKey]);
+
+  const retryLoad = useCallback(() => {
+    setError(null);
+    setErrorRetryable(false);
+    setLoading(true);
+    setReloadKey((k) => k + 1);
+  }, []);
+  useReloadOnReconnect(!!error && errorRetryable, retryLoad);
 
   // 다운로드 — 폰은 PDF 파일을 만들어 공유 시트(파일 저장 · 카톡 등)로, 웹은 인쇄 창(«PDF 로 저장»)으로.
   const handleDownload = async () => {
@@ -269,6 +284,8 @@ export default function ReportScreen() {
             <ActivityIndicator color={COLORS.primary} />
             {pending && <Text style={styles.zeroNote}>AI 가 방금 운동을 정리하고 있어요…</Text>}
           </View>
+        ) : error && errorRetryable ? (
+          <LoadError message={error} onRetry={retryLoad} />
         ) : (
           <Text style={styles.errorText}>{error}</Text>
         )}
