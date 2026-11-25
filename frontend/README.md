@@ -21,7 +21,7 @@ flowchart LR
     A["가입 · 로그인"] --> B["온보딩<br/>페르소나 선택"]
     B --> C["메인 대시보드<br/>주간요약 · 달력"]
     C --> D["운동 시작<br/>기준 동작 선택"]
-    D --> E["실시간 분석<br/>싱크로율 · 음성 피드백"]
+    D --> E["실시간 분석<br/>싱크로율 · 효과음 피드백"]
     E --> F["운동 종료"]
     F --> G["세션 리포트 확인"]
     G --> H["일지 작성"]
@@ -31,7 +31,7 @@ flowchart LR
 1. **가입 & 온보딩** — 이메일로 회원가입 후, 온보딩에서 페르소나(헬린이·헬창·다이어트·재활)를 선택합니다.
 2. **메인 대시보드** — 이번 주 운동 요약(총 운동시간·칼로리·요일별 그래프)과 달력으로 최근 운동 현황을 확인합니다.
 3. **운동 시작** — 운동(현재는 스쿼트)을 선택하면 등록된 기준 동작을 기준으로 세션이 시작됩니다.
-4. **실시간 분석** — 카메라로 촬영한 프레임을 AI 서버로 스트리밍하고, 실시간 싱크로율과 음성 피드백을 받습니다.
+4. **실시간 분석** — 카메라로 촬영한 프레임을 AI 서버로 스트리밍하고, 실시간 싱크로율과 효과음(비프) 피드백을 받습니다.
 5. **운동 종료 & 결과 확인** — 세션 리포트에서 취약 구간과 직전 세션 대비 변화를 확인합니다.
 6. **기록 남기기** — 오늘의 운동에 메모와 기분을 남깁니다.
 
@@ -50,7 +50,7 @@ graph LR
     BE --> DB
 ```
 
-카메라 프레임은 AI 서버로 직접 스트리밍하고, 세션 시작/중단만 Spring을 거칩니다. 음성 피드백은 서버가 내려주는 멘트를 device TTS(`expo-speech`)로 재생합니다.
+카메라 프레임은 AI 서버로 직접 스트리밍하고, 세션 시작/중단만 Spring을 거칩니다. 효과음 피드백은 분석 응답(rep 완료·자세 결함)과 «전신이 안 보임» 상태에 따라 앱이 짧은 비프음(`expo-audio`)을 직접 재생합니다(`utils/beep.ts`). 서버 멘트를 읽어 주는 음성(TTS) 안내는 아직 없습니다 — `expo-speech` 는 설치만 돼 있습니다.
 
 ## 실행 방법
 
@@ -64,7 +64,7 @@ npx expo start
 - 카메라로 운동 자세 촬영 및 AI 서버로 실시간 프레임 스트리밍
 - 온보딩 페르소나(헬린이·헬창·다이어트·재활) 선택 — 페르소나별 피드백 톤 반영
 - 캘린더/리포트 화면에서 세션별 싱크로율·취약 구간·이전 세션 대비 변화 조회
-- device TTS(`expo-speech`) 기반 음성 운동 피드백 재생
+- 효과음 운동 피드백 — 비프음 3종(rep 완료·자세 결함·전신 안 보임), 마이페이지에서 끄기. 음성(TTS)은 미구현
 - JWT 인증 연동 (로그인/온보딩)
 
 ## 🛠 기술 스택
@@ -78,7 +78,7 @@ npx expo start
 ![TanStack Query](https://img.shields.io/badge/TANSTACK_QUERY-FF4154?style=flat-square&logo=reactquery&logoColor=white)
 ![Axios](https://img.shields.io/badge/AXIOS-5A29E4?style=flat-square&logo=axios&logoColor=white)
 
-**Device 기능**: expo-camera, expo-av, expo-speech(TTS), expo-secure-store, react-native-chart-kit, react-native-calendars
+**Device 기능**: expo-camera, expo-audio(효과음), expo-haptics, expo-secure-store, react-native-chart-kit, react-native-calendars
 
 ---
 
