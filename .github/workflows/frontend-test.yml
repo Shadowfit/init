@@ -105,3 +105,7 @@ jobs:
       - name: node tests — 측정 안 된 세션 안내 문구
         working-directory: frontend
         run: node utils/unmeasuredMessage.test.cjs
+
+      - name: node tests — 목업 화면(공지·Q&A) 릴리스 딥링크 차단
+        working-directory: frontend
+        run: node utils/devOnlyRoute.test.cjs

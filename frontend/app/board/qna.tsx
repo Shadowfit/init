@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ChevronLeft, Plus, Clock, Lock, Unlock } from 'lucide-react-native';
 import { COLORS, FONT_SIZE, SPACING, RADIUS } from '@/constants/Colors';
+import DevOnlyRoute from '@/components/ui/DevOnlyRoute';
 
 interface QnAItem {
   id: string;
@@ -45,7 +46,16 @@ const INITIAL_QNA: QnAItem[] = [
   },
 ];
 
+// 서버 API 가 없는 목업 — 릴리스에서는 딥링크로도 못 연다(components/ui/DevOnlyRoute.tsx).
 export default function QnAScreen() {
+  return (
+    <DevOnlyRoute>
+      <QnABody />
+    </DevOnlyRoute>
+  );
+}
+
+function QnABody() {
   const router = useRouter();
   const [qnaList, setQnaList] = useState<QnAItem[]>(INITIAL_QNA);
   const [selectedItem, setSelectedItem] = useState<QnAItem | null>(null);

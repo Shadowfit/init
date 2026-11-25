@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ChevronLeft, Plus, Clock } from 'lucide-react-native';
 import { COLORS, FONT_SIZE, SPACING, RADIUS } from '@/constants/Colors';
+import DevOnlyRoute from '@/components/ui/DevOnlyRoute';
 
 interface Notice {
   id: string;
@@ -37,7 +38,16 @@ const INITIAL_NOTICES: Notice[] = [
   },
 ];
 
+// 서버 API 가 없는 목업 — 릴리스에서는 딥링크로도 못 연다(components/ui/DevOnlyRoute.tsx).
 export default function NoticeScreen() {
+  return (
+    <DevOnlyRoute>
+      <NoticeBody />
+    </DevOnlyRoute>
+  );
+}
+
+function NoticeBody() {
   const router = useRouter();
   const [notices, setNotices] = useState<Notice[]>(INITIAL_NOTICES);
   const [modalVisible, setModalVisible] = useState(false);
