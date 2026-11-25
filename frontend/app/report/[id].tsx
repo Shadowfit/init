@@ -24,6 +24,7 @@ import Button from '@/components/ui/Button';
 import ShareSessionSheet from '@/components/social/ShareSessionSheet';
 import CoachingSummary from '@/components/report/CoachingSummary';
 import FeedbackTimeline from '@/components/report/FeedbackTimeline';
+import PoseSnapshot from '@/components/report/PoseSnapshot';
 import LoadError from '@/components/ui/LoadError';
 import { useReloadOnReconnect } from '@/utils/network';
 import { exercisesService } from '@/services/exercisesService';
@@ -509,6 +510,11 @@ export default function ReportScreen() {
                 </Text>
               </View>
               <Text style={styles.worstDesc}>{report.worstSection.reason}</Text>
+              {!!report.worstSection.jointCoordinates && (
+                <View style={{ marginTop: SPACING.md }}>
+                  <PoseSnapshot jointCoordinates={report.worstSection.jointCoordinates} />
+                </View>
+              )}
             </View>
           </View>
         )}

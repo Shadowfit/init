@@ -64,6 +64,11 @@ export interface WorstSection {
    * repNumber 를 쓸 것 — 문구가 확정되면 파싱은 깨진다.
    */
   reason: string;
+  /**
+   * 대표 프레임의 33관절 좌표(JSON 문자열 `[{x,y,z,index,visibility},...]`). 응답 직전에만 채워지고,
+   * 유효한 프레임이 없거나 파티션 만료로 행이 지워졌으면 null/누락 — 그때는 그림을 생략한다.
+   */
+  jointCoordinates?: string | null;
 }
 
 /**
