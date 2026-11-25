@@ -21,11 +21,14 @@ import {
 import { COLORS, FONT_SIZE, SPACING, RADIUS } from '@/constants/Colors';
 import Button from '@/components/ui/Button';
 import LoadError from '@/components/ui/LoadError';
+import DailyLogCard from '@/components/home/DailyLogCard';
+import DailyLogModal from '@/components/home/DailyLogModal';
 import { Alert } from '@/utils/alert';
 import { reportService } from '@/services/reportService';
 import { queryClient, queryKeys, STALE } from '@/lib/queryClient';
 import { goalService } from '@/services/goalService';
 import { currentRecordsVersion } from '@/utils/recordsVersion';
+import { buildDailyLogRequest, canWriteLog, type DailyLogDraft } from '@/utils/dailyLog';
 import { useAuthStore } from '@/stores/authStore';
 import type { CalendarMainResponse, CalendarDay, DailyActivityResponse } from '@/types/report';
 import type { WorkoutGoal } from '@/types/goal';
@@ -80,6 +83,8 @@ export default function HomeScreen() {
   // 일별 기록 조회 실패 — «운동 기록이 없습니다» 로 오해되지 않게 따로 든다. dailyReload 는 «다시 시도» 용 트리거
   const [dailyError, setDailyError] = useState(false);
   const [dailyReload, setDailyReload] = useState(0);
+  // 운동 일지(메모·기분) 입력 모달
+  const [logOpen, setLogOpen] = useState(false);
   const [friends, setFriends] = useState<MemberAttendanceStatus[]>([]);
 
   // 나의 운동 약속 — 최근 7일 완료 세션 수 목표 (GET/POST/PATCH /goals)
@@ -274,6 +279,22 @@ export default function HomeScreen() {
       cancelled = true;
     };
   }, [selectedDate, today, dailyReload]);
+
+  // 운동 일지 저장 — 성공하면 «그 날짜» 의 캐시와 화면 상태만 새 값으로 바꾼다.
+  // 기록 전체 무효화(bumpRecordsVersion)는 쓰지 않는다: 캘린더·다른 날짜까지 다시 받아 깜빡이고, 일지는 세션 기록이 아니다.
+  // 지난 날짜는 일별 응답을 30분 캐시하므로(위 useEffect) 캐시를 안 고치면 방금 쓴 메모가 다음 진입에 옛 값으로 보인다.
+  const logDate = selectedDate || today;
+  const handleSaveLog = useCallback(
+    async (draft: DailyLogDraft) => {
+      const body = buildDailyLogRequest(logDate, draft);
+      await reportService.saveDailyLog(body);
+      queryClient.setQueryData<DailyActivityResponse>(queryKeys.daily(logDate), (old) =>
+        old ? { ...old, memo: body.memo, mood: body.mood } : old,
+      );
+      setDaily((d) => (d && d.date === logDate ? { ...d, memo: body.memo, mood: body.mood } : d));
+    },
+    [logDate],
+  );
 
   const baseMarked = data ? buildMarkedDates(data.records) : {};
   const markedDates = {
@@ -505,6 +526,19 @@ export default function HomeScreen() {
             </View>
           </TouchableOpacity>
         ))}
+
+        {/* 운동 일지(메모·기분) — 오늘까지만. 불러오는 중·실패 때는 숨긴다: 값을 모르는 채 «작성» 을 열면 저장이 서버 값을 덮어쓴다. */}
+        {!dailyLoading && !dailyError && daily && canWriteLog(logDate, today) && (
+          <DailyLogCard memo={daily.memo} mood={daily.mood} onEdit={() => setLogOpen(true)} />
+        )}
+        <DailyLogModal
+          visible={logOpen}
+          dateLabel={`${new Date(logDate).getMonth() + 1}월 ${new Date(logDate).getDate()}일`}
+          initialMemo={daily?.memo}
+          initialMood={daily?.mood}
+          onClose={() => setLogOpen(false)}
+          onSave={handleSaveLog}
+        />
 
         {/* 촬영 가이드 */}
         <View style={styles.guideBox}>

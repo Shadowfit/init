@@ -1,6 +1,7 @@
 // 백엔드 dto/report/* 와 1:1 매칭되는 프론트 타입.
 // 필드명/형태는 Spring DTO 기준 (camelCase JSON 직렬화 그대로).
 import type { RejectReason } from './pose';
+import type { Mood } from '@/utils/dailyLog';
 
 /* ── 달력 (record/CalendarMainResponseDto, CalendarDayDto) ── */
 export interface CalendarDay {
@@ -50,6 +51,10 @@ export interface DailyActivityResponse {
   date: string;
   totalWorkouts: number;
   sessions: ExerciseSession[];
+  /** 그 날 남긴 운동 메모. 안 남겼으면 null. 서버가 이 필드를 모르던 시절 응답에는 없으므로 누락도 «없음» 으로 본다. */
+  memo?: string | null;
+  /** 그 날의 기분(백엔드 Mood enum). 안 남겼으면 null. 누락·모르는 값은 «없음». */
+  mood?: Mood | null;
 }
 
 /* ── 세션 상세 보고서 (detailreport/*) ── */

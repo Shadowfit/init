@@ -2,6 +2,8 @@ package com.shadowfit.service.exercise;
 
 import com.shadowfit.dto.report.record.CalendarMainResponseDto;
 import com.shadowfit.dto.report.record.DailyActivityResponseDto;
+import com.shadowfit.dto.report.record.DailyLogResponseDto;
+import com.shadowfit.dto.report.record.Mood;
 import com.shadowfit.dto.report.record.WeeklyActivityResponseDto;
 import com.shadowfit.global.error.BusinessException;
 import com.shadowfit.global.error.ErrorCode;
@@ -12,9 +14,11 @@ import com.shadowfit.model.exercise.Status;
 import com.shadowfit.model.member.Member;
 import com.shadowfit.model.member.SelectedPersona;
 import com.shadowfit.model.member.UserRole;
+import com.shadowfit.model.report.DailyLog;
 import com.shadowfit.repository.exercise.ExercisesRepository;
 import com.shadowfit.repository.exercise.SessionRepository;
 import com.shadowfit.repository.member.MemberRepository;
+import com.shadowfit.repository.report.DailyLogRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -44,6 +48,7 @@ class SessionActivityQueryServiceTest {
     @Autowired private MemberRepository memberRepository;
     @Autowired private ExercisesRepository exercisesRepository;
     @Autowired private com.shadowfit.repository.exercise.CategoryRepository categoryRepository;
+    @Autowired private DailyLogRepository dailyLogRepository;
 
     private Member member;
     private Exercise exercise;
@@ -228,6 +233,84 @@ class SessionActivityQueryServiceTest {
         assertThat(todayResult.getTotalWorkouts()).isEqualTo(1);
         assertThat(yesterdayResult.getTotalWorkouts()).isZero();
         assertThat(yesterdayResult.getSessions()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("getDailyActivity — 그 날 남긴 메모·기분을 같이 돌려준다(저장 API 만 있고 읽는 길이 없던 것)")
+    void getDailyActivity_includesMemoAndMood() {
+        LocalDate today = LocalDate.now();
+        completedSessionOn(today, 80.0, 100.0, 20);
+        dailyLogRepository.saveAndFlush(DailyLog.builder()
+                .member(member).logDate(today)
+                .memo("스쿼트 첫날, 무릎이 덜 아팠다").mood(Mood.GOOD)
+                .totalExerciseTime(20).totalCalories(new BigDecimal("100.0"))
+                .build());
+
+        DailyActivityResponseDto result = sessionActivityQueryService.getDailyActivity(member.getId(), today);
+
+        assertThat(result.getMemo()).isEqualTo("스쿼트 첫날, 무릎이 덜 아팠다");
+        assertThat(result.getMood()).isEqualTo(Mood.GOOD);
+        assertThat(result.getTotalWorkouts()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("getDailyActivity — 일지 행이 없는 날은 메모·기분이 null 이다(에러가 아니라 «아직 안 씀»)")
+    void getDailyActivity_noLogRow_memoAndMoodAreNull() {
+        LocalDate today = LocalDate.now();
+        completedSessionOn(today, 80.0, 100.0, 20);
+
+        DailyActivityResponseDto result = sessionActivityQueryService.getDailyActivity(member.getId(), today);
+
+        assertThat(result.getMemo()).isNull();
+        assertThat(result.getMood()).isNull();
+        assertThat(result.getTotalWorkouts()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("getDailyActivity — 운동 집계만 있는 일지 행(메모·기분 없음)도 null 이다")
+    void getDailyActivity_statsOnlyRow_memoAndMoodAreNull() {
+        LocalDate today = LocalDate.now();
+        dailyLogRepository.saveAndFlush(DailyLog.builder()
+                .member(member).logDate(today)
+                .totalExerciseTime(20).totalCalories(new BigDecimal("100.0"))
+                .build());
+
+        DailyActivityResponseDto result = sessionActivityQueryService.getDailyActivity(member.getId(), today);
+
+        assertThat(result.getMemo()).isNull();
+        assertThat(result.getMood()).isNull();
+    }
+
+    @Test
+    @DisplayName("getDailyActivity — 다른 회원의 메모는 보이지 않는다")
+    void getDailyActivity_doesNotLeakOtherMembersMemo() {
+        LocalDate today = LocalDate.now();
+        Member other = memberRepository.saveAndFlush(Member.builder()
+                .email("other-memo@test.com").username("o").password("dummy")
+                .selectedPersona(SelectedPersona.BEGINNER).role(UserRole.USER).build());
+        dailyLogRepository.saveAndFlush(DailyLog.builder()
+                .member(other).logDate(today).memo("남의 일기").mood(Mood.BAD)
+                .totalExerciseTime(0).totalCalories(BigDecimal.ZERO)
+                .build());
+
+        DailyActivityResponseDto result = sessionActivityQueryService.getDailyActivity(member.getId(), today);
+
+        assertThat(result.getMemo()).isNull();
+        assertThat(result.getMood()).isNull();
+    }
+
+    @Test
+    @DisplayName("DailyLogResponseDto — 엔티티 변환에서 기분이 빠지지 않는다(이전에는 mood 를 대입하지 않았다)")
+    void dailyLogResponseDto_copiesMood() {
+        DailyLog entity = DailyLog.builder()
+                .member(member).logDate(LocalDate.now()).memo("m").mood(Mood.GREAT)
+                .totalExerciseTime(1).totalCalories(BigDecimal.ONE)
+                .build();
+
+        DailyLogResponseDto dto = new DailyLogResponseDto(entity);
+
+        assertThat(dto.getMood()).isEqualTo(Mood.GREAT);
+        assertThat(dto.getMemo()).isEqualTo("m");
     }
 
     @Test

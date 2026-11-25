@@ -13,6 +13,11 @@ import java.util.List;
  * 달력에서 특정 날짜를 눌렀을 때 그 날의 운동 목록을 돌려주는 응답.
  * 주간 요약의 todayDetails 와 동일한 {@link ExerciseSessionDto} 를 재사용한다.
  * (project-squat-first: 보통 하루 단건 → 프론트는 sessions[0].sessionId 로 상세 직행 가능)
+ *
+ * <p>{@code memo}·{@code mood} 는 그 날 사용자가 남긴 운동 일지다({@code POST /reports/daily-logs}).
+ * 저장 API 만 있고 읽는 길이 없어 «써도 다시 볼 수 없는 데이터» 였던 것을, 이미 날짜를 누를 때마다 부르는
+ * 이 응답에 실어 한 번에 준다. 일지를 안 남긴 날은 둘 다 null 이다 — 운동만 하고 메모를 안 쓴 날도
+ * 일지 행(운동 시간·열량 집계)은 있지만 memo·mood 는 비어 있다.
  */
 @Getter
 @Setter
@@ -23,4 +28,6 @@ public class DailyActivityResponseDto {
     private String date;                       // "2026-06-04"
     private int totalWorkouts;                 // 그 날 세션 수
     private List<ExerciseSessionDto> sessions; // 그 날 운동 리스트 (없으면 빈 배열)
+    private String memo;                       // 그 날의 운동 메모 (없으면 null)
+    private Mood mood;                         // 그 날의 기분 (없으면 null)
 }

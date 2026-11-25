@@ -34,5 +34,7 @@ public class DailyLogResponseDto {
         this.memo = entity.getMemo();
         this.totalExerciseTime = entity.getTotalExerciseTime();
         this.totalCalories = entity.getTotalCalories();
+        // 이전에는 mood 를 대입하지 않아, 이 DTO 를 응답으로 쓰면 기분이 항상 비어 나왔다.
+        this.mood = entity.getMood();
     }
 }

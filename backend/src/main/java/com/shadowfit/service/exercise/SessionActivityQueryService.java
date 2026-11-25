@@ -11,8 +11,10 @@ import com.shadowfit.global.error.ErrorCode;
 import com.shadowfit.global.util.SetSummaryFormatter;
 import com.shadowfit.model.exercise.Session;
 import com.shadowfit.model.exercise.Status;
+import com.shadowfit.model.report.DailyLog;
 import com.shadowfit.repository.exercise.SessionRepository;
 import com.shadowfit.repository.exercise.SessionSetRepository;
+import com.shadowfit.repository.report.DailyLogRepository;
 import com.shadowfit.model.exercise.SessionSet;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -22,6 +24,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -40,6 +43,7 @@ public class SessionActivityQueryService {
     private final SessionRepository sessionRepository;
     private final AttendanceService attendanceService;
     private final SessionSetRepository sessionSetRepository;
+    private final DailyLogRepository dailyLogRepository;
 
     @Transactional(readOnly = true)
     public WeeklyActivityResponseDto getWeeklyActivity(Long memberId) {
@@ -185,10 +189,15 @@ public class SessionActivityQueryService {
                 .filter(s -> s.getStartTime() != null)
                 .toList());
 
+        // 그 날의 일지(메모·기분). 행이 없거나 운동 집계만 있는 행이면 둘 다 null.
+        Optional<DailyLog> log = dailyLogRepository.findByMemberIdAndLogDate(memberId, date);
+
         return DailyActivityResponseDto.builder()
                 .date(date.toString())
                 .totalWorkouts(details.size())
                 .sessions(details)
+                .memo(log.map(DailyLog::getMemo).orElse(null))
+                .mood(log.map(DailyLog::getMood).orElse(null))
                 .build();
     }
 

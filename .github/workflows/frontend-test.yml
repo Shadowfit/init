@@ -109,3 +109,11 @@ jobs:
       - name: node tests — 목업 화면(공지·Q&A) 릴리스 딥링크 차단
         working-directory: frontend
         run: node utils/devOnlyRoute.test.cjs
+
+      - name: node tests — 운동 일지(메모·기분) 로직·백엔드 Mood enum 일치
+        working-directory: frontend
+        run: node utils/dailyLog.test.cjs
+
+      - name: node tests — 운동 일지 카드·입력 모달 렌더링
+        working-directory: frontend
+        run: node utils/dailyLogUi.test.cjs
