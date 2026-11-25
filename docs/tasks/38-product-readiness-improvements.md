@@ -66,13 +66,13 @@
 | E1 | 🔶 | 정확도 비교 스크립트(`ai-server/scripts/accuracy_report.py`, #903)가 생김. **실영상 라벨 확대·실측은 아직** |
 | E3 | ✅ | «측정 안 됨» 계약(`MeasurementStatus`, #899·#900·#902) — 0회 세션을 출석·연속·일지에서 제외 |
 | E4 | 🔶 | «왜 0 인가» 는 구분됨. 응답 단위 신뢰도 필드는 없음(`visibility` 는 관절 단위) |
-| F1 | 🔶 | CI node 테스트 11종(`frontend-test.yml`). jest-expo+RNTL 화면 테스트 시범은 #927 open |
+| F1 | 🔶 | CI node 테스트 12종(`frontend-test.yml`, #936 의 `devOnlyRoute` 포함). jest-expo+RNTL 화면 테스트 시범은 #927 open |
 | F2 | ✅ | 오프라인 배너(netinfo)·복귀 시 재시도·`LoadError` 확산(#926). **마이페이지·출석 달력 로딩 실패, 운동 중 연결 끊김은 미처리** |
 | F3 | 🔶 | `devLog` 도입, 확인한 `console.log` 2곳은 `__DEV__` 가드. 프레임 로그(`exercise.tsx:453`)는 가드 미확인 |
 | F4 | 🔶 | 운동 중 뒤로가기(소프트·하드)가 종료 확인을 거친다(`handleBack`). 격자·전체화면 버튼은 재확인 못 함 |
 | F5 | ❌ | `expo-camera` 그대로, `vision-camera` 미도입, 실기기 성능 검증 없음 |
 | F6 | 🔶 | 접근성 라벨 28곳(11-18: 약 9곳) |
-| F7 | ✅ | TODO 2건(공지·QnA)만 남음. 진입점은 `__DEV__`, **딥링크 차단은 #936(open)**. 서버 API 는 없다(실서비스 전 필요) |
+| F7 | ✅ | TODO 2건(공지·QnA)만 남음. 진입점은 `__DEV__`, **딥링크 차단은 #936 으로 머지됨**(릴리스에서 `DevOnlyRoute` 가 홈으로 리다이렉트, 실제 릴리스 빌드에서 딥링크를 열어 본 적은 없음). 서버 API 는 없다(실서비스 전 필요) |
 | G1·G3 | ❌ | admin-web 배포 구성·회원 정지·감사 로그 흔적 없음 |
 | G2 | ❓ | 재확인 못 함 |
 
