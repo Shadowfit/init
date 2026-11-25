@@ -44,6 +44,7 @@ class SessionMetricsExportNamesTest {
         metrics.sessionTransition(Status.COMPLETED, "ai-callback");
         metrics.optimisticLockConflict("timeout-scheduler", "yield");
         metrics.aiStopResult("session-missing");
+        metrics.aiCallLatency("stop", "ok", Duration.ofMillis(40).toNanos());
         metrics.outboxDispatch("default", "sent");
         metrics.outboxLag(Duration.ofMillis(250));
         metrics.poseBatch(300, 60);
@@ -61,6 +62,8 @@ class SessionMetricsExportNamesTest {
                 .contains("shadowfit_session_transitions_total")
                 .contains("shadowfit_session_optimistic_lock_conflicts_total")
                 .contains("shadowfit_ai_stop_result_total")
+                .contains("shadowfit_ai_call_latency_seconds_count")
+                .contains("shadowfit_ai_call_latency_seconds_bucket")
                 .contains("shadowfit_outbox_dispatch_total")
                 .contains("lane=\"default\"")
                 .contains("shadowfit_outbox_pending")
@@ -94,5 +97,23 @@ class SessionMetricsExportNamesTest {
         assertThat(scrape).contains("shadowfit_pose_orphan_window_seconds{quantile=\"0.5\"}");
         assertThat(scrape).contains("shadowfit_pose_orphan_window_seconds{quantile=\"0.95\"}");
         assertThat(scrape).contains("shadowfit_pose_orphan_window_seconds{quantile=\"0.99\"}");
+    }
+
+    @Test
+    @DisplayName("AI 호출 지연은 rpc·outcome 태그와 히스토그램 버킷으로 나간다 — p95 는 서버가 아니라 쿼리가 계산한다")
+    void aiCallLatencyPublishesHistogramWithTags() {
+        String scrape = registry.scrape();
+
+        assertThat(scrape).contains("rpc=\"stop\"").contains("outcome=\"ok\"");
+        // histogram_quantile 이 쓸 수 있으려면 le 라벨 버킷이 나가야 한다(퍼센타일 게이지가 아니라).
+        assertThat(scrape).contains("shadowfit_ai_call_latency_seconds_bucket{").contains("le=\"");
+    }
+
+    @Test
+    @DisplayName("AI 호출 지연 기록은 호출 경로를 깨뜨리지 않는다 — 음수 시간(시계 이상)도 던지지 않는다")
+    void aiCallLatencyNeverThrows() {
+        metrics.aiCallLatency("start", "ok", -5L);
+
+        assertThat(registry.scrape()).contains("rpc=\"start\"");
     }
 }

@@ -31,7 +31,7 @@ from app.grpc.session_state import (
     get_registry,
 )
 from app.models.pose import Landmark, PoseRequest, PoseResponse, PoseSkipReason, SquatProgress
-from app.observability import frame_path
+from app.observability import frame_path, frame_stage
 from app.utils.image_utils import base64_to_image
 
 logger = logging.getLogger(__name__)
@@ -208,6 +208,7 @@ def _detect_pose(req: PoseRequest):
     # 여기가 «워커에 실린» 순간이다. 요청 도착과의 차(`wait`)가 §12 가 물은 값이고, 계측이
     # 꺼져 있으면 이 호출들은 전부 즉시 반환한다(decisions/ai-receive-path-scaling.md §12).
     frame_path.mark_handler_in()
+    t_handler_in = time.perf_counter()  # 상시 구간 지표(frame_stage) — frame_path 와 별개로 항상 찍는다
 
     image_bgr = base64_to_image(req.image)
     image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
@@ -240,8 +241,10 @@ def _detect_pose(req: PoseRequest):
         # 리스 획득까지가 후보 2순위(검출기 획득 경로, §10-2)다. 추론과 갈라서 잰다 —
         # 합쳐 재면 「추론이 비싸다」로 읽히고 그건 R6 가 이미 반증한 답이다.
         frame_path.mark_leased()
+        t_leased = time.perf_counter()
         landmarks = detector.detect(image_rgb)
     frame_path.mark_inferred()
+    frame_stage.record(t_handler_in, t_leased, time.perf_counter())
     image_aspect = image_rgb.shape[1] / image_rgb.shape[0]
 
     if not landmarks:

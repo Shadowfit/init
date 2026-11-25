@@ -176,9 +176,59 @@ sessionId는 metadata가 아니라 메시지 payload 안에 있어 인터셉터�
 
 - [ ] JSON 구조화 로깅 — 로그 수집기 도입 시 동반
 - [ ] 보강 축 나머지 착수 순서: **outbox vs 회복탄력성** ([`portfolio-narrative.md §7`](../portfolio/portfolio-narrative.md)) — 관측성이 빠지면서 2개로 좁혀짐
-- [ ] gRPC 콜백 처리 시간 Timer — 이번 범위에서 제외(지표 3종만)
+- [x] ~~Spring→AI gRPC 호출 지연 Timer~~ — **완료(2026-11-23)**, §8. (AI→Spring **콜백 처리 시간** Timer 는 여전히 미착수)
 - [ ] AI 쪽 HTTP 엔드포인트(`pose.py`)의 cid 전파 — 이번엔 gRPC 경로만
 - [x] ~~신규 메트릭 3곳의 `SimpleMeterRegistry` 카운트 검증 테스트~~ — **완료(2026-07-28)**, §5-1
+
+---
+
+## 8. AI 구간 지표 — 결함 ④ 의 남은 빈칸 (2026-11-23)
+
+회고([`architecture-review-2026-08-11.md`](./architecture-review-2026-08-11.md) 결함 ④ «병목이 AI 인데 AI 구간을 못 본다»)의 처방은
+«전체 분산추적은 과하니, AI 처리 시간과 큐 대기만 구간 지표로 붙이자» 였다. 착수 전에 `origin/main` 을 확인하니
+**절반은 이미 있었다** — #582(applicationTaskExecutor 지표)는 #667 로 닫혔고, AI 쪽 `/metrics`(#151)와 프레임 구간 계측(`frame_path.py`)도 있었다.
+**남은 빈칸은 둘**이었다.
+
+| 빈칸 | 상태 | 이번에 한 것 |
+|---|---|---|
+| AI 구간 시간이 **시계열이 아니었다** | `frame_path` 는 기본 OFF(요청당 락 4회 = 재려는 GIL 과 같은 자원)이고 스냅샷 JSON 으로만 나온다. `metrics.py` 엔 Counter·Gauge 뿐이라 Grafana 에서 AI 처리 시간 p95 를 못 본다 | `shadowfit_ai_frame_stage_seconds{stage=wait\|lease\|infer}` 히스토그램 — **상시 ON**. 요청당 `perf_counter` 4번 + 컨텍스트 변수 1번 + `observe` 3번 (`observability/frame_stage.py`) |
+| Spring → AI 호출 지연을 **재는 Timer 가 없었다** | 결과 카운터(`ai.stop.result` 등)만 있어 «어떻게 끝났나» 는 보여도 «얼마나 걸렸나» 는 안 보였다. 서킷이 열리기 전에 느려지는 중임을 알 수 없다 | `shadowfit.ai.call.latency{rpc=start\|stop\|reattach, outcome}` — 서킷브레이커 기록(`cb.onSuccess/onError`) 바로 옆에서 **그 호출 «전에» 확정한** 경과시간(`elapsedNanos`)을 CB 와 Timer 에 같이 넘긴다 — `cb.onError` 는 상태 전이 리스너(재부착 큐잉)를 동기로 부를 수 있어, 뒤에 다시 읽으면 Spring 의 DB 지연이 AI 호출 지연으로 섞인다 |
+
+### 8-1. correlation id 는 라벨이 아니라 로그로 붙인다
+Prometheus 라벨에 cid 를 넣으면 카디널리티가 터진다. 그래서 `FRAME_SLOW_LOG_MS`(기본 **0 = 끔**)를 넘긴 프레임만 구간 내역을 WARNING 한 줄로 남기고,
+cid 는 기존 로그 레코드 팩토리가 붙인다. 그 cid 로 Spring 로그와 이어진다.
+**임계값을 기본으로 박지 않은 이유** — «몇 ms 부터 느린가» 는 [`slo-baseline.md`](./slo-baseline.md) 가 미확정으로 둔 판정선이다. 근거 없는 숫자를 기본값으로 두면 출처 없는 기준값이 된다.
+
+### 8-2. `frame_path` 와 겹치지 않는다
+두 계측은 같은 시계(`perf_counter`)지만 **구간 정의가 다르다** — `frame_stage` 의 `lease` 는 디코드를 포함한다(`frame_path` 는 디코드·리스를 가른다).
+**대조할 때는 구간 정의부터 맞출 것.** `frame_path` 는 원인 분해용(켜는 순간 그 자체가 변수), `frame_stage` 는 운영 상시용이다.
+
+### 8-3. 같이 고친 것 — 기본 구성에서 게이지가 0 으로 고정되던 문제
+`main.py` 에서 `bind_active_sessions` · `bind_complete_callback_pool` 이 `if settings.FRAME_PATH_METRICS:` 블록 **안**에 있었다.
+계측이 꺼진 기본 구성에서는 `shadowfit_ai_active_sessions` · `..._complete_callback_pending` · `..._in_flight` 가 바인딩 없이 **0 으로 고정** — «세션 0 · 큐 0» 으로 읽히는 거짓 값이다.
+기존 테스트(`test_active_sessions_reads_the_registry`)는 «이름이 보이는가» 만 봐서 못 잡았다. 블록 밖으로 옮겼고(스크레이프 시점에 읽는 값이라 핫 경로 비용 0),
+**바인딩을 되돌리면 새 회귀 테스트 2건이 실제로 실패함을 확인했다.**
+
+### 8-4. 검증하지 않은 것
+- **처리량 ON/OFF 대조는 안 했다.** 이 프로젝트 규약상 «계측 자체가 GIL 을 쓴다» 는 의심은 대조 판으로만 닫힌다. 아래 마이크로벤치는 **호출 비용**이지 처리량·p99 영향이 아니다.
+  재려면 `frame_stage.record` 를 no-op 으로 바꾼 팔과의 ABBA 대조가 필요하다(c7i 동거 rig, 판당 반복). 로컬에서는 하지 않았다 — 2물리코어 박스에 다른 워크트리의 Gradle 이 돌고 있어 상대 비교도 못 믿는다.
+
+### 8-5. 호출 비용 마이크로벤치 (2026-11-23, 로컬 · 절대값 인용 금지)
+`stamp_arrival()` + `record()` 한 쌍의 CPU 시간. 같은 머신에서 **다른 JVM 들이 돌고 있었다** — 절대값은 부풀어 있고, 의미가 있는 것은 구성 요소의 상대 크기뿐이다.
+
+| 항목 | 값 | 비고 |
+|---|---:|---|
+| `stamp_arrival` | ~1.4~1.8µs | 컨텍스트 변수 1회 |
+| `labels(stage=…)` + `observe` | ~16~19µs | 호출마다 라벨 검증·해시·락 |
+| 캐시한 자식의 `observe` | ~6.7~9µs | |
+| `record()` 전체 — 자식 캐시 **전** | ~42µs | `observe` 3번이 거의 전부 |
+| `record()` 전체 — 자식 캐시 **후** | ~25µs | `_stage_children` (metrics.py) |
+
+1차 구현은 `labels()` 를 매번 불러 42µs 였고, 자식을 미리 만들어 두는 것으로 약 40% 줄였다. **이 벤치가 «상시 ON 으로 둬도 된다» 를 증명하지는 않는다** — 프레임당 추론이 수십 ms 인 것과 비교하면 작지만(≈0.1%대, 추정),
+그 추정은 GIL 점유 구간만의 비중이 아니라 전체 대비라서 «GIL 이 병목인 박스에서 얼마나 먹나» 에는 답하지 않는다.
+`prometheus_client` 의 `observe` 는 지표마다 락 1개를 잡는다 — 같은 지표를 여러 스레드가 치므로 스레드 경합이 비용에 얹힐 수 있다. 4스레드 판도 돌렸지만(요청당 벽시간 ~44µs, 1스레드 ~66µs — 1차 구현 기준) 붐비는 박스라 경합 효과를 분리하지 못했다. **경합 비용은 미측정이다.**
+- 히스토그램 버킷(AI 1ms~2s, Spring 1ms~10s)은 **해상도 선택**이지 판정선이 아니다.
+- Grafana 패널은 `monitoring/grafana/dashboards/shadowfit-backend.json` 의 «AI 구간» 행에 3개 있다(프레임 구간 p95 · Spring→AI 호출 p95 · 세션 수와 콜백 풀). 패널 쿼리의 **실데이터 렌더는 확인하지 못했다** — 스택을 띄우지 않았고, `SessionMetricsExportNamesTest` 가 이름만 고정한다.
 
 ---
 
@@ -186,3 +236,4 @@ sessionId는 metadata가 아니라 메시지 payload 안에 있어 인터셉터�
 - 2026-07-28: 보강 3축(관측성·outbox·회복탄력성) 중 **관측성을 1순위로 착수·완료**. 근거: 착수 시점에 Actuator·Resilience4j·gRPC deadline은 이미 있어 회복탄력성은 실질적으로 채워져 있었고, 관측성만 🔴 빈칸이라 ROI가 가장 높았음. 범위는 correlation id 5단계 + 커스텀 메트릭 3종, 분산추적·JSON 구조화는 제외(§6).
 - 2026-07-28: PR #54 CodeRabbit 리뷰 반영. **Python 백그라운드 스레드 경계 누락을 수정**(§3-3-1) — 지적은 "재시도마다 id가 달라진다"(Minor)였으나 검증해 보니 `threading.Thread` 가 컨텍스트를 상속하지 않아 `CompleteAnalysis` 콜백 전체가 원 요청과 끊겨 있었음(더 큼). §3-6의 "cid가 다르고 sessionId가 같다 = 경쟁의 증거" 주장도 **과했음을 인정하고 "단서"로 완화** — 확정은 낙관락 충돌 지표가 한다(Java javadoc·logback 주석 동일 정정). `install_log_record_factory()` 멱등화 지적은 기동 시 1회 호출이라 미적용.
 - 2026-07-28: 보류했던 **메트릭 검증 테스트도 착수·완료**(§5-1). 1차에는 `SessionTimeoutSchedulerTest` 하나만 지표를 검증하고 나머지 기록 지점은 무검증이었는데, 관측성이 주제인 PR에서 관측 장치 자체가 무검증인 건 앞뒤가 안 맞다고 판단. 12건 추가(백엔드 총 181건).
+- 2026-11-23: **결함 ④ 의 남은 빈칸을 좁혀서 처리**(§8). 회고의 3순위 처방은 `origin/main` 확인 결과 절반이 이미 끝나 있어(#582 → #667, AI `/metrics` #151, `frame_path`) 범위를 «구간 시간의 시계열화 + Spring→AI 호출 지연 Timer» 로 줄였다. 부수로 기본 구성에서 AI 게이지 3종이 0 으로 고정되던 바인딩 누락을 수정. **상시 ON 계측의 비용은 미측정** — ON/OFF 대조 전에는 «비용이 작다» 고 말하지 않는다.
