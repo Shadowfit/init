@@ -13,25 +13,32 @@ import {
 } from 'lucide-react-native';
 import { COLORS, FONT_SIZE, SPACING, RADIUS } from '@/constants/Colors';
 import { reportService } from '@/services/reportService';
+import LoadError from '@/components/ui/LoadError';
+import { useReloadOnReconnect } from '@/utils/network';
 import type { WeeklyActivityResponse } from '@/types/report';
 
 export default function ActivityScreen() {
   const router = useRouter();
   const [data, setData] = useState<WeeklyActivityResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  // 실패를 «기록 없음» 과 구분한다 — 안 그러면 네트워크가 끊긴 사용자가 0회·0분 화면을 보고 기록이 사라졌다고 오해한다.
+  const [loadError, setLoadError] = useState(false);
 
-  useFocusEffect(
-    useCallback(() => {
-      setLoading(true);
-      reportService
-        .getWeeklySummary()
-        .then((res) => setData(res.data))
-        .catch((e) => {
-          devError('[weekly-summary] status=', e.response?.status, 'data=', e.response?.data);
-        })
-        .finally(() => setLoading(false));
-    }, []),
-  );
+  const load = useCallback(() => {
+    setLoading(true);
+    setLoadError(false);
+    reportService
+      .getWeeklySummary()
+      .then((res) => setData(res.data))
+      .catch((e) => {
+        devError('[weekly-summary] status=', e.response?.status, 'data=', e.response?.data);
+        setLoadError(true);
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  useFocusEffect(load);
+  useReloadOnReconnect(loadError && !data, load);
 
   const dailyLogs = data?.dailyLogs ?? [];
   const maxMin = Math.max(...dailyLogs.map((d) => d.workoutMinutes), 1);
@@ -65,6 +72,8 @@ export default function ActivityScreen() {
           <View style={styles.loadingBox}>
             <ActivityIndicator color={COLORS.primary} />
           </View>
+        ) : loadError && !data ? (
+          <LoadError message="이번 주 운동 기록을 불러오지 못했어요. 네트워크를 확인해주세요." onRetry={load} />
         ) : (
           <>
             {/* 주간 통계 */}

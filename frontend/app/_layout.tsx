@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 import 'react-native-reanimated';
 import { COLORS } from '@/constants/Colors';
 import { useAuthStore } from '@/stores/authStore';
+import OfflineBanner from '@/components/ui/OfflineBanner';
 
 export { ErrorBoundary } from 'expo-router';
 
@@ -114,6 +115,7 @@ function RootLayoutNav() {
         <Stack.Screen name="board/qna" />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
       </Stack>
+      <OfflineBanner />
     </ThemeProvider>
   );
 }

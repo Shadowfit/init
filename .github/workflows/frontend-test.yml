@@ -74,6 +74,14 @@ jobs:
         working-directory: frontend
         run: node lib/queryClient.test.cjs
 
+      - name: node tests — 오프라인 판정
+        working-directory: frontend
+        run: node utils/offline.test.cjs
+
+      - name: node tests — 연결 복귀 시 재시도 훅
+        working-directory: frontend
+        run: node utils/network.test.cjs
+
       - name: node tests — 릴리스 빌드 설정 점검
         working-directory: frontend
         run: node scripts/check-release-env.test.cjs

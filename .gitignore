@@ -178,3 +178,6 @@ data/
 /*-qr.png
 /pose_landmarker*.task
 /output/qr/
+
+# alarm.tf 가 만드는 Lambda zip
+infra/terraform/.build/

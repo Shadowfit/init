@@ -46,6 +46,18 @@ data "aws_iam_policy_document" "host" {
     actions   = ["s3:GetObject"]
     resources = ["${aws_s3_bucket.deploy.arn}/bundles/*"]
   }
+
+  # outbox FAILED 지표 발행(infra/host/alarm). PutMetricData 는 리소스 단위 제한이 없어서 네임스페이스로 좁힌다.
+  statement {
+    sid       = "PublishAppMetrics"
+    actions   = ["cloudwatch:PutMetricData"]
+    resources = ["*"]
+    condition {
+      test     = "StringEquals"
+      variable = "cloudwatch:namespace"
+      values   = ["ShadowFit"]
+    }
+  }
 }
 
 resource "aws_iam_role_policy" "host" {
