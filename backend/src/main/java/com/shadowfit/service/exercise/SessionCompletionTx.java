@@ -122,9 +122,15 @@ public class SessionCompletionTx {
         }
 
         int exerciseMinutes = (int) java.time.Duration.between(session.getStartTime(), session.getEndTime()).toMinutes();
+        // 측정된 것이 없는 세션(카메라 가림·사람 미검출 등 — Session.isMeasured)은 일지의 «운동 시간·칼로리» 에 더하지 않는다.
+        // 출석·연속 기록에서 이미 제외한 세션이라(2026-11-22 결정), 같은 세션이 «운동한 날» 로는 안 세어지면서 분·칼로리는 쌓이는
+        // 어긋남이 없어야 한다. 칼로리는 체중×시간 추정이라 아무것도 못 쟀어도 숫자가 나오므로 특히 부풀려진다.
+        // 아래 recomputeStats 쿼리도 같은 규칙이다(SQL 로 복제 — 바꿀 때 둘을 같이).
         // 칼로리가 null(체중 모름)이면 일지에는 0 을 더한다 — accumulateStats 가 접는다.
-        dailyLogService.accumulateStats(session.getMember().getId(), session.getStartTime().toLocalDate(),
-                exerciseMinutes, calories);
+        if (session.isMeasured()) {
+            dailyLogService.accumulateStats(session.getMember().getId(), session.getStartTime().toLocalDate(),
+                    exerciseMinutes, calories);
+        }
 
         precomputeReport(session, rejectedAttempts);
 

@@ -18,15 +18,19 @@ import { ChevronLeft, ChevronUp, Share2, RefreshCw, Crown, LogOut, Dumbbell, Use
 import { COLORS, FONT_SIZE, SPACING, RADIUS } from '@/constants/Colors';
 import FriendStatusList from '@/components/social/FriendStatusList';
 import CheerModal from '@/components/social/CheerModal';
+import ReactionBar from '@/components/social/ReactionBar';
+import { REACTION_KINDS, hasReacted, normalizeSummary, withToggled } from '@/utils/reactions';
 import { groupService } from '@/services/groupService';
 import { API_BASE_URL } from '@/services/api';
 import { useAuthStore } from '@/stores/authStore';
+import { queryClient, queryKeys, STALE } from '@/lib/queryClient';
 import {
   parseFeedPayload,
   type GroupAttendanceCalendar,
   type GroupDetail,
   type GroupFeedItem,
   type MemberAttendanceStatus,
+  type ReactionKind,
 } from '@/types/social';
 
 const FEED_PAGE = 20;
@@ -96,9 +100,19 @@ export default function GroupDetailScreen() {
 
   const loadAll = useCallback(() => {
     if (!groupId) return;
-    Promise.all([groupService.getDetail(groupId), groupService.getMemberStatuses(groupId)])
+    // 상세(이름·멤버·초대 코드)만 60초 캐시한다. 멤버 현황·출석·피드는 포커스마다 새로 받는다 —
+    // 재촉·응원 뒤 돌아오면 최신이어야 하는 값들이다. 상세를 고치는 곳(코드 재발급·그룹장 넘기기·탈퇴)이
+    // 캐시를 갱신·무효화한다.
+    Promise.all([
+      queryClient.fetchQuery({
+        queryKey: queryKeys.groupDetail(groupId),
+        queryFn: () => groupService.getDetail(groupId).then((res) => res.data),
+        staleTime: STALE.group,
+      }),
+      groupService.getMemberStatuses(groupId),
+    ])
       .then(([d, s]) => {
-        setDetail(d.data);
+        setDetail(d);
         setStatuses(s.data);
       })
       .catch((e) => {
@@ -132,6 +146,10 @@ export default function GroupDetailScreen() {
           try {
             const res = await groupService.regenerateInviteCode(groupId);
             setDetail((d) => (d ? { ...d, inviteCode: res.data.inviteCode } : d));
+            // 캐시의 옛 코드가 다음 진입에 보이지 않게 같이 고친다.
+            queryClient.setQueryData<GroupDetail>(queryKeys.groupDetail(groupId), (d) =>
+              d ? { ...d, inviteCode: res.data.inviteCode } : d,
+            );
           } catch (e: any) {
             Alert.alert('재발급 실패', errorText(e, '초대 코드를 재발급하지 못했어요.'));
           }
@@ -159,6 +177,8 @@ export default function GroupDetailScreen() {
         onPress: async () => {
           try {
             await groupService.leave(groupId);
+            // 나간 모임의 상세가 캐시에 남아 있으면 다시 들어왔을 때 «멤버» 로 보인다.
+            queryClient.removeQueries({ queryKey: [...queryKeys.groupAll, groupId] });
             router.back();
           } catch (e: any) {
             Alert.alert('탈퇴 실패', errorText(e, '탈퇴하지 못했어요.'));
@@ -178,6 +198,8 @@ export default function GroupDetailScreen() {
         onPress: async () => {
           try {
             await groupService.transferOwnership(groupId, memberId);
+            // 역할이 바뀌었다 — 캐시를 버려야 loadAll 이 새로 받는다(안 버리면 60초간 옛 그룹장이 보인다).
+            queryClient.invalidateQueries({ queryKey: queryKeys.groupDetail(groupId) });
             loadAll();
           } catch (e: any) {
             Alert.alert('넘기기 실패', errorText(e, '그룹장을 넘기지 못했어요.'));
@@ -203,6 +225,37 @@ export default function GroupDetailScreen() {
       Alert.alert('응원 실패', errorText(e, '응원을 보내지 못했어요.'));
     } finally {
       setCheerSending(false);
+    }
+  };
+
+  // 리액션 💗🔥 — 누르는 즉시 화면에 반영하고(낙관적) 서버 응답(갱신된 요약)으로 덮어쓴다.
+  // 실패하면 이 종류만 다시 뒤집어 누르기 전으로 돌린다 — 같은 글의 다른 종류 요청은 건드리지 않는다.
+  // 같은 (글, 종류) 요청이 가는 중에는 다시 못 누르게 잠근다(연타로 PUT/DELETE 가 엇갈리는 것을 막는다).
+  const [reactionBusy, setReactionBusy] = useState<Set<string>>(new Set());
+
+  const toggleReaction = async (item: GroupFeedItem, kind: ReactionKind) => {
+    const key = `${item.seq}:${kind}`;
+    if (reactionBusy.has(key)) return;
+    const wasOn = hasReacted(normalizeSummary(item.reactionSummary), kind);
+    const patch = (fn: (s: GroupFeedItem['reactionSummary']) => GroupFeedItem['reactionSummary']) =>
+      setFeed((prev) => prev.map((f) => (f.seq === item.seq ? { ...f, reactionSummary: fn(f.reactionSummary) } : f)));
+
+    setReactionBusy((prev) => new Set(prev).add(key));
+    patch((s) => withToggled(s, kind));
+    try {
+      const res = wasOn
+        ? await groupService.removeReaction(groupId, item.seq, kind)
+        : await groupService.addReaction(groupId, item.seq, kind);
+      patch(() => normalizeSummary(res.data));
+    } catch (e: any) {
+      patch((s) => withToggled(s, kind));
+      Alert.alert('리액션 실패', errorText(e, '리액션을 남기지 못했어요. 잠시 후 다시 시도해주세요.'));
+    } finally {
+      setReactionBusy((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
     }
   };
 
@@ -419,6 +472,11 @@ export default function GroupDetailScreen() {
                   )}
                   <Text style={styles.feedText}>{d.caption || `오늘 ${d.exerciseName} ${d.totalReps}회 완료! 💪`}</Text>
                   <Text style={styles.feedStats}>{d.exerciseName} · {d.totalReps}회 · {d.workoutMinutes}분</Text>
+                  <ReactionBar
+                    summary={item.reactionSummary}
+                    onToggle={(kind) => toggleReaction(item, kind)}
+                    pending={new Set(REACTION_KINDS.filter((k) => reactionBusy.has(`${item.seq}:${k}`)))}
+                  />
                   {item.cheers.length > 0 && (
                     <View style={styles.cheerChips}>
                       {cheers.map((c) => {
@@ -542,11 +600,6 @@ const styles = StyleSheet.create({
   feedName: { fontSize: FONT_SIZE.sm, fontWeight: '700', color: COLORS.text },
   feedTime: { fontSize: FONT_SIZE.xs, color: COLORS.textMuted },
   feedText: { fontSize: FONT_SIZE.md, color: COLORS.text },
-  reactions: { flexDirection: 'row', gap: SPACING.xs },
-  reaction: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: RADIUS.full, borderWidth: 1, borderColor: COLORS.cardBorder, paddingHorizontal: SPACING.sm, paddingVertical: 4 },
-  reactionActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  reactionText: { fontSize: FONT_SIZE.xs, color: COLORS.textSecondary, fontWeight: '600' },
-  reactionTextActive: { color: COLORS.black },
   activityRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, paddingVertical: SPACING.sm, paddingHorizontal: SPACING.xs, marginBottom: SPACING.xs },
   activityText: { flex: 1, fontSize: FONT_SIZE.sm, color: COLORS.textSecondary },
   activityName: { fontWeight: '700', color: COLORS.text },

@@ -17,8 +17,10 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Users, Plus, KeyRound, ChevronRight, Mail, X } from 'lucide-react-native';
 import { COLORS, FONT_SIZE, SPACING, RADIUS } from '@/constants/Colors';
 import Button from '@/components/ui/Button';
+import LoadError from '@/components/ui/LoadError';
 import Input from '@/components/ui/Input';
 import { groupService } from '@/services/groupService';
+import { queryClient, queryKeys } from '@/lib/queryClient';
 import type { Group, Invitation } from '@/types/social';
 
 type Sheet = 'create' | 'join' | null;
@@ -33,6 +35,8 @@ export default function GroupsScreen() {
   const [groups, setGroups] = useState<Group[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [loading, setLoading] = useState(true);
+  // 조회 실패 — 실패한 화면이 «모임이 없어요» 와 똑같이 보이지 않게 따로 든다
+  const [loadError, setLoadError] = useState(false);
 
   const [sheet, setSheet] = useState<Sheet>(null);
   const [name, setName] = useState('');
@@ -41,12 +45,16 @@ export default function GroupsScreen() {
   const [submitting, setSubmitting] = useState(false);
 
   const load = useCallback(() => {
+    setLoadError(false);
     Promise.all([groupService.listMine(), groupService.listMyInvitations()])
       .then(([g, inv]) => {
         setGroups(g.data);
         setInvitations(inv.data.filter((i) => i.status === 'PENDING'));
       })
-      .catch((e) => devWarn('[groups] status=', e?.response?.status, 'data=', JSON.stringify(e?.response?.data)))
+      .catch((e) => {
+        setLoadError(true);
+        devWarn('[groups] status=', e?.response?.status, 'data=', JSON.stringify(e?.response?.data));
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -85,6 +93,8 @@ export default function GroupsScreen() {
     setSubmitting(true);
     try {
       const res = await groupService.join(code.trim());
+      // 모임 상세는 60초 캐시된다 — 예전에 나갔다 다시 들어온 모임이면 «비멤버» 상태가 남아 있을 수 있다.
+      queryClient.invalidateQueries({ queryKey: queryKeys.groupAll });
       closeSheet();
       router.push(`/group/${res.data.id}` as any);
     } catch (e: any) {
@@ -96,8 +106,12 @@ export default function GroupsScreen() {
 
   const respondInvitation = async (inv: Invitation, accept: boolean) => {
     try {
-      if (accept) await groupService.acceptInvitation(inv.id);
-      else await groupService.declineInvitation(inv.id);
+      if (accept) {
+        await groupService.acceptInvitation(inv.id);
+        queryClient.invalidateQueries({ queryKey: queryKeys.groupAll });
+      } else {
+        await groupService.declineInvitation(inv.id);
+      }
       load();
     } catch (e: any) {
       Alert.alert('처리 실패', errorText(e, '초대를 처리하지 못했어요.'));
@@ -137,6 +151,8 @@ export default function GroupsScreen() {
           <Text style={styles.sectionTitle}>내 모임</Text>
           {loading ? (
             <ActivityIndicator color={COLORS.primary} style={{ marginVertical: SPACING.xl }} />
+          ) : loadError ? (
+            <LoadError message="모임을 불러오지 못했어요. 네트워크를 확인해주세요." onRetry={() => { setLoading(true); load(); }} />
           ) : groups.length === 0 ? (
             <View style={styles.emptyCard}>
               <Users size={28} color={COLORS.textMuted} strokeWidth={1.5} />

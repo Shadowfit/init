@@ -178,6 +178,11 @@ docker compose -f docker-compose.prod.yml up -d
 docker compose -f docker-compose.prod.yml ps      # 셋 다 'healthy' (컨테이너가 안에서 9090 을 친다)
 docker exec shadowfit-backend wget -qO- http://localhost:9090/actuator/health   # 내용까지 보려면
 
+# 3-b) 밖에서 보는 가동 감시(UptimeRobot·Better Stack 등)는 공개 포트의 GET /health 를 찌른다 — 200 {"status":"UP"} / 503 {"status":"DOWN"}.
+#      DB 연결 하나만 본다(AI 서버는 안 본다 — AI 지연을 «서비스 다운» 으로 울리지 않게). 상태 한 단어 외엔 내보내지 않는다.
+curl -s -o /dev/null -w '%{http_code}
+' https://<도메인>/health
+
 # 4) 스키마가 적용됐는지 — 여기서 Flyway 결과를 본다 (§2.3 에 세 경로 비교)
 docker exec -it shadowfit-mysql mysql -u"$MYSQL_USER" -p shadowfit \
   -e "SELECT version, description, success FROM flyway_schema_history ORDER BY installed_rank;"

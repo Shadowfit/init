@@ -84,7 +84,7 @@
 
 | DBA 업무 | 이 프로젝트에서 | 결과 | 근거 |
 |---|---|---|---|
-| **쿼리 튜닝** | JSON off-page over-fetch 제거 | payload −98.7% (조건: ①표) | [§②b · 조건](./realmysql-experiments.md#projection-98-7) |
+| **쿼리 튜닝** | JSON over-fetch 제거(꺼내 보내는 비용) | payload −98.7% (조건: ①표) | [§②b · 조건](./realmysql-experiments.md#projection-98-7) |
 | **인덱스 설계·검증** | `EXPLAIN`으로 이미 최적임을 확인 후 **가설 폐기**, `IGNORE INDEX` 강제 풀스캔과 직접 대조 | 약 9,000배 (조건: ①표) | [§②① · 조건](./realmysql-experiments.md#index-9000x) · ⚠️ **rig 없음**(2026-07-20 ad-hoc) |
 | **보존정책 운영** | 월별 RANGE 파티션 + 자동 DROP/선확보 스케줄러 | DELETE 대비 625배 (조건: ①표) | [§②d · 조건](./realmysql-experiments.md#drop-partition-625x) |
 | **용량 산정** | 커넥션 풀 사이징 EC2 4차 실측 · **자원 상한을 실측 상수에서 유도**(메모리 한도 ÷ 98.7MB) | plateau 시작점 = 10 · 코어당 16.4세션 (조건: ①표) | [§5-1(9)](../decisions/pose-ingest-downsampling.md) · [`ai-recalibrate`](../../loadtest/results/ai-recalibrate-2026-08-11/) |
@@ -106,7 +106,7 @@
 | 축 | 상태 |
 |---|---|
 | ~~무중단 스키마 변경~~ | ✅ **채워짐 (2026-08-12)** — pt-osc 대조 6판 실측. 남은 미검증: `gh-ost` 적용 가능 여부, 트리거 오버헤드의 크기 |
-| ~~백업/복구 (RTO·RPO)~~ | ✅ **채워짐 (2026-08-13)** — 1억 행에서 논리·물리 대조 9판 + PITR. 남은 미검증 2개: **물리 백업의 복구 시간이 캐시를 쟀다**([#201](https://github.com/Shadowfit/init/issues/201)), **real-JSON 축소 대조 1판 미실시**([#202](https://github.com/Shadowfit/init/issues/202) — 설계에서 확정됐던 규모의 후반부 — `mysqldump` 가 off-page 를 타므로 논리 백업의 불리함이 지금 과소평가돼 있다) |
+| ~~백업/복구 (RTO·RPO)~~ | ✅ **채워짐 (2026-08-13)** — 1억 행에서 논리·물리 대조 9판 + PITR. 남은 미검증 2개: **물리 백업의 복구 시간이 캐시를 쟀다**([#201](https://github.com/Shadowfit/init/issues/201)), **real-JSON 축소 대조 1판 미실시**([#202](https://github.com/Shadowfit/init/issues/202) — 설계에서 확정됐던 규모의 후반부 — 실제 JSON 은 행을 키워 논리 백업의 불리함이 더미로는 과소평가된다(off-page 가 아니라 행이 커져서 — #822)) |
 | ~~복제~~ | ✅ **채워짐 (2026-08-22)** — EC2 `c7i.2xlarge` 2대(같은 AZ) · 1,000만 행 · 10판. 리플리카 지연 약 60초, 반동기의 대가는 처리량 −5.9%(단일 핫세션 −10.3%). ⚠️ 앱 경로가 아닌 SQL writer 부하이고 같은 AZ 한 곳이다 ([결과](../../loadtest/results/replication-aws-2026-08-22/README.md)). 남은 미검증: 장애 시 자동 전환(HA) — 구성해 본 적 없다 |
 
 ---

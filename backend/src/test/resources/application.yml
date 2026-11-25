@@ -88,6 +88,8 @@ security:
     - "/webjars/**"
     - "/ws/**"
     - "/feed-photos/**"
+    # 외부 가동 감시용 — PublicHealthController (포트 8080, DB 한 번만 본다)
+    - "/health"
     - "/actuator/health"
     - "/actuator/health/**"
     # 관리 포트를 분리해도 필터체인은 두 포트에 공유된다(2026-08-08 실측) — 그래서 permitAll 이

@@ -13,7 +13,7 @@ RealMySQL 실험([`../../docs/portfolio/realmysql-experiments.md`](../../docs/po
 
 ## rig A — 실데이터 (pose_data, 실제 JSON)
 
-②b projection처럼 **JSON off-page 페치 비용**이 변수인 실험용. 템플릿 세션(601, ~750행)을 세션·날짜 분산해 복제.
+②b projection처럼 **2.3KB JSON 을 꺼내는 비용**이 변수인 실험용. 템플릿 세션(601, ~750행)을 세션·날짜 분산해 복제.
 
 > ⚠️ **리포트 경로 실험에는 그대로 못 쓴다.** 템플릿 601은 `rep_number`·`smoothed_knee_angle`이 생기기 전에 만들어져 두 컬럼이 전부 **0(미상)**이다. 계산기는 `rep_number <= 0`을 제외하므로 이 데이터로는 worst 구간·회차별 추이가 `null`로 나오고, 대표 프레임 선택도 "고를 근거 없음" 경로로 떨어진다. 조회 비용(JSON 페치·스캔) 실험에는 영향이 없다 — 그게 이 rig의 목적이다.
 > 리포트 경로까지 부하로 돌리려면 템플릿에 rep 경계와 무릎각을 실제 값으로 채워야 하는데, 아직 하지 않았다.

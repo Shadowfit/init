@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Calendar, type DateData } from 'react-native-calendars';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   CircleUser,
   Flame,
@@ -20,13 +20,17 @@ import {
 } from 'lucide-react-native';
 import { COLORS, FONT_SIZE, SPACING, RADIUS } from '@/constants/Colors';
 import Button from '@/components/ui/Button';
+import LoadError from '@/components/ui/LoadError';
 import { Alert } from '@/utils/alert';
 import { reportService } from '@/services/reportService';
+import { queryClient, queryKeys, STALE } from '@/lib/queryClient';
 import { goalService } from '@/services/goalService';
+import { currentRecordsVersion } from '@/utils/recordsVersion';
 import { useAuthStore } from '@/stores/authStore';
 import type { CalendarMainResponse, CalendarDay, DailyActivityResponse } from '@/types/report';
 import type { WorkoutGoal } from '@/types/goal';
 import FriendStatusList from '@/components/social/FriendStatusList';
+import NextSessionCard from '@/components/home/NextSessionCard';
 import { friendService } from '@/services/friendService';
 import { notificationService } from '@/services/notificationService';
 import type { MemberAttendanceStatus } from '@/types/social';
@@ -46,6 +50,11 @@ function buildMarkedDates(records: CalendarDay[]): Record<string, any> {
     marked[r.date] = { marked: true, dotColor };
   }
   return marked;
+}
+
+// 지금보다 «이전 달» 인가 — 캐시해도 되는 달인지 가른다. 이번 달·미래 달은 false.
+function isPastMonth(year: number, month: number, now: Date = new Date()): boolean {
+  return year * 12 + month < now.getFullYear() * 12 + (now.getMonth() + 1);
 }
 
 // «오늘» 은 로컬 날짜로 만든다 — toISOString() 은 UTC 라 한국 밤 9시 이후엔 내일로 잡힌다
@@ -68,6 +77,9 @@ export default function HomeScreen() {
   // 선택 날짜의 운동 목록 (GET /reports/daily)
   const [daily, setDaily] = useState<DailyActivityResponse | null>(null);
   const [dailyLoading, setDailyLoading] = useState(false);
+  // 일별 기록 조회 실패 — «운동 기록이 없습니다» 로 오해되지 않게 따로 든다. dailyReload 는 «다시 시도» 용 트리거
+  const [dailyError, setDailyError] = useState(false);
+  const [dailyReload, setDailyReload] = useState(0);
   const [friends, setFriends] = useState<MemberAttendanceStatus[]>([]);
 
   // 나의 운동 약속 — 최근 7일 완료 세션 수 목표 (GET/POST/PATCH /goals)
@@ -77,16 +89,41 @@ export default function HomeScreen() {
   const [goalError, setGoalError] = useState(false);
   const [goalEditing, setGoalEditing] = useState(false);
 
-  // 화면 포커스 / 연·월 변경마다 캘린더 데이터 재조회
+  // 화면 포커스 / 연·월 변경마다 캘린더 데이터 조회. **지난 달은 캐시를 쓴다**(30분) — 한번 생기면
+  // 안 바뀌는데 포커스·◀▶ 때마다 다시 받고 있었다. 이번 달은 운동을 끝내고 돌아오면 바뀌므로
+  // staleTime 0 = 예전처럼 매번 받는다.
   useFocusEffect(
     useCallback(() => {
-      reportService
-        .getCalendar(viewYear, viewMonth)
-        .then((res) => setData(res.data))
+      let cancelled = false;
+      queryClient
+        .fetchQuery({
+          queryKey: queryKeys.calendar(viewYear, viewMonth),
+          queryFn: () => reportService.getCalendar(viewYear, viewMonth).then((res) => res.data),
+          staleTime: isPastMonth(viewYear, viewMonth) ? STALE.immutable : 0,
+        })
+        .then((cal) => {
+          if (!cancelled) setData(cal);
+        })
         .catch((e) => {
           devError('[calendar] status=', e.response?.status, 'data=', e.response?.data);
         });
+      return () => {
+        cancelled = true;
+      };
     }, [viewYear, viewMonth]),
+  );
+
+  // 리포트에서 기록을 지우고 돌아오면(utils/recordsVersion) 일별 목록을 다시 받는다 — 이 목록은 날짜를 바꿀 때만 받아서,
+  // 안 받으면 지운 세션이 남아 있다가 누르면 «보고서를 찾을 수 없어요» 가 된다. 캘린더는 포커스마다 받으니 따로 안 건드린다.
+  const seenRecordsVersion = useRef(currentRecordsVersion());
+  useFocusEffect(
+    useCallback(() => {
+      const v = currentRecordsVersion();
+      if (v !== seenRecordsVersion.current) {
+        seenRecordsVersion.current = v;
+        setDailyReload((n) => n + 1);
+      }
+    }, []),
   );
 
   // 내 모임 친구 운동 현황 — 화면 포커스마다 재조회 (재촉·응원 뒤 돌아오면 최신 상태)
@@ -143,6 +180,39 @@ export default function HomeScreen() {
     }
   };
 
+  // 목표 삭제 — 완료한 운동 기록은 그대로 남고 «목표 설정» 만 지워진다(서버 goalRepository.delete 뿐).
+  const [goalDeleting, setGoalDeleting] = useState(false);
+  const deleteGoal = () => {
+    if (!goal || goalDeleting) return;
+    const goalId = goal.id;
+    Alert.alert('목표를 삭제할까요?', '운동 기록은 그대로 남아요. 목표만 지워지고 언제든 다시 정할 수 있어요.', [
+      { text: '취소', style: 'cancel' },
+      {
+        text: '삭제',
+        style: 'destructive',
+        onPress: async () => {
+          setGoalDeleting(true);
+          try {
+            await goalService.deleteGoal(goalId);
+            setGoal(null);
+            setGoalEditing(false);
+            setGoalError(false);
+          } catch (error: any) {
+            if (error?.response?.status === 404) {
+              // 이미 지워졌다(다른 기기에서 등) — 화면도 «목표 없음» 으로 맞춘다.
+              setGoal(null);
+              setGoalEditing(false);
+            } else {
+              Alert.alert('목표를 삭제하지 못했습니다', error?.response?.data?.message ?? '연결을 확인하고 다시 시도해주세요.');
+            }
+          } finally {
+            setGoalDeleting(false);
+          }
+        },
+      },
+    ]);
+  };
+
   const retryGoal = async () => {
     setGoalLoading(true);
     try {
@@ -175,16 +245,35 @@ export default function HomeScreen() {
   // 선택 날짜 변경 시 그 날의 운동 목록 조회 (없으면 오늘 자동 조회)
   useEffect(() => {
     const targetDate = selectedDate || today;
+    // 날짜 문자열(YYYY-MM-DD)은 사전순 = 시간순이다. 지난 날짜만 캐시(30분), 오늘은 예전처럼 매번.
+    const isPastDate = targetDate < today;
+    // 날짜를 빠르게 바꾸면 늦게 도착한 앞 날짜 응답이 뒤 날짜 화면을 덮어쓴다 — 캐시가 응답을 빠르게
+    // 만들어 이 순서 뒤바뀜이 더 잘 보이므로 여기서 막는다.
+    let cancelled = false;
     setDailyLoading(true);
-    reportService
-      .getDaily(targetDate)
-      .then((res) => setDaily(res.data))
+    setDailyError(false);
+    queryClient
+      .fetchQuery({
+        queryKey: queryKeys.daily(targetDate),
+        queryFn: () => reportService.getDaily(targetDate).then((res) => res.data),
+        staleTime: isPastDate ? STALE.immutable : 0,
+      })
+      .then((res) => {
+        if (!cancelled) setDaily(res);
+      })
       .catch((e) => {
+        if (cancelled) return;
+        setDailyError(true);
         devWarn('[daily] 에러 status=', e?.response?.status, 'data=', JSON.stringify(e?.response?.data));
         setDaily(null);
       })
-      .finally(() => setDailyLoading(false));
-  }, [selectedDate, today]);
+      .finally(() => {
+        if (!cancelled) setDailyLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDate, today, dailyReload]);
 
   const baseMarked = data ? buildMarkedDates(data.records) : {};
   const markedDates = {
@@ -294,9 +383,19 @@ export default function HomeScreen() {
               ))}
             </View>
           ) : goal ? (
-            <TouchableOpacity accessibilityRole="button" onPress={() => setGoalEditing(true)} style={styles.goalEditButton}>
-              <Text style={styles.goalEditText}>목표 변경</Text>
-            </TouchableOpacity>
+            <View style={styles.goalActions}>
+              <TouchableOpacity accessibilityRole="button" onPress={() => setGoalEditing(true)} style={styles.goalEditButton}>
+                <Text style={styles.goalEditText}>목표 변경</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                accessibilityRole="button"
+                disabled={goalDeleting}
+                onPress={deleteGoal}
+                style={styles.goalEditButton}
+              >
+                <Text style={styles.goalDeleteText}>{goalDeleting ? '삭제하는 중...' : '목표 삭제'}</Text>
+              </TouchableOpacity>
+            </View>
           ) : (
             <TouchableOpacity accessibilityRole="button" onPress={() => router.push('/(auth)/login')} style={styles.goalEditButton}>
               <Text style={styles.goalEditText}>로그인하고 시작하기</Text>
@@ -304,6 +403,9 @@ export default function HomeScreen() {
           )}
           <Text style={styles.goalFootnote}>완료한 운동 세션만 셉니다. 쉬는 날에도 목표 설정은 유지돼요.</Text>
         </View>
+
+        {/* 다음 스쿼트 추천 — GET /recommendations/next-session (로그인 상태에서만) */}
+        <NextSessionCard enabled={isAuthenticated} />
 
         {/* 내 모임 친구 운동 현황 — GET /friends (오늘 완료 → 진행 중 → 기록 없음 순) */}
         <View style={styles.friendsSection}>
@@ -365,6 +467,8 @@ export default function HomeScreen() {
           </Text>
           {dailyLoading ? (
             <Text style={styles.noRecordText}>불러오는 중...</Text>
+          ) : dailyError ? (
+            <LoadError message="운동 기록을 불러오지 못했어요." onRetry={() => setDailyReload((n) => n + 1)} />
           ) : (daily?.totalWorkouts ?? 0) === 0 ? (
             <Text style={styles.noRecordText}>운동 기록이 없습니다</Text>
           ) : (
@@ -509,6 +613,8 @@ const styles = StyleSheet.create({
   goalOptionText: { color: COLORS.text, fontSize: FONT_SIZE.md, fontWeight: '700' },
   goalEditButton: { alignSelf: 'flex-start', marginTop: SPACING.md, paddingVertical: SPACING.sm },
   goalEditText: { color: COLORS.primary, fontSize: FONT_SIZE.sm, fontWeight: '700' },
+  goalActions: { flexDirection: 'row', alignItems: 'center', gap: SPACING.lg },
+  goalDeleteText: { color: COLORS.textMuted, fontSize: FONT_SIZE.sm, fontWeight: '700' },
   goalFootnote: { color: COLORS.textMuted, fontSize: FONT_SIZE.xs, marginTop: SPACING.md, lineHeight: 17 },
 
   // 친구 운동 현황

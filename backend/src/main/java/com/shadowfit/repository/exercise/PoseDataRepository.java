@@ -32,7 +32,7 @@ import java.util.Optional;
 @Repository
 public interface PoseDataRepository extends JpaRepository<PoseData, Long> {
     /**
-     * 리포트 worst rep 계산용 프레임 조회. joint_coordinates(2.3KB JSON) 제외 → off-page I/O 회피.
+     * 리포트 worst rep 계산용 프레임 조회. joint_coordinates(2.3KB JSON) 제외 → JSON 을 읽어 앱으로 보내지 않는다(off-page 회피가 아니다 — 행 안에 저장, #822).
      *
      * <p><b>rep_number 를 싣는 이유</b>(이슈 #78): {@code sync_rate} 는 rep 안에서 상수라
      * (ai-server 가 rep 단위로 채점해 프레임마다 복제 전송) rep 을 모르면 계산기가 경계를 넘는
@@ -59,7 +59,7 @@ public interface PoseDataRepository extends JpaRepository<PoseData, Long> {
      * 조건이면 PK가 {@code (id, created_at)} 복합키라 파티션 프루닝이 안 걸려 14개 파티션을 전부
      * 뒤진다. 둘 다 주면 복합 PK 그대로 단일 파티션 · 단일 행 다이브가 된다.
      *
-     * <p>단일 행만 읽으므로 {@code findFramesBySessionId} 가 피하던 off-page I/O 비용은 딱 이
+     * <p>단일 행만 읽으므로 {@code findFramesBySessionId} 가 피하던 JSON 전송·변환 비용은 딱 이
      * 한 번만 낸다 — 세션 전체 프레임(수백~수천)이 아니라 대표로 뽑힌 딱 하나이기 때문에 값이 있다.
      */
     @Query("SELECT p.jointCoordinates FROM PoseData p " +

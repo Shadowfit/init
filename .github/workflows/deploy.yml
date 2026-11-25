@@ -1,0 +1,168 @@
+name: Deploy — prod 호스트
+
+# cd-backend / cd-ai-server 가 이미지를 GHCR 에 올린 뒤, 그 이미지를 운영 호스트에 반영한다.
+#
+# ⚠️ 호스트가 만들어지기 전에는 돌면 안 된다. 그래서 저장소 변수 DEPLOY_ENABLED 가 'true' 일 때만
+#    실제 단계가 실행된다 (infra/README.md "처음 켜는 순서"). 변수가 없으면 job 이 건너뛰어진다.
+#
+# 흐름:  이미지 푸시 성공 → 번들(compose·nginx 설정·host 스크립트) S3 업로드
+#        → SSM Run Command 로 호스트의 deploy.sh 실행 → 헬스체크·스모크 → 실패 시 직전 태그로 롤백
+#
+# 인증: GitHub OIDC 로 AWS 역할을 맡는다. 저장소에 AWS 키가 없다.
+#   역할의 신뢰 정책이 "main 브랜치의 이 저장소 워크플로"만 허용한다 (infra/terraform/iam.tf).
+#   ⚠️ 이 job 에 `environment:` 를 붙이면 OIDC sub 가 바뀌어 신뢰 정책과 어긋난다.
+
+on:
+  workflow_run:
+    workflows: ["CD — backend 이미지", "CD — ai-server 이미지"]
+    types: [completed]
+    branches: [main]
+
+  workflow_dispatch:
+    inputs:
+      backend_tag:
+        description: "backend 이미지 태그 (예: sha-<40자>). 비우면 지금 떠 있는 태그 유지"
+        required: false
+        default: ""
+      ai_tag:
+        description: "ai-server 이미지 태그. 비우면 지금 떠 있는 태그 유지"
+        required: false
+        default: ""
+      git_ref:
+        description: "번들(compose 등)을 가져올 커밋. 비우면 main"
+        required: false
+        default: ""
+
+# 배포를 중간에 끊으면 호스트가 반쯤 바뀐 상태가 된다. 줄은 세우되 취소하지 않는다.
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: 호스트에 반영
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: >-
+      vars.DEPLOY_ENABLED == 'true' &&
+      (github.event_name == 'workflow_dispatch' ||
+       github.event.workflow_run.conclusion == 'success')
+
+    steps:
+      - name: 무엇을 배포하는지 정한다
+        id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          RUN_NAME: ${{ github.event.workflow_run.name }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          IN_BACKEND: ${{ inputs.backend_tag }}
+          IN_AI: ${{ inputs.ai_tag }}
+          IN_REF: ${{ inputs.git_ref }}
+        run: |
+          backend=""; ai=""; ref="main"
+          if [ "$EVENT" = "workflow_run" ]; then
+            ref="$RUN_SHA"
+            case "$RUN_NAME" in
+              *backend*)   backend="sha-$RUN_SHA" ;;
+              *ai-server*) ai="sha-$RUN_SHA" ;;
+            esac
+          else
+            backend="$IN_BACKEND"; ai="$IN_AI"
+            [ -n "$IN_REF" ] && ref="$IN_REF"
+          fi
+          # 태그와 ref 는 뒤에서 호스트 셸 명령에 들어간다 — 허용 문자만 통과시킨다.
+          for v in "$backend" "$ai"; do
+            [[ "$v" =~ ^[A-Za-z0-9._-]*$ ]] || { echo "허용되지 않는 태그 문자: $v"; exit 1; }
+          done
+          [[ "$ref" =~ ^[A-Za-z0-9._/-]+$ ]] || { echo "허용되지 않는 ref: $ref"; exit 1; }
+          {
+            echo "backend=$backend"
+            echo "ai=$ai"
+            echo "ref=$ref"
+          } >> "$GITHUB_OUTPUT"
+          echo "배포 대상 — backend='${backend:-유지}' ai='${ai:-유지}' 번들 ref=$ref"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.plan.outputs.ref }}
+
+      - name: AWS 자격 (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: 번들 만들어 올리기
+        id: bundle
+        env:
+          BUCKET: ${{ vars.DEPLOY_BUCKET }}
+        run: |
+          key="bundles/$(date +%Y%m%d-%H%M%S)-${GITHUB_SHA::8}.tgz"
+          tar -czf bundle.tgz \
+            docker-compose.prod.yml \
+            mysql/my.cnf \
+            nginx-ai/default.conf \
+            scripts/backup/mysql-backup.sh \
+            scripts/backup/mysql-restore.sh \
+            infra/host/deploy.sh \
+            infra/host/systemd
+          aws s3 cp bundle.tgz "s3://$BUCKET/$key" --only-show-errors
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+
+      - name: 호스트에서 deploy.sh 실행 (SSM)
+        env:
+          BUCKET: ${{ vars.DEPLOY_BUCKET }}
+          INSTANCE: ${{ vars.DEPLOY_INSTANCE_ID }}
+          KEY: ${{ steps.bundle.outputs.key }}
+          BACKEND: ${{ steps.plan.outputs.backend }}
+          AI: ${{ steps.plan.outputs.ai }}
+        run: |
+          # 입력값은 env 로만 받는다 — 스크립트 문자열에 직접 끼워 넣지 않는다.
+          cmd="set -euo pipefail; source /opt/shadowfit/host.env; \
+            rm -rf /tmp/bs && mkdir -p /tmp/bs; \
+            aws s3 cp s3://$BUCKET/$KEY /tmp/bs.tgz --only-show-errors --region \$AWS_REGION; \
+            tar -xzf /tmp/bs.tgz -C /tmp/bs; \
+            bash /tmp/bs/infra/host/deploy.sh '$KEY' '$BACKEND' '$AI'"
+
+          id=$(aws ssm send-command \
+            --instance-ids "$INSTANCE" \
+            --document-name AWS-RunShellScript \
+            --comment "deploy ${GITHUB_SHA::8}" \
+            --timeout-seconds 900 \
+            --parameters "$(jq -cn --arg c "$cmd" '{commands:[$c]}')" \
+            --query 'Command.CommandId' --output text)
+          echo "SSM command: $id"
+
+          # 끝날 때까지 직접 기다린다. `aws ssm wait` 는 약 100초에서 포기하는데, 이미지 pull·
+          # 헬스체크·롤백까지 합치면 그보다 오래 걸릴 수 있다. 실패해도 출력은 보고 나서 종료한다.
+          status=""
+          for _ in $(seq 1 180); do   # 5초 × 180 = 최대 15분
+            status=$(aws ssm get-command-invocation --command-id "$id" --instance-id "$INSTANCE" \
+              --query 'Status' --output text 2>/dev/null || echo "Pending")
+            case "$status" in
+              Success|Failed|Cancelled|TimedOut|Cancelling) break ;;
+            esac
+            sleep 5
+          done
+
+          echo "::group::호스트 출력"
+          aws ssm get-command-invocation --command-id "$id" --instance-id "$INSTANCE" \
+            --query '[StandardOutputContent, StandardErrorContent]' --output text
+          echo "::endgroup::"
+
+          echo "최종 상태: $status"
+          [ "$status" = "Success" ]
+
+      - name: 요약
+        if: always()
+        run: |
+          {
+            echo "## 배포"
+            echo "- backend: \`${{ steps.plan.outputs.backend || '유지' }}\`"
+            echo "- ai-server: \`${{ steps.plan.outputs.ai || '유지' }}\`"
+            echo "- 번들: \`${{ steps.bundle.outputs.key }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
