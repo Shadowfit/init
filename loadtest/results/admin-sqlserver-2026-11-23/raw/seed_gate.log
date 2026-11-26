@@ -1,0 +1,21 @@
+Changed database context to 'sf_idx_bench'.
+== gate 1: row count
+rows=1000000 expected=1000000
+== gate 2: status distribution vs 70/20/8/2 (|diff| <= 5 sigma)
+status pct verdict
+------ --- -------
+COMPLETED 69.972 ok
+IN_PROGRESS 20.098 ok
+CANCELLED 7.953 ok
+FAILED 1.977 ok
+== gate 3: members with >=3 sessions whose sessions ALL share one status (independent seeding => well below 50%; dependent seeding => ~100%)
+single_status_member_pct=17.46
+== gate 4: mean minutes-ago per status vs global (|diff| <= 5 sd/sqrt(n)); start_time independent of status
+statuses_failing=0
+== gate 5: same, bucketed by member_id % 10
+buckets_failing=0
+== gate 6: duplicate (member_id,start_time) pairs (birthday expectation ~5 at this size; hundreds => seeding is degenerate)
+dup_pairs=3
+== gate 7: start_time span in days (365-day range => ~365)
+span_days=365
+== GATE RESULT: failures=0

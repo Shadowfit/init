@@ -1,0 +1,28 @@
+Changed database context to 'sf_idx_bench'.
+2026-11-23 17:39:43 block 0/6 arm A0
+2026-11-23 17:40:23 block 0/6 arm A1
+2026-11-23 17:40:49 block 0/6 arm B
+2026-11-23 17:40:56 block 1/6 arm A0
+2026-11-23 17:41:32 block 1/6 arm A1
+2026-11-23 17:41:59 block 1/6 arm B
+2026-11-23 17:42:13 block 2/6 arm B
+2026-11-23 17:42:23 block 2/6 arm A1
+2026-11-23 17:42:44 block 2/6 arm A0
+2026-11-23 17:43:19 block 3/6 arm A1
+2026-11-23 17:43:46 block 3/6 arm B
+2026-11-23 17:43:53 block 3/6 arm A0
+2026-11-23 17:44:29 block 4/6 arm A0
+2026-11-23 17:45:13 block 4/6 arm B
+2026-11-23 17:45:23 block 4/6 arm A1
+2026-11-23 17:45:56 block 5/6 arm B
+2026-11-23 17:46:04 block 5/6 arm A0
+2026-11-23 17:46:45 block 5/6 arm A1
+2026-11-23 17:47:42 block 6/6 arm A1
+2026-11-23 17:48:02 block 6/6 arm A0
+2026-11-23 17:48:49 block 6/6 arm B
+objtype plans
+------- -----
+Prepared 32
+rows_total rows_without_stats
+---------- ------------------
+3360 0
